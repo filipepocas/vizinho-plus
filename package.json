@@ -14,6 +14,7 @@
     "@types/react-dom": "^19.2.3",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
+    "react-barcode": "^1.6.1",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.13.1",
     "react-scripts": "5.0.1",
