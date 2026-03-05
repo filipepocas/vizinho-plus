@@ -21,7 +21,7 @@ interface AppState {
   currentUser: User | Client | Merchant | null;
   setCurrentUser: (user: User | Client | Merchant | null) => void;
   transactions: Transaction[];
-  clients: Client[]; // Devolvido para corrigir o erro
+  clients: Client[];
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   subscribeToTransactions: () => () => void;
 }
@@ -30,7 +30,7 @@ export const useStore = create<AppState>((set, get) => ({
   currentUser: null,
   setCurrentUser: (user) => set({ currentUser: user }),
   transactions: [],
-  clients: [], // Inicializado vazio
+  clients: [],
 
   addTransaction: async (transactionData) => {
     try {
@@ -40,6 +40,7 @@ export const useStore = create<AppState>((set, get) => ({
       });
     } catch (error) {
       console.error("Erro ao gravar transação: ", error);
+      throw error;
     }
   },
 
@@ -50,7 +51,7 @@ export const useStore = create<AppState>((set, get) => ({
       const transactions = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data(),
-        createdAt: (doc.data().createdAt as Timestamp).toDate(),
+        createdAt: (doc.data() as any).createdAt?.toDate() || new Date(),
       })) as Transaction[];
       
       set({ transactions });

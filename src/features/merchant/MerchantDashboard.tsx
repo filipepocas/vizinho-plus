@@ -1,115 +1,137 @@
 // src/features/merchant/MerchantDashboard.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
+import { collection, query, where, getDocs, addDoc, Timestamp } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 const MerchantDashboard: React.FC = () => {
   const { addTransaction } = useStore();
   
-  // Estados para o formulário
+  // Estados de Login da Loja
+  const [isAuthorized, setIsAuthorized] = useState(false);
+  const [loginEmail, setLoginEmail] = useState('');
+  const [activeMerchant, setActiveMerchant] = useState<any>(null);
+
+  // Estados do Formulário de Venda
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  const handleSale = (e: React.FormEvent) => {
+  // Função para "Entrar" como Loja
+  const handleMerchantLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    if (!cardNumber || !amount) {
-      setMessage({ type: 'error', text: 'Preencha todos os campos!' });
-      return;
+    const q = query(collection(db, 'merchants'), where('email', '==', loginEmail));
+    const querySnapshot = await getDocs(q);
+
+    if (!querySnapshot.empty) {
+      const merchantData = { id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() };
+      setActiveMerchant(merchantData);
+      setIsAuthorized(true);
+    } else {
+      alert('E-mail de lojista não encontrado!');
     }
-
-    const saleAmount = parseFloat(amount);
-    const cashbackGenerated = saleAmount * 0.10; // Exemplo: 10% de Cashback fixo por agora
-
-    const newTransaction = {
-      id: `VPLUS-${Math.floor(Math.random() * 100000)}`,
-      clientId: cardNumber, // Usamos o cartão como ID por agora
-      merchantId: 'M-001',   // ID da loja (será dinâmico no futuro)
-      operatorId: 'OP-01',
-      amount: saleAmount,
-      cashbackAmount: cashbackGenerated,
-      type: 'earn' as const,
-      status: 'pending' as const,
-      createdAt: new Date(),
-    };
-
-    addTransaction(newTransaction);
-    
-    setMessage({ 
-      type: 'success', 
-      text: `Sucesso! ${cashbackGenerated.toFixed(2)}€ de cashback atribuídos.` 
-    });
-    
-    // Limpar campos
-    setCardNumber('');
-    setAmount('');
-    
-    // Limpar mensagem após 3 segundos
-    setTimeout(() => setMessage({ type: '', text: '' }), 3000);
   };
 
-  return (
-    <div className="min-h-screen bg-white p-4 md:p-8">
-      {/* Cabeçalho Brutalista */}
-      <div className="border-4 border-vplus-blue p-6 mb-8 bg-vplus-green-light">
-        <h1 className="text-4xl font-black text-vplus-blue uppercase tracking-tighter">
-          REGISTAR VENDA
-        </h1>
-        <p className="font-bold text-vplus-blue opacity-70">COMERCIANTE: LOJA EXEMPLO</p>
-      </div>
+  const handleSale = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!cardNumber || !amount) return;
 
-      <div className="max-w-2xl mx-auto">
+    const saleAmount = parseFloat(amount);
+    const cashbackGenerated = saleAmount * 0.10; // 10% Fixo
+
+    try {
+      // Gravamos diretamente com o ID da loja ativa
+      await addTransaction({
+        clientId: cardNumber,
+        merchantId: activeMerchant.id,
+        merchantName: activeMerchant.shopName,
+        amount: saleAmount,
+        cashbackAmount: cashbackGenerated,
+        type: 'earn',
+        status: 'pending'
+      });
+
+      setMessage({ type: 'success', text: `Venda de ${saleAmount}€ registada!` });
+      setCardNumber('');
+      setAmount('');
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+    } catch (error) {
+      setMessage({ type: 'error', text: 'Erro ao registar venda.' });
+    }
+  };
+
+  // ECRÃ DE LOGIN DO LOJISTA
+  if (!isAuthorized) {
+    return (
+      <div className="min-h-screen bg-vplus-green-light flex items-center justify-center p-6">
+        <div className="bg-white p-8 border-4 border-vplus-blue shadow-[10px_10px_0px_0px_rgba(28,48,92,1)] w-full max-w-md">
+          <h1 className="text-2xl font-black text-vplus-blue uppercase mb-6">Acesso Lojista</h1>
+          <form onSubmit={handleMerchantLogin} className="space-y-4">
+            <input 
+              type="email" 
+              placeholder="E-mail da Loja" 
+              value={loginEmail}
+              onChange={(e) => setLoginEmail(e.target.value)}
+              className="w-full p-4 border-2 border-vplus-blue font-bold outline-none"
+            />
+            <button className="w-full bg-vplus-blue text-white p-4 font-black uppercase hover:bg-vplus-green hover:text-vplus-blue transition-colors">
+              Abrir Terminal de Vendas
+            </button>
+          </form>
+        </div>
+      </div>
+    );
+  }
+
+  // ECRÃ DE VENDAS (SÓ APARECE APÓS LOGIN)
+  return (
+    <div className="min-h-screen bg-white">
+      <header className="bg-vplus-blue text-white p-4 flex justify-between items-center">
+        <div>
+          <p className="text-[10px] font-bold uppercase opacity-70">Loja Ativa</p>
+          <h2 className="font-black uppercase">{activeMerchant?.shopName}</h2>
+        </div>
+        <button onClick={() => setIsAuthorized(false)} className="text-[10px] bg-red-500 px-2 py-1 font-bold">SAIR</button>
+      </header>
+
+      <main className="p-6 max-w-xl mx-auto">
         {message.text && (
-          <div className={`p-4 mb-6 font-bold uppercase text-center border-2 ${
-            message.type === 'success' ? 'bg-vplus-green text-vplus-blue border-vplus-blue' : 'bg-red-500 text-white border-black'
+          <div className={`p-4 mb-6 font-black uppercase text-center border-2 ${
+            message.type === 'success' ? 'bg-vplus-green border-vplus-blue' : 'bg-red-500 text-white'
           }`}>
             {message.text}
           </div>
         )}
 
-        <form onSubmit={handleSale} className="space-y-6">
-          <div className="flex flex-col">
-            <label className="text-sm font-black uppercase mb-2">Número do Cartão (ou ler código)</label>
+        <form onSubmit={handleSale} className="space-y-8 mt-10">
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase">Número do Cartão Vizinho+</label>
             <input 
               type="text" 
               value={cardNumber}
               onChange={(e) => setCardNumber(e.target.value)}
               placeholder="Ex: 5601234567"
-              className="p-4 border-4 border-vplus-blue text-2xl font-mono focus:outline-none focus:bg-vplus-blue-light"
+              className="w-full p-6 border-4 border-vplus-blue text-3xl font-mono focus:bg-vplus-blue-light outline-none"
             />
           </div>
 
-          <div className="flex flex-col">
-            <label className="text-sm font-black uppercase mb-2">Valor Total da Venda (€)</label>
+          <div className="space-y-2">
+            <label className="text-xs font-black uppercase">Valor da Compra (€)</label>
             <input 
               type="number" 
               step="0.01"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
               placeholder="0.00"
-              className="p-4 border-4 border-vplus-blue text-4xl font-black focus:outline-none focus:bg-vplus-green-light"
+              className="w-full p-6 border-4 border-vplus-blue text-5xl font-black focus:bg-vplus-green-light outline-none"
             />
           </div>
 
-          <button 
-            type="submit"
-            className="w-full bg-vplus-blue text-white p-6 text-2xl font-black uppercase hover:bg-vplus-green hover:text-vplus-blue transition-colors border-b-8 border-black active:border-b-0 active:translate-y-2"
-          >
-            VALIDAR CASHBACK
+          <button className="w-full bg-vplus-green text-vplus-blue p-8 text-2xl font-black uppercase border-b-8 border-vplus-blue active:border-b-0 active:translate-y-2 transition-all">
+            GERAR CASHBACK
           </button>
         </form>
-
-        <div className="mt-12 grid grid-cols-2 gap-4">
-          <div className="border-2 border-gray-200 p-4">
-            <p className="text-xs font-bold uppercase text-gray-400">Vendas hoje</p>
-            <p className="text-2xl font-black">--</p>
-          </div>
-          <div className="border-2 border-gray-200 p-4">
-            <p className="text-xs font-bold uppercase text-gray-400">Total Cashback</p>
-            <p className="text-2xl font-black text-vplus-green">-- €</p>
-          </div>
-        </div>
-      </div>
+      </main>
     </div>
   );
 };

@@ -1,45 +1,47 @@
 // src/types/index.ts
 
-export type UserRole = 'admin' | 'merchant' | 'client';
-
 export interface User {
   id: string;
   email: string;
-  role: UserRole;
   name: string;
+  role: 'admin' | 'merchant' | 'client';
 }
 
-export interface Client extends User {
-  cardNumber: string;      // Os 10 dígitos aleatórios
-  totalBalance: number;    // Saldo Total (inclui o que ainda não pode ser usado)
-  availableBalance: number; // Saldo Disponível (após 48h)
-  nif?: string;
+export interface Client {
+  id: string;
+  name: string;
+  email?: string;
   phone?: string;
+  cardNumber: string;
+  totalCashback: number;
+  availableCashback: number;
+  createdAt: any;
 }
 
-export interface Merchant extends User {
-  nif: string;
+export interface Merchant {
+  id: string;
   shopName: string;
-  address: string;
-  postalCode: string;
+  email: string;
+  nif: string;
+  status: 'active' | 'inactive';
+  createdAt: any;
 }
 
 export interface Operator {
   id: string;
   merchantId: string;
   name: string;
-  pin: string; // O código de 5 dígitos
+  email: string;
 }
 
 export interface Transaction {
-  id: string;              // Texto e número livre (ex: VPLUS-123)
+  id: string;
   clientId: string;
   merchantId: string;
-  operatorId: string;
-  amount: number;          // Valor da transação
-  cashbackAmount: number;  // Valor de cashback gerado ou descontado
-  type: 'earn' | 'redeem' | 'refund'; // Ganhar, Descontar ou Nota de Crédito
-  status: 'pending' | 'available';     // Fica pending por 48h
-  documentNumber?: string; // Número da fatura/nota de crédito
-  createdAt: Date;
+  merchantName?: string;
+  amount: number;
+  cashbackAmount: number;
+  type: 'earn' | 'redeem';
+  status: 'pending' | 'available' | 'cancelled';
+  createdAt: any;
 }
