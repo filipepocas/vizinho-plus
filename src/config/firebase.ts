@@ -3,19 +3,16 @@ import { initializeApp } from "firebase/app";
 import { getFirestore } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 
-// SUBSTITUI ESTE BLOCO PELOS TEUS DADOS DO FIREBASE
+// ESTES VALORES TÊM DE SER OS TEUS, NÃO OS MEUS
 const firebaseConfig = {
-apiKey: "A tua API Key",
+  apiKey: "AIzaSyAZc0WqXxax4PongdY25SIveqyTX0SgFoM",
   authDomain: "vizinho-plus.firebaseapp.com",
   projectId: "vizinho-plus",
-  storageBucket: "vizinho-plus.appspot.com",
-  messagingSenderId: "teu-id",
-  appId: "teu-app-id"
+  storageBucket: "vizinho-plus.firebasestorage.app",
+  messagingSenderId: "359894288352",
+  appId: "1:359894288352:web:3e5ca9ea8246e4264c4d85"
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
-
-// Exportar serviços para usar na App
 export const db = getFirestore(app);
 export const auth = getAuth(app);
