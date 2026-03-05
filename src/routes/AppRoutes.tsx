@@ -5,15 +5,26 @@ import ClientDashboard from '../features/client/ClientDashboard';
 import MerchantDashboard from '../features/merchant/MerchantDashboard';
 import AdminDashboard from '../features/admin/AdminDashboard';
 import LoginPage from '../features/auth/LoginPage';
+import PrivateRoute from './PrivateRoute'; // O nosso novo segurança
 
 const AppRoutes = () => {
   return (
     <BrowserRouter>
       <Routes>
+        {/* Rotas Públicas */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/cliente" element={<ClientDashboard />} />
         <Route path="/comerciante" element={<MerchantDashboard />} />
-        <Route path="/admin" element={<AdminDashboard />} />
+
+        {/* Rota Protegida - Só entra quem fez Login */}
+        <Route 
+          path="/admin" 
+          element={
+            <PrivateRoute>
+              <AdminDashboard />
+            </PrivateRoute>
+          } 
+        />
 
         {/* Redirecionamento padrão */}
         <Route path="/" element={<Navigate to="/cliente" replace />} />
