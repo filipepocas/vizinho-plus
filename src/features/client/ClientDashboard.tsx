@@ -1,24 +1,21 @@
 // src/features/client/ClientDashboard.tsx
-import React, { useEffect } from 'react';
+import React from 'react';
 import ClientCard from '../../components/ClientCard';
 import { useStore } from '../../store/useStore';
 
 const ClientDashboard: React.FC = () => {
-  const { transactions, updateBalances } = useStore();
+  // Removido o updateBalances que causava erro
+  const { transactions } = useStore();
   
-  // Dados do cliente (Simulamos que o ID é este número de cartão)
   const clientData = {
     id: "5601234567",
     name: "Filipe Rocha"
   };
 
-  // Filtrar transações deste cliente
   const myTransactions = transactions.filter(t => t.clientId === clientData.id);
 
-  // Calcular saldos em tempo real
   const totalBalance = myTransactions.reduce((acc, t) => acc + (t.type === 'earn' ? t.cashbackAmount : -t.cashbackAmount), 0);
   
-  // Lógica simplificada de 48h para o teste visual
   const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
   const availableBalance = myTransactions
     .filter(t => new Date(t.createdAt) <= fortyEightHoursAgo)
@@ -38,9 +35,9 @@ const ClientDashboard: React.FC = () => {
 
         <div className="mt-8 space-y-4">
           <div className="bg-white p-4 border-2 border-vplus-blue text-left">
-            <h3 className="text-[10px] font-black uppercase text-vplus-blue opacity-50">Últimos Movimentos</h3>
+            <h3 className="text-[10px] font-black uppercase text-vplus-blue opacity-50">Últimos Movimentos (Firebase)</h3>
             {myTransactions.length === 0 ? (
-              <p className="text-sm italic text-gray-400 mt-2">Sem movimentos recentes.</p>
+              <p className="text-sm italic text-gray-400 mt-2">Sem movimentos na nuvem.</p>
             ) : (
               myTransactions.slice(0, 3).map(t => (
                 <div key={t.id} className="flex justify-between items-center py-2 border-b border-gray-100 last:border-0">
