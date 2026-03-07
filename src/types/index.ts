@@ -20,6 +20,7 @@ export interface Merchant {
   email: string;
   nif?: string;
   logoUrl?: string;
+  primaryColor?: string; // NOVA MOLÉCULA: Ex: "#1C305C"
   createdAt: Date;
   status: 'active' | 'inactive';
 }
@@ -34,10 +35,4 @@ export interface Transaction {
   type: 'earn' | 'redeem';
   status: 'pending' | 'available';
   createdAt: Date;
-}
-
-export interface Operator {
-  id: string;
-  name: string;
-  merchantId: string;
 }

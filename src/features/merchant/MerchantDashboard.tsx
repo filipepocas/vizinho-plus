@@ -17,7 +17,9 @@ const MerchantDashboard: React.FC = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   const [showScanner, setShowScanner] = useState(false);
 
-  // Lógica do Scanner QR
+  // COR DINÂMICA: Se o lojista tiver cor, usa-a. Se não, usa o azul padrão.
+  const brandColor = activeMerchant?.primaryColor || '#1C305C';
+
   useEffect(() => {
     if (showScanner) {
       const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
@@ -25,8 +27,8 @@ const MerchantDashboard: React.FC = () => {
         setCardNumber(decodedText);
         setShowScanner(false);
         scanner.clear();
-      }, (error) => { /* ignora erros de scan */ });
-      return () => { scanner.clear(); };
+      }, () => {});
+      return () => { try { scanner.clear(); } catch(e) {} };
     }
   }, [showScanner]);
 
@@ -37,21 +39,15 @@ const MerchantDashboard: React.FC = () => {
     if (!querySnapshot.empty) {
       setActiveMerchant({ id: querySnapshot.docs[0].id, ...querySnapshot.docs[0].data() });
       setIsAuthorized(true);
+    } else {
+      alert("Lojista não encontrado.");
     }
-  };
-
-  const checkBalance = () => {
-    const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
-    const balance = transactions
-      .filter(t => t.clientId === cardNumber && new Date(t.createdAt) <= fortyEightHoursAgo)
-      .reduce((acc, t) => acc + (t.type === 'earn' ? t.cashbackAmount : -t.cashbackAmount), 0);
-    setClientAvailableBalance(balance);
   };
 
   const handleSale = async (e: React.FormEvent) => {
     e.preventDefault();
     const saleAmount = parseFloat(amount);
-    if (!cardNumber || isNaN(saleAmount) || saleAmount <= 0) return alert("Dados inválidos");
+    if (!cardNumber || isNaN(saleAmount) || saleAmount <= 0) return;
 
     let redeemAmount = (useCashback && clientAvailableBalance) ? Math.min(saleAmount, clientAvailableBalance) : 0;
     const finalPayable = saleAmount - redeemAmount;
@@ -72,10 +68,10 @@ const MerchantDashboard: React.FC = () => {
   if (!isAuthorized) {
     return (
       <div className="min-h-screen bg-vplus-green-light flex items-center justify-center p-6 font-mono">
-        <div className="bg-white p-8 border-4 border-black shadow-[10px_10px_0_0_rgba(0,0,0,1)] w-full max-w-md">
-          <h1 className="text-2xl font-black uppercase mb-6 italic">Terminal V+</h1>
+        <div className="bg-white p-8 border-8 border-black shadow-[15px_15px_0px_0px_rgba(0,0,0,1)] w-full max-w-md">
+          <h1 className="text-3xl font-black uppercase italic mb-6">Terminal Lojista</h1>
           <form onSubmit={handleMerchantLogin} className="space-y-4">
-            <input type="email" placeholder="EMAIL LOJISTA" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full p-4 border-4 border-black font-black outline-none focus:bg-gray-100" />
+            <input type="email" placeholder="EMAIL" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full p-4 border-4 border-black font-black outline-none" />
             <button className="w-full bg-black text-white p-4 font-black uppercase hover:bg-vplus-blue">Entrar</button>
           </form>
         </div>
@@ -84,45 +80,36 @@ const MerchantDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white font-mono p-6">
+    <div className="min-h-screen bg-white font-mono p-6 border-[12px]" style={{ borderColor: brandColor }}>
       <div className="max-w-xl mx-auto space-y-6">
-        <header className="flex justify-between items-center border-b-4 border-black pb-4">
-          <h2 className="font-black uppercase italic">{activeMerchant?.shopName}</h2>
-          <button onClick={() => setIsAuthorized(false)} className="bg-red-500 text-white px-2 py-1 font-black text-xs">SAIR</button>
+        <header className="flex justify-between items-center border-b-8 border-black pb-4">
+          <h2 className="text-2xl font-black uppercase italic" style={{ color: brandColor }}>{activeMerchant?.shopName}</h2>
+          <button onClick={() => setIsAuthorized(false)} className="bg-red-500 text-white px-3 py-1 font-black text-xs border-2 border-black uppercase">Sair</button>
         </header>
 
-        {message.text && <div className={`p-4 font-black uppercase text-center border-4 border-black ${message.type === 'success' ? 'bg-vplus-green' : 'bg-red-500 text-white'}`}>{message.text}</div>}
-
         {showScanner ? (
-          <div className="border-4 border-black p-4 bg-black">
+          <div className="border-8 border-black p-4 bg-black">
             <div id="reader"></div>
-            <button onClick={() => setShowScanner(false)} className="w-full bg-red-500 text-white p-2 mt-4 font-black uppercase">Cancelar Scanner</button>
+            <button onClick={() => setShowScanner(false)} className="w-full bg-red-500 text-white p-4 mt-4 font-black uppercase">Cancelar</button>
           </div>
         ) : (
           <form onSubmit={handleSale} className="space-y-6">
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase italic">Identificar Cliente</label>
+              <label className="text-xs font-black uppercase italic">Cliente (Litura QR ou Manual)</label>
               <div className="flex gap-2">
-                <input type="text" value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="CARTÃO" className="flex-grow p-4 border-4 border-black text-xl font-black outline-none" />
-                <button type="button" onClick={() => setShowScanner(true)} className="bg-vplus-green border-4 border-black px-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">📷</button>
+                <input type="text" value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="000 000 000" className="flex-grow p-4 border-4 border-black text-2xl font-black outline-none focus:bg-gray-100" />
+                <button type="button" onClick={() => setShowScanner(true)} className="bg-vplus-green border-4 border-black px-6 shadow-[4px_4px_0_0_rgba(0,0,0,1)] text-2xl">📷</button>
               </div>
-              <button type="button" onClick={checkBalance} className="w-full bg-vplus-blue text-white p-2 font-black uppercase text-xs">Consultar Saldo</button>
-              {clientAvailableBalance !== null && <p className="text-xs font-black">Disponível: <span className="text-vplus-green">{clientAvailableBalance.toFixed(2)}€</span></p>}
             </div>
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase italic">Valor Total (€)</label>
-              <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-4 border-4 border-black text-4xl font-black outline-none focus:bg-vplus-green-light" />
+              <label className="text-xs font-black uppercase italic">Valor da Venda (€)</label>
+              <input type="number" step="0.01" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-6 border-4 border-black text-5xl font-black outline-none" />
             </div>
 
-            {clientAvailableBalance! > 0 && (
-              <div className="flex items-center gap-3 p-4 bg-gray-100 border-2 border-black">
-                <input type="checkbox" checked={useCashback} onChange={e => setUseCashback(e.target.checked)} className="w-6 h-6 border-2 border-black" />
-                <span className="text-[10px] font-black uppercase">Descontar Saldo</span>
-              </div>
-            )}
-
-            <button className="w-full bg-black text-white p-6 text-xl font-black uppercase border-b-8 border-vplus-blue active:border-b-0 active:translate-y-2 transition-all">Confirmar</button>
+            <button className="w-full text-white p-8 text-2xl font-black uppercase border-b-[10px] border-black active:border-b-0 active:translate-y-2 transition-all shadow-[0_10px_0_0_rgba(0,0,0,0.2)]" style={{ backgroundColor: brandColor }}>
+              Registar Venda
+            </button>
           </form>
         )}
       </div>
