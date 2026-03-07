@@ -1,58 +1,73 @@
 // src/App.tsx
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
-// IMPORTAÇÃO DAS PÁGINAS (FEATURES)
-import LandingPage from './features/public/LandingPage';
+// IMPORTAÇÃO DE TODOS OS COMPONENTES DO ECOSSISTEMA
 import Login from './features/auth/Login';
-import ForgotPassword from './features/auth/ForgotPassword';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import ClientDashboard from './features/client/ClientDashboard';
-
-// IMPORTAÇÃO DO GUARDIÃO DE SEGURANÇA
 import AdminRoute from './features/auth/AdminRoute';
 
+/**
+ * App.tsx - O Sistema Central de Navegação
+ * Aqui definimos como as 3 APPS (Cliente, Comerciante, Admin) 
+ * comunicam e se protegem entre si.
+ */
 function App() {
-  const { subscribeToTransactions } = useStore();
+  const { subscribeToTransactions, currentUser } = useStore();
 
   useEffect(() => {
-    // Liga a escuta em tempo real da base de dados Firebase
+    // Inicializa a escuta de dados em tempo real do Firebase
+    // Isto garante que o saldo atualiza no exato momento da picação
     const unsubscribe = subscribeToTransactions();
     
-    // Limpa a escuta quando o componente é destruído para poupar bateria/dados
-    return () => unsubscribe();
+    // Limpeza ao fechar a app para evitar consumo de dados desnecessário
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
   }, [subscribeToTransactions]);
 
   return (
-    <Router>
-      <Routes>
-        {/* ROTA PRINCIPAL: Landing Page (A Montra) */}
-        <Route path="/" element={<LandingPage />} />
-        
-        {/* AUTENTICAÇÃO */}
-        <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} />
-        
-        {/* DASHBOARDS DE UTILIZADOR (PÚBLICOS/ACESSO DIRETO) */}
-        <Route path="/cliente" element={<ClientDashboard />} />
-        <Route path="/lojista" element={<MerchantDashboard />} />
-        
-        {/* PAINEL DE CONTROLO (RESTRITO APENAS AO FILIPE) */}
-        <Route 
-          path="/admin" 
-          element={
-            <AdminRoute>
-              <AdminDashboard />
-            </AdminRoute>
-          } 
-        />
+    <BrowserRouter>
+      <div className="min-h-screen bg-gray-50">
+        <Routes>
+          {/* ROTA INICIAL: Sempre o Login conforme as regras de segurança */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* PAINEL DO ADMINISTRADOR (FILIPE) - Protegido por AdminRoute */}
+          <Route 
+            path="/admin" 
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
+            } 
+          />
 
-        {/* REDIRECIONAMENTO DE SEGURANÇA: Se a rota não existir, volta para a Landing Page */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </Router>
+          {/* PAINEL DO LOJISTA (TERMINAL DE PICAÇÃO) */}
+          <Route 
+            path="/merchant" 
+            element={
+              currentUser?.role === 'merchant' || currentUser?.role === 'admin' 
+                ? <MerchantDashboard /> 
+                : <Navigate to="/login" replace />
+            } 
+          />
+
+          {/* PAINEL DO CLIENTE (CARTEIRA DIGITAL E QR CODE) */}
+          <Route 
+            path="/client" 
+            element={<ClientDashboard />} 
+          />
+
+          {/* REDIRECIONAMENTO DE SEGURANÇA: Qualquer rota desconhecida vai para o Login */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
+          <Route path="*" element={<Navigate to="/login" replace />} />
+        </Routes>
+      </div>
+    </BrowserRouter>
   );
 }
 
