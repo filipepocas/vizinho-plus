@@ -1,9 +1,13 @@
 // src/config/firebase.ts
-import { initializeApp } from "firebase/app";
-import { getFirestore } from "firebase/firestore";
-import { getAuth } from "firebase/auth";
+import { initializeApp } from 'firebase/app';
+import { 
+  getFirestore, 
+  initializeFirestore, 
+  persistentLocalCache, 
+  persistentMultipleTabManager 
+} from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 
-// ESTES VALORES TÊM DE SER OS TEUS, NÃO OS MEUS
 const firebaseConfig = {
   apiKey: "AIzaSyAZc0WqXxax4PongdY25SIveqyTX0SgFoM",
   authDomain: "vizinho-plus.firebaseapp.com",
@@ -14,5 +18,12 @@ const firebaseConfig = {
 };
 
 const app = initializeApp(firebaseConfig);
-export const db = getFirestore(app);
+
+// CONFIGURAÇÃO DE CACHE PERSISTENTE (OFFLINE-FIRST)
+export const db = initializeFirestore(app, {
+  localCache: persistentLocalCache({
+    tabManager: persistentMultipleTabManager()
+  })
+});
+
 export const auth = getAuth(app);
