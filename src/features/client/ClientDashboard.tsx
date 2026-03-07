@@ -2,35 +2,101 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
+import { collection, query, where, getDocs, addDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 
 const ClientDashboard: React.FC = () => {
   const { transactions } = useStore();
-  const [cardNumber, setCardNumber] = useState('');
+  
+  // ESTADOS DE SESSÃO
   const [isLogged, setIsLogged] = useState(false);
+  const [view, setView] = useState<'login' | 'register'>('login');
+  const [loggedClient, setLoggedClient] = useState<any>(null);
 
-  // 1. FILTRAR TRANSAÇÕES DO CLIENTE
-  const userTransactions = transactions.filter(t => t.clientId === cardNumber);
+  // ESTADOS DO FORMULÁRIO
+  const [loginId, setLoginId] = useState(''); // NIF, Email ou Cartão
+  const [password, setPassword] = useState('');
+  
+  // ESTADOS DE REGISTO (CONFORME CHECKLIST PAG 3)
+  const [regName, setRegName] = useState('');
+  const [regNif, setRegNif] = useState('');
+  const [regEmail, setRegEmail] = useState('');
+  const [regPhone, setRegPhone] = useState('');
+  const [regZip, setRegZip] = useState('');
+  const [regPass, setRegPass] = useState('');
 
-  // 2. LOGICA MOLECULAR: AGRUPAR SALDO POR LOJA (PAG 1 DO PDF)
+  // 1. LÓGICA DE LOGIN (MULTI-IDENTIFICADOR)
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const clientsRef = collection(db, 'clients');
+    
+    // Procura por NIF, Email ou Número do Cartão
+    const queries = [
+      query(clientsRef, where('nif', '==', loginId)),
+      query(clientsRef, where('email', '==', loginId.toLowerCase())),
+      query(clientsRef, where('cardNumber', '==', loginId))
+    ];
+
+    for (const q of queries) {
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        const clientData = snap.docs[0].data();
+        if (clientData.password === password) {
+          setLoggedClient({ id: snap.docs[0].id, ...clientData });
+          setIsLogged(true);
+          return;
+        }
+      }
+    }
+    alert("Credenciais inválidas. Verifique o identificador e a password.");
+  };
+
+  // 2. LÓGICA DE REGISTO (VALIDAÇÃO DE NIF ÚNICO)
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (regNif.length !== 9) return alert("NIF deve ter 9 dígitos.");
+
+    const q = query(collection(db, 'clients'), where('nif', '==', regNif));
+    const existing = await getDocs(q);
+    if (!existing.empty) return alert("Este NIF já está registado!");
+
+    const newCardNumber = Math.floor(100000000 + Math.random() * 900000000).toString();
+
+    const newClient = {
+      name: regName,
+      nif: regNif,
+      email: regEmail.toLowerCase(),
+      phone: regPhone,
+      zipCode: regZip,
+      password: regPass,
+      cardNumber: newCardNumber,
+      createdAt: new Date()
+    };
+
+    try {
+      await addDoc(collection(db, 'clients'), newClient);
+      alert(`Registo concluído! O seu nº de cartão é: ${newCardNumber}`);
+      setView('login');
+    } catch {
+      alert("Erro ao criar conta.");
+    }
+  };
+
+  // 3. CÁLCULOS DE SALDO (LOGICA MOLECULAR POR LOJA)
+  const userTransactions = transactions.filter(t => t.clientId === loggedClient?.cardNumber);
+  
   const getBalancesByStore = () => {
     const stores: { [key: string]: { name: string, total: number, available: number } } = {};
-    const now = new Date();
-    const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
+    const fortyEightHoursAgo = new Date(Date.now() - (48 * 60 * 60 * 1000));
 
     userTransactions.forEach(t => {
-      if (!stores[t.merchantId]) {
-        stores[t.merchantId] = { name: t.merchantName, total: 0, available: 0 };
-      }
-
+      if (!stores[t.merchantId]) stores[t.merchantId] = { name: t.merchantName, total: 0, available: 0 };
       const isAvailable = new Date(t.createdAt) <= fortyEightHoursAgo;
 
       if (t.type === 'earn') {
         stores[t.merchantId].total += t.cashbackAmount;
-        if (isAvailable) {
-          stores[t.merchantId].available += t.cashbackAmount;
-        }
-      } else if (t.type === 'redeem' || t.type === 'subtract') {
-        // Regra do PDF: Retira primeiro do disponível, depois do total
+        if (isAvailable) stores[t.merchantId].available += t.cashbackAmount;
+      } else {
         stores[t.merchantId].total -= t.cashbackAmount;
         stores[t.merchantId].available -= t.cashbackAmount;
       }
@@ -38,103 +104,74 @@ const ClientDashboard: React.FC = () => {
     return stores;
   };
 
-  const storeBalances = getBalancesByStore();
-  const globalTotal = Object.values(storeBalances).reduce((acc, curr) => acc + curr.total, 0);
-
   if (!isLogged) {
     return (
-      <div className="min-h-screen bg-vplus-blue flex items-center justify-center p-6 font-mono text-black">
-        <div className="bg-white p-8 border-8 border-black shadow-[15px_15px_0_0_rgba(163,230,53,1)] w-full max-w-md">
-          <h1 className="text-4xl font-black uppercase italic mb-2">V+ CLIENTE</h1>
-          <p className="text-[10px] font-bold uppercase mb-8 opacity-60">Aceda com o seu nº de cartão</p>
-          <input 
-            type="text" 
-            placeholder="000 000 000" 
-            value={cardNumber}
-            onChange={(e) => setCardNumber(e.target.value)}
-            className="w-full p-4 border-4 border-black font-black text-2xl text-center outline-none mb-6"
-          />
-          <button 
-            onClick={() => cardNumber.length >= 3 && setIsLogged(true)}
-            className="w-full bg-black text-white p-5 font-black uppercase text-xl border-b-8 border-vplus-green active:border-b-0 active:translate-y-2 transition-all"
-          >
-            Ver Meus Saldos
-          </button>
+      <div className="min-h-screen bg-vplus-blue flex items-center justify-center p-4 font-mono text-black">
+        <div className="bg-white p-6 border-8 border-black shadow-[12px_12px_0_0_rgba(163,230,53,1)] w-full max-w-md">
+          <h1 className="text-3xl font-black uppercase italic mb-6 text-center">V+ CLIENTE</h1>
+          
+          <div className="flex border-4 border-black mb-6">
+            <button onClick={() => setView('login')} className={`flex-1 p-2 font-black uppercase text-xs ${view === 'login' ? 'bg-black text-white' : 'bg-white'}`}>Entrar</button>
+            <button onClick={() => setView('register')} className={`flex-1 p-2 font-black uppercase text-xs ${view === 'register' ? 'bg-black text-white' : 'bg-white'}`}>Registo</button>
+          </div>
+
+          {view === 'login' ? (
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input placeholder="NIF / EMAIL / CARTÃO" value={loginId} onChange={e => setLoginId(e.target.value)} className="w-full p-3 border-4 border-black font-black outline-none" required />
+              <input type="password" placeholder="PASSWORD" value={password} onChange={e => setPassword(e.target.value)} className="w-full p-3 border-4 border-black font-black outline-none" required />
+              <button className="w-full bg-vplus-green p-4 font-black uppercase border-b-8 border-black active:border-b-0 active:translate-y-1 transition-all">Aceder Carteira</button>
+            </form>
+          ) : (
+            <form onSubmit={handleRegister} className="space-y-3">
+              <input placeholder="NOME COMPLETO" value={regName} onChange={e => setRegName(e.target.value)} className="w-full p-2 border-2 border-black font-black text-xs outline-none" required />
+              <div className="grid grid-cols-2 gap-2">
+                <input placeholder="NIF" value={regNif} onChange={e => setRegNif(e.target.value)} className="w-full p-2 border-2 border-black font-black text-xs outline-none" required />
+                <input placeholder="TELEMÓVEL" value={regPhone} onChange={e => setRegPhone(e.target.value)} className="w-full p-2 border-2 border-black font-black text-xs outline-none" required />
+              </div>
+              <input placeholder="EMAIL" type="email" value={regEmail} onChange={e => setRegEmail(e.target.value)} className="w-full p-2 border-2 border-black font-black text-xs outline-none" required />
+              <input placeholder="CÓDIGO POSTAL" value={regZip} onChange={e => setRegZip(e.target.value)} className="w-full p-2 border-2 border-black font-black text-xs outline-none" required />
+              <input placeholder="PASSWORD" type="password" value={regPass} onChange={e => setRegPass(e.target.value)} className="w-full p-2 border-2 border-black font-black text-xs outline-none" required />
+              <button className="w-full bg-black text-white p-3 font-black uppercase text-xs border-b-4 border-vplus-green">Criar Conta</button>
+            </form>
+          )}
         </div>
       </div>
     );
   }
 
+  const balances = getBalancesByStore();
+
   return (
     <div className="min-h-screen bg-gray-100 font-mono text-black pb-10">
-      {/* HEADER FIXO */}
-      <header className="bg-white border-b-8 border-black p-6 sticky top-0 z-20">
-        <div className="max-w-md mx-auto flex justify-between items-center">
-          <h2 className="text-2xl font-black italic uppercase">Meu <span className="text-vplus-green">Painel</span></h2>
-          <button onClick={() => setIsLogged(false)} className="text-[10px] font-black uppercase underline">Sair</button>
-        </div>
+      <header className="bg-white border-b-8 border-black p-4 sticky top-0 z-20 flex justify-between items-center">
+        <h2 className="font-black italic uppercase">Olá, {loggedClient.name.split(' ')[0]}</h2>
+        <button onClick={() => setIsLogged(false)} className="bg-red-500 text-white p-1 border-2 border-black text-[8px] font-black uppercase">Sair</button>
       </header>
 
       <main className="max-w-md mx-auto p-4 space-y-6">
-        {/* CARTÃO QR */}
         <section className="bg-vplus-blue text-white p-6 border-8 border-black shadow-[8px_8px_0_0_rgba(0,0,0,1)] flex flex-col items-center">
-          <div className="bg-white p-4 border-4 border-black mb-4">
-            <QRCodeSVG value={cardNumber} size={140} />
-          </div>
-          <p className="text-2xl font-black tracking-widest">{cardNumber}</p>
-          <div className="mt-4 bg-vplus-green text-black px-4 py-1 text-[10px] font-black uppercase">
-            Saldo Total: {globalTotal.toFixed(2)}€
-          </div>
+          <div className="bg-white p-4 border-4 border-black mb-4"><QRCodeSVG value={loggedClient.cardNumber} size={140} /></div>
+          <p className="text-2xl font-black tracking-widest">{loggedClient.cardNumber}</p>
+          <p className="text-[8px] uppercase opacity-50 mt-2">NIF: {loggedClient.nif}</p>
         </section>
 
-        {/* LISTAGEM POR LOJA (EXIGÊNCIA PDF PÁG 1) */}
         <section className="space-y-4">
-          <h3 className="font-black uppercase italic border-b-4 border-black inline-block text-sm">Saldos por Estabelecimento</h3>
-          
-          {Object.keys(storeBalances).length === 0 ? (
-            <div className="bg-white border-4 border-black p-8 text-center italic opacity-40 text-xs">
-              Ainda não tem movimentos registados.
+          <h3 className="font-black uppercase italic border-b-4 border-black inline-block text-sm">Saldos por Loja</h3>
+          {Object.entries(balances).map(([id, data]) => (
+            <div key={id} className="bg-white border-4 border-black p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
+              <p className="font-black uppercase text-lg">{data.name}</p>
+              <div className="grid grid-cols-2 gap-2 mt-2">
+                <div className="bg-vplus-green-light p-2 border-2 border-black">
+                  <p className="text-[7px] font-black uppercase">Disponível</p>
+                  <p className="font-black text-xl">{data.available.toFixed(2)}€</p>
+                </div>
+                <div className="bg-gray-100 p-2 border-2 border-black">
+                  <p className="text-[7px] font-black uppercase">Total</p>
+                  <p className="font-black text-xl">{data.total.toFixed(2)}€</p>
+                </div>
+              </div>
             </div>
-          ) : (
-            Object.entries(storeBalances).map(([id, data]) => (
-              <div key={id} className="bg-white border-4 border-black p-4 shadow-[4px_4px_0_0_rgba(0,0,0,1)]">
-                <div className="flex justify-between items-start mb-2">
-                  <p className="font-black uppercase text-lg leading-none">{data.name}</p>
-                </div>
-                <div className="grid grid-cols-2 gap-2 mt-4">
-                  <div className="bg-vplus-green-light border-2 border-black p-2">
-                    <p className="text-[8px] font-black uppercase opacity-60">Disponível</p>
-                    <p className="font-black text-xl">{data.available.toFixed(2)}€</p>
-                  </div>
-                  <div className="bg-gray-100 border-2 border-black p-2">
-                    <p className="text-[8px] font-black uppercase opacity-60">Total Acumulado</p>
-                    <p className="font-black text-xl">{data.total.toFixed(2)}€</p>
-                  </div>
-                </div>
-                <p className="text-[7px] mt-2 font-bold uppercase opacity-40 italic">
-                  * O saldo ganho hoje só fica disponível passadas 48h.
-                </p>
-              </div>
-            ))
-          )}
-        </section>
-
-        {/* HISTÓRICO DE MOVIMENTOS */}
-        <section className="space-y-4">
-          <h3 className="font-black uppercase italic border-b-4 border-black inline-block text-sm">Últimos Movimentos</h3>
-          <div className="space-y-2">
-            {userTransactions.sort((a,b) => b.createdAt.getTime() - a.createdAt.getTime()).map(t => (
-              <div key={t.id} className="bg-white border-2 border-black p-3 flex justify-between items-center text-[10px]">
-                <div>
-                  <p className="font-black uppercase">{t.merchantName}</p>
-                  <p className="opacity-50">{t.createdAt.toLocaleDateString()} - Doc: {t.docNumber || '---'}</p>
-                </div>
-                <p className={`font-black text-sm ${t.type === 'earn' ? 'text-vplus-green' : 'text-red-600'}`}>
-                  {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)}€
-                </p>
-              </div>
-            ))}
-          </div>
+          ))}
         </section>
       </main>
     </div>
