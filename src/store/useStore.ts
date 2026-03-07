@@ -13,18 +13,22 @@ import { Transaction } from '../types';
 
 interface StoreState {
   transactions: Transaction[];
+  currentUser: any | null; // Adicionado para resolver o erro de AdminRoute
+  setCurrentUser: (user: any | null) => void; // Adicionado para resolver o erro de Login
   addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
   subscribeToTransactions: () => () => void;
 }
 
 export const useStore = create<StoreState>((set) => ({
   transactions: [],
+  currentUser: null,
+
+  setCurrentUser: (user) => set({ currentUser: user }),
 
   addTransaction: async (transaction) => {
     try {
       await addDoc(collection(db, 'transactions'), {
         ...transaction,
-        // Convertemos a data para o formato do Firebase
         createdAt: Timestamp.fromDate(transaction.createdAt)
       });
     } catch (error) {
@@ -41,7 +45,6 @@ export const useStore = create<StoreState>((set) => ({
         return {
           id: doc.id,
           ...data,
-          // Convertemos de volta de Timestamp para Date do JavaScript
           createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : new Date(data.createdAt),
         } as Transaction;
       });
