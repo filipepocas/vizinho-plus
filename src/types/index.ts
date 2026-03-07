@@ -3,7 +3,6 @@
 export interface User {
   id: string;
   email: string;
-  name: string;
   role: 'admin' | 'merchant' | 'client';
 }
 
@@ -11,37 +10,34 @@ export interface Client {
   id: string;
   name: string;
   email?: string;
-  phone?: string;
-  cardNumber: string;
-  totalCashback: number;
-  availableCashback: number;
-  createdAt: any;
+  totalBalance: number;
+  availableBalance: number;
 }
 
 export interface Merchant {
   id: string;
   shopName: string;
   email: string;
-  nif: string;
+  nif?: string;
+  logoUrl?: string;
+  createdAt: Date;
   status: 'active' | 'inactive';
-  createdAt: any;
-}
-
-export interface Operator {
-  id: string;
-  merchantId: string;
-  name: string;
-  email: string;
 }
 
 export interface Transaction {
   id: string;
   clientId: string;
   merchantId: string;
-  merchantName?: string;
+  merchantName: string;
   amount: number;
   cashbackAmount: number;
   type: 'earn' | 'redeem';
-  status: 'pending' | 'available' | 'cancelled';
-  createdAt: any;
+  status: 'pending' | 'available';
+  createdAt: Date;
+}
+
+export interface Operator {
+  id: string;
+  name: string;
+  merchantId: string;
 }
