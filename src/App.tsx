@@ -3,13 +3,13 @@ import React, { useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import Login from './features/auth/Login';
-import ForgotPassword from './features/auth/ForgotPassword'; // NOVA LINHA
+import ForgotPassword from './features/auth/ForgotPassword';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import ClientDashboard from './features/client/ClientDashboard';
 
-// Proteção de Rota para o Admin
-const PrivateRoute = ({ children }: { children: JSX.Element }) => {
+// Proteção de Rota para o Admin - CORREÇÃO DO TIPO AQUI
+const PrivateRoute = ({ children }: { children: React.ReactElement }) => {
   const { currentUser } = useStore();
   return currentUser ? children : <Navigate to="/login" />;
 };
@@ -28,7 +28,7 @@ function App() {
       <Routes>
         {/* ROTAS PÚBLICAS */}
         <Route path="/login" element={<Login />} />
-        <Route path="/forgot-password" element={<ForgotPassword />} /> {/* NOVA LINHA: A "ESTAÇÃO" DA RECUPERAÇÃO */}
+        <Route path="/forgot-password" element={<ForgotPassword />} />
         
         {/* ROTAS DE UTILIZADOR */}
         <Route path="/cliente" element={<ClientDashboard />} />
