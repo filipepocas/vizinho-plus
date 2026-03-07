@@ -34,12 +34,27 @@ export const useStore = create<AppState>((set, get) => ({
 
   addTransaction: async (transactionData) => {
     try {
-      await addDoc(collection(db, 'transactions'), {
+      // 1. Gravar a Transação Principal
+      const docRef = await addDoc(collection(db, 'transactions'), {
         ...transactionData,
         createdAt: Timestamp.now(),
       });
+
+      // 2. Se for uma Redenção (Gasto de Saldo), criar um Log de Auditoria de Segurança
+      if (transactionData.type === 'redeem') {
+        await addDoc(collection(db, 'audit_logs'), {
+          transactionId: docRef.id,
+          type: 'SECURITY_CHECK',
+          severity: transactionData.cashbackAmount > 50 ? 'HIGH' : 'LOW', // Alerta se gastar > 50€ de uma vez
+          merchantId: transactionData.merchantId,
+          clientId: transactionData.clientId,
+          amount: transactionData.cashbackAmount,
+          timestamp: Timestamp.now(),
+          message: `Redenção de saldo efetuada na loja ${transactionData.merchantName}`
+        });
+      }
     } catch (error) {
-      console.error("Erro ao gravar transação: ", error);
+      console.error("Erro na operação molecular: ", error);
       throw error;
     }
   },
