@@ -1,4 +1,3 @@
-// src/store/useStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { 
@@ -16,6 +15,7 @@ interface StoreState {
   transactions: Transaction[];
   currentUser: any | null;
   setCurrentUser: (user: any | null) => void;
+  logout: () => void;
   addTransaction: (transaction: Omit<Transaction, 'id'>) => Promise<void>;
   subscribeToTransactions: () => () => void;
 }
@@ -27,8 +27,13 @@ export const useStore = create<StoreState>()(
       currentUser: null,
 
       setCurrentUser: (user) => {
-        console.log("Sistema: Utilizador autenticado com sucesso.");
+        console.log("MOLÉCULA: Utilizador injetado no estado:", user);
         set({ currentUser: user });
+      },
+
+      logout: () => {
+        set({ currentUser: null });
+        localStorage.removeItem('vplus-storage-auth-v1');
       },
 
       addTransaction: async (transaction) => {
@@ -38,7 +43,7 @@ export const useStore = create<StoreState>()(
             createdAt: Timestamp.fromDate(transaction.createdAt)
           });
         } catch (error) {
-          console.error("Erro na transação:", error);
+          console.error("ERRO MOLECULAR TRANSACTION:", error);
           throw error;
         }
       },
@@ -59,7 +64,7 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: 'vplus-storage-v1', // Chave limpa que acabaste de autorizar
+      name: 'vplus-storage-auth-v1',
       storage: createJSONStorage(() => localStorage),
     }
   )
