@@ -26,6 +26,7 @@ const MerchantDashboard: React.FC = () => {
 
   useEffect(() => {
     if (isAuthorized && activeMerchant) {
+      // Subscrição usa a coleção 'transactions' conforme a estrutura do Firebase
       const unsubscribe = subscribeToTransactions('merchant', activeMerchant.id);
       return () => unsubscribe();
     }
@@ -52,30 +53,32 @@ const MerchantDashboard: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
+      // Procura na coleção 'merchants' pelo email exato que está no Firebase
       const q = query(collection(db, 'merchants'), where('email', '==', loginEmail.toLowerCase().trim()));
       const snap = await getDocs(q);
+      
       if (!snap.empty) {
         const data = snap.docs[0].data();
-        // NORMALIZAÇÃO: Garante que o nome da loja é capturado corretamente
+        // Mapeia shopName para garantir que o nome aparece no Dashboard
         setActiveMerchant({ 
           id: snap.docs[0].id, 
           ...data,
-          displayName: data.shopName || data.name || 'Loja Vizinho+'
+          displayName: data.shopName || data.name || 'Lojista' 
         });
         setIsAuthorized(true);
       } else {
-        alert("Lojista não registado. Contacte o Administrador.");
+        alert("Lojista não registado. Verifique o email padaria@vizinho.pt");
       }
     } catch (err) {
       console.error(err);
-      alert("Erro ao aceder ao servidor.");
+      alert("Erro ao aceder ao Firebase.");
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleAddOperator = async () => {
-    if (newOpCode.length !== 5) return alert("O código deve ter exatamente 5 dígitos.");
+    if (newOpCode.length !== 5) return alert("O PIN deve ter 5 dígitos.");
     if (!newOpName) return alert("Insira o nome do operador.");
 
     const newOp = {
@@ -85,18 +88,21 @@ const MerchantDashboard: React.FC = () => {
     };
 
     try {
+      // Atualiza o documento na coleção 'merchants'
       const merchantRef = doc(db, 'merchants', activeMerchant.id);
       await updateDoc(merchantRef, { operators: arrayUnion(newOp) });
+      
       setActiveMerchant({
         ...activeMerchant,
         operators: [...(activeMerchant.operators || []), newOp]
       });
+      
       setNewOpName('');
       setNewOpCode('');
-      setMessage({ type: 'success', text: "Operador registado!" });
+      setMessage({ type: 'success', text: "Operador pronto para faturar!" });
       setTimeout(() => setMessage({ type: '', text: '' }), 2000);
     } catch (error) {
-      alert("Erro ao guardar operador.");
+      alert("Erro ao guardar operador no Firebase.");
     }
   };
 
@@ -119,7 +125,7 @@ const MerchantDashboard: React.FC = () => {
   const processAction = async (type: 'earn' | 'redeem' | 'subtract') => {
     const val = parseFloat(amount);
     if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber || opCode.length !== 5) {
-      return alert("Preencha Cartão, Valor, Nº Documento e PIN de 5 dígitos.");
+      return alert("Preencha todos os campos obrigatórios.");
     }
     
     const operator = activeMerchant.operators?.find((o: any) => o.code === opCode);
@@ -128,7 +134,7 @@ const MerchantDashboard: React.FC = () => {
     if (type === 'redeem') {
       const available = getClientAvailableBalance(cardNumber);
       if (val > available) {
-        return alert(`Saldo insuficiente! Disponível nesta loja: ${available.toFixed(2)}€`);
+        return alert(`Saldo insuficiente! Disponível: ${available.toFixed(2)}€`);
       }
     }
 
@@ -139,7 +145,7 @@ const MerchantDashboard: React.FC = () => {
       await addTransaction({
         clientId: cardNumber,
         merchantId: activeMerchant.id,
-        merchantName: activeMerchant.displayName,
+        merchantName: activeMerchant.displayName, // Usa o shopName capturado no login
         amount: type === 'earn' ? val : 0,
         cashbackAmount: cashback,
         type: type,
@@ -148,13 +154,13 @@ const MerchantDashboard: React.FC = () => {
         status: type === 'earn' ? 'pending' : 'available'
       });
       
-      setMessage({ type: 'success', text: "Operação concluída com sucesso!" });
+      setMessage({ type: 'success', text: "Transação enviada para o Vizinho!" });
       setAmount('');
       setDocumentNumber('');
       setOpCode('');
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
-      setMessage({ type: 'error', text: "Erro na base de dados." });
+      setMessage({ type: 'error', text: "Erro ao gravar transação." });
     } finally {
       setIsLoading(false);
     }
@@ -162,24 +168,24 @@ const MerchantDashboard: React.FC = () => {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 font-sans">
+      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6">
         <div className="bg-white p-10 rounded-[32px] shadow-xl w-full max-w-md border border-slate-100 text-center">
           <h1 className="text-3xl font-black italic text-[#0a2540] mb-2">VIZINHO+</h1>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-8 text-center">Terminal de Lojista</p>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-8">Terminal de Lojista</p>
           <form onSubmit={handleMerchantLogin} className="space-y-4 text-left">
             <div>
-              <label className="text-xs font-bold uppercase text-slate-400 ml-1">Email do Estabelecimento</label>
+              <label className="text-xs font-bold uppercase text-slate-400 ml-1">Email da Loja</label>
               <input 
                 type="email" 
                 value={loginEmail} 
                 onChange={e => setLoginEmail(e.target.value)} 
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
-                placeholder="loja@email.com"
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f]"
+                placeholder="ex: padaria@vizinho.pt"
                 required 
               />
             </div>
-            <button className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-bold hover:bg-[#153455] transition-all shadow-lg">
-              {isLoading ? 'A carregar...' : 'Abrir Terminal'}
+            <button className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-bold hover:bg-[#153455] shadow-lg">
+              {isLoading ? 'A verificar...' : 'Abrir Terminal'}
             </button>
           </form>
         </div>
@@ -204,21 +210,19 @@ const MerchantDashboard: React.FC = () => {
           </div>
           <div className="flex gap-3">
             <button onClick={() => setShowOpManager(!showOpManager)} className="px-5 py-2.5 rounded-xl bg-slate-50 text-[#0a2540] text-sm font-bold border border-slate-200 hover:bg-slate-100 transition-all">
-              {showOpManager ? 'Voltar ao Terminal' : 'Gerir Equipa'}
+              {showOpManager ? 'Voltar' : 'Gerir Equipa'}
             </button>
-            <button onClick={() => setIsAuthorized(false)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100 hover:bg-red-100 transition-all">Sair</button>
+            <button onClick={() => setIsAuthorized(false)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100">Sair</button>
           </div>
         </header>
 
         {showOpManager ? (
           <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
-            <h3 className="text-lg font-bold text-[#0a2540] mb-6 flex items-center gap-2">
-              <span className="w-2 h-6 bg-[#00d66f] rounded-full"></span> Configurar Operadores
-            </h3>
+            <h3 className="text-lg font-bold text-[#0a2540] mb-6 flex items-center gap-2">Configurar Operadores</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-              <input placeholder="NOME DO OPERADOR" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f]" />
-              <input placeholder="PIN (5 DÍGITOS)" value={newOpCode} onChange={e => setNewOpCode(e.target.value)} maxLength={5} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-center font-bold tracking-widest" />
-              <button onClick={handleAddOperator} className="bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-bold hover:bg-[#00c265] transition-all">Adicionar à Equipa</button>
+              <input placeholder="NOME" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl" />
+              <input placeholder="PIN (5 DÍGITOS)" value={newOpCode} onChange={e => setNewOpCode(e.target.value)} maxLength={5} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center font-bold" />
+              <button onClick={handleAddOperator} className="bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-bold hover:bg-[#00c265]">Adicionar Operador</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {activeMerchant.operators?.map((op: any) => (
@@ -233,46 +237,39 @@ const MerchantDashboard: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="lg:col-span-2 bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 space-y-8">
               <div className="space-y-3">
-                <label className="text-xs font-bold uppercase text-slate-400 tracking-wider text-center block">1. Identificar Cliente (Cartão/NIF)</label>
+                <label className="text-xs font-bold uppercase text-slate-400 tracking-wider block text-center">1. Identificar Cliente (NIF ou Cartão)</label>
                 <div className="flex gap-3">
-                  <input value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="NIF ou Nº Cartão" className="flex-grow p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none focus:border-[#00d66f]" />
-                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-[#153455] transition-all"><span className="text-2xl">📷</span></button>
+                  <input value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="NIF ou Nº Cartão" className="flex-grow p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none" />
+                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-[#153455]"><span className="text-2xl">📷</span></button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
                   <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">2. Valor da Venda (€)</label>
-                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none focus:border-[#00d66f]" />
+                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">3. Nº da Fatura / Doc.</label>
-                  <input value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} placeholder="Ex: FT 101" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none focus:border-[#00d66f] uppercase" />
+                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">3. Nº Fatura</label>
+                  <input value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} placeholder="Ex: FT 101" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none uppercase" />
                 </div>
               </div>
 
               <div className="pt-4 border-t border-slate-50 text-center">
-                <label className="text-xs font-bold uppercase text-red-500 tracking-wider block mb-3">4. PIN de Autorização do Operador</label>
-                <input type="password" value={opCode} onChange={e => setOpCode(e.target.value)} maxLength={5} placeholder="•••••" className="w-full max-w-xs mx-auto p-5 bg-red-50/30 border border-red-100 rounded-2xl text-3xl text-center font-bold tracking-[0.5em] text-[#0a2540] outline-none focus:border-red-300" />
+                <label className="text-xs font-bold uppercase text-red-500 tracking-wider block mb-3">4. Autorização (PIN Operador)</label>
+                <input type="password" value={opCode} onChange={e => setOpCode(e.target.value)} maxLength={5} placeholder="•••••" className="w-full max-w-xs mx-auto p-5 bg-red-50/30 border border-red-100 rounded-2xl text-3xl text-center font-bold tracking-[0.5em]" />
               </div>
             </div>
 
             <div className="flex flex-col gap-4">
               <button onClick={() => processAction('earn')} className="group bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] transition-all hover:scale-[1.02] shadow-lg flex flex-col items-center gap-2">
                 <span className="text-4xl">💰</span>
-                <span className="font-bold text-lg">Atribuir Cashback</span>
+                <span className="font-bold text-lg text-center">Atribuir Cashback</span>
               </button>
-              
-              <button onClick={() => processAction('subtract')} className="bg-white p-8 rounded-[32px] text-[#0a2540] border border-slate-100 transition-all hover:bg-slate-50 flex flex-col items-center gap-2">
-                <span className="text-4xl">🧾</span>
-                <span className="font-bold text-lg">Nota de Crédito</span>
-              </button>
-
               <button onClick={() => processAction('redeem')} className="bg-[#0a2540] p-8 rounded-[32px] text-white transition-all hover:bg-[#153455] shadow-lg flex flex-col items-center gap-2">
                 <span className="text-4xl">🎁</span>
-                <span className="font-bold text-lg">Descontar Saldo</span>
+                <span className="font-bold text-lg text-center">Descontar Saldo</span>
               </button>
-
               {message.text && (
                 <div className={`mt-4 p-5 rounded-2xl font-bold text-center ${message.type === 'success' ? 'bg-[#00d66f]/20 text-[#0a2540]' : 'bg-red-50 text-red-600'}`}>
                   {message.text}
@@ -286,7 +283,7 @@ const MerchantDashboard: React.FC = () => {
           <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-md z-50 p-6 flex flex-col items-center justify-center">
             <div className="bg-white p-4 rounded-[40px] shadow-2xl w-full max-w-lg relative">
               <div id="reader" className="w-full"></div>
-              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-bold mt-4 rounded-2xl">Fechar Scanner</button>
+              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-bold mt-4 rounded-2xl">Sair do Scanner</button>
             </div>
           </div>
         )}
