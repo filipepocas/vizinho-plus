@@ -26,7 +26,10 @@ export const useStore = create<StoreState>()(
       transactions: [],
       currentUser: null,
 
-      setCurrentUser: (user) => set({ currentUser: user }),
+      setCurrentUser: (user) => {
+        console.log("Sistema: Utilizador autenticado com sucesso.");
+        set({ currentUser: user });
+      },
 
       addTransaction: async (transaction) => {
         try {
@@ -35,7 +38,7 @@ export const useStore = create<StoreState>()(
             createdAt: Timestamp.fromDate(transaction.createdAt)
           });
         } catch (error) {
-          console.error("Erro ao adicionar transação:", error);
+          console.error("Erro na transação:", error);
           throw error;
         }
       },
@@ -56,7 +59,7 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: 'vplus-storage', // Nome da chave no LocalStorage
+      name: 'vplus-storage-v1', // Chave limpa que acabaste de autorizar
       storage: createJSONStorage(() => localStorage),
     }
   )
