@@ -1,3 +1,4 @@
+// src/store/useStore.ts
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { 
@@ -43,7 +44,7 @@ export const useStore = create<StoreState>()(
             createdAt: Timestamp.fromDate(transaction.createdAt)
           });
         } catch (error) {
-          console.error("ERRO MOLECULAR TRANSACTION:", error);
+          console.error("ERRO FIREBASE TRANSACTION:", error);
           throw error;
         }
       },
@@ -64,7 +65,7 @@ export const useStore = create<StoreState>()(
       },
     }),
     {
-      name: 'vplus-storage-auth-v1',
+      name: 'vplus-storage-auth-v1', // Chave única para limpar erros anteriores
       storage: createJSONStorage(() => localStorage),
     }
   )
