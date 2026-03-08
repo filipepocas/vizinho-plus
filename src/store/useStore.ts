@@ -1,4 +1,3 @@
-// src/store/useStore.ts
 import { create } from 'zustand';
 import { 
   collection, 
@@ -7,10 +6,12 @@ import {
   query, 
   orderBy, 
   where,
-  Timestamp,
-  serverTimestamp 
+  serverTimestamp,
+  setDoc,
+  doc 
 } from 'firebase/firestore';
-import { db } from '../config/firebase';
+import { signOut } from 'firebase/auth'; // Adicionado para logout real
+import { db, auth } from '../config/firebase';
 
 export interface Transaction {
   id: string;
@@ -26,13 +27,24 @@ export interface Transaction {
   createdAt: any;
 }
 
+// Interface para o perfil do Cliente conforme o teu plano
+export interface UserProfile {
+  uid: string;
+  name: string;
+  nif: string;
+  freguesia: string;
+  email: string;
+  role: 'client' | 'merchant' | 'admin';
+}
+
 interface StoreState {
   transactions: Transaction[];
-  currentUser: any | null;
+  currentUser: UserProfile | any | null;
   setCurrentUser: (user: any | null) => void;
-  logout: () => void;
+  logout: () => Promise<void>; // Agora é assíncrona
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   subscribeToTransactions: (role?: string, id?: string) => () => void;
+  registerClientProfile: (profile: UserProfile) => Promise<void>; // Nova função para o plano
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -41,7 +53,28 @@ export const useStore = create<StoreState>((set) => ({
 
   setCurrentUser: (user) => set({ currentUser: user }),
 
-  logout: () => set({ currentUser: null, transactions: [] }),
+  // Logout agora limpa o Firebase e o Estado Local
+  logout: async () => {
+    try {
+      await signOut(auth);
+      set({ currentUser: null, transactions: [] });
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+    }
+  },
+
+  // Grava o perfil do cliente no Firestore para os teus relatórios de Admin
+  registerClientProfile: async (profile) => {
+    try {
+      await setDoc(doc(db, 'users', profile.uid), {
+        ...profile,
+        createdAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error("Erro ao registar perfil:", error);
+      throw error;
+    }
+  },
 
   addTransaction: async (transactionData) => {
     try {
