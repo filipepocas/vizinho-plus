@@ -1,47 +1,88 @@
+// src/App.tsx
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
+// 1. IMPORTAÇÕES DE COMPONENTES
 import Login from './features/auth/Login';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import ClientDashboard from './features/client/ClientDashboard';
-import AdminRoute from './features/auth/AdminRoute';
+import LoginSelector from './components/LoginSelector';
 
+// 2. HELPER DE PROTEÇÃO DE ROTA ADMIN (SÓ PARA O FILIPE OU ADMINS)
+const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { currentUser } = useStore();
+  const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'rochap.filipe@gmail.com';
+  
+  if (!currentUser) return <Navigate to="/login" replace />;
+  return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
+};
+
+// 3. COMPONENTE PRINCIPAL
 function App() {
   const { subscribeToTransactions, currentUser } = useStore();
 
+  // ESCUTA DE DADOS EM TEMPO REAL (Cérebro da App)
   useEffect(() => {
-    const unsubscribe = subscribeToTransactions();
-    return () => { if (unsubscribe) unsubscribe(); };
-  }, [subscribeToTransactions]);
+    let unsubscribe: (() => void) | undefined;
+
+    if (currentUser) {
+      // Configura a escuta baseada no perfil que fez login
+      if (currentUser.role === 'admin' || currentUser.email === 'rochap.filipe@gmail.com') {
+        unsubscribe = subscribeToTransactions('admin');
+      } else if (currentUser.role === 'merchant') {
+        unsubscribe = subscribeToTransactions('merchant', currentUser.uid);
+      } else if (currentUser.role === 'client') {
+        unsubscribe = subscribeToTransactions('client', currentUser.cardNumber);
+      }
+    }
+
+    return () => { 
+      if (unsubscribe) unsubscribe(); 
+    };
+  }, [currentUser, subscribeToTransactions]);
 
   return (
     <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        
-        <Route path="/admin" element={
-          <AdminRoute>
-            <AdminDashboard />
-          </AdminRoute>
-        } />
+      <div className="min-h-screen bg-[#f6f9fc] selection:bg-[#00d66f] selection:text-[#0a2540]">
+        <Routes>
+          
+          {/* ROTA 1: PORTAL DE ENTRADA (Onde o utilizador escolhe o perfil) */}
+          <Route path="/" element={<LoginSelector />} />
 
-        <Route path="/merchant" element={
-          currentUser?.role === 'merchant' || currentUser?.role === 'admin'
-            ? <MerchantDashboard /> 
-            : <Navigate to="/login" replace />
-        } />
+          {/* ROTA 2: LOGIN DO LOJISTA/ADMIN */}
+          <Route path="/login" element={<Login />} />
+          
+          {/* ROTA 3: ÁREA DO FILIPE (ADMIN CONTROL) */}
+          <Route 
+            path="/admin" 
+            element={
+              <AdminRoute>
+                <AdminDashboard />
+              </AdminRoute>
+            } 
+          />
 
-        <Route path="/client" element={
-          currentUser?.role === 'client' || currentUser?.role === 'admin'
-            ? <ClientDashboard /> 
-            : <Navigate to="/login" replace />
-        } />
+          {/* ROTA 4: ÁREA DO LOJISTA (TERMINAL DE VENDAS) */}
+          <Route 
+            path="/merchant" 
+            element={
+              currentUser?.role === 'merchant' || currentUser?.role === 'admin'
+                ? <MerchantDashboard /> 
+                : <Navigate to="/login" replace />
+            } 
+          />
 
-        <Route path="/" element={<Navigate to="/login" replace />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
-      </Routes>
+          {/* ROTA 5: ÁREA DO CLIENTE (CARTEIRA DIGITAL) */}
+          {/* O ClientDashboard tem o seu próprio sistema de Login/Registo interno */}
+          <Route path="/client" element={<ClientDashboard />} />
+
+          {/* ROTA 6: REDIRECIONAMENTO DE SEGURANÇA */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+          
+        </Routes>
+      </div>
     </BrowserRouter>
   );
 }
