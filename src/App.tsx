@@ -3,11 +3,11 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
-// 1. IMPORTAÇÕES DE COMPONENTES
+// 1. IMPORTAÇÕES DE COMPONENTES (Ajustadas aos nossos novos ficheiros)
 import Login from './features/auth/Login';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
-import ClientDashboard from './features/client/ClientDashboard';
+import UserDashboard from './features/user/UserDashboard'; // O que criámos agora
 import LoginSelector from './components/LoginSelector';
 
 // 2. HELPER DE PROTEÇÃO DE ROTA ADMIN (SÓ PARA O FILIPE OU ADMINS)
@@ -32,9 +32,10 @@ function App() {
       if (currentUser.role === 'admin' || currentUser.email === 'rochap.filipe@gmail.com') {
         unsubscribe = subscribeToTransactions('admin');
       } else if (currentUser.role === 'merchant') {
-        unsubscribe = subscribeToTransactions('merchant', currentUser.uid);
+        // Se no teu store o id for 'uid', mantemos 'uid'
+        unsubscribe = subscribeToTransactions('merchant', currentUser.uid || currentUser.id);
       } else if (currentUser.role === 'client') {
-        unsubscribe = subscribeToTransactions('client', currentUser.cardNumber);
+        unsubscribe = subscribeToTransactions('client', currentUser.cardNumber || currentUser.clientId);
       }
     }
 
@@ -48,7 +49,7 @@ function App() {
       <div className="min-h-screen bg-[#f6f9fc] selection:bg-[#00d66f] selection:text-[#0a2540]">
         <Routes>
           
-          {/* ROTA 1: PORTAL DE ENTRADA (Onde o utilizador escolhe o perfil) */}
+          {/* ROTA 1: PORTAL DE ENTRADA */}
           <Route path="/" element={<LoginSelector />} />
 
           {/* ROTA 2: LOGIN DO LOJISTA/ADMIN */}
@@ -74,9 +75,8 @@ function App() {
             } 
           />
 
-          {/* ROTA 5: ÁREA DO CLIENTE (CARTEIRA DIGITAL) */}
-          {/* O ClientDashboard tem o seu próprio sistema de Login/Registo interno */}
-          <Route path="/client" element={<ClientDashboard />} />
+          {/* ROTA 5: ÁREA DO CLIENTE (VIZINHO) */}
+          <Route path="/client" element={<UserDashboard />} />
 
           {/* ROTA 6: REDIRECIONAMENTO DE SEGURANÇA */}
           <Route path="*" element={<Navigate to="/" replace />} />
