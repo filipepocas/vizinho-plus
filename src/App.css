@@ -1,0 +1,87 @@
+/* ESTILO VIZINHO+ 2026 
+  DESIGN: MODERN COMMERCIAL / FINTECH
+  CORES: VERDE MENTA & AZUL PROFUNDO
+*/
+
+:root {
+  --vplus-blue: #0a2540;        /* Azul Profundo para confiança */
+  --vplus-green: #00d66f;       /* Verde Menta para crescimento/cashback */
+  --vplus-bg: #f6f9fc;          /* Fundo cinza ultra-claro para descanso visual */
+  --vplus-text: #424770;        /* Texto cinza azulado suave */
+  --vplus-white: #ffffff;
+  --vplus-shadow: 0 7px 14px 0 rgba(49, 49, 93, 0.1), 0 3px 6px 0 rgba(0, 0, 0, 0.08);
+  --vplus-radius: 12px;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: var(--vplus-bg);
+  color: var(--vplus-text);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Contentores Modernos (Cards) */
+.vplus-card {
+  background: var(--vplus-white);
+  border-radius: var(--vplus-radius);
+  box-shadow: var(--vplus-shadow);
+  padding: 2rem;
+  border: 1px solid rgba(0, 0, 0, 0.02);
+}
+
+/* Botões Comerciais */
+.vplus-button {
+  background-color: var(--vplus-blue);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.vplus-button:hover {
+  transform: translateY(-1px);
+  background-color: #1a3a5a;
+  box-shadow: 0 7px 14px rgba(50, 50, 93, 0.1), 0 3px 6px rgba(0, 0, 0, 0.08);
+}
+
+.vplus-button-green {
+  background-color: var(--vplus-green);
+  color: var(--vplus-blue);
+}
+
+/* Inputs Limpos */
+input {
+  width: 100%;
+  padding: 12px 16px;
+  margin: 8px 0;
+  display: inline-block;
+  border: 1px solid #e6ebf1;
+  border-radius: 8px;
+  box-sizing: border-box;
+  font-size: 16px;
+  transition: border-color 0.2s ease;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--vplus-green);
+  box-shadow: 0 0 0 3px rgba(0, 214, 111, 0.1);
+}
+
+/* Tipografia */
+h1, h2, h3 {
+  color: var(--vplus-blue);
+  font-weight: 700;
+}
+
+.text-gradient {
+  background: linear-gradient(135deg, var(--vplus-blue) 0%, var(--vplus-green) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}

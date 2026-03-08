@@ -6,17 +6,18 @@ import { db } from '../../config/firebase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const MerchantDashboard: React.FC = () => {
-  const { transactions, addTransaction } = useStore();
+  const { transactions, addTransaction, subscribeToTransactions } = useStore();
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [loginEmail, setLoginEmail] = useState('');
   const [activeMerchant, setActiveMerchant] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   // ESTADOS DA OPERAÇÃO
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [docNumber, setDocNumber] = useState('');
-  const [opCode, setOpCode] = useState(''); // PIN de 5 dígitos
+  const [opCode, setOpCode] = useState(''); 
   const [showScanner, setShowScanner] = useState(false);
 
   // ESTADOS DE GESTÃO DE OPERADORES
@@ -24,7 +25,13 @@ const MerchantDashboard: React.FC = () => {
   const [newOpCode, setNewOpCode] = useState('');
   const [showOpManager, setShowOpManager] = useState(false);
 
-  const brandColor = activeMerchant?.primaryColor || '#1C305C';
+  // Ativa a escuta de transações assim que o lojista entra
+  useEffect(() => {
+    if (isAuthorized && activeMerchant) {
+      const unsubscribe = subscribeToTransactions('merchant', activeMerchant.id);
+      return () => unsubscribe();
+    }
+  }, [isAuthorized, activeMerchant, subscribeToTransactions]);
 
   // CONTROLO DO SCANNER QR
   useEffect(() => {
@@ -36,7 +43,7 @@ const MerchantDashboard: React.FC = () => {
           setShowScanner(false);
           scanner.clear();
         },
-        (error) => { /* ignora erros de leitura contínua */ }
+        (error) => { /* ignora erros de leitura */ }
       );
       return () => {
         try { scanner.clear(); } catch (e) { console.error(e); }
@@ -44,48 +51,46 @@ const MerchantDashboard: React.FC = () => {
     }
   }, [showScanner]);
 
-  // LOGIN DO LOJISTA
   const handleMerchantLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
     const q = query(collection(db, 'merchants'), where('email', '==', loginEmail.toLowerCase().trim()));
     const snap = await getDocs(q);
     if (!snap.empty) {
       setActiveMerchant({ id: snap.docs[0].id, ...snap.docs[0].data() });
       setIsAuthorized(true);
     } else {
-      alert("Lojista não registado pelo Administrador.");
+      alert("Lojista não registado. Contacte o Administrador.");
     }
+    setIsLoading(false);
   };
 
-  // GESTÃO DE OPERADORES (PAGINA 6 DO PDF)
   const handleAddOperator = async () => {
     if (newOpCode.length !== 5) return alert("O código deve ter exatamente 5 dígitos.");
     if (!newOpName) return alert("Insira o nome do operador.");
 
     const newOp = {
-      id: Date.now().toString(),
+      id: Math.random().toString(36).substr(2, 9),
       name: newOpName,
       code: newOpCode
     };
 
     try {
       const merchantRef = doc(db, 'merchants', activeMerchant.id);
-      await updateDoc(merchantRef, {
-        operators: arrayUnion(newOp)
-      });
+      await updateDoc(merchantRef, { operators: arrayUnion(newOp) });
       setActiveMerchant({
         ...activeMerchant,
         operators: [...(activeMerchant.operators || []), newOp]
       });
       setNewOpName('');
       setNewOpCode('');
-      alert("Operador adicionado com sucesso!");
+      setMessage({ type: 'success', text: "Operador registado!" });
+      setTimeout(() => setMessage({ type: '', text: '' }), 2000);
     } catch (error) {
       alert("Erro ao guardar operador.");
     }
   };
 
-  // FUNÇÃO DE CÁLCULO DE SALDO DISPONÍVEL (REGRA 48H)
   const getClientAvailableBalance = (id: string) => {
     const fortyEightHoursAgo = new Date(Date.now() - (48 * 60 * 60 * 1000));
     return transactions
@@ -95,36 +100,31 @@ const MerchantDashboard: React.FC = () => {
         if (t.type === 'earn') {
           return isAvailable ? acc + t.cashbackAmount : acc;
         } else {
-          // Descontos e notas de crédito abatem sempre ao disponível
           return acc - t.cashbackAmount;
         }
       }, 0);
   };
 
-  // PROCESSAR MOVIMENTOS (ADICIONAR / SUBTRAIR / DESCONTAR)
   const processAction = async (type: 'earn' | 'redeem' | 'subtract') => {
     const val = parseFloat(amount);
-    if (!cardNumber || isNaN(val) || val <= 0 || !docNumber) {
-      return alert("Preencha todos os campos: Cartão, Valor e Nº do Documento.");
+    if (!cardNumber || isNaN(val) || val <= 0 || !docNumber || opCode.length !== 5) {
+      return alert("Preencha Cartão, Valor, Nº Documento e PIN de 5 dígitos.");
     }
     
-    // 1. VALIDAR OPERADOR PELO PIN
     const operator = activeMerchant.operators?.find((o: any) => o.code === opCode);
-    if (!operator) return alert("PIN de Operador Inválido! Operação cancelada.");
+    if (!operator) return alert("PIN de Operador Inválido!");
 
-    // 2. VALIDAR SALDO PARA DESCONTO EM COMPRAS (PAGINA 5 PDF)
     if (type === 'redeem') {
       const available = getClientAvailableBalance(cardNumber);
       if (val > available) {
-        return alert(`Operação Rejeitada! O cliente só tem ${available.toFixed(2)}€ disponíveis nesta loja.`);
+        return alert(`Saldo insuficiente! Disponível: ${available.toFixed(2)}€`);
       }
     }
 
-    // 3. CALCULAR VALOR DE CASHBACK
-    // Se for 'earn', aplica a % da loja. Se for 'redeem' ou 'subtract', o valor é o próprio montante.
     const cashback = type === 'earn' ? (val * (activeMerchant.cashbackPercent / 100)) : val;
 
     try {
+      setIsLoading(true);
       await addTransaction({
         clientId: cardNumber,
         merchantId: activeMerchant.id,
@@ -132,43 +132,43 @@ const MerchantDashboard: React.FC = () => {
         amount: type === 'earn' ? val : 0,
         cashbackAmount: cashback,
         type: type,
-        docNumber: docNumber,
-        operatorId: operator.id,
-        operatorName: operator.name,
-        status: type === 'earn' ? 'pending' : 'available',
-        createdAt: new Date()
+        documentNumber: docNumber,
+        operatorCode: opCode,
+        status: type === 'earn' ? 'pending' : 'available'
       });
       
-      setMessage({ type: 'success', text: "Movimento registado com sucesso!" });
+      setMessage({ type: 'success', text: "Operação concluída com sucesso!" });
       setAmount('');
       setDocNumber('');
       setOpCode('');
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
-      setMessage({ type: 'error', text: "Erro ao comunicar com a base de dados." });
+      setMessage({ type: 'error', text: "Erro na base de dados." });
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  // ECRÃ DE LOGIN
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-vplus-green-light flex items-center justify-center p-6 font-mono text-black">
-        <div className="bg-white p-8 border-8 border-black shadow-[15px_15px_0_0_rgba(0,0,0,1)] w-full max-w-md text-center">
-          <h1 className="text-4xl font-black uppercase italic mb-6">Terminal V+</h1>
-          <form onSubmit={handleMerchantLogin} className="space-y-4">
-            <div className="text-left">
-              <label className="text-[10px] font-black uppercase italic">Login Estabelecimento</label>
+      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 font-sans">
+        <div className="bg-white p-10 rounded-[32px] shadow-xl w-full max-w-md border border-slate-100 text-center">
+          <img src="/logo-vizinho.png" alt="Logo" className="w-32 mx-auto mb-8" />
+          <h1 className="text-2xl font-bold text-[#0a2540] mb-6">Acesso Lojista</h1>
+          <form onSubmit={handleMerchantLogin} className="space-y-4 text-left">
+            <div>
+              <label className="text-xs font-bold uppercase text-slate-400 ml-1">Email do Estabelecimento</label>
               <input 
                 type="email" 
-                placeholder="EMAIL DA CONTA" 
                 value={loginEmail} 
                 onChange={e => setLoginEmail(e.target.value)} 
-                className="w-full p-4 border-4 border-black font-black outline-none focus:bg-yellow-50" 
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
+                placeholder="loja@email.com"
                 required 
               />
             </div>
-            <button className="w-full bg-black text-white p-4 font-black uppercase border-b-8 border-vplus-green active:border-b-0 active:translate-y-2 transition-all">
-              Entrar no Painel
+            <button className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-bold hover:bg-[#153455] transition-all shadow-lg">
+              {isLoading ? 'A carregar...' : 'Abrir Terminal'}
             </button>
           </form>
         </div>
@@ -176,154 +176,102 @@ const MerchantDashboard: React.FC = () => {
     );
   }
 
-  // ECRÃ PRINCIPAL DO TERMINAL
   return (
-    <div className="min-h-screen bg-white font-mono p-4 lg:p-8 border-[12px]" style={{ borderColor: brandColor }}>
-      <div className="max-w-5xl mx-auto space-y-6">
+    <div className="min-h-screen bg-[#f6f9fc] font-sans">
+      <div className="max-w-6xl mx-auto p-4 lg:p-8">
         
-        {/* HEADER DO TERMINAL */}
-        <header className="flex justify-between items-end border-b-8 border-black pb-6">
-          <div>
-            <h2 className="text-4xl font-black uppercase italic leading-none" style={{ color: brandColor }}>
-              {activeMerchant.shopName}
-            </h2>
-            <div className="flex gap-4 mt-2">
-              <p className="text-[10px] font-black uppercase px-2 bg-black text-white italic">NIF: {activeMerchant.nif}</p>
-              <p className="text-[10px] font-black uppercase px-2 bg-vplus-green text-black italic">Taxa: {activeMerchant.cashbackPercent}%</p>
+        {/* HEADER COMERCIAL */}
+        <header className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-[#00d66f]/10 rounded-xl flex items-center justify-center text-[#00d66f]">
+              <span className="text-2xl">🏪</span>
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-[#0a2540] leading-none">{activeMerchant.shopName}</h2>
+              <div className="flex gap-2 mt-1">
+                <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">NIF {activeMerchant.nif}</span>
+                <span className="text-[10px] font-bold bg-[#00d66f]/10 px-2 py-0.5 rounded text-[#00d66f] uppercase">{activeMerchant.cashbackPercent}% Cashback</span>
+              </div>
             </div>
           </div>
           <div className="flex gap-3">
-            <button 
-              onClick={() => setShowOpManager(!showOpManager)} 
-              className="bg-black text-white px-6 py-2 font-black uppercase text-xs border-2 border-black hover:bg-white hover:text-black transition-all"
-            >
-              {showOpManager ? 'Fechar Gestão' : 'Operadores'}
+            <button onClick={() => setShowOpManager(!showOpManager)} className="px-5 py-2.5 rounded-xl bg-slate-50 text-[#0a2540] text-sm font-bold border border-slate-200 hover:bg-slate-100 transition-all">
+              {showOpManager ? 'Voltar ao Terminal' : 'Gerir Equipa'}
             </button>
-            <button 
-              onClick={() => setIsAuthorized(false)} 
-              className="bg-red-600 text-white px-6 py-2 font-black uppercase text-xs border-2 border-black"
-            >
-              Sair
-            </button>
+            <button onClick={() => setIsAuthorized(false)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100 hover:bg-red-100 transition-all">Sair</button>
           </div>
         </header>
 
         {showOpManager ? (
-          /* GESTÃO DE OPERADORES (EXPANSÍVEL) */
-          <div className="bg-gray-100 border-8 border-black p-6 shadow-[10px_10px_0_0_rgba(0,0,0,1)]">
-            <h3 className="text-xl font-black uppercase italic mb-6 border-b-4 border-black pb-2">Configurar Equipa</h3>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
-              <input 
-                placeholder="NOME DO OPERADOR" 
-                value={newOpName} 
-                onChange={e => setNewOpName(e.target.value)} 
-                className="p-4 border-4 border-black font-black uppercase"
-              />
-              <input 
-                placeholder="PIN (5 DÍGITOS)" 
-                value={newOpCode} 
-                onChange={e => setNewOpCode(e.target.value)} 
-                maxLength={5}
-                className="p-4 border-4 border-black font-black text-center"
-              />
-              <button 
-                onClick={handleAddOperator}
-                className="bg-vplus-green p-4 border-4 border-black font-black uppercase hover:bg-black hover:text-white transition-all"
-              >
-                Registar Operador
-              </button>
+          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 animate-in fade-in duration-300">
+            <h3 className="text-lg font-bold text-[#0a2540] mb-6 flex items-center gap-2">
+              <span className="w-2 h-6 bg-[#00d66f] rounded-full"></span> Configurar Operadores
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
+              <input placeholder="NOME DO OPERADOR" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f]" />
+              <input placeholder="PIN (5 DÍGITOS)" value={newOpCode} onChange={e => setNewOpCode(e.target.value)} maxLength={5} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-center font-bold tracking-widest" />
+              <button onClick={handleAddOperator} className="bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-bold hover:bg-[#00c265] transition-all shadow-md shadow-green-900/10">Adicionar à Equipa</button>
             </div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {activeMerchant.operators?.map((op: any) => (
-                <div key={op.id} className="bg-white border-4 border-black p-3 relative">
-                  <p className="font-black uppercase text-xs">{op.name}</p>
-                  <p className="text-[10px] font-bold opacity-30 mt-1 italic leading-none">CÓDIGO: {op.code}</p>
+                <div key={op.id} className="p-4 border border-slate-100 bg-slate-50 rounded-2xl">
+                  <p className="font-bold text-[#0a2540] text-sm uppercase">{op.name}</p>
+                  <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-widest">CÓDIGO: {op.code}</p>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          /* INTERFACE DE PICAÇÃO (OPERAÇÃO) */
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-            
-            {/* COLUNA DADOS */}
-            <div className="lg:col-span-7 space-y-6">
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase italic">1. Identificar Cliente (Cartão/NIF)</label>
-                <div className="flex gap-2">
-                  <input 
-                    value={cardNumber} 
-                    onChange={e => setCardNumber(e.target.value)} 
-                    placeholder="000000000" 
-                    className="flex-grow p-6 border-8 border-black text-3xl font-black outline-none focus:bg-vplus-green-light" 
-                  />
-                  <button 
-                    onClick={() => setShowScanner(true)}
-                    className="bg-vplus-green border-8 border-black px-6 shadow-[6px_6px_0_0_rgba(0,0,0,1)] hover:shadow-none hover:translate-x-1 hover:translate-y-1 transition-all"
-                  >
-                    <span className="text-3xl">📷</span>
-                  </button>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* PAINEL DE OPERAÇÃO */}
+            <div className="lg:col-span-2 bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 space-y-8">
+              <div className="space-y-3">
+                <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">1. Identificar Cliente (Cartão/NIF)</label>
+                <div className="flex gap-3">
+                  <input value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="000000000" className="flex-grow p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none focus:border-[#00d66f] focus:ring-4 focus:ring-[#00d66f]/5 transition-all" />
+                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-[#153455] transition-all shadow-lg"><span className="text-2xl">📷</span></button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase italic">2. Valor da Venda (€)</label>
-                  <input 
-                    type="number" 
-                    value={amount} 
-                    onChange={e => setAmount(e.target.value)} 
-                    placeholder="0.00" 
-                    className="w-full p-6 border-8 border-black text-3xl font-black outline-none" 
-                  />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">2. Valor da Operação (€)</label>
+                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none focus:border-[#00d66f]" />
                 </div>
-                <div className="space-y-2">
-                  <label className="text-xs font-black uppercase italic">3. Nº da Fatura/Doc</label>
-                  <input 
-                    value={docNumber} 
-                    onChange={e => setDocNumber(e.target.value)} 
-                    placeholder="FT 2024/..." 
-                    className="w-full p-6 border-8 border-black text-3xl font-black outline-none uppercase" 
-                  />
+                <div className="space-y-3">
+                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">3. Nº da Fatura / Documento</label>
+                  <input value={docNumber} onChange={e => setDocNumber(e.target.value)} placeholder="Ex: FT 2026/01" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none focus:border-[#00d66f] uppercase" />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-black uppercase italic text-red-600">4. PIN de Segurança do Operador</label>
-                <input 
-                  type="password" 
-                  value={opCode} 
-                  onChange={e => setOpCode(e.target.value)} 
-                  maxLength={5} 
-                  placeholder="*****" 
-                  className="w-full p-6 border-8 border-red-600 text-4xl font-black text-center tracking-[0.5em] outline-none bg-red-50" 
-                />
+              <div className="pt-4 border-t border-slate-50">
+                <label className="text-xs font-bold uppercase text-red-500 tracking-wider block mb-3">4. Autorização do Operador (PIN 5 DÍGITOS)</label>
+                <input type="password" value={opCode} onChange={e => setOpCode(e.target.value)} maxLength={5} placeholder="•••••" className="w-full p-5 bg-red-50/30 border border-red-100 rounded-2xl text-3xl text-center font-bold tracking-[0.8em] text-[#0a2540] outline-none focus:border-red-300" />
               </div>
             </div>
 
-            {/* COLUNA AÇÕES (BOTÕES DO PDF) */}
-            <div className="lg:col-span-5 flex flex-col gap-4 justify-center">
-              <button 
-                onClick={() => processAction('earn')} 
-                className="bg-vplus-green p-8 border-8 border-black shadow-[10px_10px_0_0_rgba(0,0,0,1)] font-black uppercase text-2xl hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-              >
-                (+) Adicionar Cashback
-              </button>
-              <button 
-                onClick={() => processAction('subtract')} 
-                className="bg-yellow-400 p-8 border-8 border-black shadow-[10px_10px_0_0_rgba(0,0,0,1)] font-black uppercase text-2xl hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-              >
-                (-) Nota de Crédito
-              </button>
-              <button 
-                onClick={() => processAction('redeem')} 
-                className="bg-black text-white p-8 border-8 border-black shadow-[10px_10px_0_0_rgba(163,230,53,1)] font-black uppercase text-2xl hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-              >
-                ($) Descontar Saldo
+            {/* PAINEL DE AÇÕES */}
+            <div className="flex flex-col gap-4">
+              <button onClick={() => processAction('earn')} className="group bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-green-900/10 flex flex-col items-center gap-2">
+                <span className="text-4xl">💰</span>
+                <span className="font-bold text-lg">Atribuir Cashback</span>
+                <span className="text-[11px] font-bold opacity-60 uppercase tracking-widest">Ganhar Saldo</span>
               </button>
               
+              <button onClick={() => processAction('subtract')} className="bg-white p-8 rounded-[32px] text-[#0a2540] border border-slate-100 transition-all hover:bg-slate-50 flex flex-col items-center gap-2">
+                <span className="text-4xl">🧾</span>
+                <span className="font-bold text-lg">Nota de Crédito</span>
+                <span className="text-[11px] font-bold opacity-40 uppercase tracking-widest">Remover Saldo</span>
+              </button>
+
+              <button onClick={() => processAction('redeem')} className="bg-[#0a2540] p-8 rounded-[32px] text-white transition-all hover:bg-[#153455] shadow-lg flex flex-col items-center gap-2">
+                <span className="text-4xl">🎁</span>
+                <span className="font-bold text-lg">Descontar no Pagamento</span>
+                <span className="text-[11px] font-bold opacity-40 uppercase tracking-widest">Usar Saldo Acumulado</span>
+              </button>
+
               {message.text && (
-                <div className={`p-6 border-8 border-black font-black uppercase text-center text-xl shadow-[6px_6px_0_0_rgba(0,0,0,1)] ${message.type === 'success' ? 'bg-vplus-green text-black' : 'bg-red-600 text-white'}`}>
+                <div className={`mt-4 p-5 rounded-2xl font-bold text-center animate-bounce ${message.type === 'success' ? 'bg-[#00d66f]/20 text-[#0a2540]' : 'bg-red-50 text-red-600'}`}>
                   {message.text}
                 </div>
               )}
@@ -331,18 +279,13 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* MODAL DO SCANNER */}
+        {/* MODAL SCANNER QR */}
         {showScanner && (
-          <div className="fixed inset-0 bg-black z-50 p-4 flex flex-col">
-            <div className="bg-white p-2 border-8 border-black flex-grow relative overflow-hidden">
-              <div id="reader" className="w-full h-full"></div>
+          <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-md z-50 p-6 flex flex-col items-center justify-center">
+            <div className="bg-white p-4 rounded-[40px] shadow-2xl w-full max-w-lg overflow-hidden relative">
+              <div id="reader" className="w-full"></div>
+              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-bold mt-4 rounded-2xl hover:bg-red-700 transition-all">Cancelar Leitura</button>
             </div>
-            <button 
-              onClick={() => setShowScanner(false)} 
-              className="w-full bg-red-600 text-white p-8 font-black mt-4 uppercase text-2xl border-4 border-black"
-            >
-              Cancelar Leitura
-            </button>
           </div>
         )}
       </div>

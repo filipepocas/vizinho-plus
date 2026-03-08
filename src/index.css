@@ -1,21 +1,58 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-/* src/index.css */
+
+/* VIZINHO+ 2026 - NÚCLEO VISUAL 
+  Configuração de Reset e Suavização Comercial
+*/
+
 @layer base {
+  :root {
+    --vplus-blue: #0a2540;
+    --vplus-green: #00d66f;
+  }
+
   html {
     -webkit-tap-highlight-color: transparent;
     touch-action: manipulation;
+    background-color: #f6f9fc; /* Fundo suave anti-fadiga */
   }
   
+  body {
+    @apply text-slate-700 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
   button, input {
-    @apply outline-none;
+    @apply outline-none transition-all duration-200;
+  }
+
+  /* Scrollbar elegante para desktop */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full hover:bg-slate-400;
   }
 }
 
-/* Evitar zoom automático em inputs no iOS */
+@layer components {
+  /* Classe auxiliar para o gradiente moderno solicitado */
+  .vplus-gradient {
+    @apply bg-gradient-to-r from-[#0a2540] to-[#00d66f];
+  }
+}
+
+/* Evitar zoom automático em inputs no iOS e melhorar usabilidade mobile */
 @media screen and (max-width: 768px) {
   input, select, textarea {
     font-size: 16px !important;
+  }
+  
+  .vplus-card {
+    @apply rounded-xl shadow-sm;
   }
 }
