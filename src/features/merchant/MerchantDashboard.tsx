@@ -15,7 +15,7 @@ const MerchantDashboard: React.FC = () => {
   // ESTADOS DA OPERAÇÃO
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
-  const [documentNumber, setDocumentNumber] = useState(''); // Corrigido para bater com useStore
+  const [documentNumber, setDocumentNumber] = useState('');
   const [opCode, setOpCode] = useState(''); 
   const [showScanner, setShowScanner] = useState(false);
 
@@ -56,7 +56,12 @@ const MerchantDashboard: React.FC = () => {
       const snap = await getDocs(q);
       if (!snap.empty) {
         const data = snap.docs[0].data();
-        setActiveMerchant({ id: snap.docs[0].id, ...data });
+        // NORMALIZAÇÃO: Garante que o nome da loja é capturado corretamente
+        setActiveMerchant({ 
+          id: snap.docs[0].id, 
+          ...data,
+          displayName: data.shopName || data.name || 'Loja Vizinho+'
+        });
         setIsAuthorized(true);
       } else {
         alert("Lojista não registado. Contacte o Administrador.");
@@ -100,7 +105,6 @@ const MerchantDashboard: React.FC = () => {
     return transactions
       .filter(t => t.clientId === clientId && t.merchantId === activeMerchant.id)
       .reduce((acc, t) => {
-        // Se createdAt for Timestamp do Firebase, convertemos para ms
         const txTime = t.createdAt?.seconds ? t.createdAt.seconds * 1000 : Date.now();
         const isAvailable = txTime <= fortyEightHoursAgo;
         
@@ -135,7 +139,7 @@ const MerchantDashboard: React.FC = () => {
       await addTransaction({
         clientId: cardNumber,
         merchantId: activeMerchant.id,
-        merchantName: activeMerchant.name || activeMerchant.shopName, // Suporta os dois nomes
+        merchantName: activeMerchant.displayName,
         amount: type === 'earn' ? val : 0,
         cashbackAmount: cashback,
         type: type,
@@ -191,7 +195,7 @@ const MerchantDashboard: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-[#00d66f]/10 rounded-xl flex items-center justify-center text-[#00d66f] text-2xl">🏪</div>
             <div>
-              <h2 className="text-xl font-bold text-[#0a2540] leading-none">{activeMerchant.name || activeMerchant.shopName}</h2>
+              <h2 className="text-xl font-bold text-[#0a2540] leading-none">{activeMerchant.displayName}</h2>
               <div className="flex gap-2 mt-1">
                 <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">NIF {activeMerchant.nif}</span>
                 <span className="text-[10px] font-bold bg-[#00d66f]/10 px-2 py-0.5 rounded text-[#00d66f] uppercase">{activeMerchant.cashbackPercent}% Cashback</span>
