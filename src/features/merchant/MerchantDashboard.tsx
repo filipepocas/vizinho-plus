@@ -7,7 +7,10 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 const MerchantDashboard: React.FC = () => {
   const { transactions, addTransaction, subscribeToTransactions } = useStore();
   const [isAuthorized, setIsAuthorized] = useState(false);
+  const [loginStep, setLoginStep] = useState<'credentials' | 'changePass'>('credentials');
   const [loginEmail, setLoginEmail] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [newPass, setNewPass] = useState('');
   const [activeMerchant, setActiveMerchant] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
@@ -56,19 +59,62 @@ const MerchantDashboard: React.FC = () => {
       const snap = await getDocs(q);
       
       if (!snap.empty) {
-        const data = snap.docs[0].data();
-        setActiveMerchant({ 
-          id: snap.docs[0].id, 
-          ...data,
-          displayName: data.shopName || data.name || 'Lojista' 
-        });
-        setIsAuthorized(true);
+        const merchantDoc = snap.docs[0];
+        const data = merchantDoc.data();
+        
+        // LÓGICA DE PRIMEIRO ACESSO
+        if (data.firstAccess) {
+          if (loginPass === data.temporaryPassword) {
+            setActiveMerchant({ id: merchantDoc.id, ...data });
+            setLoginStep('changePass');
+          } else {
+            alert("Password Provisória incorreta.");
+          }
+        } else {
+          // LOGIN NORMAL
+          if (loginPass === data.password) {
+            setActiveMerchant({ 
+              id: merchantDoc.id, 
+              ...data,
+              displayName: data.shopName || data.name || 'Lojista' 
+            });
+            setIsAuthorized(true);
+          } else {
+            alert("Password incorreta.");
+          }
+        }
       } else {
-        alert("Lojista não registado. Verifique o email.");
+        alert("Lojista não registado no sistema.");
       }
     } catch (err) {
       console.error(err);
       alert("Erro ao aceder ao Firebase.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleUpdatePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (newPass.length < 6) return alert("A nova password deve ter pelo menos 6 caracteres.");
+    
+    setIsLoading(true);
+    try {
+      const merchantRef = doc(db, 'merchants', activeMerchant.id);
+      await updateDoc(merchantRef, {
+        password: newPass,
+        temporaryPassword: "", // Remove a provisória
+        firstAccess: false      // Liberta o acesso futuro
+      });
+      
+      setIsAuthorized(true);
+      setLoginStep('credentials');
+      setActiveMerchant({ 
+        ...activeMerchant, 
+        displayName: activeMerchant.shopName || activeMerchant.name 
+      });
+    } catch (err) {
+      alert("Erro ao guardar nova password.");
     } finally {
       setIsLoading(false);
     }
@@ -102,11 +148,8 @@ const MerchantDashboard: React.FC = () => {
     }
   };
 
-  // Cálculo de Saldo Disponível com regra de prioridade de débito
   const getClientAvailableBalance = (clientId: string) => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
-    
-    // Filtramos apenas as transações deste cliente nesta loja
     const merchantClientTxs = transactions.filter(t => t.clientId === clientId && t.merchantId === activeMerchant.id);
     
     let available = 0;
@@ -121,14 +164,13 @@ const MerchantDashboard: React.FC = () => {
         if (isMature) available += amount;
         else pending += amount;
       } else {
-        // Débito: tira primeiro do disponível
         let toDebit = amount;
         if (available >= toDebit) {
           available -= toDebit;
         } else {
           toDebit -= available;
           available = 0;
-          pending -= toDebit; // Pode ficar negativo aqui se for 'subtract' (Nota de Crédito)
+          pending -= toDebit;
         }
       }
     });
@@ -139,17 +181,16 @@ const MerchantDashboard: React.FC = () => {
   const processAction = async (type: 'earn' | 'redeem' | 'subtract') => {
     const val = parseFloat(amount);
     if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber || opCode.length !== 5) {
-      return alert("Preencha todos os campos obrigatórios (Cliente, Valor, Fatura e PIN).");
+      return alert("Preencha todos os campos obrigatórios.");
     }
     
     const operator = activeMerchant.operators?.find((o: any) => o.code === opCode);
     if (!operator) return alert("PIN de Operador Inválido!");
 
-    // REGRA: Compras (redeem) não podem deixar saldo negativo
     if (type === 'redeem') {
       const available = getClientAvailableBalance(cardNumber);
       if (val > available) {
-        return alert(`Saldo insuficiente para compra! Disponível: ${available.toFixed(2)}€`);
+        return alert(`Saldo insuficiente! Disponível: ${available.toFixed(2)}€`);
       }
     }
 
@@ -171,7 +212,7 @@ const MerchantDashboard: React.FC = () => {
       
       setMessage({ 
         type: 'success', 
-        text: type === 'subtract' ? "Nota de Crédito registada!" : "Transação enviada para o Vizinho!" 
+        text: type === 'subtract' ? "Nota de Crédito registada!" : "Transação enviada!" 
       });
       
       setAmount('');
@@ -179,7 +220,7 @@ const MerchantDashboard: React.FC = () => {
       setOpCode('');
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     } catch (error) {
-      setMessage({ type: 'error', text: "Erro ao gravar transação." });
+      setMessage({ type: 'error', text: "Erro ao gravar." });
     } finally {
       setIsLoading(false);
     }
@@ -187,26 +228,52 @@ const MerchantDashboard: React.FC = () => {
 
   if (!isAuthorized) {
     return (
-      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6">
-        <div className="bg-white p-10 rounded-[32px] shadow-xl w-full max-w-md border border-slate-100 text-center">
-          <h1 className="text-3xl font-black italic text-[#0a2540] mb-2">VIZINHO+</h1>
-          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-8">Terminal de Lojista</p>
-          <form onSubmit={handleMerchantLogin} className="space-y-4 text-left">
-            <div>
-              <label className="text-xs font-bold uppercase text-slate-400 ml-1">Email da Loja</label>
+      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 text-center">
+        <div className="bg-white p-10 rounded-[40px] shadow-2xl w-full max-w-md border border-slate-100">
+          <h1 className="text-3xl font-black italic text-[#0a2540] mb-2 uppercase">VIZINHO+</h1>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mb-10">Portal do Comerciante</p>
+          
+          {loginStep === 'credentials' ? (
+            <form onSubmit={handleMerchantLogin} className="space-y-4">
               <input 
                 type="email" 
                 value={loginEmail} 
                 onChange={e => setLoginEmail(e.target.value)} 
-                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f]"
-                placeholder="ex: padaria@vizinho.pt"
+                className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#00d66f]" 
+                placeholder="Email da Loja" 
                 required 
               />
-            </div>
-            <button className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-bold hover:bg-[#153455] shadow-lg transition-all">
-              {isLoading ? 'A verificar...' : 'Abrir Terminal'}
-            </button>
-          </form>
+              <input 
+                type="password" 
+                value={loginPass} 
+                onChange={e => setLoginPass(e.target.value)} 
+                className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#00d66f]" 
+                placeholder="Password" 
+                required 
+              />
+              <button className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all">
+                {isLoading ? 'A entrar...' : 'Entrar no Terminal'}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={handleUpdatePassword} className="space-y-4 animate-in fade-in zoom-in duration-300">
+              <div className="bg-blue-50 p-4 rounded-2xl mb-4 text-left border border-blue-100">
+                <p className="text-[10px] font-black text-blue-600 uppercase">Segurança Ativada</p>
+                <p className="text-xs font-bold text-blue-900 mt-1">Este é o teu primeiro acesso. Define a tua password definitiva para continuar.</p>
+              </div>
+              <input 
+                type="password" 
+                value={newPass} 
+                onChange={e => setNewPass(e.target.value)} 
+                className="w-full p-5 bg-slate-50 border-2 border-blue-200 rounded-2xl font-bold outline-none focus:border-blue-500" 
+                placeholder="Nova Password (min. 6 car.)" 
+                required 
+              />
+              <button className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-blue-700 transition-all">
+                Guardar e Ativar
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -231,7 +298,7 @@ const MerchantDashboard: React.FC = () => {
             <button onClick={() => setShowOpManager(!showOpManager)} className="px-5 py-2.5 rounded-xl bg-slate-50 text-[#0a2540] text-sm font-bold border border-slate-200 hover:bg-slate-100 transition-all">
               {showOpManager ? 'Voltar ao Terminal' : 'Gerir Equipa'}
             </button>
-            <button onClick={() => setIsAuthorized(false)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100 hover:bg-red-100 transition-all">Sair</button>
+            <button onClick={() => { setIsAuthorized(false); setLoginPass(''); setLoginStep('credentials'); }} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100 hover:bg-red-100 transition-all">Sair</button>
           </div>
         </header>
 
@@ -287,21 +354,15 @@ const MerchantDashboard: React.FC = () => {
               <button onClick={() => processAction('earn')} className="group bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] transition-all hover:scale-[1.02] shadow-xl shadow-green-500/10 flex flex-col items-center gap-2 active:scale-95">
                 <span className="text-4xl group-hover:rotate-12 transition-transform">💰</span>
                 <span className="font-black text-lg uppercase tracking-tighter italic">Atribuir Cashback</span>
-                <p className="text-[9px] font-bold opacity-60 uppercase">Venda Normal</p>
               </button>
-
               <button onClick={() => processAction('redeem')} className="group bg-[#0a2540] p-8 rounded-[32px] text-white transition-all hover:bg-black shadow-xl shadow-blue-900/10 flex flex-col items-center gap-2 active:scale-95">
                 <span className="text-4xl group-hover:scale-110 transition-transform">🎁</span>
                 <span className="font-black text-lg uppercase tracking-tighter italic">Descontar Saldo</span>
-                <p className="text-[9px] font-bold opacity-60 uppercase">Uso de Cashback</p>
               </button>
-
               <button onClick={() => processAction('subtract')} className="group bg-white border-2 border-slate-100 p-6 rounded-[32px] text-slate-400 transition-all hover:border-red-500 hover:text-red-500 flex flex-col items-center gap-1 active:scale-95">
                 <span className="text-2xl grayscale group-hover:grayscale-0 transition-all">📄</span>
                 <span className="font-black text-xs uppercase tracking-widest">Nota de Crédito</span>
-                <p className="text-[8px] font-bold opacity-60 uppercase">Permite Saldo Negativo</p>
               </button>
-
               {message.text && (
                 <div className={`mt-4 p-5 rounded-2xl font-black text-center text-xs uppercase tracking-widest animate-pulse ${message.type === 'success' ? 'bg-[#00d66f]/10 text-[#00d66f]' : 'bg-red-50 text-red-600'}`}>
                   {message.text}

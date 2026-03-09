@@ -9,12 +9,15 @@ const AdminDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   
-  // Estado para o novo lojista
+  // Estado para o novo lojista com todos os campos obrigatórios
   const [newMerchant, setNewMerchant] = useState({
     name: '',
+    address: '',
     nif: '',
+    zipCode: '',
+    phone: '',
     email: '',
-    password: '',
+    password: '', // Esta será a password provisória definida pelo admin
     cashbackPercent: 10
   });
 
@@ -26,17 +29,32 @@ const AdminDashboard: React.FC = () => {
   const handleCreateMerchant = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      // Criação do lojista com a lógica de primeiro acesso
       await addDoc(collection(db, 'merchants'), {
-        ...newMerchant,
+        name: newMerchant.name,
+        address: newMerchant.address,
+        nif: newMerchant.nif,
+        zipCode: newMerchant.zipCode,
+        phone: newMerchant.phone,
+        email: newMerchant.email.toLowerCase().trim(),
+        temporaryPassword: newMerchant.password, // Gravada como provisória
+        password: '', // Vazia até o lojista definir a sua
+        firstAccess: true, // Gatilho de segurança
+        cashbackPercent: newMerchant.cashbackPercent,
         role: 'merchant',
+        operators: [],
         createdAt: new Date()
       });
-      alert('Lojista criado com sucesso!');
+
+      alert('Lojista registado! Já pode entregar as credenciais ao comerciante.');
       setIsModalOpen(false);
-      setNewMerchant({ name: '', nif: '', email: '', password: '', cashbackPercent: 10 });
+      setNewMerchant({ 
+        name: '', address: '', nif: '', zipCode: '', 
+        phone: '', email: '', password: '', cashbackPercent: 10 
+      });
     } catch (error) {
       console.error("Erro ao criar lojista:", error);
-      alert('Erro ao criar lojista.');
+      alert('Erro ao criar lojista no sistema.');
     }
   };
 
@@ -71,44 +89,45 @@ const AdminDashboard: React.FC = () => {
         <div className="flex gap-4">
           <button 
             onClick={() => setIsModalOpen(true)}
-            className="bg-[#00d66f] text-[#0a2540] px-6 py-2 rounded-xl font-bold hover:scale-105 transition-all"
+            className="bg-[#00d66f] text-[#0a2540] px-6 py-2 rounded-xl font-bold hover:scale-105 transition-all shadow-lg"
           >
-            + Novo Lojista
+            + Registar Comerciante
           </button>
-          <button onClick={() => logout()} className="text-slate-400 hover:text-white font-bold">Sair</button>
+          <button onClick={() => logout()} className="text-slate-400 hover:text-white font-bold transition-colors text-sm uppercase tracking-widest">Sair</button>
         </div>
       </header>
 
       <main className="p-8 max-w-7xl mx-auto">
-        <div className="flex gap-4 mb-8">
+        <div className="flex flex-col md:flex-row gap-4 mb-8">
           <input 
             type="text" 
-            placeholder="Pesquisar..." 
-            className="flex-1 p-4 rounded-2xl border border-slate-200 outline-none focus:border-[#00d66f]"
+            placeholder="Pesquisar transações (NIF, Loja ou Doc)..." 
+            className="flex-1 p-4 rounded-2xl border-2 border-slate-100 outline-none focus:border-[#00d66f] font-bold"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
-          <button onClick={exportToExcel} className="bg-white border border-slate-200 px-6 rounded-2xl font-bold hover:bg-slate-50">📊 Excel</button>
+          <button onClick={exportToExcel} className="bg-white border-2 border-slate-100 px-8 py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-slate-50 transition-all flex items-center justify-center gap-2">
+            <span>📊</span> Exportar Excel
+          </button>
         </div>
 
-        {/* TABELA */}
         <div className="bg-white rounded-[32px] shadow-sm border border-slate-100 overflow-hidden">
-          <table className="w-full text-left">
+          <table className="w-full text-left border-collapse">
             <thead className="bg-slate-50 border-b border-slate-100">
               <tr>
-                <th className="p-5 text-xs font-bold text-slate-400 uppercase">Data</th>
-                <th className="p-5 text-xs font-bold text-slate-400 uppercase">Loja</th>
-                <th className="p-5 text-xs font-bold text-slate-400 uppercase">Cliente</th>
-                <th className="p-5 text-xs font-bold text-slate-400 uppercase text-right">Cashback</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Loja</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest">Cliente</th>
+                <th className="p-6 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Cashback</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
               {filteredTransactions.map((t) => (
-                <tr key={t.id}>
-                  <td className="p-5 text-sm text-slate-500">{t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '...'}</td>
-                  <td className="p-5 font-bold">{t.merchantName}</td>
-                  <td className="p-5 font-mono text-blue-600">{t.clientId}</td>
-                  <td className={`p-5 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                <tr key={t.id} className="hover:bg-slate-50/50 transition-colors">
+                  <td className="p-6 text-sm font-bold text-slate-500">{t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '...'}</td>
+                  <td className="p-6 font-black uppercase text-sm tracking-tighter">{t.merchantName}</td>
+                  <td className="p-6 font-mono text-blue-600 font-bold">{t.clientId}</td>
+                  <td className={`p-6 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
                     {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)}€
                   </td>
                 </tr>
@@ -118,48 +137,100 @@ const AdminDashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* MODAL NOVO LOJISTA */}
+      {/* MODAL REGISTO DE LOJISTA */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-[#0a2540]/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-md rounded-[40px] p-10 shadow-2xl border border-white">
-            <h2 className="text-2xl font-black text-[#0a2540] mb-6">Registar Lojista</h2>
-            <form onSubmit={handleCreateMerchant} className="space-y-4">
-              <input 
-                type="text" placeholder="Nome da Loja" required
-                className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:border-[#00d66f]"
-                value={newMerchant.name}
-                onChange={e => setNewMerchant({...newMerchant, name: e.target.value})}
-              />
-              <input 
-                type="text" placeholder="NIF" required
-                className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:border-[#00d66f]"
-                value={newMerchant.nif}
-                onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})}
-              />
-              <input 
-                type="email" placeholder="Email de Acesso" required
-                className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:border-[#00d66f]"
-                value={newMerchant.email}
-                onChange={e => setNewMerchant({...newMerchant, email: e.target.value})}
-              />
-              <input 
-                type="password" placeholder="Password Temporária" required
-                className="w-full p-4 bg-slate-50 border rounded-2xl outline-none focus:border-[#00d66f]"
-                value={newMerchant.password}
-                onChange={e => setNewMerchant({...newMerchant, password: e.target.value})}
-              />
-              <div className="p-4 bg-blue-50 rounded-2xl">
-                <label className="text-xs font-bold text-blue-900 uppercase">% Cashback Padrão</label>
+        <div className="fixed inset-0 bg-[#0a2540]/80 backdrop-blur-md flex items-center justify-center z-50 p-4">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] p-8 md:p-12 shadow-2xl overflow-y-auto max-h-[90vh]">
+            <h2 className="text-3xl font-black text-[#0a2540] mb-2 uppercase italic">Novo Comerciante</h2>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-8">Dados Obrigatórios para Adesão</p>
+            
+            <form onSubmit={handleCreateMerchant} className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome do Estabelecimento</label>
                 <input 
-                  type="number" step="0.1"
-                  className="w-full bg-transparent text-xl font-black outline-none"
-                  value={newMerchant.cashbackPercent}
-                  onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})}
+                  type="text" required
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold"
+                  value={newMerchant.name}
+                  onChange={e => setNewMerchant({...newMerchant, name: e.target.value})}
                 />
               </div>
-              <div className="flex gap-3 mt-8">
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 p-4 font-bold text-slate-400">Cancelar</button>
-                <button type="submit" className="flex-1 p-4 bg-[#0a2540] text-white rounded-2xl font-bold hover:bg-black transition-all">Criar Loja</button>
+
+              <div className="md:col-span-2 space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Morada Completa</label>
+                <input 
+                  type="text" required
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold"
+                  value={newMerchant.address}
+                  onChange={e => setNewMerchant({...newMerchant, address: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF</label>
+                <input 
+                  type="text" required
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold"
+                  value={newMerchant.nif}
+                  onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Código Postal</label>
+                <input 
+                  type="text" required placeholder="0000-000"
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold"
+                  value={newMerchant.zipCode}
+                  onChange={e => setNewMerchant({...newMerchant, zipCode: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Contato Telemóvel</label>
+                <input 
+                  type="tel" required
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold"
+                  value={newMerchant.phone}
+                  onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email de Acesso</label>
+                <input 
+                  type="email" required
+                  className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold"
+                  value={newMerchant.email}
+                  onChange={e => setNewMerchant({...newMerchant, email: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Password Provisória</label>
+                <input 
+                  type="text" required
+                  className="w-full p-4 bg-slate-100 border-2 border-slate-200 rounded-2xl outline-none focus:border-black font-black text-blue-600"
+                  value={newMerchant.password}
+                  onChange={e => setNewMerchant({...newMerchant, password: e.target.value})}
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">% Cashback Padrão</label>
+                <div className="flex items-center bg-green-50 rounded-2xl px-4 border-2 border-green-100">
+                   <input 
+                    type="number" step="0.1"
+                    className="w-full p-4 bg-transparent text-xl font-black outline-none text-green-700"
+                    value={newMerchant.cashbackPercent}
+                    onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})}
+                  />
+                  <span className="font-black text-green-700">%</span>
+                </div>
+              </div>
+
+              <div className="md:col-span-2 flex gap-4 mt-8">
+                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 p-5 font-black uppercase text-[10px] tracking-[0.2em] text-slate-400 hover:text-red-500 transition-colors">Cancelar</button>
+                <button type="submit" className="flex-[2] p-5 bg-[#0a2540] text-white rounded-2xl font-black uppercase text-xs tracking-[0.2em] hover:bg-black transition-all shadow-xl active:scale-95">Finalizar Registo</button>
               </div>
             </form>
           </div>
