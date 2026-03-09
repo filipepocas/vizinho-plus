@@ -1,4 +1,3 @@
-// src/features/auth/Login.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
@@ -31,6 +30,7 @@ const Login: React.FC = () => {
 
     try {
       // 1. VERIFICAÇÃO DE ADMIN (FILIPE)
+      // Nota: Mantemos o acesso fixo para garantir que entras, mas vamos criar a página de gestão a seguir
       if (idnt === 'rochap.filipe@gmail.com' && password === 'admin123') {
         setCurrentUser({ 
           id: 'admin_filipe',
@@ -91,35 +91,39 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 font-sans">
       
+      {/* LOGOTIPO REAL NA PÁGINA DE LOGIN */}
       <div className="mb-8">
-        <div className="w-20 h-20 bg-gradient-to-br from-[#0a2540] to-[#00d66f] rounded-[24px] flex items-center justify-center shadow-2xl shadow-blue-900/20">
-          <span className="text-white font-black text-4xl italic">V+</span>
+        <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center shadow-2xl shadow-blue-900/10 border-2 border-slate-50 p-4 transform hover:rotate-3 transition-transform">
+          <img src="/logo-vizinho.png" alt="Vizinho+" className="w-full h-full object-contain" />
         </div>
       </div>
 
-      <div className="bg-white p-10 rounded-[40px] shadow-[0_20px_60px_rgba(10,37,64,0.08)] w-full max-w-md border border-slate-100">
+      <div className="bg-white p-10 rounded-[40px] shadow-[0_20px_60px_rgba(10,37,64,0.08)] w-full max-w-md border border-slate-100 relative overflow-hidden">
+        {/* Detalhe estético brutalista */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-[#00d66f]/5 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
+
         <div className="text-center mb-10">
-          <h1 className="text-3xl font-bold text-[#0a2540] tracking-tight">Bem-vindo</h1>
-          <p className="text-slate-400 mt-2 text-sm font-medium">Introduza as suas credenciais de acesso</p>
+          <h1 className="text-3xl font-black text-[#0a2540] tracking-tight uppercase italic">VIZINHO+</h1>
+          <p className="text-slate-400 mt-2 text-sm font-bold uppercase tracking-widest">Painel de Acesso</p>
         </div>
         
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 ml-1">Utilizador (Email, NIF ou Cartão)</label>
+            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Identificador</label>
             <input 
               type="text" 
               value={identifier} 
               onChange={(e) => setIdentifier(e.target.value)}
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-medium"
-              placeholder="Digite aqui..."
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-black"
+              placeholder="Email, NIF ou Cartão"
               required
             />
           </div>
           
           <div className="space-y-2">
             <div className="flex justify-between items-center ml-1">
-              <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Palavra-Passe</label>
-              <Link to="/forgot-password" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">
+              <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Palavra-Passe</label>
+              <Link to="/forgot-password" title="Funcionalidade em breve" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">
                 Esqueci-me ➔
               </Link>
             </div>
@@ -127,14 +131,14 @@ const Login: React.FC = () => {
               type="password" 
               value={password} 
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-medium"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-black"
               placeholder="********"
               required
             />
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100">
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border-2 border-red-100 animate-shake">
               ⚠️ {error}
             </div>
           )}
@@ -142,29 +146,31 @@ const Login: React.FC = () => {
           <button 
             type="submit"
             disabled={isLoading}
-            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-bold text-lg hover:bg-[#153455] active:scale-[0.98] transition-all shadow-xl shadow-blue-900/10 flex items-center justify-center gap-3"
+            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black text-lg hover:bg-black active:scale-[0.98] transition-all shadow-xl shadow-blue-900/10 flex items-center justify-center gap-3 group"
           >
             {isLoading ? (
-              <div className="w-6 h-6 border-2 border-white/20 border-t-white rounded-full animate-spin"></div>
+              <div className="w-6 h-6 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
             ) : (
-              <>Aceder ao Painel ➔</>
+              <>ENTRAR <span className="group-hover:translate-x-1 transition-transform">➔</span></>
             )}
           </button>
         </form>
 
-        <div className="mt-8 text-center border-t border-slate-50 pt-8">
-          <p className="text-slate-400 text-xs">
-            Novo cliente? <Link to="/client/register" className="text-[#00d66f] font-bold hover:underline">Registe-se na App Cliente</Link>
+        <div className="mt-8 text-center border-t-2 border-slate-50 pt-8">
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
+            Novo por aqui? <Link to="/client/register" className="text-[#00d66f] hover:underline">Registe-se agora</Link>
           </p>
         </div>
       </div>
 
-      <footer className="mt-12 text-slate-400 text-[10px] font-bold uppercase tracking-[0.2em] flex flex-col items-center gap-2">
-        <span>© 2026 Vizinho+ • Tecnologia para o Comércio Local</span>
-        <div className="flex gap-4">
-          <Link to="/" className="hover:text-[#0a2540]">Início</Link>
-          <span>•</span>
-          <button onClick={() => navigate('/admin')} className="hover:text-[#0a2540]">Admin</button>
+      <footer className="mt-12 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex flex-col items-center gap-4">
+        <div className="flex items-center gap-3 grayscale opacity-50">
+           <img src="/logo-vizinho.png" alt="" className="h-4 w-4" />
+           <span>Vizinho+ • 2026</span>
+        </div>
+        <div className="flex gap-6">
+          <Link to="/" className="hover:text-[#0a2540] transition-colors">Início</Link>
+          <Link to="/admin" className="hover:text-[#0a2540] transition-colors">Admin</Link>
         </div>
       </footer>
     </div>

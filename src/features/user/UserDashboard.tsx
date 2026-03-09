@@ -24,7 +24,7 @@ const UserDashboard: React.FC = () => {
     return <MerchantExplore onBack={() => setView('home')} />;
   }
 
-  // Cálculo de Saldos com a regra das 48h e prioridade de débito (Mantendo a tua lógica exata)
+  // Cálculo de Saldos com a regra das 48h e prioridade de débito
   const getBalancesByMerchant = () => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
     const balances: { [key: string]: { name: string, available: number, pending: number, total: number } } = {};
@@ -47,7 +47,6 @@ const UserDashboard: React.FC = () => {
           balances[merchantId].pending += amount;
         }
       } else {
-        // Regra de Débito: Retira primeiro do disponível, o resto do pendente
         let remainingToDebit = amount;
         
         if (balances[merchantId].available >= remainingToDebit) {
@@ -88,6 +87,7 @@ const UserDashboard: React.FC = () => {
     return (
       <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-center">
         <div className="space-y-4">
+          <img src="/logo-vizinho.png" alt="Vizinho+" className="w-16 h-16 mx-auto mb-4 object-contain animate-pulse" />
           <div className="w-12 h-12 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin mx-auto"></div>
           <p className="font-black text-white uppercase tracking-widest text-xs">A carregar o teu cartão...</p>
         </div>
@@ -101,11 +101,13 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] font-sans pb-20">
-      {/* HEADER BRUTALISTA */}
+      {/* HEADER BRUTALISTA COM LOGOTIPO REAL */}
       <header className="bg-[#0a2540] p-6 text-white rounded-b-[40px] shadow-2xl mb-8">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <div className="bg-[#00d66f] text-[#0a2540] p-2 rounded-xl font-black italic text-xl shadow-[4px_4px_0px_#fff]">V+</div>
+            <div className="bg-white p-1.5 rounded-xl shadow-[4px_4px_0px_#00d66f]">
+              <img src="/logo-vizinho.png" alt="V+" className="h-8 w-8 object-contain" />
+            </div>
             <h1 className="font-black italic text-2xl tracking-tighter uppercase">VIZINHO+</h1>
           </div>
           <button 
@@ -119,12 +121,17 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-5xl mx-auto px-6">
         
-        {/* O CARTÃO VIZINHO+ (UI REFORÇADA) */}
+        {/* O CARTÃO VIZINHO+ (COM LOGOTIPO INTEGRADO) */}
         <div className="relative group max-w-md mx-auto mb-12">
           <div className="absolute -inset-2 bg-gradient-to-r from-[#00d66f] to-blue-400 rounded-[45px] blur-xl opacity-20 group-hover:opacity-40 transition duration-700"></div>
           <div className="relative bg-white p-8 rounded-[40px] shadow-2xl border-b-8 border-[#00d66f] overflow-hidden transition-transform hover:scale-[1.02]">
             
-            <div className="flex justify-between items-start mb-8">
+            {/* MARCA DE ÁGUA DO LOGO NO CARTÃO */}
+            <div className="absolute top-0 right-0 p-4 opacity-[0.05] pointer-events-none">
+              <img src="/logo-vizinho.png" alt="" className="w-32 h-32 object-contain rotate-12" />
+            </div>
+
+            <div className="flex justify-between items-start mb-8 relative z-10">
               <div className="space-y-1">
                 <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Oficial</p>
                 <h2 className="text-2xl font-black text-[#0a2540] tracking-tight uppercase leading-none break-words max-w-[200px]">
@@ -141,7 +148,7 @@ const UserDashboard: React.FC = () => {
             </div>
 
             {/* BARCODE & QR CODE AREA */}
-            <div className="bg-slate-50 p-6 rounded-[24px] border-2 border-slate-100 flex flex-col items-center gap-4">
+            <div className="bg-slate-50 p-6 rounded-[24px] border-2 border-slate-100 flex flex-col items-center gap-4 relative z-10">
               <div className="bg-white p-2 rounded-xl shadow-sm">
                 <Barcode 
                   value={currentUser.customerNumber || "0000000000"} 
@@ -159,10 +166,13 @@ const UserDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-8 flex justify-between items-end">
-              <div>
-                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">NIF Registado</p>
-                <p className="text-sm font-black text-[#0a2540]">{currentUser.nif}</p>
+            <div className="mt-8 flex justify-between items-end relative z-10">
+              <div className="flex items-center gap-2">
+                <img src="/logo-vizinho.png" alt="" className="h-5 w-5 grayscale opacity-50" />
+                <div>
+                  <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">NIF Registado</p>
+                  <p className="text-sm font-black text-[#0a2540]">{currentUser.nif}</p>
+                </div>
               </div>
               <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
                  <QRCodeSVG value={currentUser.nif} size={40} />
@@ -187,7 +197,7 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* SALDOS POR LOJA (HORIZONTAL SCROLL) */}
+        {/* SALDOS POR LOJA */}
         <div className="mb-12">
           <div className="flex items-center gap-2 mb-4 ml-2">
             <div className="w-2 h-6 bg-[#00d66f] rounded-full"></div>
