@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
 const Login: React.FC = () => {
@@ -29,8 +29,25 @@ const Login: React.FC = () => {
     const idnt = identifier.toLowerCase().trim();
 
     try {
-      // 1. VERIFICAÇÃO DE ADMIN (FILIPE)
-      // Nota: Mantemos o acesso fixo para garantir que entras, mas vamos criar a página de gestão a seguir
+      // 1. VERIFICAÇÃO DE ADMIN (DINÂMICA + BACKUP)
+      // Primeiro tentamos ler as definições guardadas na base de dados
+      const adminSettingsRef = doc(db, 'settings', 'admin_profile');
+      const adminSettingsSnap = await getDoc(adminSettingsRef);
+      
+      if (adminSettingsSnap.exists()) {
+        const adminData = adminSettingsSnap.data();
+        if (idnt === adminData.email && password === adminData.password) {
+          setCurrentUser({ 
+            id: 'admin_filipe',
+            email: idnt, 
+            role: 'admin', 
+            name: 'Filipe (Admin)' 
+          });
+          return;
+        }
+      }
+
+      // Acesso de Backup (Caso a BD esteja vazia ou precises de entrar na primeira vez)
       if (idnt === 'rochap.filipe@gmail.com' && password === 'admin123') {
         setCurrentUser({ 
           id: 'admin_filipe',
@@ -51,7 +68,9 @@ const Login: React.FC = () => {
 
       if (!targetM.empty) {
         const d = targetM.docs[0].data();
-        if (d.password === password) {
+        // Verifica se é password definitiva ou temporária
+        const correctPassword = d.password === password || d.temporaryPassword === password;
+        if (correctPassword) {
           setCurrentUser({ id: targetM.docs[0].id, ...d, role: 'merchant' });
           return;
         }
@@ -91,7 +110,6 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 font-sans">
       
-      {/* LOGOTIPO REAL NA PÁGINA DE LOGIN */}
       <div className="mb-8">
         <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center shadow-2xl shadow-blue-900/10 border-2 border-slate-50 p-4 transform hover:rotate-3 transition-transform">
           <img src="/logo-vizinho.png" alt="Vizinho+" className="w-full h-full object-contain" />
@@ -99,7 +117,6 @@ const Login: React.FC = () => {
       </div>
 
       <div className="bg-white p-10 rounded-[40px] shadow-[0_20px_60px_rgba(10,37,64,0.08)] w-full max-w-md border border-slate-100 relative overflow-hidden">
-        {/* Detalhe estético brutalista */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-[#00d66f]/5 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
 
         <div className="text-center mb-10">
