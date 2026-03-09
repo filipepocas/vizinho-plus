@@ -91,7 +91,6 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 font-sans">
       
-      {/* LOGO / BADGE */}
       <div className="mb-8">
         <div className="w-20 h-20 bg-gradient-to-br from-[#0a2540] to-[#00d66f] rounded-[24px] flex items-center justify-center shadow-2xl shadow-blue-900/20">
           <span className="text-white font-black text-4xl italic">V+</span>
@@ -118,7 +117,12 @@ const Login: React.FC = () => {
           </div>
           
           <div className="space-y-2">
-            <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400 ml-1">Palavra-Passe</label>
+            <div className="flex justify-between items-center ml-1">
+              <label className="text-[11px] font-bold uppercase tracking-[0.1em] text-slate-400">Palavra-Passe</label>
+              <Link to="/forgot-password" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">
+                Esqueci-me ➔
+              </Link>
+            </div>
             <input 
               type="password" 
               value={password} 
@@ -130,7 +134,7 @@ const Login: React.FC = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100 animate-shake">
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-xs font-bold border border-red-100">
               ⚠️ {error}
             </div>
           )}
@@ -150,7 +154,7 @@ const Login: React.FC = () => {
 
         <div className="mt-8 text-center border-t border-slate-50 pt-8">
           <p className="text-slate-400 text-xs">
-            Novo cliente? <Link to="/client" className="text-[#00d66f] font-bold hover:underline">Registe-se na App Cliente</Link>
+            Novo cliente? <Link to="/client/register" className="text-[#00d66f] font-bold hover:underline">Registe-se na App Cliente</Link>
           </p>
         </div>
       </div>
@@ -167,4 +171,4 @@ const Login: React.FC = () => {
   );
 };
 
-export default Login; 
+export default Login;

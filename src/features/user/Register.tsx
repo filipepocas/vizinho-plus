@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../config/firebase';
+import { collection, query, where, getDocs } from 'firebase/firestore'; // Importações para verificação
+import { auth, db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 
 const Register: React.FC = () => {
@@ -12,6 +13,8 @@ const Register: React.FC = () => {
     name: '',
     nif: '',
     freguesia: '',
+    postalCode: '',
+    phone: '',
     email: '',
     password: '',
     confirmPassword: ''
@@ -24,6 +27,7 @@ const Register: React.FC = () => {
     e.preventDefault();
     setError('');
 
+    // 1. Validações de Interface
     if (formData.password !== formData.confirmPassword) {
       return setError('As passwords não coincidem.');
     }
@@ -32,31 +36,51 @@ const Register: React.FC = () => {
       return setError('O NIF deve ter 9 dígitos.');
     }
 
+    if (formData.postalCode.length < 4) {
+      return setError('Introduza um Código Postal válido.');
+    }
+
     setLoading(true);
 
     try {
-      // 1. Criar utilizador no Firebase Auth
+      // 2. Verificação de NIF duplicado (Segurança de Conta Única)
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('nif', '==', formData.nif));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        setLoading(false);
+        return setError('Este NIF já está associado a uma conta ativa.');
+      }
+
+      // 3. Criar utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
         formData.password
       );
 
-      // 2. Gravar perfil completo para os relatórios do Filipe (Admin)
+      // 4. Gravar perfil completo para os relatórios do Admin
       await registerClientProfile({
         uid: userCredential.user.uid,
         name: formData.name,
         nif: formData.nif,
         freguesia: formData.freguesia,
+        postalCode: formData.postalCode,
+        phone: formData.phone || undefined,
         email: formData.email,
         role: 'client'
       });
 
-      // 3. Sucesso! Redirecionar para o Dashboard
+      // 5. Sucesso! Redirecionar para o Dashboard
       navigate('/client');
     } catch (err: any) {
       console.error(err);
-      setError('Erro ao criar conta. Verifique se o email já existe.');
+      if (err.code === 'auth/email-already-in-use') {
+        setError('Este email já está em uso.');
+      } else {
+        setError('Erro ao criar conta. Tente novamente.');
+      }
     } finally {
       setLoading(false);
     }
@@ -98,6 +122,29 @@ const Register: React.FC = () => {
                 className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
                 value={formData.nif}
                 onChange={e => setFormData({...formData, nif: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Telemóvel (Opcional)</label>
+              <input 
+                type="tel" 
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+                value={formData.phone}
+                onChange={e => setFormData({...formData, phone: e.target.value})}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Código Postal</label>
+              <input 
+                type="text" 
+                required
+                placeholder="0000-000"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+                value={formData.postalCode}
+                onChange={e => setFormData({...formData, postalCode: e.target.value})}
               />
             </div>
             <div>
@@ -153,7 +200,7 @@ const Register: React.FC = () => {
             disabled={loading}
             className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black hover:bg-black transition-all shadow-lg pt-4 disabled:opacity-50"
           >
-            {loading ? 'A CRIAR CONTA...' : 'CRIAR MEU PERFIL ➔'}
+            {loading ? 'A VERIFICAR...' : 'CRIAR MEU PERFIL ➔'}
           </button>
         </form>
 

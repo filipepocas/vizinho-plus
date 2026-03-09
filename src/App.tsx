@@ -4,10 +4,11 @@ import { useStore } from './store/useStore';
 
 // 1. IMPORTAÇÕES DE COMPONENTES
 import Login from './features/auth/Login';
+import ForgotPassword from './features/auth/ForgotPassword'; // Novo: Recuperação autónoma
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
-import Register from './features/user/Register'; // Novo: Para o plano de registo do cliente
+import Register from './features/user/Register';
 import LoginSelector from './components/LoginSelector';
 
 // 2. HELPER DE PROTEÇÃO DE ROTA ADMIN (PARA O FILIPE)
@@ -48,8 +49,11 @@ function App() {
 
           {/* ROTA 2: LOGIN FORMAL (Admin e Lojistas) */}
           <Route path="/login" element={<Login />} />
+
+          {/* ROTA 3: RECUPERAÇÃO DE PASSWORD (Autónoma) */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
           
-          {/* ROTA 3: ÁREA DO FILIPE (ADMIN CONTROL) */}
+          {/* ROTA 4: ÁREA DO FILIPE (ADMIN CONTROL) */}
           <Route 
             path="/admin" 
             element={
@@ -59,20 +63,19 @@ function App() {
             } 
           />
 
-          {/* ROTA 4: ÁREA DO LOJISTA */}
+          {/* ROTA 5: ÁREA DO LOJISTA */}
           <Route path="/merchant" element={<MerchantDashboard />} />
 
-          {/* ROTA 5: ÁREA DO CLIENTE (VIZINHO) */}
-          {/* O Dashboard agora só abre se houver um currentUser logado */}
+          {/* ROTA 6: ÁREA DO CLIENTE (VIZINHO) */}
           <Route 
             path="/client" 
             element={currentUser ? <UserDashboard /> : <Navigate to="/client/register" replace />} 
           />
           
-          {/* ROTA 6: REGISTO DO CLIENTE (Fase 1 do Plano) */}
+          {/* ROTA 7: REGISTO DO CLIENTE */}
           <Route path="/client/register" element={<Register />} />
 
-          {/* ROTA 7: REDIRECIONAMENTO DE SEGURANÇA */}
+          {/* ROTA 8: REDIRECIONAMENTO DE SEGURANÇA */}
           <Route path="*" element={<Navigate to="/" replace />} />
           
         </Routes>

@@ -1,53 +1,79 @@
-// src/features/auth/ForgotPassword.tsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { sendPasswordResetEmail } from 'firebase/auth';
 import { auth } from '../../config/firebase';
-import { Link } from 'react-router-dom';
 
 const ForgotPassword: React.FC = () => {
+  const navigate = useNavigate();
   const [email, setEmail] = useState('');
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const handleReset = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email) return;
+    setMessage('');
+    setError('');
+    setLoading(true);
 
     try {
       await sendPasswordResetEmail(auth, email);
-      setMessage({ type: 'success', text: 'E-mail de recuperação enviado! Verifica a tua caixa de entrada.' });
-    } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erro: E-mail não encontrado ou inválido.' });
+      setMessage('Verifique a sua caixa de entrada. Enviamos um link para definir a nova password.');
+    } catch (err: any) {
+      console.error(err);
+      setError('Erro ao enviar email. Verifique se o endereço está correto.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-vplus-blue flex items-center justify-center p-6 font-mono">
-      <div className="bg-white p-8 border-8 border-black shadow-[15px_15px_0px_0px_rgba(0,0,0,1)] w-full max-w-md">
-        <h1 className="text-3xl font-black uppercase italic mb-2">Recuperar Acesso</h1>
-        <p className="text-[10px] font-bold uppercase mb-6 opacity-60 italic">Introduz o teu e-mail de lojista</p>
+    <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 font-sans">
+      <div className="bg-white p-8 rounded-[40px] shadow-2xl w-full max-w-md border-2 border-slate-100">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-black italic text-[#0a2540]">RECUPERAR</h1>
+          <p className="text-xs font-bold text-[#00d66f] uppercase tracking-widest">Acesso ao Vizinho+</p>
+        </div>
 
-        {message.text && (
-          <div className={`p-4 mb-6 font-black uppercase text-xs border-4 border-black ${message.type === 'success' ? 'bg-vplus-green text-black' : 'bg-red-500 text-white'}`}>
-            {message.text}
+        {message && (
+          <div className="bg-green-50 text-green-600 p-4 rounded-2xl text-xs font-bold mb-6 border border-green-100">
+            ✅ {message}
           </div>
         )}
 
-        <form onSubmit={handleReset} className="space-y-4">
-          <input 
-            type="email" 
-            placeholder="O TEU EMAIL" 
-            value={email} 
-            onChange={(e) => setEmail(e.target.value)}
-            className="w-full p-4 border-4 border-black font-black outline-none focus:bg-vplus-green-light transition-colors"
-          />
-          <button className="w-full bg-black text-white p-4 font-black uppercase border-b-8 border-vplus-blue active:border-b-0 active:translate-y-2 transition-all">
-            Enviar Link
+        {error && (
+          <div className="bg-red-50 text-red-500 p-4 rounded-2xl text-xs font-bold mb-6 border border-red-100">
+            ⚠️ {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">O seu Email de Registo</label>
+            <input 
+              type="email" 
+              required
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+              placeholder="exemplo@email.com"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </div>
+
+          <button 
+            disabled={loading}
+            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black hover:bg-black transition-all shadow-lg pt-4 disabled:opacity-50"
+          >
+            {loading ? 'A ENVIAR...' : 'ENVIAR LINK DE RECUPERAÇÃO ➔'}
           </button>
         </form>
 
-        <div className="mt-8 pt-6 border-t-4 border-gray-100 flex justify-between items-center">
-          <Link to="/login" className="text-[10px] font-black uppercase underline hover:text-vplus-blue">Voltar ao Login</Link>
-        </div>
+        <button 
+          onClick={() => navigate('/login')}
+          className="mt-6 w-full text-center text-xs text-slate-400 font-bold uppercase tracking-widest hover:text-[#0a2540]"
+        >
+          Voltar ao Login
+        </button>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@ import {
   setDoc,
   doc 
 } from 'firebase/firestore';
-import { signOut } from 'firebase/auth'; // Adicionado para logout real
+import { signOut } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 
 export interface Transaction {
@@ -27,12 +27,14 @@ export interface Transaction {
   createdAt: any;
 }
 
-// Interface para o perfil do Cliente conforme o teu plano
+// Interface atualizada conforme a nova afinação
 export interface UserProfile {
   uid: string;
   name: string;
   nif: string;
   freguesia: string;
+  postalCode: string; // Novo campo obrigatório
+  phone?: string;      // Novo campo facultativo
   email: string;
   role: 'client' | 'merchant' | 'admin';
 }
@@ -41,10 +43,10 @@ interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | any | null;
   setCurrentUser: (user: any | null) => void;
-  logout: () => Promise<void>; // Agora é assíncrona
+  logout: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   subscribeToTransactions: (role?: string, id?: string) => () => void;
-  registerClientProfile: (profile: UserProfile) => Promise<void>; // Nova função para o plano
+  registerClientProfile: (profile: UserProfile) => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set) => ({
@@ -53,7 +55,6 @@ export const useStore = create<StoreState>((set) => ({
 
   setCurrentUser: (user) => set({ currentUser: user }),
 
-  // Logout agora limpa o Firebase e o Estado Local
   logout: async () => {
     try {
       await signOut(auth);
@@ -63,7 +64,6 @@ export const useStore = create<StoreState>((set) => ({
     }
   },
 
-  // Grava o perfil do cliente no Firestore para os teus relatórios de Admin
   registerClientProfile: async (profile) => {
     try {
       await setDoc(doc(db, 'users', profile.uid), {
