@@ -26,7 +26,6 @@ const MerchantDashboard: React.FC = () => {
 
   useEffect(() => {
     if (isAuthorized && activeMerchant) {
-      // Subscrição usa a coleção 'transactions' conforme a estrutura do Firebase
       const unsubscribe = subscribeToTransactions('merchant', activeMerchant.id);
       return () => unsubscribe();
     }
@@ -53,13 +52,11 @@ const MerchantDashboard: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     try {
-      // Procura na coleção 'merchants' pelo email exato que está no Firebase
       const q = query(collection(db, 'merchants'), where('email', '==', loginEmail.toLowerCase().trim()));
       const snap = await getDocs(q);
       
       if (!snap.empty) {
         const data = snap.docs[0].data();
-        // Mapeia shopName para garantir que o nome aparece no Dashboard
         setActiveMerchant({ 
           id: snap.docs[0].id, 
           ...data,
@@ -67,7 +64,7 @@ const MerchantDashboard: React.FC = () => {
         });
         setIsAuthorized(true);
       } else {
-        alert("Lojista não registado. Verifique o email padaria@vizinho.pt");
+        alert("Lojista não registado. Verifique o email.");
       }
     } catch (err) {
       console.error(err);
@@ -88,7 +85,6 @@ const MerchantDashboard: React.FC = () => {
     };
 
     try {
-      // Atualiza o documento na coleção 'merchants'
       const merchantRef = doc(db, 'merchants', activeMerchant.id);
       await updateDoc(merchantRef, { operators: arrayUnion(newOp) });
       
@@ -102,39 +98,58 @@ const MerchantDashboard: React.FC = () => {
       setMessage({ type: 'success', text: "Operador pronto para faturar!" });
       setTimeout(() => setMessage({ type: '', text: '' }), 2000);
     } catch (error) {
-      alert("Erro ao guardar operador no Firebase.");
+      alert("Erro ao guardar operador.");
     }
   };
 
+  // Cálculo de Saldo Disponível com regra de prioridade de débito
   const getClientAvailableBalance = (clientId: string) => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
-    return transactions
-      .filter(t => t.clientId === clientId && t.merchantId === activeMerchant.id)
-      .reduce((acc, t) => {
-        const txTime = t.createdAt?.seconds ? t.createdAt.seconds * 1000 : Date.now();
-        const isAvailable = txTime <= fortyEightHoursAgo;
-        
-        if (t.type === 'earn') {
-          return isAvailable ? acc + (t.cashbackAmount || 0) : acc;
+    
+    // Filtramos apenas as transações deste cliente nesta loja
+    const merchantClientTxs = transactions.filter(t => t.clientId === clientId && t.merchantId === activeMerchant.id);
+    
+    let available = 0;
+    let pending = 0;
+
+    merchantClientTxs.forEach(t => {
+      const txTime = t.createdAt?.seconds ? t.createdAt.seconds * 1000 : Date.now();
+      const amount = t.cashbackAmount || 0;
+      const isMature = txTime <= fortyEightHoursAgo;
+
+      if (t.type === 'earn') {
+        if (isMature) available += amount;
+        else pending += amount;
+      } else {
+        // Débito: tira primeiro do disponível
+        let toDebit = amount;
+        if (available >= toDebit) {
+          available -= toDebit;
         } else {
-          return acc - (t.cashbackAmount || 0);
+          toDebit -= available;
+          available = 0;
+          pending -= toDebit; // Pode ficar negativo aqui se for 'subtract' (Nota de Crédito)
         }
-      }, 0);
+      }
+    });
+
+    return available;
   };
 
   const processAction = async (type: 'earn' | 'redeem' | 'subtract') => {
     const val = parseFloat(amount);
     if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber || opCode.length !== 5) {
-      return alert("Preencha todos os campos obrigatórios.");
+      return alert("Preencha todos os campos obrigatórios (Cliente, Valor, Fatura e PIN).");
     }
     
     const operator = activeMerchant.operators?.find((o: any) => o.code === opCode);
     if (!operator) return alert("PIN de Operador Inválido!");
 
+    // REGRA: Compras (redeem) não podem deixar saldo negativo
     if (type === 'redeem') {
       const available = getClientAvailableBalance(cardNumber);
       if (val > available) {
-        return alert(`Saldo insuficiente! Disponível: ${available.toFixed(2)}€`);
+        return alert(`Saldo insuficiente para compra! Disponível: ${available.toFixed(2)}€`);
       }
     }
 
@@ -145,7 +160,7 @@ const MerchantDashboard: React.FC = () => {
       await addTransaction({
         clientId: cardNumber,
         merchantId: activeMerchant.id,
-        merchantName: activeMerchant.displayName, // Usa o shopName capturado no login
+        merchantName: activeMerchant.displayName,
         amount: type === 'earn' ? val : 0,
         cashbackAmount: cashback,
         type: type,
@@ -154,7 +169,11 @@ const MerchantDashboard: React.FC = () => {
         status: type === 'earn' ? 'pending' : 'available'
       });
       
-      setMessage({ type: 'success', text: "Transação enviada para o Vizinho!" });
+      setMessage({ 
+        type: 'success', 
+        text: type === 'subtract' ? "Nota de Crédito registada!" : "Transação enviada para o Vizinho!" 
+      });
+      
       setAmount('');
       setDocumentNumber('');
       setOpCode('');
@@ -184,7 +203,7 @@ const MerchantDashboard: React.FC = () => {
                 required 
               />
             </div>
-            <button className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-bold hover:bg-[#153455] shadow-lg">
+            <button className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-bold hover:bg-[#153455] shadow-lg transition-all">
               {isLoading ? 'A verificar...' : 'Abrir Terminal'}
             </button>
           </form>
@@ -199,79 +218,92 @@ const MerchantDashboard: React.FC = () => {
         
         <header className="bg-white p-6 rounded-[24px] shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-[#00d66f]/10 rounded-xl flex items-center justify-center text-[#00d66f] text-2xl">🏪</div>
+            <div className="w-12 h-12 bg-[#00d66f]/10 rounded-xl flex items-center justify-center text-[#00d66f] text-2xl shadow-inner">🏪</div>
             <div>
               <h2 className="text-xl font-bold text-[#0a2540] leading-none">{activeMerchant.displayName}</h2>
               <div className="flex gap-2 mt-1">
-                <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase">NIF {activeMerchant.nif}</span>
+                <span className="text-[10px] font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-500 uppercase italic">NIF {activeMerchant.nif}</span>
                 <span className="text-[10px] font-bold bg-[#00d66f]/10 px-2 py-0.5 rounded text-[#00d66f] uppercase">{activeMerchant.cashbackPercent}% Cashback</span>
               </div>
             </div>
           </div>
           <div className="flex gap-3">
             <button onClick={() => setShowOpManager(!showOpManager)} className="px-5 py-2.5 rounded-xl bg-slate-50 text-[#0a2540] text-sm font-bold border border-slate-200 hover:bg-slate-100 transition-all">
-              {showOpManager ? 'Voltar' : 'Gerir Equipa'}
+              {showOpManager ? 'Voltar ao Terminal' : 'Gerir Equipa'}
             </button>
-            <button onClick={() => setIsAuthorized(false)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100">Sair</button>
+            <button onClick={() => setIsAuthorized(false)} className="px-5 py-2.5 rounded-xl bg-red-50 text-red-600 text-sm font-bold border border-red-100 hover:bg-red-100 transition-all">Sair</button>
           </div>
         </header>
 
         {showOpManager ? (
-          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 animate-in fade-in duration-300">
             <h3 className="text-lg font-bold text-[#0a2540] mb-6 flex items-center gap-2">Configurar Operadores</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-              <input placeholder="NOME" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl" />
-              <input placeholder="PIN (5 DÍGITOS)" value={newOpCode} onChange={e => setNewOpCode(e.target.value)} maxLength={5} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center font-bold" />
-              <button onClick={handleAddOperator} className="bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-bold hover:bg-[#00c265]">Adicionar Operador</button>
+              <input placeholder="NOME DO OPERADOR" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none focus:border-[#00d66f]" />
+              <input placeholder="PIN (5 DÍGITOS)" value={newOpCode} onChange={e => setNewOpCode(e.target.value)} maxLength={5} className="p-4 bg-slate-50 border border-slate-200 rounded-2xl text-center font-bold outline-none focus:border-[#00d66f]" />
+              <button onClick={handleAddOperator} className="bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-bold hover:bg-[#00c265] shadow-lg transition-all active:scale-95">Adicionar Operador</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {activeMerchant.operators?.map((op: any) => (
-                <div key={op.id} className="p-4 border border-slate-100 bg-slate-50 rounded-2xl">
-                  <p className="font-bold text-[#0a2540] text-sm uppercase">{op.name}</p>
-                  <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-widest">PIN: {op.code}</p>
+                <div key={op.id} className="p-4 border border-slate-100 bg-slate-50 rounded-2xl flex justify-between items-center">
+                  <div>
+                    <p className="font-bold text-[#0a2540] text-sm uppercase">{op.name}</p>
+                    <p className="text-[10px] text-slate-400 font-bold mt-1 tracking-widest leading-none">PIN: {op.code}</p>
+                  </div>
+                  <span className="text-xl grayscale opacity-30">👤</span>
                 </div>
               ))}
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in slide-in-from-bottom-4 duration-500">
             <div className="lg:col-span-2 bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 space-y-8">
-              <div className="space-y-3">
-                <label className="text-xs font-bold uppercase text-slate-400 tracking-wider block text-center">1. Identificar Cliente (NIF ou Cartão)</label>
+              <div className="space-y-3 text-center">
+                <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] block">1. Identificar Cliente (NIF ou Cartão)</label>
                 <div className="flex gap-3">
-                  <input value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="NIF ou Nº Cartão" className="flex-grow p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none" />
-                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-[#153455]"><span className="text-2xl">📷</span></button>
+                  <input value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="NIF ou Nº Cartão" className="flex-grow p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-2xl font-black text-[#0a2540] outline-none focus:border-[#0a2540] transition-all" />
+                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-black shadow-lg transition-all active:scale-95"><span className="text-2xl">📷</span></button>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-3">
-                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">2. Valor da Venda (€)</label>
-                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">2. Valor da Operação (€)</label>
+                  <input type="number" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-2xl font-black text-[#0a2540] outline-none focus:border-[#00d66f] transition-all" />
                 </div>
                 <div className="space-y-3">
-                  <label className="text-xs font-bold uppercase text-slate-400 tracking-wider">3. Nº Fatura</label>
-                  <input value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} placeholder="Ex: FT 101" className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl text-2xl font-bold text-[#0a2540] outline-none uppercase" />
+                  <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em]">3. Nº Documento (Fatura/NC)</label>
+                  <input value={documentNumber} onChange={e => setDocumentNumber(e.target.value)} placeholder="Ex: FT 101" className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-2xl font-black text-[#0a2540] outline-none uppercase focus:border-[#00d66f] transition-all" />
                 </div>
               </div>
 
-              <div className="pt-4 border-t border-slate-50 text-center">
-                <label className="text-xs font-bold uppercase text-red-500 tracking-wider block mb-3">4. Autorização (PIN Operador)</label>
-                <input type="password" value={opCode} onChange={e => setOpCode(e.target.value)} maxLength={5} placeholder="•••••" className="w-full max-w-xs mx-auto p-5 bg-red-50/30 border border-red-100 rounded-2xl text-3xl text-center font-bold tracking-[0.5em]" />
+              <div className="pt-8 border-t-2 border-slate-50 text-center">
+                <label className="text-[10px] font-black uppercase text-red-500 tracking-[0.2em] block mb-4">4. Autorização Final (PIN Operador)</label>
+                <input type="password" value={opCode} onChange={e => setOpCode(e.target.value)} maxLength={5} placeholder="•••••" className="w-full max-w-xs mx-auto p-5 bg-red-50/30 border-2 border-red-100 rounded-2xl text-3xl text-center font-black tracking-[0.5em] focus:border-red-500 transition-all outline-none" />
               </div>
             </div>
 
             <div className="flex flex-col gap-4">
-              <button onClick={() => processAction('earn')} className="group bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] transition-all hover:scale-[1.02] shadow-lg flex flex-col items-center gap-2">
-                <span className="text-4xl">💰</span>
-                <span className="font-bold text-lg text-center">Atribuir Cashback</span>
+              <button onClick={() => processAction('earn')} className="group bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] transition-all hover:scale-[1.02] shadow-xl shadow-green-500/10 flex flex-col items-center gap-2 active:scale-95">
+                <span className="text-4xl group-hover:rotate-12 transition-transform">💰</span>
+                <span className="font-black text-lg uppercase tracking-tighter italic">Atribuir Cashback</span>
+                <p className="text-[9px] font-bold opacity-60 uppercase">Venda Normal</p>
               </button>
-              <button onClick={() => processAction('redeem')} className="bg-[#0a2540] p-8 rounded-[32px] text-white transition-all hover:bg-[#153455] shadow-lg flex flex-col items-center gap-2">
-                <span className="text-4xl">🎁</span>
-                <span className="font-bold text-lg text-center">Descontar Saldo</span>
+
+              <button onClick={() => processAction('redeem')} className="group bg-[#0a2540] p-8 rounded-[32px] text-white transition-all hover:bg-black shadow-xl shadow-blue-900/10 flex flex-col items-center gap-2 active:scale-95">
+                <span className="text-4xl group-hover:scale-110 transition-transform">🎁</span>
+                <span className="font-black text-lg uppercase tracking-tighter italic">Descontar Saldo</span>
+                <p className="text-[9px] font-bold opacity-60 uppercase">Uso de Cashback</p>
               </button>
+
+              <button onClick={() => processAction('subtract')} className="group bg-white border-2 border-slate-100 p-6 rounded-[32px] text-slate-400 transition-all hover:border-red-500 hover:text-red-500 flex flex-col items-center gap-1 active:scale-95">
+                <span className="text-2xl grayscale group-hover:grayscale-0 transition-all">📄</span>
+                <span className="font-black text-xs uppercase tracking-widest">Nota de Crédito</span>
+                <p className="text-[8px] font-bold opacity-60 uppercase">Permite Saldo Negativo</p>
+              </button>
+
               {message.text && (
-                <div className={`mt-4 p-5 rounded-2xl font-bold text-center ${message.type === 'success' ? 'bg-[#00d66f]/20 text-[#0a2540]' : 'bg-red-50 text-red-600'}`}>
+                <div className={`mt-4 p-5 rounded-2xl font-black text-center text-xs uppercase tracking-widest animate-pulse ${message.type === 'success' ? 'bg-[#00d66f]/10 text-[#00d66f]' : 'bg-red-50 text-red-600'}`}>
                   {message.text}
                 </div>
               )}
@@ -280,10 +312,10 @@ const MerchantDashboard: React.FC = () => {
         )}
 
         {showScanner && (
-          <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-md z-50 p-6 flex flex-col items-center justify-center">
-            <div className="bg-white p-4 rounded-[40px] shadow-2xl w-full max-w-lg relative">
+          <div className="fixed inset-0 bg-[#0a2540]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center animate-in fade-in duration-300">
+            <div className="bg-white p-4 rounded-[40px] shadow-2xl w-full max-w-lg relative overflow-hidden">
               <div id="reader" className="w-full"></div>
-              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-bold mt-4 rounded-2xl">Sair do Scanner</button>
+              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-black uppercase text-xs tracking-[0.2em] mt-4 rounded-2xl active:scale-95 transition-all">Cancelar Leitura</button>
             </div>
           </div>
         )}
