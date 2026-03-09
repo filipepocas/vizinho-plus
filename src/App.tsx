@@ -7,6 +7,7 @@ import Login from './features/auth/Login';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
+import Register from './features/user/Register'; // Novo: Para o plano de registo do cliente
 import LoginSelector from './components/LoginSelector';
 
 // 2. HELPER DE PROTEÇÃO DE ROTA ADMIN (PARA O FILIPE)
@@ -23,8 +24,6 @@ function App() {
   const { subscribeToTransactions, currentUser } = useStore();
 
   // ESCUTA DE DADOS EM TEMPO REAL (Cérebro da App)
-  // Nota: Deixamos a subscrição aqui apenas para o Admin. 
-  // Lojista e Cliente gerem a sua própria subscrição ao validar o acesso.
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
 
@@ -44,10 +43,10 @@ function App() {
       <div className="min-h-screen bg-[#f6f9fc] selection:bg-[#00d66f] selection:text-[#0a2540]">
         <Routes>
           
-          {/* ROTA 1: PORTAL DE ENTRADA (Onde o utilizador escolhe quem é) */}
+          {/* ROTA 1: PORTAL DE ENTRADA */}
           <Route path="/" element={<LoginSelector />} />
 
-          {/* ROTA 2: LOGIN FORMAL (Para Admin e Lojistas Registados) */}
+          {/* ROTA 2: LOGIN FORMAL (Admin e Lojistas) */}
           <Route path="/login" element={<Login />} />
           
           {/* ROTA 3: ÁREA DO FILIPE (ADMIN CONTROL) */}
@@ -60,15 +59,20 @@ function App() {
             } 
           />
 
-          {/* ROTA 4: ÁREA DO LOJISTA (TERMINAL DE VENDAS) */}
-          {/* Permitimos acesso direto porque o MerchantDashboard tem o seu próprio login por email */}
+          {/* ROTA 4: ÁREA DO LOJISTA */}
           <Route path="/merchant" element={<MerchantDashboard />} />
 
           {/* ROTA 5: ÁREA DO CLIENTE (VIZINHO) */}
-          {/* Permitimos acesso direto porque o UserDashboard tem o seu próprio login por NIF */}
-          <Route path="/client" element={<UserDashboard />} />
+          {/* O Dashboard agora só abre se houver um currentUser logado */}
+          <Route 
+            path="/client" 
+            element={currentUser ? <UserDashboard /> : <Navigate to="/client/register" replace />} 
+          />
+          
+          {/* ROTA 6: REGISTO DO CLIENTE (Fase 1 do Plano) */}
+          <Route path="/client/register" element={<Register />} />
 
-          {/* ROTA 6: REDIRECIONAMENTO DE SEGURANÇA */}
+          {/* ROTA 7: REDIRECIONAMENTO DE SEGURANÇA */}
           <Route path="*" element={<Navigate to="/" replace />} />
           
         </Routes>
