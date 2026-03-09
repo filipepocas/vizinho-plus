@@ -19,12 +19,12 @@ const UserDashboard: React.FC = () => {
     }
   }, [currentUser, subscribeToTransactions]);
 
-  // Lógica de alternância de vista
+  // Lógica de alternância de vista para exploração de lojas
   if (view === 'merchants') {
     return <MerchantExplore onBack={() => setView('home')} />;
   }
 
-  // Cálculo de Saldos com a regra das 48h e prioridade de débito
+  // Cálculo de Saldos com a regra das 48h e prioridade de débito (Mantendo a tua lógica exata)
   const getBalancesByMerchant = () => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
     const balances: { [key: string]: { name: string, available: number, pending: number, total: number } } = {};
@@ -86,8 +86,11 @@ const UserDashboard: React.FC = () => {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 text-center">
-        <p className="font-bold text-slate-400 uppercase tracking-widest">A carregar o seu cartão...</p>
+      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-center">
+        <div className="space-y-4">
+          <div className="w-12 h-12 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="font-black text-white uppercase tracking-widest text-xs">A carregar o teu cartão...</p>
+        </div>
       </div>
     );
   }
@@ -98,57 +101,59 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] font-sans pb-20">
-      {/* HEADER COM LOGO E SAIR */}
-      <header className="p-6 flex justify-between items-center max-w-5xl mx-auto">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-[#0a2540] rounded-lg flex items-center justify-center shadow-lg">
-            <span className="text-white font-black text-sm italic">V+</span>
+      {/* HEADER BRUTALISTA */}
+      <header className="bg-[#0a2540] p-6 text-white rounded-b-[40px] shadow-2xl mb-8">
+        <div className="max-w-5xl mx-auto flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#00d66f] text-[#0a2540] p-2 rounded-xl font-black italic text-xl shadow-[4px_4px_0px_#fff]">V+</div>
+            <h1 className="font-black italic text-2xl tracking-tighter uppercase">VIZINHO+</h1>
           </div>
-          <span className="font-black text-[#0a2540] tracking-tighter">VIZINHO+</span>
+          <button 
+            onClick={() => logout()} 
+            className="bg-white/10 hover:bg-red-500/20 text-[10px] font-black uppercase px-4 py-2 rounded-full border border-white/20 transition-all"
+          >
+            Sair [→]
+          </button>
         </div>
-        <button 
-          onClick={() => logout()} 
-          className="text-[10px] font-black uppercase text-slate-400 hover:text-red-500 transition-colors"
-        >
-          Sair [→
-        </button>
       </header>
 
-      <main className="max-w-5xl mx-auto p-6">
+      <main className="max-w-5xl mx-auto px-6">
         
-        {/* O CARTÃO DESENHADO */}
-        <div className="relative group max-w-md mx-auto mb-10">
-          <div className="absolute -inset-1 bg-gradient-to-r from-[#00d66f] to-blue-500 rounded-[35px] blur opacity-20 transition duration-1000 group-hover:opacity-40"></div>
-          <div className="relative bg-white p-8 rounded-[32px] shadow-2xl border border-slate-50 overflow-hidden">
+        {/* O CARTÃO VIZINHO+ (UI REFORÇADA) */}
+        <div className="relative group max-w-md mx-auto mb-12">
+          <div className="absolute -inset-2 bg-gradient-to-r from-[#00d66f] to-blue-400 rounded-[45px] blur-xl opacity-20 group-hover:opacity-40 transition duration-700"></div>
+          <div className="relative bg-white p-8 rounded-[40px] shadow-2xl border-b-8 border-[#00d66f] overflow-hidden transition-transform hover:scale-[1.02]">
             
-            <div className="flex justify-between items-start mb-10">
+            <div className="flex justify-between items-start mb-8">
               <div className="space-y-1">
-                <p className="text-[9px] font-black text-[#00d66f] uppercase tracking-[0.2em]">Cartão Vizinho+</p>
-                <h2 className="text-xl font-black text-[#0a2540] tracking-tight uppercase leading-none">
+                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Oficial</p>
+                <h2 className="text-2xl font-black text-[#0a2540] tracking-tight uppercase leading-none break-words max-w-[200px]">
                   {currentUser.name}
                 </h2>
               </div>
               <div className="text-right">
-                <p className="text-[9px] font-black text-slate-300 uppercase">Saldo Total</p>
-                <p className="text-2xl font-black text-[#0a2540] leading-none">{totalBalance.toFixed(2)}€</p>
-                <div className="mt-1 bg-[#00d66f]/10 px-2 py-0.5 rounded-md inline-block">
-                  <p className="text-[8px] font-black text-[#00d66f] uppercase leading-none">Disponível: {totalAvailable.toFixed(2)}€</p>
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Saldo Total</p>
+                <p className="text-3xl font-black text-[#0a2540] leading-none">{totalBalance.toFixed(2)}€</p>
+                <div className="mt-2 bg-[#00d66f] px-3 py-1 rounded-lg inline-block shadow-sm">
+                  <p className="text-[10px] font-black text-[#0a2540] uppercase leading-none">Pronto: {totalAvailable.toFixed(2)}€</p>
                 </div>
               </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center space-y-4 py-6 bg-slate-50 rounded-2xl border border-slate-100">
-              <Barcode 
-                value={currentUser.customerNumber || "0000000000"} 
-                width={1.6} 
-                height={60} 
-                displayValue={false}
-                background="transparent"
-                lineColor="#0a2540"
-              />
+            {/* BARCODE & QR CODE AREA */}
+            <div className="bg-slate-50 p-6 rounded-[24px] border-2 border-slate-100 flex flex-col items-center gap-4">
+              <div className="bg-white p-2 rounded-xl shadow-sm">
+                <Barcode 
+                  value={currentUser.customerNumber || "0000000000"} 
+                  width={1.5} 
+                  height={50} 
+                  displayValue={false}
+                  lineColor="#0a2540"
+                />
+              </div>
               <div className="text-center">
-                <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Número de Cliente</p>
-                <p className="text-xl font-mono font-black tracking-[0.25em] text-[#0a2540]">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">ID Cliente</p>
+                <p className="text-lg font-mono font-black tracking-[0.3em] text-[#0a2540]">
                   {currentUser.customerNumber?.match(/.{1,4}/g)?.join(' ') || "0000 0000 00"}
                 </p>
               </div>
@@ -156,61 +161,80 @@ const UserDashboard: React.FC = () => {
 
             <div className="mt-8 flex justify-between items-end">
               <div>
-                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">NIF Registado</p>
-                <p className="text-xs font-black text-[#0a2540]">{currentUser.nif}</p>
+                <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">NIF Registado</p>
+                <p className="text-sm font-black text-[#0a2540]">{currentUser.nif}</p>
               </div>
-              <div className="opacity-10">
-                 <QRCodeSVG value={currentUser.nif} size={35} />
+              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
+                 <QRCodeSVG value={currentUser.nif} size={40} />
               </div>
             </div>
           </div>
         </div>
 
-        {/* BOTÕES DE ACESSO */}
+        {/* ACÇÕES RÁPIDAS */}
         <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mb-12">
           <button 
             onClick={() => setView('merchants')}
-            className="bg-[#0a2540] text-white p-6 rounded-[28px] flex flex-col items-center justify-center gap-2 hover:bg-black transition-all shadow-xl shadow-blue-900/10 group active:scale-95"
+            className="bg-[#0a2540] text-white p-6 rounded-[32px] flex flex-col items-center justify-center gap-2 hover:bg-black transition-all shadow-xl active:scale-95 group"
           >
-            <span className="text-2xl group-hover:scale-110 transition-transform">🏪</span>
-            <span className="text-[10px] font-black uppercase tracking-widest">Lojas Aderentes</span>
+            <span className="text-3xl group-hover:bounce transition-transform">🏪</span>
+            <span className="text-[11px] font-black uppercase tracking-widest">Explorar Lojas</span>
           </button>
 
-          <button className="bg-white text-[#0a2540] p-6 rounded-[28px] flex flex-col items-center justify-center gap-2 border-2 border-slate-100 hover:border-[#00d66f] transition-all group active:scale-95">
-            <span className="text-2xl group-hover:scale-110 transition-transform">👤</span>
-            <span className="text-[10px] font-black uppercase tracking-widest">Meu Perfil</span>
+          <button className="bg-white text-[#0a2540] p-6 rounded-[32px] flex flex-col items-center justify-center gap-2 border-4 border-slate-100 hover:border-[#00d66f] transition-all active:scale-95 group">
+            <span className="text-3xl group-hover:rotate-12 transition-transform">⚙️</span>
+            <span className="text-[11px] font-black uppercase tracking-widest">Definições</span>
           </button>
         </div>
 
-        {/* SALDOS POR LOJA */}
-        <div className="mb-10">
-          <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest mb-4 ml-2">Saldos por Loja</h4>
-          <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
-            {merchantBalances.map((m, idx) => (
-              <div key={idx} className="min-w-[220px] bg-white p-6 rounded-[28px] shadow-sm border-2 border-slate-100">
-                <p className="text-[10px] font-black text-slate-400 uppercase mb-1">{m.name}</p>
-                <div className="flex flex-col">
-                  <span className="text-xl font-black text-[#0a2540]">{m.total.toFixed(2)}€</span>
-                  <span className="text-[9px] font-bold text-[#00d66f] uppercase tracking-tighter">Disponível: {m.available.toFixed(2)}€</span>
-                </div>
-                {m.pending > 0 && (
-                  <p className="text-[9px] font-bold text-orange-500 uppercase mt-2">⌛ {m.pending.toFixed(2)}€ a libertar</p>
-                )}
+        {/* SALDOS POR LOJA (HORIZONTAL SCROLL) */}
+        <div className="mb-12">
+          <div className="flex items-center gap-2 mb-4 ml-2">
+            <div className="w-2 h-6 bg-[#00d66f] rounded-full"></div>
+            <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest">Carteira por Estabelecimento</h4>
+          </div>
+          <div className="flex gap-4 overflow-x-auto pb-6 no-scrollbar">
+            {merchantBalances.length === 0 ? (
+              <div className="w-full bg-white p-8 rounded-[32px] border-4 border-dashed border-slate-100 text-center">
+                <p className="text-slate-400 font-bold uppercase text-[10px]">Ainda sem cashback aqui.</p>
               </div>
-            ))}
+            ) : (
+              merchantBalances.map((m, idx) => (
+                <div key={idx} className="min-w-[240px] bg-white p-6 rounded-[32px] shadow-lg border-2 border-slate-50 flex flex-col justify-between">
+                  <div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-tight truncate">{m.name}</p>
+                    <h5 className="text-2xl font-black text-[#0a2540]">{m.total.toFixed(2)}€</h5>
+                  </div>
+                  <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                    <div>
+                      <p className="text-[9px] font-black text-[#00d66f] uppercase">Disponível</p>
+                      <p className="font-black text-[#0a2540]">{m.available.toFixed(2)}€</p>
+                    </div>
+                    {m.pending > 0 && (
+                      <div className="text-right">
+                        <p className="text-[9px] font-black text-orange-400 uppercase">Pendente</p>
+                        <p className="font-black text-orange-500 text-sm italic">{m.pending.toFixed(2)}€</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
         {/* HISTÓRICO COM FILTROS */}
-        <div className="space-y-4">
+        <div className="space-y-4 pb-10">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 ml-2">
-            <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest">Movimentos Detalhados</h4>
+            <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest flex items-center gap-2">
+               Últimos Movimentos
+            </h4>
             
             <div className="flex gap-2">
               <select 
                 value={merchantFilter}
                 onChange={(e) => setMerchantFilter(e.target.value)}
-                className="bg-white border-2 border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold uppercase outline-none focus:border-[#00d66f]"
+                className="bg-white border-2 border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] cursor-pointer"
               >
                 <option value="all">Todas as Lojas</option>
                 {merchantBalances.map(m => (
@@ -221,40 +245,40 @@ const UserDashboard: React.FC = () => {
               <select 
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
-                className="bg-white border-2 border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold uppercase outline-none focus:border-[#00d66f]"
+                className="bg-white border-2 border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] cursor-pointer"
               >
-                <option value="all">Todo o histórico</option>
-                <option value="7d">7 dias</option>
-                <option value="30d">30 dias</option>
-                <option value="90d">90 dias</option>
+                <option value="all">Sempre</option>
+                <option value="7d">7 Dias</option>
+                <option value="30d">30 Dias</option>
               </select>
             </div>
           </div>
 
-          <div className="bg-white rounded-[32px] shadow-sm border-2 border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-[40px] shadow-sm border-2 border-slate-100 overflow-hidden">
             {filteredTransactions.length === 0 ? (
-              <div className="p-10 text-center">
-                <p className="text-slate-300 font-bold text-xs uppercase italic">Sem registos encontrados</p>
+              <div className="p-16 text-center">
+                <p className="text-slate-300 font-black text-xs uppercase italic tracking-widest text-center">Nenhum registo</p>
               </div>
             ) : (
               <div className="divide-y-2 divide-slate-50">
-                {filteredTransactions.map((t) => (
-                  <div key={t.id} className="p-5 flex justify-between items-center hover:bg-slate-50 transition-colors">
+                {[...filteredTransactions].reverse().map((t) => (
+                  <div key={t.id} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors group">
                     <div className="flex gap-4 items-center">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black ${t.type === 'earn' ? 'bg-green-50 text-[#00d66f]' : 'bg-red-50 text-red-500'}`}>
-                        {t.type === 'earn' ? '↑' : '↓'}
+                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm ${t.type === 'earn' ? 'bg-[#00d66f]/10 text-[#00d66f]' : 'bg-red-50 text-red-500'}`}>
+                        {t.type === 'earn' ? '+' : '-'}
                       </div>
                       <div>
-                        <p className="font-bold text-[#0a2540] text-sm">{t.merchantName}</p>
-                        <p className="text-[10px] text-slate-400 font-black uppercase">
-                          {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT') : 'A processar...'}
+                        <p className="font-black text-[#0a2540] text-sm uppercase tracking-tight">{t.merchantName}</p>
+                        <p className="text-[10px] text-slate-400 font-bold">
+                          {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '...'}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                      <p className={`text-lg font-black ${t.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>
                         {t.type === 'earn' ? '+' : '-'}{(t.cashbackAmount || 0).toFixed(2)}€
                       </p>
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Cashback</p>
                     </div>
                   </div>
                 ))}

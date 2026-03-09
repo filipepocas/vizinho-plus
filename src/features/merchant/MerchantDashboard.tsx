@@ -7,7 +7,7 @@ import { Html5QrcodeScanner } from 'html5-qrcode';
 const MerchantDashboard: React.FC = () => {
   const { transactions, addTransaction, subscribeToTransactions } = useStore();
   const [isAuthorized, setIsAuthorized] = useState(false);
-  const [view, setView] = useState<'terminal' | 'history'>('terminal');
+  const [view, setView] = useState<'terminal' | 'history' | 'profile'>('terminal');
   const [loginStep, setLoginStep] = useState<'credentials' | 'changePass' | 'recovery'>('credentials');
   
   // Estados de Login e Recuperação
@@ -38,9 +38,20 @@ const MerchantDashboard: React.FC = () => {
   const [newOpPass, setNewOpPass] = useState('');
   const [showOpManager, setShowOpManager] = useState(false);
 
+  // ESTADOS DE EDIÇÃO DE PERFIL
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editCashback, setEditCashback] = useState<number>(0);
+
   useEffect(() => {
     if (isAuthorized && activeMerchant) {
       const unsubscribe = subscribeToTransactions('merchant', activeMerchant.id);
+      // Inicializar campos de edição
+      setEditName(activeMerchant.name);
+      setEditEmail(activeMerchant.email);
+      setEditPhone(activeMerchant.phone || '');
+      setEditCashback(activeMerchant.cashbackPercent);
       return () => unsubscribe();
     }
   }, [isAuthorized, activeMerchant, subscribeToTransactions]);
@@ -62,7 +73,58 @@ const MerchantDashboard: React.FC = () => {
     }
   }, [showScanner]);
 
-  // --- LÓGICA DE CÁLCULO DE ESTATÍSTICAS E FILTROS ---
+  // --- LÓGICA DE ATUALIZAÇÃO DE PERFIL (NOVA) ---
+  const handleUpdateProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+
+    try {
+      // Validar Unicidade de Email
+      if (editEmail.toLowerCase().trim() !== activeMerchant.email.toLowerCase()) {
+        const qEmail = query(collection(db, 'merchants'), where('email', '==', editEmail.toLowerCase().trim()));
+        const snapEmail = await getDocs(qEmail);
+        if (!snapEmail.empty) throw new Error("Este email já está registado noutro comerciante.");
+      }
+
+      // Validar Unicidade de Telefone
+      if (editPhone && editPhone.trim() !== activeMerchant.phone) {
+        const qPhone = query(collection(db, 'merchants'), where('phone', '==', editPhone.trim()));
+        const snapPhone = await getDocs(qPhone);
+        if (!snapPhone.empty) throw new Error("Este telefone já está registado noutro comerciante.");
+      }
+
+      const updates: any = {
+        name: editName,
+        email: editEmail.toLowerCase().trim(),
+        phone: editPhone.trim(),
+      };
+
+      // Regra das 00:00 para alteração de cashback
+      if (editCashback !== activeMerchant.cashbackPercent) {
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        tomorrow.setHours(0, 0, 0, 0);
+        
+        updates.pendingCashbackChange = {
+          newPercent: editCashback,
+          effectiveDate: tomorrow.toISOString()
+        };
+        alert(`Atenção: A nova taxa de ${editCashback}% será aplicada automaticamente às 00:00 de amanhã.`);
+      }
+
+      await updateDoc(doc(db, 'merchants', activeMerchant.id), updates);
+      setActiveMerchant({ ...activeMerchant, ...updates });
+      setMessage({ type: 'success', text: "Perfil atualizado com sucesso!" });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      setView('terminal');
+    } catch (err: any) {
+      alert(err.message || "Erro ao atualizar dados.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // --- LÓGICA DE CÁLCULO DE ESTATÍSTICAS E FILTROS (MANTIDA) ---
   
   const merchantTransactions = useMemo(() => {
     return transactions.filter(t => t.merchantId === activeMerchant?.id);
@@ -285,14 +347,17 @@ const MerchantDashboard: React.FC = () => {
             <button onClick={() => { setView('terminal'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'terminal' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Terminal</button>
             <button onClick={() => { setView('history'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'history' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Movimentos</button>
             {activeOperator.code === 'ADMIN' && (
-              <button onClick={() => setShowOpManager(!showOpManager)} className="px-4 py-2 rounded-xl bg-slate-100 text-[#0a2540] text-xs font-bold uppercase">Equipa</button>
+              <>
+                <button onClick={() => { setView('profile'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'profile' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Perfil</button>
+                <button onClick={() => setShowOpManager(!showOpManager)} className="px-4 py-2 rounded-xl bg-slate-100 text-[#0a2540] text-xs font-bold uppercase">Equipa</button>
+              </>
             )}
             <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold uppercase">Sair</button>
           </div>
         </header>
 
         {showOpManager ? (
-          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
+          <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 animate-in fade-in duration-300">
             <h3 className="text-lg font-bold text-[#0a2540] mb-6 italic uppercase">Gestão de Operadores</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
               <input placeholder="NOME" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" />
@@ -309,7 +374,7 @@ const MerchantDashboard: React.FC = () => {
             </div>
           </div>
         ) : view === 'terminal' ? (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-300">
             <div className="lg:col-span-2 bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 space-y-8">
                <div className="space-y-3 text-center">
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] block">1. Identificar Cliente (NIF)</label>
@@ -347,7 +412,7 @@ const MerchantDashboard: React.FC = () => {
               )}
             </div>
           </div>
-        ) : (
+        ) : view === 'history' ? (
           <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
             {/* PAINEL DE SALDOS DO COMERCIANTE */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -411,6 +476,45 @@ const MerchantDashboard: React.FC = () => {
                 </table>
               </div>
             </div>
+          </div>
+        ) : (
+          <div className="max-w-2xl mx-auto bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm animate-in zoom-in-95 duration-300">
+            <h3 className="text-xl font-black text-[#0a2540] mb-6 uppercase italic tracking-tighter">Dados da Loja</h3>
+            <form onSubmit={handleUpdateProfile} className="space-y-6">
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">NIF (Contribuinte - Unico)</label>
+                <input value={activeMerchant.nif} disabled className="w-full p-4 bg-slate-100 border-2 border-transparent rounded-2xl font-bold text-slate-400 cursor-not-allowed" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nome Comercial</label>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#0a2540]" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Email da Loja</label>
+                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#0a2540]" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Telefone Contacto</label>
+                  <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#0a2540]" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Cashback Atual (%)</label>
+                  <input type="number" step="0.1" value={editCashback} onChange={e => setEditCashback(parseFloat(e.target.value))} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f]/30 rounded-2xl font-black text-[#00d66f] outline-none focus:border-[#00d66f]" />
+                </div>
+              </div>
+              {editCashback !== activeMerchant.cashbackPercent && (
+                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                  <p className="text-[10px] font-black text-orange-600 uppercase">Agendamento Ativo</p>
+                  <p className="text-xs font-bold text-orange-400">A nova taxa entrará em vigor às 00:00 de amanhã.</p>
+                </div>
+              )}
+              <button disabled={isLoading} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">
+                {isLoading ? 'A Guardar...' : 'Atualizar Perfil'}
+              </button>
+            </form>
           </div>
         )}
 
