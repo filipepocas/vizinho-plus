@@ -3,11 +3,24 @@ import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
 import Barcode from 'react-barcode';
 import MerchantExplore from './MerchantExplore';
+import { 
+  LogOut, 
+  Store, 
+  Settings, 
+  Wallet, 
+  Clock, 
+  ArrowUpRight, 
+  ArrowDownLeft,
+  Filter,
+  Calendar,
+  CreditCard,
+  Info,
+  History // Adicionado o ícone que estava em falta nos imports
+} from 'lucide-react';
 
 const UserDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout, currentUser } = useStore();
   
-  // Estados para Navegação e Filtros
   const [view, setView] = useState<'home' | 'merchants'>('home');
   const [merchantFilter, setMerchantFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('all'); 
@@ -19,12 +32,10 @@ const UserDashboard: React.FC = () => {
     }
   }, [currentUser, subscribeToTransactions]);
 
-  // Lógica de alternância de vista para exploração de lojas
   if (view === 'merchants') {
     return <MerchantExplore onBack={() => setView('home')} />;
   }
 
-  // Cálculo de Saldos com a regra das 48h e prioridade de débito
   const getBalancesByMerchant = () => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
     const balances: { [key: string]: { name: string, available: number, pending: number, total: number } } = {};
@@ -65,7 +76,6 @@ const UserDashboard: React.FC = () => {
     return Object.values(balances);
   };
 
-  // Lógica de Filtragem de Transações
   const filteredTransactions = transactions.filter(t => {
     const matchMerchant = merchantFilter === 'all' || t.merchantName === merchantFilter;
     
@@ -85,12 +95,13 @@ const UserDashboard: React.FC = () => {
 
   if (!currentUser) {
     return (
-      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-center">
-        <div className="space-y-4">
-          <img src="/logo-vizinho.png" alt="Vizinho+" className="w-16 h-16 mx-auto mb-4 object-contain animate-pulse" />
-          <div className="w-12 h-12 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="font-black text-white uppercase tracking-widest text-xs">A carregar o teu cartão...</p>
+      <div className="min-h-screen bg-[#0a2540] flex flex-col items-center justify-center p-6 text-center">
+        <div className="relative mb-8">
+          <div className="absolute inset-0 bg-[#00d66f] blur-2xl opacity-20 animate-pulse"></div>
+          <img src="/logo-vizinho.png" alt="Vizinho+" className="w-20 h-20 relative object-contain" />
         </div>
+        <div className="w-10 h-1 border-2 border-[#00d66f] animate-pulse mb-6"></div>
+        <p className="font-black text-white uppercase tracking-[0.3em] text-[10px]">A ler o teu chip...</p>
       </div>
     );
   }
@@ -100,129 +111,139 @@ const UserDashboard: React.FC = () => {
   const totalAvailable = merchantBalances.reduce((acc, curr) => acc + curr.available, 0);
 
   return (
-    <div className="min-h-screen bg-[#f6f9fc] font-sans pb-20">
-      {/* HEADER BRUTALISTA COM LOGOTIPO REAL */}
-      <header className="bg-[#0a2540] p-6 text-white rounded-b-[40px] shadow-2xl mb-8">
+    <div className="min-h-screen bg-[#f6f9fc] font-sans pb-24">
+      
+      <header className="bg-[#0a2540] px-6 py-8 text-white rounded-b-[48px] shadow-2xl mb-10 border-b-4 border-[#00d66f]">
         <div className="max-w-5xl mx-auto flex justify-between items-center">
-          <div className="flex items-center gap-3">
-            <div className="bg-white p-1.5 rounded-xl shadow-[4px_4px_0px_#00d66f]">
-              <img src="/logo-vizinho.png" alt="V+" className="h-8 w-8 object-contain" />
+          <div className="flex items-center gap-4">
+            <div className="bg-white p-2 rounded-xl rotate-[-6deg] shadow-[4px_4px_0px_#00d66f]">
+              <img src="/logo-vizinho.png" alt="V+" className="h-7 w-7 object-contain" />
             </div>
-            <h1 className="font-black italic text-2xl tracking-tighter uppercase">VIZINHO+</h1>
+            <h1 className="font-black italic text-xl tracking-tighter uppercase leading-none">VIZINHO+</h1>
           </div>
           <button 
             onClick={() => logout()} 
-            className="bg-white/10 hover:bg-red-500/20 text-[10px] font-black uppercase px-4 py-2 rounded-full border border-white/20 transition-all"
+            className="group flex items-center gap-2 bg-white/5 hover:bg-red-500/20 text-[10px] font-black uppercase px-5 py-2.5 rounded-full border border-white/10 transition-all active:scale-95"
           >
-            Sair [→]
+            Sair <LogOut size={14} className="group-hover:translate-x-1 transition-transform" />
           </button>
         </div>
       </header>
 
       <main className="max-w-5xl mx-auto px-6">
         
-        {/* O CARTÃO VIZINHO+ (COM LOGOTIPO INTEGRADO) */}
-        <div className="relative group max-w-md mx-auto mb-12">
-          <div className="absolute -inset-2 bg-gradient-to-r from-[#00d66f] to-blue-400 rounded-[45px] blur-xl opacity-20 group-hover:opacity-40 transition duration-700"></div>
-          <div className="relative bg-white p-8 rounded-[40px] shadow-2xl border-b-8 border-[#00d66f] overflow-hidden transition-transform hover:scale-[1.02]">
+        <div className="relative group max-w-md mx-auto mb-14">
+          <div className="absolute -inset-4 bg-gradient-to-br from-[#00d66f] to-[#0a2540] rounded-[55px] blur-2xl opacity-10 group-hover:opacity-20 transition duration-1000"></div>
+          
+          <div className="relative bg-white p-10 rounded-[48px] shadow-[0_30px_60px_-15px_rgba(10,37,64,0.15)] border-b-[12px] border-[#00d66f] overflow-hidden transition-all duration-500 hover:translate-y-[-4px]">
             
-            {/* MARCA DE ÁGUA DO LOGO NO CARTÃO */}
-            <div className="absolute top-0 right-0 p-4 opacity-[0.05] pointer-events-none">
-              <img src="/logo-vizinho.png" alt="" className="w-32 h-32 object-contain rotate-12" />
+            <div className="absolute top-0 right-0 p-4 opacity-[0.03] pointer-events-none select-none">
+              <img src="/logo-vizinho.png" alt="" className="w-48 h-48 object-contain rotate-12" />
             </div>
 
-            <div className="flex justify-between items-start mb-8 relative z-10">
-              <div className="space-y-1">
-                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Oficial</p>
-                <h2 className="text-2xl font-black text-[#0a2540] tracking-tight uppercase leading-none break-words max-w-[200px]">
+            <div className="flex justify-between items-start mb-10 relative z-10">
+              <div className="space-y-2">
+                <span className="inline-flex items-center gap-2 px-3 py-1 bg-[#00d66f]/10 text-[#00d66f] rounded-full text-[9px] font-black uppercase tracking-[0.2em]">
+                  <CreditCard size={10} strokeWidth={3} /> Membro Oficial
+                </span>
+                <h2 className="text-3xl font-black text-[#0a2540] tracking-tighter uppercase leading-[0.9] break-words max-w-[220px]">
                   {currentUser.name}
                 </h2>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Saldo Total</p>
-                <p className="text-3xl font-black text-[#0a2540] leading-none">{totalBalance.toFixed(2)}€</p>
-                <div className="mt-2 bg-[#00d66f] px-3 py-1 rounded-lg inline-block shadow-sm">
-                  <p className="text-[10px] font-black text-[#0a2540] uppercase leading-none">Pronto: {totalAvailable.toFixed(2)}€</p>
-                </div>
+                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Saldo Acumulado</p>
+                <p className="text-4xl font-black text-[#0a2540] leading-none italic tracking-tighter">{totalBalance.toFixed(2)}€</p>
               </div>
             </div>
 
-            {/* BARCODE & QR CODE AREA */}
-            <div className="bg-slate-50 p-6 rounded-[24px] border-2 border-slate-100 flex flex-col items-center gap-4 relative z-10">
-              <div className="bg-white p-2 rounded-xl shadow-sm">
+            <div className="bg-slate-50 p-7 rounded-[32px] border-2 border-slate-100 flex flex-col items-center gap-5 relative z-10 shadow-inner">
+              <div className="bg-white p-3 rounded-2xl shadow-sm border border-slate-100">
+                {/* Correção: Garantir que o valor seja sempre string e nunca undefined */}
                 <Barcode 
-                  value={currentUser.customerNumber || "0000000000"} 
-                  width={1.5} 
-                  height={50} 
+                  value={String(currentUser.customerNumber || "0000000000")} 
+                  width={1.6} 
+                  height={45} 
                   displayValue={false}
                   lineColor="#0a2540"
+                  margin={0}
                 />
               </div>
               <div className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">ID Cliente</p>
-                <p className="text-lg font-mono font-black tracking-[0.3em] text-[#0a2540]">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Número de Cliente</p>
+                <p className="text-xl font-mono font-black tracking-[0.25em] text-[#0a2540] bg-white px-4 py-1 rounded-lg">
                   {currentUser.customerNumber?.match(/.{1,4}/g)?.join(' ') || "0000 0000 00"}
                 </p>
               </div>
             </div>
 
-            <div className="mt-8 flex justify-between items-end relative z-10">
-              <div className="flex items-center gap-2">
-                <img src="/logo-vizinho.png" alt="" className="h-5 w-5 grayscale opacity-50" />
+            <div className="mt-10 flex justify-between items-end relative z-10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-100 shadow-sm">
+                  <QRCodeSVG value={currentUser.nif || ""} size={24} />
+                </div>
                 <div>
                   <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest">NIF Registado</p>
                   <p className="text-sm font-black text-[#0a2540]">{currentUser.nif}</p>
                 </div>
               </div>
-              <div className="p-2 bg-slate-50 rounded-xl border border-slate-100">
-                 <QRCodeSVG value={currentUser.nif} size={40} />
+              <div className="bg-[#00d66f] px-5 py-2.5 rounded-[18px] shadow-lg shadow-[#00d66f]/20">
+                <p className="text-[10px] font-black text-[#0a2540] uppercase leading-none mb-1">Disponível</p>
+                <p className="text-lg font-black text-[#0a2540] leading-none tracking-tighter">{totalAvailable.toFixed(2)}€</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ACÇÕES RÁPIDAS */}
-        <div className="grid grid-cols-2 gap-4 max-w-md mx-auto mb-12">
+        <div className="grid grid-cols-2 gap-6 max-w-md mx-auto mb-16">
           <button 
             onClick={() => setView('merchants')}
-            className="bg-[#0a2540] text-white p-6 rounded-[32px] flex flex-col items-center justify-center gap-2 hover:bg-black transition-all shadow-xl active:scale-95 group"
+            className="group bg-[#0a2540] text-white p-8 rounded-[40px] flex flex-col items-center justify-center gap-3 hover:bg-black transition-all shadow-2xl active:scale-95 border-b-8 border-black/30"
           >
-            <span className="text-3xl group-hover:bounce transition-transform">🏪</span>
+            <div className="bg-white/10 p-4 rounded-[20px] group-hover:scale-110 transition-transform">
+              <Store size={28} className="text-[#00d66f]" />
+            </div>
             <span className="text-[11px] font-black uppercase tracking-widest">Explorar Lojas</span>
           </button>
 
-          <button className="bg-white text-[#0a2540] p-6 rounded-[32px] flex flex-col items-center justify-center gap-2 border-4 border-slate-100 hover:border-[#00d66f] transition-all active:scale-95 group">
-            <span className="text-3xl group-hover:rotate-12 transition-transform">⚙️</span>
+          <button className="group bg-white text-[#0a2540] p-8 rounded-[40px] flex flex-col items-center justify-center gap-3 border-2 border-slate-100 hover:border-[#00d66f] transition-all active:scale-95 shadow-xl border-b-8 border-slate-100">
+            <div className="bg-slate-50 p-4 rounded-[20px] group-hover:rotate-90 transition-transform duration-500">
+              <Settings size={28} />
+            </div>
             <span className="text-[11px] font-black uppercase tracking-widest">Definições</span>
           </button>
         </div>
 
-        {/* SALDOS POR LOJA */}
-        <div className="mb-12">
-          <div className="flex items-center gap-2 mb-4 ml-2">
-            <div className="w-2 h-6 bg-[#00d66f] rounded-full"></div>
-            <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest">Carteira por Estabelecimento</h4>
+        <div className="mb-16">
+          <div className="flex items-center gap-3 mb-6 ml-4">
+            <Wallet className="text-[#00d66f]" size={20} strokeWidth={3} />
+            <h4 className="text-[11px] font-black text-[#0a2540] uppercase tracking-[0.2em]">O Teu Saldo por Loja</h4>
           </div>
-          <div className="flex gap-4 overflow-x-auto pb-6 no-scrollbar">
+          <div className="flex gap-6 overflow-x-auto pb-8 px-4 no-scrollbar -mx-4">
             {merchantBalances.length === 0 ? (
-              <div className="w-full bg-white p-8 rounded-[32px] border-4 border-dashed border-slate-100 text-center">
-                <p className="text-slate-400 font-bold uppercase text-[10px]">Ainda sem cashback aqui.</p>
+              <div className="w-full bg-white p-12 rounded-[40px] border-4 border-dashed border-slate-100 text-center">
+                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Info size={24} className="text-slate-300" />
+                </div>
+                <p className="text-slate-400 font-black uppercase text-[10px] tracking-widest">Ainda não tens compras registadas.</p>
               </div>
             ) : (
               merchantBalances.map((m, idx) => (
-                <div key={idx} className="min-w-[240px] bg-white p-6 rounded-[32px] shadow-lg border-2 border-slate-50 flex flex-col justify-between">
-                  <div>
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-1 tracking-tight truncate">{m.name}</p>
-                    <h5 className="text-2xl font-black text-[#0a2540]">{m.total.toFixed(2)}€</h5>
+                <div key={idx} className="min-w-[260px] bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-50 flex flex-col justify-between transition-all hover:border-[#00d66f]">
+                  <div className="space-y-1">
+                    <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest truncate">{m.name}</p>
+                    <h5 className="text-3xl font-black text-[#0a2540] tracking-tighter italic">{m.total.toFixed(2)}€</h5>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-slate-50 flex justify-between items-center">
+                  <div className="mt-6 pt-6 border-t-2 border-slate-50 flex justify-between items-end">
                     <div>
-                      <p className="text-[9px] font-black text-[#00d66f] uppercase">Disponível</p>
-                      <p className="font-black text-[#0a2540]">{m.available.toFixed(2)}€</p>
+                      <p className="text-[9px] font-black text-[#00d66f] uppercase mb-1">Pronto</p>
+                      <p className="text-xl font-black text-[#0a2540]">{m.available.toFixed(2)}€</p>
                     </div>
                     {m.pending > 0 && (
                       <div className="text-right">
-                        <p className="text-[9px] font-black text-orange-400 uppercase">Pendente</p>
+                        <div className="flex items-center gap-1 justify-end text-orange-400 mb-1">
+                          <Clock size={10} strokeWidth={3} />
+                          <p className="text-[9px] font-black uppercase">Espera</p>
+                        </div>
                         <p className="font-black text-orange-500 text-sm italic">{m.pending.toFixed(2)}€</p>
                       </div>
                     )}
@@ -233,62 +254,70 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* HISTÓRICO COM FILTROS */}
-        <div className="space-y-4 pb-10">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 ml-2">
-            <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest flex items-center gap-2">
-               Últimos Movimentos
-            </h4>
+        <div className="space-y-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 ml-4">
+            <div className="flex items-center gap-3">
+              <History size={20} strokeWidth={3} className="text-[#0a2540]" />
+              <h4 className="text-[11px] font-black text-[#0a2540] uppercase tracking-[0.2em]">Atividade Recente</h4>
+            </div>
             
-            <div className="flex gap-2">
-              <select 
-                value={merchantFilter}
-                onChange={(e) => setMerchantFilter(e.target.value)}
-                className="bg-white border-2 border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] cursor-pointer"
-              >
-                <option value="all">Todas as Lojas</option>
-                {merchantBalances.map(m => (
-                  <option key={m.name} value={m.name}>{m.name}</option>
-                ))}
-              </select>
+            <div className="flex gap-3">
+              <div className="relative">
+                <Filter className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                <select 
+                  value={merchantFilter}
+                  onChange={(e) => setMerchantFilter(e.target.value)}
+                  className="bg-white border-2 border-slate-100 rounded-2xl pl-9 pr-4 py-2.5 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] cursor-pointer appearance-none shadow-sm"
+                >
+                  <option value="all">Lojas</option>
+                  {merchantBalances.map(m => (
+                    <option key={m.name} value={m.name}>{m.name}</option>
+                  ))}
+                </select>
+              </div>
 
-              <select 
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-                className="bg-white border-2 border-slate-200 rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] cursor-pointer"
-              >
-                <option value="all">Sempre</option>
-                <option value="7d">7 Dias</option>
-                <option value="30d">30 Dias</option>
-              </select>
+              <div className="relative">
+                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={12} />
+                <select 
+                  value={dateFilter}
+                  onChange={(e) => setDateFilter(e.target.value)}
+                  className="bg-white border-2 border-slate-100 rounded-2xl pl-9 pr-4 py-2.5 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] cursor-pointer appearance-none shadow-sm"
+                >
+                  <option value="all">Sempre</option>
+                  <option value="7d">7 Dias</option>
+                  <option value="30d">30 Dias</option>
+                </select>
+              </div>
             </div>
           </div>
 
-          <div className="bg-white rounded-[40px] shadow-sm border-2 border-slate-100 overflow-hidden">
+          <div className="bg-white rounded-[48px] shadow-xl border-2 border-slate-100 overflow-hidden">
             {filteredTransactions.length === 0 ? (
-              <div className="p-16 text-center">
-                <p className="text-slate-300 font-black text-xs uppercase italic tracking-widest text-center">Nenhum registo</p>
+              <div className="p-20 text-center">
+                <p className="text-slate-300 font-black text-[10px] uppercase italic tracking-[0.3em]">Sem movimentos registados</p>
               </div>
             ) : (
               <div className="divide-y-2 divide-slate-50">
                 {[...filteredTransactions].reverse().map((t) => (
-                  <div key={t.id} className="p-6 flex justify-between items-center hover:bg-slate-50 transition-colors group">
-                    <div className="flex gap-4 items-center">
-                      <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-black text-lg shadow-sm ${t.type === 'earn' ? 'bg-[#00d66f]/10 text-[#00d66f]' : 'bg-red-50 text-red-500'}`}>
-                        {t.type === 'earn' ? '+' : '-'}
+                  <div key={t.id} className="p-8 flex justify-between items-center hover:bg-slate-50 transition-all group">
+                    <div className="flex gap-5 items-center">
+                      <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-lg transition-transform group-hover:scale-110 ${
+                        t.type === 'earn' ? 'bg-[#00d66f]/10 text-[#00d66f]' : 'bg-red-50 text-red-500'
+                      }`}>
+                        {t.type === 'earn' ? <ArrowUpRight size={24} strokeWidth={3} /> : <ArrowDownLeft size={24} strokeWidth={3} />}
                       </div>
                       <div>
-                        <p className="font-black text-[#0a2540] text-sm uppercase tracking-tight">{t.merchantName}</p>
-                        <p className="text-[10px] text-slate-400 font-bold">
-                          {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '...'}
+                        <p className="font-black text-[#0a2540] text-sm uppercase tracking-tight mb-1">{t.merchantName}</p>
+                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest flex items-center gap-2">
+                          <Clock size={10} /> {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' }) : '...'}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className={`text-lg font-black ${t.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>
+                      <p className={`text-xl font-black italic tracking-tighter ${t.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>
                         {t.type === 'earn' ? '+' : '-'}{(t.cashbackAmount || 0).toFixed(2)}€
                       </p>
-                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-tighter">Cashback</p>
+                      <p className="text-[9px] font-black text-slate-300 uppercase tracking-widest mt-1">Cashback</p>
                     </div>
                   </div>
                 ))}
