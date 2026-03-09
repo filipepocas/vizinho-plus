@@ -27,26 +27,34 @@ export interface Transaction {
   createdAt: any;
 }
 
-// Interface atualizada com o Número de Cliente de 10 dígitos
+// Interface unificada para Clientes, Lojistas e Admins
+// Alterada para tornar campos de perfil opcionais (?) e evitar erros no Login
 export interface UserProfile {
-  uid: string;
-  customerNumber?: string; // NOVO: Campo para o número de 10 dígitos do cartão
-  name: string;
-  nif: string;
-  freguesia: string;
-  postalCode: string;
-  phone?: string;
-  email: string;
+  id: string; // ID do documento no Firestore
+  uid?: string; // UID do Firebase Auth (para clientes)
+  customerNumber?: string; 
+  name?: string;     // Tornado opcional para aceitar logins parciais
+  nif?: string;      // Tornado opcional
+  email?: string;    // Tornado opcional
   role: 'client' | 'merchant' | 'admin';
+  // Campos específicos de Lojista
+  cashbackPercent?: number;
+  phone?: string;
+  freguesia?: string;
+  postalCode?: string;
+  operators?: any[];
+  firstAccess?: boolean;
+  temporaryPassword?: string;
+  password?: string;
 }
 
 interface StoreState {
   transactions: Transaction[];
-  currentUser: UserProfile | any | null;
-  setCurrentUser: (user: any | null) => void;
+  currentUser: UserProfile | null;
+  setCurrentUser: (user: UserProfile | null) => void;
   logout: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
-  subscribeToTransactions: (role?: string, id?: string) => () => void;
+  subscribeToTransactions: (role?: string, identifier?: string) => () => void;
   registerClientProfile: (profile: UserProfile) => Promise<void>;
 }
 
@@ -67,7 +75,9 @@ export const useStore = create<StoreState>((set) => ({
 
   registerClientProfile: async (profile) => {
     try {
-      await setDoc(doc(db, 'users', profile.uid), {
+      // Usamos o uid se existir (clientes auth), caso contrário o id (lojistas manuais)
+      const docId = profile.uid || profile.id;
+      await setDoc(doc(db, 'users', docId), {
         ...profile,
         createdAt: serverTimestamp(),
       });
@@ -93,10 +103,14 @@ export const useStore = create<StoreState>((set) => ({
     const transRef = collection(db, 'transactions');
     let q = query(transRef, orderBy('createdAt', 'desc'));
 
+    // Filtros por Role para garantir que ninguém vê o que não deve
     if (role === 'merchant' && identifier) {
       q = query(transRef, where('merchantId', '==', identifier), orderBy('createdAt', 'desc'));
     } else if (role === 'client' && identifier) {
       q = query(transRef, where('clientId', '==', identifier), orderBy('createdAt', 'desc'));
+    } else if (role === 'admin') {
+      // Admin vê tudo por padrão
+      q = query(transRef, orderBy('createdAt', 'desc'));
     }
 
     return onSnapshot(q, (snapshot) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { useStore } from '../../store/useStore';
+import { useStore, UserProfile } from '../../store/useStore';
 import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 
@@ -15,7 +15,7 @@ const Login: React.FC = () => {
   // Redirecionamento automático se já estiver logado
   useEffect(() => {
     if (currentUser) {
-      if (currentUser.role === 'admin' || currentUser.email === 'rochap.filipe@gmail.com') navigate('/admin');
+      if (currentUser.role === 'admin') navigate('/admin');
       else if (currentUser.role === 'merchant') navigate('/merchant');
       else if (currentUser.role === 'client') navigate('/client');
     }
@@ -30,31 +30,32 @@ const Login: React.FC = () => {
 
     try {
       // 1. VERIFICAÇÃO DE ADMIN (DINÂMICA + BACKUP)
-      // Primeiro tentamos ler as definições guardadas na base de dados
       const adminSettingsRef = doc(db, 'settings', 'admin_profile');
       const adminSettingsSnap = await getDoc(adminSettingsRef);
       
       if (adminSettingsSnap.exists()) {
         const adminData = adminSettingsSnap.data();
         if (idnt === adminData.email && password === adminData.password) {
-          setCurrentUser({ 
+          const adminProfile: UserProfile = { 
             id: 'admin_filipe',
             email: idnt, 
             role: 'admin', 
             name: 'Filipe (Admin)' 
-          });
+          };
+          setCurrentUser(adminProfile);
           return;
         }
       }
 
-      // Acesso de Backup (Caso a BD esteja vazia ou precises de entrar na primeira vez)
+      // Acesso de Backup
       if (idnt === 'rochap.filipe@gmail.com' && password === 'admin123') {
-        setCurrentUser({ 
+        const adminProfile: UserProfile = { 
           id: 'admin_filipe',
           email: idnt, 
           role: 'admin', 
           name: 'Filipe (Admin)' 
-        });
+        };
+        setCurrentUser(adminProfile);
         return;
       }
 
@@ -68,10 +69,14 @@ const Login: React.FC = () => {
 
       if (!targetM.empty) {
         const d = targetM.docs[0].data();
-        // Verifica se é password definitiva ou temporária
         const correctPassword = d.password === password || d.temporaryPassword === password;
         if (correctPassword) {
-          setCurrentUser({ id: targetM.docs[0].id, ...d, role: 'merchant' });
+          const merchantProfile: UserProfile = { 
+            id: targetM.docs[0].id, 
+            ...d, 
+            role: 'merchant' 
+          } as UserProfile;
+          setCurrentUser(merchantProfile);
           return;
         }
       }
@@ -93,7 +98,12 @@ const Login: React.FC = () => {
       if (!targetC.empty) {
         const d = targetC.docs[0].data();
         if (d.password === password) {
-          setCurrentUser({ id: targetC.docs[0].id, ...d, role: 'client' });
+          const clientProfile: UserProfile = { 
+            id: targetC.docs[0].id, 
+            ...d, 
+            role: 'client' 
+          } as UserProfile;
+          setCurrentUser(clientProfile);
           return;
         }
       }

@@ -5,30 +5,21 @@ import { db } from '../../config/firebase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 
 const MerchantDashboard: React.FC = () => {
-  const { transactions, addTransaction, subscribeToTransactions } = useStore();
-  const [isAuthorized, setIsAuthorized] = useState(false);
+  const { currentUser, transactions, addTransaction, subscribeToTransactions, logout, setCurrentUser } = useStore();
+  
+  // ESTADOS DE VISUALIZAÇÃO
   const [view, setView] = useState<'terminal' | 'history' | 'profile'>('terminal');
-  const [loginStep, setLoginStep] = useState<'credentials' | 'changePass' | 'recovery'>('credentials');
-  
-  // Estados de Login e Recuperação
-  const [loginEmail, setLoginEmail] = useState('');
-  const [loginPass, setLoginPass] = useState('');
-  const [activeOperator, setActiveOperator] = useState<any>(null);
-  const [recoveryCode, setRecoveryCode] = useState('');
-  const [sentRecoveryCode, setSentRecoveryCode] = useState('');
-  const [newPass, setNewPass] = useState('');
-  
-  const [activeMerchant, setActiveMerchant] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState({ type: '', text: '' });
+  const [showOpManager, setShowOpManager] = useState(false);
+  const [showScanner, setShowScanner] = useState(false);
 
-  // ESTADOS DA OPERAÇÃO
+  // ESTADOS DE OPERAÇÃO
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
-  const [showScanner, setShowScanner] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
 
-  // ESTADOS DE FILTRAGEM
+  // ESTADOS DE FILTRAGEM (HISTÓRICO)
   const [filterNif, setFilterNif] = useState('');
   const [filterDoc, setFilterDoc] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -36,26 +27,22 @@ const MerchantDashboard: React.FC = () => {
   // ESTADOS DE GESTÃO DE OPERADORES
   const [newOpName, setNewOpName] = useState('');
   const [newOpPass, setNewOpPass] = useState('');
-  const [showOpManager, setShowOpManager] = useState(false);
 
-  // ESTADOS DE EDIÇÃO DE PERFIL
-  const [editName, setEditName] = useState('');
-  const [editEmail, setEditEmail] = useState('');
-  const [editPhone, setEditPhone] = useState('');
-  const [editCashback, setEditCashback] = useState<number>(0);
+  // ESTADOS DE EDIÇÃO DE PERFIL - Com Fallbacks para evitar erro de undefined
+  const [editName, setEditName] = useState(currentUser?.name || '');
+  const [editEmail, setEditEmail] = useState(currentUser?.email || '');
+  const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
+  const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
 
+  // SUBSCREVER TRANSAÇÕES
   useEffect(() => {
-    if (isAuthorized && activeMerchant) {
-      const unsubscribe = subscribeToTransactions('merchant', activeMerchant.id);
-      // Inicializar campos de edição
-      setEditName(activeMerchant.name);
-      setEditEmail(activeMerchant.email);
-      setEditPhone(activeMerchant.phone || '');
-      setEditCashback(activeMerchant.cashbackPercent);
-      return () => unsubscribe();
+    if (currentUser?.id) {
+      const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
+      return () => { if (unsubscribe) unsubscribe(); };
     }
-  }, [isAuthorized, activeMerchant, subscribeToTransactions]);
+  }, [currentUser, subscribeToTransactions]);
 
+  // SCANNER QR CODE
   useEffect(() => {
     if (showScanner) {
       const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
@@ -65,7 +52,7 @@ const MerchantDashboard: React.FC = () => {
           setShowScanner(false);
           scanner.clear();
         },
-        () => { /* ignora erros de leitura */ }
+        () => { /* Erros de leitura ignorados */ }
       );
       return () => {
         try { scanner.clear(); } catch (e) { console.error(e); }
@@ -73,24 +60,18 @@ const MerchantDashboard: React.FC = () => {
     }
   }, [showScanner]);
 
-  // --- LÓGICA DE ATUALIZAÇÃO DE PERFIL (NOVA) ---
+  // LÓGICA DE ATUALIZAÇÃO DE PERFIL
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!currentUser) return;
     setIsLoading(true);
 
     try {
-      // Validar Unicidade de Email
-      if (editEmail.toLowerCase().trim() !== activeMerchant.email.toLowerCase()) {
+      const currentEmail = currentUser.email || '';
+      if (editEmail.toLowerCase().trim() !== currentEmail.toLowerCase()) {
         const qEmail = query(collection(db, 'merchants'), where('email', '==', editEmail.toLowerCase().trim()));
         const snapEmail = await getDocs(qEmail);
-        if (!snapEmail.empty) throw new Error("Este email já está registado noutro comerciante.");
-      }
-
-      // Validar Unicidade de Telefone
-      if (editPhone && editPhone.trim() !== activeMerchant.phone) {
-        const qPhone = query(collection(db, 'merchants'), where('phone', '==', editPhone.trim()));
-        const snapPhone = await getDocs(qPhone);
-        if (!snapPhone.empty) throw new Error("Este telefone já está registado noutro comerciante.");
+        if (!snapEmail.empty) throw new Error("Este email já está registado.");
       }
 
       const updates: any = {
@@ -99,8 +80,7 @@ const MerchantDashboard: React.FC = () => {
         phone: editPhone.trim(),
       };
 
-      // Regra das 00:00 para alteração de cashback
-      if (editCashback !== activeMerchant.cashbackPercent) {
+      if (editCashback !== currentUser.cashbackPercent) {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         tomorrow.setHours(0, 0, 0, 0);
@@ -109,33 +89,28 @@ const MerchantDashboard: React.FC = () => {
           newPercent: editCashback,
           effectiveDate: tomorrow.toISOString()
         };
-        alert(`Atenção: A nova taxa de ${editCashback}% será aplicada automaticamente às 00:00 de amanhã.`);
+        alert(`A nova taxa de ${editCashback}% será aplicada às 00:00 de amanhã.`);
       }
 
-      await updateDoc(doc(db, 'merchants', activeMerchant.id), updates);
-      setActiveMerchant({ ...activeMerchant, ...updates });
-      setMessage({ type: 'success', text: "Perfil atualizado com sucesso!" });
+      await updateDoc(doc(db, 'merchants', currentUser.id), updates);
+      setCurrentUser({ ...currentUser, ...updates });
+      setMessage({ type: 'success', text: "Perfil atualizado!" });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       setView('terminal');
     } catch (err: any) {
-      alert(err.message || "Erro ao atualizar dados.");
+      alert(err.message || "Erro ao atualizar.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  // --- LÓGICA DE CÁLCULO DE ESTATÍSTICAS E FILTROS (MANTIDA) ---
-  
-  const merchantTransactions = useMemo(() => {
-    return transactions.filter(t => t.merchantId === activeMerchant?.id);
-  }, [transactions, activeMerchant]);
-
+  // ESTATÍSTICAS E FILTROS
   const stats = useMemo(() => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
     let theoretical = 0;
     let available = 0;
 
-    merchantTransactions.forEach(t => {
+    transactions.forEach(t => {
       const txTime = t.createdAt?.seconds ? t.createdAt.seconds * 1000 : Date.now();
       const val = t.cashbackAmount || 0;
       const isMature = txTime <= fortyEightHoursAgo;
@@ -149,188 +124,63 @@ const MerchantDashboard: React.FC = () => {
       }
     });
     return { theoretical, available };
-  }, [merchantTransactions]);
+  }, [transactions]);
 
   const filteredHistory = useMemo(() => {
-    return merchantTransactions.filter(t => {
+    return transactions.filter(t => {
       const matchNif = filterNif ? t.clientId.includes(filterNif) : true;
       const matchDoc = filterDoc ? t.documentNumber?.toLowerCase().includes(filterDoc.toLowerCase()) : true;
       const matchType = filterType === 'all' ? true : t.type === filterType;
       return matchNif && matchDoc && matchType;
     }).sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
-  }, [merchantTransactions, filterNif, filterDoc, filterType]);
+  }, [transactions, filterNif, filterDoc, filterType]);
 
   const handleExportCSV = () => {
-    const headers = "Data,Cliente,Documento,Tipo,Valor Original,Cashback,Operador\n";
+    const headers = "Data,Cliente,Documento,Tipo,Valor Original,Cashback\n";
     const rows = filteredHistory.map(t => {
       const date = t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---';
-      return `${date},${t.clientId},${t.documentNumber},${t.type},${t.amount}€,${t.cashbackAmount}€,${t.operatorCode}`;
+      return `${date},${t.clientId},${t.documentNumber},${t.type},${t.amount}€,${t.cashbackAmount}€`;
     }).join("\n");
-    
     const blob = new Blob([headers + rows], { type: 'text/csv' });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement('a');
-    a.href = url;
-    a.download = `relatorio_${activeMerchant.name}.csv`;
-    a.click();
-  };
-
-  // --- LÓGICA DE AUTENTICAÇÃO E OPERAÇÕES (MANTIDA) ---
-
-  const handleMerchantLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      const q = query(collection(db, 'merchants'), where('email', '==', loginEmail.toLowerCase().trim()));
-      const snap = await getDocs(q);
-      
-      if (!snap.empty) {
-        const merchantDoc = snap.docs[0];
-        const data = merchantDoc.data();
-        
-        if (data.firstAccess && loginPass === data.temporaryPassword) {
-          setActiveMerchant({ id: merchantDoc.id, ...data });
-          setLoginStep('changePass');
-          return;
-        }
-
-        if (loginPass === data.password) {
-          setActiveMerchant({ id: merchantDoc.id, ...data, displayName: data.name });
-          setActiveOperator({ id: 'admin', name: 'Administrador (Gerência)', code: 'ADMIN' });
-          setIsAuthorized(true);
-          return;
-        }
-
-        const op = data.operators?.find((o: any) => o.password === loginPass);
-        if (op) {
-          setActiveMerchant({ id: merchantDoc.id, ...data, displayName: data.name });
-          setActiveOperator({ ...op, code: op.id });
-          setIsAuthorized(true);
-        } else {
-          alert("Credenciais inválidas.");
-        }
-      } else {
-        alert("Lojista não encontrado.");
-      }
-    } catch (err) {
-      alert("Erro de conexão.");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleInitiateRecovery = async () => {
-    if (!loginEmail) return alert("Insira o email.");
-    setIsLoading(true);
-    const mockCode = Math.floor(100000 + Math.random() * 900000).toString();
-    setSentRecoveryCode(mockCode);
-    console.log(`[SISTEMA] Código para ${loginEmail}: ${mockCode}`);
-    alert(`Código enviado.`);
-    setLoginStep('recovery');
-    setIsLoading(false);
-  };
-
-  const handleResetPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (recoveryCode !== sentRecoveryCode) return alert("Código inválido.");
-    setIsLoading(true);
-    try {
-      const q = query(collection(db, 'merchants'), where('email', '==', loginEmail.toLowerCase().trim()));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
-        await updateDoc(doc(db, 'merchants', snap.docs[0].id), {
-          password: newPass,
-          firstAccess: false,
-          temporaryPassword: ""
-        });
-        alert("Sucesso! Faça login.");
-        setLoginStep('credentials');
-      }
-    } catch (err) { alert("Erro."); } finally { setIsLoading(false); }
-  };
-
-  const handleUpdateFirstPassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
-      await updateDoc(doc(db, 'merchants', activeMerchant.id), {
-        password: newPass,
-        firstAccess: false,
-        temporaryPassword: ""
-      });
-      setActiveOperator({ id: 'admin', name: 'Administrador', code: 'ADMIN' });
-      setIsAuthorized(true);
-    } catch (err) { alert("Erro."); } finally { setIsLoading(false); }
+    a.href = url; a.download = `relatorio_${currentUser?.name || 'loja'}.csv`; a.click();
   };
 
   const handleAddOperator = async () => {
-    if (!newOpName || newOpPass.length < 4) return alert("Dados inválidos.");
+    if (!newOpName || newOpPass.length < 4 || !currentUser) return alert("Dados inválidos.");
     const newOp = { id: `op_${Date.now()}`, name: newOpName, password: newOpPass, createdAt: new Date().toISOString() };
     try {
-      await updateDoc(doc(db, 'merchants', activeMerchant.id), { operators: arrayUnion(newOp) });
-      setActiveMerchant({ ...activeMerchant, operators: [...(activeMerchant.operators || []), newOp] });
+      await updateDoc(doc(db, 'merchants', currentUser.id), { operators: arrayUnion(newOp) });
+      setCurrentUser({ ...currentUser, operators: [...(currentUser.operators || []), newOp] });
       setNewOpName(''); setNewOpPass('');
       alert("Operador adicionado!");
-    } catch (error) { alert("Erro."); }
+    } catch (error) { alert("Erro ao adicionar."); }
   };
 
   const processAction = async (type: 'earn' | 'redeem' | 'subtract') => {
     const val = parseFloat(amount);
-    if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber) return alert("Preencha tudo.");
-
-    if (type === 'redeem' && val > stats.available) {
-      return alert(`Saldo insuficiente! Disponível: ${stats.available.toFixed(2)}€`);
-    }
+    if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber || !currentUser) return alert("Preencha tudo.");
+    if (type === 'redeem' && val > stats.available) return alert(`Saldo insuficiente!`);
 
     try {
       setIsLoading(true);
       await addTransaction({
         clientId: cardNumber,
-        merchantId: activeMerchant.id,
-        merchantName: activeMerchant.name,
+        merchantId: currentUser.id,
+        merchantName: currentUser.name || 'Loja Vizinho+', // Fallback aqui
         amount: type === 'earn' ? val : 0,
-        cashbackAmount: type === 'earn' ? (val * (activeMerchant.cashbackPercent / 100)) : val,
+        cashbackAmount: type === 'earn' ? (val * ((currentUser.cashbackPercent || 0) / 100)) : val, // Fallback aqui
         type: type,
         documentNumber: documentNumber,
-        operatorCode: activeOperator.code,
+        operatorCode: 'LOJA', 
         status: type === 'earn' ? 'pending' : 'available'
       });
       setMessage({ type: 'success', text: "Operação Concluída!" });
       setAmount(''); setDocumentNumber('');
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    } catch (error) { alert("Erro."); } finally { setIsLoading(false); }
+    } catch (error) { alert("Erro na operação."); } finally { setIsLoading(false); }
   };
-
-  if (!isAuthorized) {
-    return (
-      <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 text-center">
-        <div className="bg-white p-10 rounded-[40px] shadow-2xl w-full max-w-md border border-slate-100 font-sans">
-          <h1 className="text-3xl font-black italic text-[#0a2540] mb-8 uppercase">VIZINHO+</h1>
-          {loginStep === 'credentials' && (
-            <form onSubmit={handleMerchantLogin} className="space-y-4">
-              <input type="email" value={loginEmail} onChange={e => setLoginEmail(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" placeholder="Email da Loja" required />
-              <input type="password" value={loginPass} onChange={e => setLoginPass(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" placeholder="Password" required />
-              <button className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest">Entrar</button>
-              <button type="button" onClick={handleInitiateRecovery} className="text-[10px] font-black uppercase text-slate-400 mt-4">Recuperar Password</button>
-            </form>
-          )}
-          {loginStep === 'changePass' && (
-            <form onSubmit={handleUpdateFirstPassword} className="space-y-4">
-              <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-blue-200 rounded-2xl font-bold" placeholder="Nova Password" required />
-              <button className="w-full bg-blue-600 text-white p-5 rounded-2xl font-black uppercase">Ativar Conta</button>
-            </form>
-          )}
-          {loginStep === 'recovery' && (
-            <form onSubmit={handleResetPassword} className="space-y-4">
-              <input type="text" value={recoveryCode} onChange={e => setRecoveryCode(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-orange-200 rounded-2xl font-bold text-center text-2xl" placeholder="000000" required />
-              <input type="password" value={newPass} onChange={e => setNewPass(e.target.value)} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold" placeholder="Nova Password" required />
-              <button className="w-full bg-orange-500 text-white p-5 rounded-2xl font-black uppercase">Redefinir</button>
-            </form>
-          )}
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] font-sans pb-10">
@@ -339,33 +189,29 @@ const MerchantDashboard: React.FC = () => {
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-[#00d66f]/10 rounded-xl flex items-center justify-center text-[#00d66f] text-2xl shadow-inner">🏪</div>
             <div>
-              <h2 className="text-xl font-bold text-[#0a2540]">{activeMerchant.name}</h2>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">Sessão: {activeOperator.name}</p>
+              <h2 className="text-xl font-bold text-[#0a2540]">{currentUser?.name}</h2>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter">ID: {currentUser?.nif}</p>
             </div>
           </div>
           <div className="flex gap-2">
             <button onClick={() => { setView('terminal'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'terminal' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Terminal</button>
             <button onClick={() => { setView('history'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'history' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Movimentos</button>
-            {activeOperator.code === 'ADMIN' && (
-              <>
-                <button onClick={() => { setView('profile'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'profile' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Perfil</button>
-                <button onClick={() => setShowOpManager(!showOpManager)} className="px-4 py-2 rounded-xl bg-slate-100 text-[#0a2540] text-xs font-bold uppercase">Equipa</button>
-              </>
-            )}
-            <button onClick={() => setIsAuthorized(false)} className="px-4 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold uppercase">Sair</button>
+            <button onClick={() => { setView('profile'); setShowOpManager(false); }} className={`px-4 py-2 rounded-xl font-bold text-xs uppercase ${view === 'profile' ? 'bg-[#0a2540] text-white' : 'bg-slate-50 text-slate-400'}`}>Perfil</button>
+            <button onClick={() => setShowOpManager(!showOpManager)} className="px-4 py-2 rounded-xl bg-slate-100 text-[#0a2540] text-xs font-bold uppercase tracking-widest hover:bg-[#00d66f]">Equipa</button>
+            <button onClick={() => logout()} className="px-4 py-2 rounded-xl bg-red-50 text-red-600 text-xs font-bold uppercase">Sair</button>
           </div>
         </header>
 
         {showOpManager ? (
           <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100 animate-in fade-in duration-300">
-            <h3 className="text-lg font-bold text-[#0a2540] mb-6 italic uppercase">Gestão de Operadores</h3>
+            <h3 className="text-lg font-bold text-[#0a2540] mb-6 italic uppercase">Gestão de Equipa</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-10">
-              <input placeholder="NOME" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" />
+              <input placeholder="NOME DO OPERADOR" value={newOpName} onChange={e => setNewOpName(e.target.value)} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" />
               <input placeholder="PASSWORD" value={newOpPass} onChange={e => setNewOpPass(e.target.value)} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" />
               <button onClick={handleAddOperator} className="bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase text-xs">Adicionar</button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {activeMerchant.operators?.map((op: any) => (
+              {currentUser?.operators?.map((op: any) => (
                 <div key={op.id} className="p-4 border border-slate-100 bg-slate-50 rounded-2xl flex justify-between items-center">
                   <p className="font-black text-[#0a2540] text-sm uppercase">{op.name}</p>
                   <span className="text-xl">👤</span>
@@ -380,7 +226,7 @@ const MerchantDashboard: React.FC = () => {
                 <label className="text-[10px] font-black uppercase text-slate-400 tracking-[0.2em] block">1. Identificar Cliente (NIF)</label>
                 <div className="flex gap-3">
                   <input value={cardNumber} onChange={e => setCardNumber(e.target.value)} placeholder="000000000" className="flex-grow p-5 bg-slate-50 border-2 border-slate-100 rounded-2xl text-2xl font-black text-[#0a2540] outline-none" />
-                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-black transition-all active:scale-95"><span className="text-2xl">📷</span></button>
+                  <button onClick={() => setShowScanner(true)} className="bg-[#0a2540] p-5 rounded-2xl text-white hover:bg-black active:scale-95"><span className="text-2xl">📷</span></button>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -403,10 +249,6 @@ const MerchantDashboard: React.FC = () => {
                 <span className="text-4xl">🎁</span>
                 <span className="font-black text-lg uppercase italic text-center leading-none">Descontar<br/>Saldo</span>
               </button>
-              <button onClick={() => processAction('subtract')} className="group bg-white border-2 border-slate-100 p-6 rounded-[32px] text-slate-400 transition-all hover:border-red-500 hover:text-red-500 flex flex-col items-center gap-1">
-                <span className="text-2xl">📄</span>
-                <span className="font-black text-xs uppercase italic">Nota de Crédito</span>
-              </button>
               {message.text && (
                 <div className="mt-4 p-5 rounded-2xl bg-[#00d66f]/10 text-[#00d66f] font-black text-center text-xs uppercase animate-pulse">{message.text}</div>
               )}
@@ -414,62 +256,51 @@ const MerchantDashboard: React.FC = () => {
           </div>
         ) : view === 'history' ? (
           <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-300">
-            {/* PAINEL DE SALDOS DO COMERCIANTE */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Total Emitido (Teórico)</p>
+              <div className="bg-white p-6 rounded-[24px] border border-slate-100 shadow-sm text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Saldo Total Emitido</p>
                 <h3 className="text-3xl font-black text-[#0a2540] mt-1">{stats.theoretical.toFixed(2)}€</h3>
               </div>
-              <div className="bg-[#0a2540] p-6 rounded-[24px] text-white shadow-xl">
-                <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">Saldo Disponível para Uso (Maduro)</p>
+              <div className="bg-[#0a2540] p-6 rounded-[24px] text-white shadow-xl text-center">
+                <p className="text-[10px] font-black text-white/50 uppercase tracking-widest">Saldo Maduro (48h+)</p>
                 <h3 className="text-3xl font-black text-[#00d66f] mt-1">{stats.available.toFixed(2)}€</h3>
               </div>
             </div>
-
-            {/* FILTROS E TABELA */}
             <div className="bg-white p-8 rounded-[32px] shadow-sm border border-slate-100">
               <div className="flex flex-wrap gap-4 mb-8 items-end">
                 <div className="flex-grow min-w-[200px]">
-                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">NIF Cliente</label>
-                  <input value={filterNif} onChange={e => setFilterNif(e.target.value)} placeholder="Filtrar por NIF..." className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">NIF Cliente</label>
+                  <input value={filterNif} onChange={e => setFilterNif(e.target.value)} placeholder="000..." className="w-full p-4 bg-slate-50 border rounded-2xl font-bold" />
                 </div>
                 <div className="w-48">
-                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Documento</label>
-                  <input value={filterDoc} onChange={e => setFilterDoc(e.target.value)} placeholder="FT..." className="w-full p-4 bg-slate-50 border rounded-2xl font-bold uppercase" />
-                </div>
-                <div className="w-48">
-                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block tracking-widest">Tipo</label>
+                  <label className="text-[10px] font-black text-slate-400 uppercase mb-2 block">Tipo</label>
                   <select value={filterType} onChange={e => setFilterType(e.target.value)} className="w-full p-4 bg-slate-50 border rounded-2xl font-bold">
                     <option value="all">TODOS</option>
                     <option value="earn">EMITIDO</option>
                     <option value="redeem">UTILIZADO</option>
-                    <option value="subtract">N. CRÉDITO</option>
                   </select>
                 </div>
-                <button onClick={handleExportCSV} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase tracking-widest hover:bg-black">Exportar CSV</button>
+                <button onClick={handleExportCSV} className="bg-slate-900 text-white px-8 py-4 rounded-2xl font-black text-xs uppercase hover:bg-black transition-all">Exportar CSV</button>
               </div>
-
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
                     <tr className="border-b-2 border-slate-50 text-[10px] font-black text-slate-400 uppercase tracking-widest">
                       <th className="pb-4">Data</th>
                       <th className="pb-4">Cliente</th>
-                      <th className="pb-4">Documento</th>
+                      <th className="pb-4">Doc</th>
                       <th className="pb-4">Cashback</th>
-                      <th className="pb-4 text-right">Op</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {filteredHistory.map((t, idx) => (
-                      <tr key={idx} className="text-sm font-bold text-[#0a2540] hover:bg-slate-50/50 transition-colors">
-                        <td className="py-4 whitespace-nowrap">{t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}</td>
+                      <tr key={idx} className="text-sm font-bold text-[#0a2540] hover:bg-slate-50/50">
+                        <td className="py-4">{t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}</td>
                         <td className="py-4">{t.clientId}</td>
                         <td className="py-4 uppercase">{t.documentNumber}</td>
                         <td className={`py-4 font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
                           {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount?.toFixed(2)}€
                         </td>
-                        <td className="py-4 text-right text-[10px] text-slate-400 font-black">{t.operatorCode}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -479,40 +310,24 @@ const MerchantDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="max-w-2xl mx-auto bg-white p-8 rounded-[32px] border border-slate-100 shadow-sm animate-in zoom-in-95 duration-300">
-            <h3 className="text-xl font-black text-[#0a2540] mb-6 uppercase italic tracking-tighter">Dados da Loja</h3>
+            <h3 className="text-xl font-black text-[#0a2540] mb-6 uppercase italic tracking-tighter text-center">Definições do Estabelecimento</h3>
             <form onSubmit={handleUpdateProfile} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Nome Comercial</label>
+                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" />
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Email</label>
+                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none" />
+                </div>
+              </div>
               <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">NIF (Contribuinte - Unico)</label>
-                <input value={activeMerchant.nif} disabled className="w-full p-4 bg-slate-100 border-2 border-transparent rounded-2xl font-bold text-slate-400 cursor-not-allowed" />
+                <label className="text-[10px] font-black text-slate-400 uppercase block mb-2">Taxa de Cashback Atual (%)</label>
+                <input type="number" step="0.1" value={editCashback} onChange={e => setEditCashback(parseFloat(e.target.value))} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f]/30 rounded-2xl font-black text-[#00d66f] outline-none" />
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Nome Comercial</label>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#0a2540]" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Email da Loja</label>
-                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#0a2540]" />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Telefone Contacto</label>
-                  <input value={editPhone} onChange={e => setEditPhone(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold outline-none focus:border-[#0a2540]" />
-                </div>
-                <div>
-                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest block mb-2">Cashback Atual (%)</label>
-                  <input type="number" step="0.1" value={editCashback} onChange={e => setEditCashback(parseFloat(e.target.value))} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f]/30 rounded-2xl font-black text-[#00d66f] outline-none focus:border-[#00d66f]" />
-                </div>
-              </div>
-              {editCashback !== activeMerchant.cashbackPercent && (
-                <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
-                  <p className="text-[10px] font-black text-orange-600 uppercase">Agendamento Ativo</p>
-                  <p className="text-xs font-bold text-orange-400">A nova taxa entrará em vigor às 00:00 de amanhã.</p>
-                </div>
-              )}
               <button disabled={isLoading} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all shadow-lg active:scale-95">
-                {isLoading ? 'A Guardar...' : 'Atualizar Perfil'}
+                {isLoading ? 'A Guardar...' : 'Atualizar Dados'}
               </button>
             </form>
           </div>
@@ -522,7 +337,7 @@ const MerchantDashboard: React.FC = () => {
           <div className="fixed inset-0 bg-[#0a2540]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center">
             <div className="bg-white p-4 rounded-[40px] shadow-2xl w-full max-w-lg relative">
               <div id="reader" className="w-full"></div>
-              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-black uppercase text-xs mt-4 rounded-2xl">Fechar</button>
+              <button onClick={() => setShowScanner(false)} className="w-full bg-red-600 text-white p-5 font-black uppercase text-xs mt-4 rounded-2xl">Fechar Câmara</button>
             </div>
           </div>
         )}
