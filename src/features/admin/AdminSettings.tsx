@@ -1,7 +1,16 @@
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { doc, updateDoc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { 
+  ArrowLeft, 
+  ShieldCheck, 
+  Mail, 
+  Lock, 
+  Save, 
+  AlertCircle,
+  CheckCircle2
+} from 'lucide-react';
 
 const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentUser, setCurrentUser } = useStore();
@@ -23,22 +32,19 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setMessage({ type: '', text: '' });
 
     try {
-      // Guardamos as definições numa pasta central de configurações no Firebase
       const adminRef = doc(db, 'settings', 'admin_profile');
       
-      const updateData = {
+      const updateData: any = {
         email: newEmail.toLowerCase().trim(),
-        updatedAt: new Date()
+        updatedAt: serverTimestamp()
       };
 
       if (newPassword) {
-        // @ts-ignore
         updateData.password = newPassword;
       }
 
       await setDoc(adminRef, updateData, { merge: true });
 
-      // Atualiza o estado local para o Filipe não ser deslogado
       if (currentUser) {
         setCurrentUser({
           ...currentUser,
@@ -46,91 +52,132 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         });
       }
 
-      setMessage({ type: 'success', text: 'Definições atualizadas com sucesso!' });
+      setMessage({ type: 'success', text: 'Credenciais atualizadas com sucesso!' });
       setNewPassword('');
       setConfirmPassword('');
     } catch (error) {
       console.error(error);
-      setMessage({ type: 'error', text: 'Erro ao guardar no Firebase.' });
+      setMessage({ type: 'error', text: 'Erro crítico ao guardar no Firebase.' });
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="flex items-center gap-4 mb-8">
-        <button 
-          onClick={onBack}
-          className="bg-slate-100 hover:bg-slate-200 p-3 rounded-2xl transition-all"
-        >
-          ⬅️ Voltar
-        </button>
-        <h2 className="text-2xl font-black text-[#0a2540] uppercase italic tracking-tighter">
-          Definições de Segurança
-        </h2>
-      </div>
-
-      <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 relative overflow-hidden">
-        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
-          <img src="/logo-vizinho.png" alt="" className="w-24 h-24" />
+    <div className="min-h-screen bg-[#f6f9fc] p-6 md:p-12">
+      <div className="max-w-2xl mx-auto">
+        
+        {/* CABEÇALHO */}
+        <div className="flex items-center gap-6 mb-10">
+          <button 
+            onClick={onBack}
+            className="group bg-white p-4 rounded-2xl shadow-sm border border-slate-100 hover:bg-[#0a2540] hover:text-white transition-all active:scale-90"
+          >
+            <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+          </button>
+          <div>
+            <h2 className="text-3xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">
+              Segurança <span className="text-[#00d66f]">Admin</span>
+            </h2>
+            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">
+              Gestão de Acesso de Super-User
+            </p>
+          </div>
         </div>
 
-        <form onSubmit={handleUpdateAdmin} className="space-y-6">
-          <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">E-mail de Administrador</label>
-            <input 
-              type="email" 
-              value={newEmail}
-              onChange={(e) => setNewEmail(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-[#0a2540]"
-              required
-            />
+        {/* CARD PRINCIPAL */}
+        <div className="bg-white rounded-[40px] shadow-[0_30px_60px_rgba(10,37,64,0.08)] border-2 border-slate-100 relative overflow-hidden p-8 md:p-12">
+          
+          <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
+            <ShieldCheck size={200} className="text-[#0a2540]" />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Nova Password</label>
+          <form onSubmit={handleUpdateAdmin} className="relative z-10 space-y-8">
+            
+            {/* EMAIL */}
+            <div className="space-y-3">
+              <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                <Mail size={14} /> E-mail de Administrador
+              </label>
               <input 
-                type="password" 
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Deixar vazio para manter"
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-[#0a2540]"
+                type="email" 
+                value={newEmail}
+                onChange={(e) => setNewEmail(e.target.value)}
+                className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[24px] outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
+                required
               />
             </div>
-            <div className="space-y-2">
-              <label className="text-[11px] font-black uppercase tracking-widest text-slate-400">Confirmar Password</label>
-              <input 
-                type="password" 
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-[#0a2540]"
-              />
+
+            {/* PASSWORDS */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                  <Lock size={14} /> Nova Password
+                </label>
+                <input 
+                  type="password" 
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  placeholder="Manter atual..."
+                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[24px] outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all placeholder:text-slate-300"
+                />
+              </div>
+              <div className="space-y-3">
+                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-400 ml-2">
+                  <Lock size={14} /> Confirmar
+                </label>
+                <input 
+                  type="password" 
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[24px] outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
+                />
+              </div>
             </div>
+
+            {/* FEEDBACK MESSAGES */}
+            {message.text && (
+              <div className={`p-5 rounded-[24px] font-black text-xs uppercase flex items-center gap-3 animate-in fade-in slide-in-from-top-4 ${
+                message.type === 'success' 
+                  ? 'bg-green-50 text-green-600 border-2 border-green-100' 
+                  : 'bg-red-50 text-red-600 border-2 border-red-100'
+              }`}>
+                {message.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
+                {message.text}
+              </div>
+            )}
+
+            {/* BOTÃO SUBMIT */}
+            <button 
+              type="submit"
+              disabled={isSaving}
+              className="group w-full bg-[#0a2540] text-white p-6 rounded-[24px] font-black text-sm uppercase tracking-widest hover:bg-black transition-all shadow-xl flex items-center justify-center gap-4 disabled:opacity-50 active:scale-95"
+            >
+              {isSaving ? (
+                <div className="w-5 h-5 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
+              ) : (
+                <>
+                  <Save size={20} className="group-hover:scale-110 transition-transform" />
+                  Atualizar Credenciais
+                </>
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* BOX DE AVISO */}
+        <div className="mt-10 p-8 bg-blue-50/50 rounded-[32px] border-2 border-blue-100/50 flex gap-5 items-start">
+          <div className="bg-blue-100 p-3 rounded-2xl text-blue-600">
+            <ShieldCheck size={24} />
           </div>
+          <div>
+            <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Protocolo de Segurança</p>
+            <p className="text-xs text-blue-900/70 font-bold leading-relaxed">
+              Estas alterações são aplicadas instantaneamente à base de dados. O sistema passará a exigir estas novas credenciais em todos os futuros acessos ao Painel Admin.
+            </p>
+          </div>
+        </div>
 
-          {message.text && (
-            <div className={`p-4 rounded-2xl font-black text-xs uppercase ${message.type === 'success' ? 'bg-green-50 text-green-600 border-2 border-green-100' : 'bg-red-50 text-red-600 border-2 border-red-100'}`}>
-              {message.type === 'success' ? '✅' : '⚠️'} {message.text}
-            </div>
-          )}
-
-          <button 
-            type="submit"
-            disabled={isSaving}
-            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black text-lg hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3 disabled:opacity-50"
-          >
-            {isSaving ? 'A GUARDAR...' : 'ATUALIZAR CREDENCIAIS ➔'}
-          </button>
-        </form>
-      </div>
-
-      <div className="mt-8 p-6 bg-blue-50 rounded-[32px] border-2 border-blue-100">
-        <p className="text-[10px] font-black text-blue-400 uppercase tracking-[0.2em] mb-2">Nota Importante</p>
-        <p className="text-xs text-blue-900 font-bold leading-relaxed">
-          Ao alterar estas definições, os valores no código serão ignorados e passaremos a validar o teu acesso através da base de dados segura. Guarda estas credenciais num local seguro.
-        </p>
       </div>
     </div>
   );
