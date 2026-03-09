@@ -1,6 +1,18 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, addDoc, serverTimestamp, getDocs, updateDoc, doc, query, orderBy } from 'firebase/firestore';
+import { 
+  collection, 
+  addDoc, 
+  serverTimestamp, 
+  getDocs, 
+  updateDoc, 
+  doc, 
+  query, 
+  where, 
+  getDoc, 
+  writeBatch, 
+  increment 
+} from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import * as XLSX from 'xlsx';
 import { 
@@ -13,10 +25,10 @@ import {
   Settings, 
   LogOut, 
   Search,
-  ArrowUpRight,
   CheckCircle2,
   XCircle,
-  AlertCircle
+  Clock,
+  RefreshCw
 } from 'lucide-react';
 import AdminSettings from './AdminSettings';
 
@@ -25,29 +37,68 @@ const AdminDashboard: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
+  const [isProcessing, setIsProcessing] = useState(false);
   
   const [merchants, setMerchants] = useState<any[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [newMerchant, setNewMerchant] = useState({
-    name: '',
-    address: '',
-    nif: '',
-    zipCode: '',
-    phone: '',
-    email: '',
-    password: '',
-    cashbackPercent: 10
+    name: '', address: '', nif: '', zipCode: '', 
+    phone: '', email: '', password: '', cashbackPercent: 10 
   });
 
-  // Subscrever a transações em tempo real (Mantido)
+  // 1. MOTOR DE MATURAÇÃO (NOVA LÓGICA INTEGRADA)
+  const processMaturation = async () => {
+    setIsProcessing(true);
+    try {
+      const configRef = doc(db, 'system', 'config');
+      const configSnap = await getDoc(configRef);
+      const hours = configSnap.exists() ? configSnap.data().maturationHours : 48;
+      
+      const limitDate = new Date();
+      limitDate.setHours(limitDate.getHours() - hours);
+
+      const q = query(
+        collection(db, 'transactions'), 
+        where('status', '==', 'pending'),
+        where('createdAt', '<=', limitDate)
+      );
+
+      const querySnapshot = await getDocs(q);
+      if (querySnapshot.empty) {
+        setIsProcessing(false);
+        return;
+      }
+
+      const batch = writeBatch(db);
+      querySnapshot.docs.forEach((txDoc) => {
+        const txData = txDoc.data();
+        batch.update(doc(db, 'transactions', txDoc.id), {
+          status: 'available',
+          maturedAt: serverTimestamp()
+        });
+        const userRef = doc(db, 'users', txData.userId);
+        batch.update(userRef, {
+          'wallet.available': increment(txData.amount),
+          'wallet.pending': increment(-txData.amount)
+        });
+      });
+
+      await batch.commit();
+    } catch (error) {
+      console.error("Erro na maturação:", error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = subscribeToTransactions('admin');
+    processMaturation(); // Executa ao entrar
     return () => { if (unsubscribe) unsubscribe(); };
   }, [subscribeToTransactions]);
 
-  // Carregar Lojistas e Utilizadores para as novas vistas
   useEffect(() => {
     const fetchData = async () => {
       if (currentView === 'merchants' || currentView === 'users') {
@@ -67,15 +118,18 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [currentView]);
 
-  // Cálculos de Métricas Globais (Mantido e Otimizado)
   const stats = useMemo(() => {
     const totalVolume = transactions.reduce((acc, t) => acc + (t.amount || 0), 0);
     const totalCashback = transactions.reduce((acc, t) => acc + (t.cashbackAmount || 0), 0);
+    const pendingCashback = transactions
+      .filter(t => t.status === 'pending')
+      .reduce((acc, t) => acc + (t.cashbackAmount || 0), 0);
     const uniqueClients = new Set(transactions.map(t => t.clientId)).size;
     
     return {
       volume: totalVolume,
       cashback: totalCashback,
+      pending: pendingCashback,
       clients: uniqueClients,
       count: transactions.length
     };
@@ -84,27 +138,17 @@ const AdminDashboard: React.FC = () => {
   const handleCreateMerchant = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      // Criamos na coleção 'users' para manter o sistema de login centralizado
       await addDoc(collection(db, 'users'), {
-        name: newMerchant.name,
-        address: newMerchant.address,
-        nif: newMerchant.nif,
-        zipCode: newMerchant.zipCode,
-        phone: newMerchant.phone,
+        ...newMerchant,
         email: newMerchant.email.toLowerCase().trim(),
         temporaryPassword: newMerchant.password,
-        status: 'active', // Admin cria já ativo por defeito
-        cashbackPercent: newMerchant.cashbackPercent,
+        status: 'active',
         role: 'merchant',
         createdAt: serverTimestamp()
       });
-
       alert('Lojista registado com sucesso!');
       setIsModalOpen(false);
-      setNewMerchant({ 
-        name: '', address: '', nif: '', zipCode: '', 
-        phone: '', email: '', password: '', cashbackPercent: 10 
-      });
+      setNewMerchant({ name: '', address: '', nif: '', zipCode: '', phone: '', email: '', password: '', cashbackPercent: 10 });
     } catch (error) {
       alert('Erro ao criar lojista.');
     }
@@ -123,11 +167,10 @@ const AdminDashboard: React.FC = () => {
     const data = transactions.map(t => ({
       'Data': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString() : '---',
       'Loja': t.merchantName || '---',
-      'Cliente (NIF/ID)': t.clientId || '---',
+      'Cliente': t.clientId || '---',
       'Valor Bruto': (t.amount || 0).toFixed(2) + '€',
       'Cashback': (t.cashbackAmount || 0).toFixed(2) + '€',
-      'Documento': t.documentNumber || '---',
-      'Tipo': t.type === 'earn' ? 'Acumulação' : 'Resgate'
+      'Status': t.status || 'pending'
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
@@ -142,19 +185,12 @@ const AdminDashboard: React.FC = () => {
             t.documentNumber?.toLowerCase().includes(query));
   });
 
-  if (currentView === 'settings') {
-    return <AdminSettings onBack={() => setCurrentView('overview')} />;
-  }
+  if (currentView === 'settings') return <AdminSettings onBack={() => setCurrentView('overview')} />;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-20 text-[#0a2540]">
       
-      {/* HEADER BRUTALISTA INTEGRADO */}
       <header className="bg-[#0a2540] text-white p-8 rounded-b-[64px] shadow-2xl mb-12 border-b-8 border-[#00d66f] relative overflow-hidden">
-        <div className="absolute -top-10 -left-10 opacity-5 pointer-events-none">
-          <ShieldCheck size={300} />
-        </div>
-        
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
           <div className="flex items-center gap-6">
             <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-lg rotate-3">
@@ -192,59 +228,52 @@ const AdminDashboard: React.FC = () => {
         
         {currentView === 'overview' && (
           <div className="space-y-10 animate-in fade-in duration-500">
-            {/* CARDS DE MÉTRICAS (FUSÃO DOS DOIS CÓDIGOS) */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 relative overflow-hidden group hover:-translate-y-2 transition-all">
+            {/* CARDS DE MÉTRICAS COM MATURAÇÃO */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume de Vendas</p>
-                 <h3 className="text-4xl font-black italic tracking-tighter">{stats.volume.toFixed(2)}€</h3>
-                 <div className="flex items-center gap-1 mt-4 text-[#00d66f] font-bold text-[10px] uppercase tracking-widest">
-                    <TrendingUp size={14} /> Fluxo da Rede
+                 <h3 className="text-3xl font-black italic tracking-tighter">{stats.volume.toFixed(2)}€</h3>
+              </div>
+              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
+                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Pendente (48h)</p>
+                 <h3 className="text-3xl font-black italic tracking-tighter">{stats.pending.toFixed(2)}€</h3>
+                 <div className="mt-2 flex items-center gap-2 text-[8px] font-black uppercase text-slate-300">
+                   <Clock size={10}/> A aguardar maturação
                  </div>
               </div>
-
-              <div className="bg-[#00d66f] p-8 rounded-[40px] shadow-xl border-2 border-[#00d66f] relative overflow-hidden group hover:-translate-y-2 transition-all">
-                 <p className="text-[10px] font-black text-[#0a2540]/60 uppercase tracking-widest mb-1 text-[#0a2540]">Cashback Gerado</p>
-                 <h3 className="text-4xl font-black italic tracking-tighter text-[#0a2540]">{stats.cashback.toFixed(2)}€</h3>
-                 <p className="text-[10px] font-black text-[#0a2540]/60 mt-4 uppercase tracking-widest">Em circulação</p>
+              <div className="bg-[#00d66f] p-8 rounded-[40px] shadow-xl border-2 border-[#00d66f] text-[#0a2540]">
+                 <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">Cashback Disponível</p>
+                 <h3 className="text-3xl font-black italic tracking-tighter">{(stats.cashback - stats.pending).toFixed(2)}€</h3>
+                 <button onClick={processMaturation} disabled={isProcessing} className="mt-4 flex items-center gap-2 text-[9px] font-black uppercase hover:underline">
+                   <RefreshCw size={12} className={isProcessing ? 'animate-spin' : ''}/> Forçar Varredura
+                 </button>
               </div>
-
-              <div className="bg-[#0a2540] p-8 rounded-[40px] shadow-xl border-2 border-[#0a2540] relative overflow-hidden group hover:-translate-y-2 transition-all text-white">
-                 <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Clientes Ativos</p>
-                 <h3 className="text-4xl font-black italic tracking-tighter">{stats.clients}</h3>
-                 <div className="flex items-center gap-1 mt-4 text-[#00d66f] font-bold text-[10px] uppercase tracking-widest">
-                    <Users size={14} /> Vizinhos Reais
-                 </div>
+              <div className="bg-[#0a2540] p-8 rounded-[40px] shadow-xl text-white">
+                 <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Vizinhos Ativos</p>
+                 <h3 className="text-3xl font-black italic tracking-tighter">{stats.clients}</h3>
               </div>
             </div>
 
-            {/* BARRA DE PESQUISA E EXPORTAÇÃO (MANTIDO) */}
             <div className="flex flex-col md:flex-row gap-4">
               <div className="relative flex-1 group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f]" size={20} />
                 <input 
                   type="text" 
                   placeholder="PROCURAR POR NIF, LOJA OU DOCUMENTO..." 
-                  className="w-full p-6 pl-12 rounded-3xl border-2 border-slate-100 outline-none focus:border-[#00d66f] font-black text-xs uppercase shadow-sm transition-all"
+                  className="w-full p-6 pl-12 rounded-3xl border-2 border-slate-100 outline-none focus:border-[#00d66f] font-black text-xs uppercase"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
               <button 
                 onClick={exportToExcel} 
-                className="bg-white border-2 border-slate-100 px-8 py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:bg-[#0a2540] hover:text-white transition-all flex items-center justify-center gap-3 shadow-sm active:scale-95"
+                className="bg-white border-2 border-slate-100 px-8 py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:bg-[#0a2540] hover:text-white transition-all flex items-center gap-3 shadow-sm"
               >
                 <Download size={18} /> Exportar Excel
               </button>
             </div>
 
-            {/* TABELA DE TRANSACÇÕES (MANTIDO E ESTILIZADO) */}
             <div className="bg-white rounded-[48px] shadow-xl border-2 border-slate-100 overflow-hidden">
-              <div className="p-8 border-b-4 border-slate-50 flex justify-between items-center bg-slate-50/30">
-                <h3 className="font-black uppercase tracking-widest text-[11px] text-slate-400">Histórico Global de Movimentos</h3>
-                <span className="bg-[#0a2540] text-white text-[10px] font-black px-4 py-2 rounded-2xl uppercase tracking-tighter">
-                  {filteredTransactions.length} Operações
-                </span>
-              </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
@@ -253,21 +282,24 @@ const AdminDashboard: React.FC = () => {
                       <th className="p-8">Loja</th>
                       <th className="p-8">Vizinho</th>
                       <th className="p-8 text-right">Volume</th>
+                      <th className="p-8 text-right">Status</th>
                       <th className="p-8 text-right">Cashback</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-50">
                     {filteredTransactions.map((t) => (
-                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors group">
+                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="p-8 text-xs font-bold text-slate-400">
                           {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}
                         </td>
-                        <td className="p-8">
-                          <p className="font-black uppercase text-sm tracking-tighter">{t.merchantName}</p>
-                          <p className="text-[9px] font-black text-slate-300 uppercase">{t.documentNumber}</p>
-                        </td>
+                        <td className="p-8 font-black uppercase text-sm tracking-tighter">{t.merchantName}</td>
                         <td className="p-8 font-mono text-slate-400 font-bold text-xs">{t.clientId}</td>
                         <td className="p-8 text-right font-black text-slate-400">{(t.amount || 0).toFixed(2)}€</td>
+                        <td className="p-8 text-right uppercase text-[9px] font-black tracking-widest">
+                          <span className={t.status === 'available' ? 'text-[#00d66f]' : 'text-amber-500'}>
+                            {t.status === 'available' ? 'Disponível' : 'Pendente'}
+                          </span>
+                        </td>
                         <td className={`p-8 text-right font-black text-lg ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
                           {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)}€
                         </td>
@@ -287,41 +319,28 @@ const AdminDashboard: React.FC = () => {
                   <h2 className="text-2xl font-black uppercase italic tracking-tighter">Rede de Parceiros</h2>
                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Gestão de Lojistas Registados</p>
                </div>
-               <button 
-                  onClick={() => setIsModalOpen(true)}
-                  className="bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-3 shadow-lg"
-                >
+               <button onClick={() => setIsModalOpen(true)} className="bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:scale-105 transition-all flex items-center gap-3">
                   <Plus size={18} strokeWidth={3} /> Registar Novo Parceiro
                 </button>
              </div>
-
              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {merchants.map(m => (
                   <div key={m.id} className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
                     <div className="flex justify-between items-start mb-6">
-                      <div className="bg-slate-50 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
-                        <Store size={24} />
-                      </div>
+                      <div className="bg-slate-50 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors"><Store size={24} /></div>
                       <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest ${m.status === 'active' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
                         {m.status || 'pending'}
                       </span>
                     </div>
                     <h3 className="text-xl font-black uppercase italic tracking-tighter mb-1">{m.name}</h3>
                     <p className="text-[10px] font-black text-slate-400 uppercase mb-6 tracking-widest">NIF: {m.nif}</p>
-                    
                     <div className="flex gap-2">
                        {m.status !== 'active' ? (
-                         <button onClick={() => handleUpdateStatus(m.id, 'active')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px] flex items-center justify-center gap-2 shadow-md">
-                           <CheckCircle2 size={14} /> Ativar
-                         </button>
+                         <button onClick={() => handleUpdateStatus(m.id, 'active')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px] flex items-center justify-center gap-2 shadow-md"><CheckCircle2 size={14} /> Ativar</button>
                        ) : (
-                         <button onClick={() => handleUpdateStatus(m.id, 'disabled')} className="flex-1 bg-slate-50 text-slate-400 p-3 rounded-xl font-black uppercase text-[10px] hover:text-red-500 transition-colors flex items-center justify-center gap-2">
-                           <XCircle size={14} /> Suspender
-                         </button>
+                         <button onClick={() => handleUpdateStatus(m.id, 'disabled')} className="flex-1 bg-slate-50 text-slate-400 p-3 rounded-xl font-black uppercase text-[10px] hover:text-red-500 transition-colors flex items-center justify-center gap-2"><XCircle size={14} /> Suspender</button>
                        )}
-                       <button className="bg-slate-100 p-3 rounded-xl text-slate-400 hover:bg-[#0a2540] hover:text-white transition-all">
-                         <Settings size={14} />
-                       </button>
+                       <button className="bg-slate-100 p-3 rounded-xl text-slate-400 hover:bg-[#0a2540] hover:text-white transition-all"><Settings size={14} /></button>
                     </div>
                   </div>
                 ))}
@@ -330,7 +349,7 @@ const AdminDashboard: React.FC = () => {
         )}
 
         {currentView === 'users' && (
-          <div className="bg-white p-12 rounded-[48px] shadow-xl border-2 border-slate-100 animate-in slide-in-from-bottom-6 duration-500">
+          <div className="bg-white p-12 rounded-[48px] shadow-xl border-2 border-slate-100 animate-in slide-in-from-bottom-6">
              <h3 className="text-3xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-10 flex items-center gap-4">
                 <Users size={32} className="text-[#00d66f]" /> Vizinhos na Plataforma
              </h3>
@@ -350,102 +369,39 @@ const AdminDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAL DE REGISTO (MANTIDO E MELHORADO VISUALMENTE) */}
+      {/* MODAL DE REGISTO MANTIDO */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[48px] p-12 shadow-2xl overflow-y-auto max-h-[90vh] border border-white/20">
+          <div className="bg-white w-full max-w-2xl rounded-[48px] p-12 shadow-2xl overflow-y-auto max-h-[90vh]">
             <div className="flex justify-between items-start mb-10">
-              <div>
-                <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
-                <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.3em] mt-2">Registo Oficial no Ecossistema</p>
-              </div>
-              <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-red-500 transition-colors">
-                <XCircle size={24} />
-              </button>
+              <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
+              <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-red-500 transition-colors"><XCircle size={24} /></button>
             </div>
-            
             <form onSubmit={handleCreateMerchant} className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="md:col-span-2 space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome Comercial</label>
-                <input 
-                  type="text" required
-                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs uppercase"
-                  value={newMerchant.name}
-                  onChange={e => setNewMerchant({...newMerchant, name: e.target.value})}
-                />
+                <input type="text" required className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
               </div>
-
               <div className="md:col-span-2 space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Morada Completa</label>
-                <input 
-                  type="text" required
-                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs uppercase"
-                  value={newMerchant.address}
-                  onChange={e => setNewMerchant({...newMerchant, address: e.target.value})}
-                />
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor</label>
+                <input type="email" required className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
               </div>
-
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">NIF</label>
-                <input 
-                  type="text" required maxLength={9}
-                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs"
-                  value={newMerchant.nif}
-                  onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})}
-                />
+                <input type="text" required maxLength={9} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})} />
               </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Cód. Postal</label>
-                <input 
-                  type="text" required placeholder="0000-000"
-                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs"
-                  value={newMerchant.zipCode}
-                  onChange={e => setNewMerchant({...newMerchant, zipCode: e.target.value})}
-                />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor</label>
-                <input 
-                  type="email" required
-                  className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs"
-                  value={newMerchant.email}
-                  onChange={e => setNewMerchant({...newMerchant, email: e.target.value})}
-                />
-              </div>
-
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Password Inicial</label>
-                <input 
-                  type="text" required
-                  className="w-full p-5 bg-slate-100 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#0a2540] font-black text-[#00d66f] text-xs"
-                  value={newMerchant.password}
-                  onChange={e => setNewMerchant({...newMerchant, password: e.target.value})}
-                />
+                <input type="text" required className="w-full p-5 bg-slate-100 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#0a2540] font-black text-[#00d66f] text-xs" value={newMerchant.password} onChange={e => setNewMerchant({...newMerchant, password: e.target.value})} />
               </div>
-
               <div className="md:col-span-2 space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">% Cashback Base</label>
                 <div className="flex items-center bg-green-50 rounded-3xl px-6 border-2 border-green-100">
-                   <input 
-                    type="number" step="0.1"
-                    className="w-full py-5 bg-transparent text-2xl font-black outline-none text-[#0a2540]"
-                    value={newMerchant.cashbackPercent}
-                    onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})}
-                  />
-                  <span className="font-black text-[#0a2540] text-xl">%</span>
+                   <input type="number" step="0.1" className="w-full py-5 bg-transparent text-2xl font-black outline-none text-[#0a2540]" value={newMerchant.cashbackPercent} onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})} />
+                   <span className="font-black text-[#0a2540] text-xl">%</span>
                 </div>
               </div>
-
-              <div className="md:col-span-2 flex flex-col md:flex-row gap-4 mt-8">
-                <button type="submit" className="flex-[2] p-6 bg-[#00d66f] text-[#0a2540] rounded-3xl font-black uppercase text-xs tracking-widest hover:bg-[#00c265] transition-all shadow-xl active:scale-95">
-                  Confirmar Adesão da Loja
-                </button>
-                <button type="button" onClick={() => setIsModalOpen(false)} className="flex-1 p-6 font-black uppercase text-[10px] tracking-widest text-slate-400 hover:text-red-500 transition-colors">
-                  Desistir
-                </button>
-              </div>
+              <button type="submit" className="md:col-span-2 p-6 bg-[#00d66f] text-[#0a2540] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl">Confirmar Adesão da Loja</button>
             </form>
           </div>
         </div>
