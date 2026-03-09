@@ -1,11 +1,10 @@
 import React, { useEffect } from 'react';
 import { useStore } from '../../store/useStore';
-import { QRCodeSVG } from 'qrcode.react'; // Precisarás de: npm install qrcode.react
+import { QRCodeSVG } from 'qrcode.react';
 
 const UserDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout, currentUser } = useStore();
 
-  // Ativa a escuta de transações baseada no NIF do perfil logado
   useEffect(() => {
     if (currentUser?.nif) {
       const unsubscribe = subscribeToTransactions('client', currentUser.nif);
@@ -13,15 +12,15 @@ const UserDashboard: React.FC = () => {
     }
   }, [currentUser, subscribeToTransactions]);
 
-  // Cálculo de Saldos por Loja (Lógica preservada e blindada)
+  // Cálculo de Saldos com a regra das 48h
   const getBalancesByMerchant = () => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
-    const balances: { [key: string]: { name: string, available: number, pending: number } } = {};
+    const balances: { [key: string]: { name: string, available: number, pending: number, total: number } } = {};
 
     transactions.forEach(t => {
       const merchantId = t.merchantId || 'unknown';
       if (!balances[merchantId]) {
-        balances[merchantId] = { name: t.merchantName || 'Loja Vizinha', available: 0, pending: 0 };
+        balances[merchantId] = { name: t.merchantName || 'Loja Vizinha', available: 0, pending: 0, total: 0 };
       }
 
       const txTime = t.createdAt?.seconds ? t.createdAt.seconds * 1000 : Date.now();
@@ -29,20 +28,22 @@ const UserDashboard: React.FC = () => {
       const amount = t.cashbackAmount || 0;
 
       if (t.type === 'earn') {
+        balances[merchantId].total += amount;
         if (isAvailable) {
           balances[merchantId].available += amount;
         } else {
           balances[merchantId].pending += amount;
         }
       } else {
+        // No gasto (spend), subtraímos do disponível e do total
         balances[merchantId].available -= amount;
+        balances[merchantId].total -= amount;
       }
     });
 
     return Object.values(balances);
   };
 
-  // Se não estiver logado via Firebase Auth, redireciona ou mostra erro (O App.tsx tratará disto, mas aqui fica a proteção)
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 text-center">
@@ -53,6 +54,7 @@ const UserDashboard: React.FC = () => {
 
   const merchantBalances = getBalancesByMerchant();
   const totalAvailable = merchantBalances.reduce((acc, curr) => acc + curr.available, 0);
+  const totalAccumulated = merchantBalances.reduce((acc, curr) => acc + curr.total, 0);
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] font-sans pb-20">
@@ -71,19 +73,23 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* ÁREA DO QR CODE - Fase 2 do Plano */}
-        <div className="max-w-4xl mx-auto mt-8 flex flex-col md:flex-row gap-6">
-          <div className="flex-1 bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] flex justify-between items-center shadow-xl border-b-8 border-green-700">
+        <div className="max-w-4xl mx-auto mt-8 grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Card Principal: Saldo Disponível (O que pode gastar já) */}
+          <div className="md:col-span-2 bg-[#00d66f] p-8 rounded-[32px] text-[#0a2540] flex justify-between items-center shadow-xl border-b-8 border-green-700">
             <div>
-              <p className="text-sm font-bold uppercase opacity-70">Saldo Disponível</p>
+              <p className="text-sm font-bold uppercase opacity-70">Saldo Disponível (Pronto a usar)</p>
               <h3 className="text-5xl font-black tracking-tighter">{totalAvailable.toFixed(2)}€</h3>
+              <p className="text-[10px] font-black uppercase mt-2 opacity-50">
+                Total acumulado: {totalAccumulated.toFixed(2)}€
+              </p>
             </div>
             <div className="text-4xl">💰</div>
           </div>
           
+          {/* QR Code */}
           <div className="bg-white p-4 rounded-[32px] flex flex-col items-center justify-center shadow-lg border-2 border-slate-100">
             <QRCodeSVG value={currentUser.nif} size={100} fgColor="#0a2540" />
-            <p className="text-[9px] font-black text-[#0a2540] mt-2 uppercase tracking-widest">Meu QR Code</p>
+            <p className="text-[9px] font-black text-[#0a2540] mt-2 uppercase tracking-widest">Identificador</p>
           </div>
         </div>
       </header>
@@ -96,16 +102,21 @@ const UserDashboard: React.FC = () => {
               <div className="flex justify-between items-start mb-4">
                 <span className="text-2xl">🏪</span>
                 <div className="text-right">
-                  <p className="text-[10px] font-black text-slate-400 uppercase">Na Loja</p>
+                  <p className="text-[10px] font-black text-[#00d66f] uppercase">Disponível</p>
                   <p className="text-xl font-black text-[#0a2540]">{m.available.toFixed(2)}€</p>
                 </div>
               </div>
               <h5 className="font-bold text-[#0a2540] mb-1">{m.name}</h5>
-              {m.pending > 0 && (
-                <p className="text-[10px] font-bold text-orange-600 bg-orange-50 px-3 py-1.5 rounded-full inline-block border border-orange-100">
-                  ⌛ + {m.pending.toFixed(2)}€ pendentes
+              <div className="flex flex-col gap-2 mt-3">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">
+                  Cashback Total nesta loja: {m.total.toFixed(2)}€
                 </p>
-              )}
+                {m.pending > 0 && (
+                  <p className="text-[10px] font-bold text-orange-600 bg-orange-50 px-3 py-1.5 rounded-full inline-block border border-orange-100 w-fit">
+                    ⌛ {m.pending.toFixed(2)}€ a libertar (48h)
+                  </p>
+                )}
+              </div>
             </div>
           ))}
         </div>
