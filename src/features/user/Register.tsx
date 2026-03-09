@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore'; // Importações para verificação
+import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { auth, db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 
@@ -23,6 +23,11 @@ const Register: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  // FUNÇÃO PARA GERAR NÚMERO DE CLIENTE (10 DÍGITOS)
+  const generateCustomerNumber = () => {
+    return Math.floor(1000000000 + Math.random() * 9000000000).toString();
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -43,7 +48,7 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      // 2. Verificação de NIF duplicado (Segurança de Conta Única)
+      // 2. Verificação de NIF duplicado
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('nif', '==', formData.nif));
       const querySnapshot = await getDocs(q);
@@ -53,16 +58,20 @@ const Register: React.FC = () => {
         return setError('Este NIF já está associado a uma conta ativa.');
       }
 
-      // 3. Criar utilizador no Firebase Auth
+      // 3. Gerar o novo número de cliente de 10 dígitos
+      const customerNumber = generateCustomerNumber();
+
+      // 4. Criar utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
         formData.password
       );
 
-      // 4. Gravar perfil completo para os relatórios do Admin
+      // 5. Gravar perfil completo com o NOVO número gerado
       await registerClientProfile({
         uid: userCredential.user.uid,
+        customerNumber: customerNumber, // Campo novo para o cartão
         name: formData.name,
         nif: formData.nif,
         freguesia: formData.freguesia,
@@ -72,7 +81,7 @@ const Register: React.FC = () => {
         role: 'client'
       });
 
-      // 5. Sucesso! Redirecionar para o Dashboard
+      // 6. Sucesso!
       navigate('/client');
     } catch (err: any) {
       console.error(err);
@@ -156,8 +165,8 @@ const Register: React.FC = () => {
                 onChange={e => setFormData({...formData, freguesia: e.target.value})}
               >
                 <option value="">Selecionar...</option>
-                <option value="freguesia1">Freguesia A</option>
-                <option value="freguesia2">Freguesia B</option>
+                <option value="Freguesia A">Freguesia A</option>
+                <option value="Freguesia B">Freguesia B</option>
               </select>
             </div>
           </div>
@@ -205,7 +214,7 @@ const Register: React.FC = () => {
         </form>
 
         <p className="mt-6 text-center text-xs text-slate-400 font-bold">
-          Já tem conta? <button onClick={() => navigate('/client/login')} className="text-[#00d66f] uppercase tracking-widest ml-1">Fazer Login</button>
+          Já tem conta? <button onClick={() => navigate('/login')} className="text-[#00d66f] uppercase tracking-widest ml-1">Fazer Login</button>
         </p>
       </div>
     </div>

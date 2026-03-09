@@ -27,14 +27,15 @@ export interface Transaction {
   createdAt: any;
 }
 
-// Interface atualizada conforme a nova afinação
+// Interface atualizada com o Número de Cliente de 10 dígitos
 export interface UserProfile {
   uid: string;
+  customerNumber?: string; // NOVO: Campo para o número de 10 dígitos do cartão
   name: string;
   nif: string;
   freguesia: string;
-  postalCode: string; // Novo campo obrigatório
-  phone?: string;      // Novo campo facultativo
+  postalCode: string;
+  phone?: string;
   email: string;
   role: 'client' | 'merchant' | 'admin';
 }
