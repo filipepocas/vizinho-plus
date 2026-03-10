@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
 import { collection, query, where, getDocs } from 'firebase/firestore'; 
 import { auth, db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
@@ -22,7 +22,6 @@ const Register: React.FC = () => {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  // FUNÇÃO PARA GERAR NÚMERO DE CLIENTE (10 DÍGITOS)
   const generateCustomerNumber = () => {
     return Math.floor(1000000000 + Math.random() * 9000000000).toString();
   };
@@ -31,15 +30,13 @@ const Register: React.FC = () => {
     e.preventDefault();
     setError('');
 
-    // 1. Validações de Interface
+    // 1. Validações Locais
     if (formData.password !== formData.confirmPassword) {
       return setError('As passwords não coincidem.');
     }
-
     if (formData.nif.length !== 9) {
       return setError('O NIF deve ter 9 dígitos.');
     }
-
     if (formData.postalCode.length < 4) {
       return setError('Introduza um Código Postal válido.');
     }
@@ -47,29 +44,34 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      // 2. Verificação de NIF duplicado
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('nif', '==', formData.nif));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        setLoading(false);
-        return setError('Este NIF já está associado a uma conta ativa.');
-      }
-
-      // 3. Gerar o novo número de cliente de 10 dígitos
-      const customerNumber = generateCustomerNumber();
-
-      // 4. Criar utilizador no Firebase Auth
+      // 2. Criar utilizador no Firebase Auth PRIMEIRO
+      // Isto garante que temos um 'uid' para passar as regras de segurança do Firestore
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
         formData.password
       );
 
-      // 5. Gravar perfil completo (FREGUESIA REMOVIDA)
+      const newUser = userCredential.user;
+
+      // 3. Agora que estamos autenticados, verificamos o NIF
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, where('nif', '==', formData.nif));
+      const querySnapshot = await getDocs(q);
+
+      if (!querySnapshot.empty) {
+        // Se o NIF já existe, temos de apagar o user criado no Auth para permitir nova tentativa limpa
+        await deleteUser(newUser);
+        setLoading(false);
+        return setError('Este NIF já está associado a uma conta ativa.');
+      }
+
+      // 4. Gerar o novo número de cliente
+      const customerNumber = generateCustomerNumber();
+
+      // 5. Gravar perfil completo (Usando o UID do user autenticado)
       await registerClientProfile({
-        id: userCredential.user.uid,
+        id: newUser.uid,
         customerNumber: customerNumber,
         name: formData.name,
         nif: formData.nif,
@@ -84,11 +86,10 @@ const Register: React.FC = () => {
     } catch (err: any) {
       console.error("ERRO DETALHADO NO REGISTO:", err);
       
-      // Mapeamento de erros para serem claros no ecrã
       if (err.code === 'auth/email-already-in-use') {
         setError('Este email já está em uso.');
       } else if (err.code === 'permission-denied') {
-        setError('Erro de permissão no servidor. Contacte o administrador.');
+        setError('Erro de permissão: Verifique as regras do Firestore ou contacte o Filipe.');
       } else if (err.code === 'auth/weak-password') {
         setError('A password deve ter pelo menos 6 caracteres.');
       } else {
@@ -119,7 +120,8 @@ const Register: React.FC = () => {
             <input 
               type="text" 
               required
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+              placeholder="Ex: João Silva"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
             />
@@ -132,16 +134,18 @@ const Register: React.FC = () => {
                 type="text" 
                 required
                 maxLength={9}
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+                placeholder="9 dígitos"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.nif}
                 onChange={e => setFormData({...formData, nif: e.target.value})}
               />
             </div>
             <div>
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Telemóvel (Opcional)</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Telemóvel</label>
               <input 
                 type="tel" 
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+                placeholder="Opcional"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.phone}
                 onChange={e => setFormData({...formData, phone: e.target.value})}
               />
@@ -154,7 +158,7 @@ const Register: React.FC = () => {
               type="text" 
               required
               placeholder="0000-000"
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
               value={formData.postalCode}
               onChange={e => setFormData({...formData, postalCode: e.target.value})}
             />
@@ -165,7 +169,8 @@ const Register: React.FC = () => {
             <input 
               type="email" 
               required
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+              placeholder="seu@email.com"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
               value={formData.email}
               onChange={e => setFormData({...formData, email: e.target.value})}
             />
@@ -177,7 +182,7 @@ const Register: React.FC = () => {
               <input 
                 type="password" 
                 required
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.password}
                 onChange={e => setFormData({...formData, password: e.target.value})}
               />
@@ -187,7 +192,7 @@ const Register: React.FC = () => {
               <input 
                 type="password" 
                 required
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.confirmPassword}
                 onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
               />
@@ -196,9 +201,9 @@ const Register: React.FC = () => {
 
           <button 
             disabled={loading}
-            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black hover:bg-black transition-all shadow-lg pt-4 disabled:opacity-50"
+            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black hover:bg-black transition-all shadow-lg pt-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'A VERIFICAR...' : 'CRIAR MEU PERFIL ➔'}
+            {loading ? 'A PROCESSAR...' : 'CRIAR MEU PERFIL ➔'}
           </button>
         </form>
 
