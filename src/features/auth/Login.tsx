@@ -1,18 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useStore, UserProfile } from '../../store/useStore';
-import { collection, query, where, getDocs, doc, getDoc } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { db, auth } from '../../config/firebase';
 
 const Login: React.FC = () => {
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { setCurrentUser, currentUser } = useStore();
+  const { setCurrentUser, currentUser, setLoading } = useStore();
   const navigate = useNavigate();
 
-  // Redirecionamento automático se já estiver logado
   useEffect(() => {
     if (currentUser) {
       if (currentUser.role === 'admin') navigate('/admin');
@@ -24,102 +24,58 @@ const Login: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
+    setLoading(true);
     setError('');
     
-    const idnt = identifier.toLowerCase().trim();
+    const email = identifier.toLowerCase().trim();
 
     try {
-      // 1. VERIFICAÇÃO DE ADMIN (DINÂMICA + BACKUP)
-      const adminSettingsRef = doc(db, 'settings', 'admin_profile');
-      const adminSettingsSnap = await getDoc(adminSettingsRef);
-      
-      if (adminSettingsSnap.exists()) {
-        const adminData = adminSettingsSnap.data();
-        if (idnt === adminData.email && password === adminData.password) {
-          const adminProfile: UserProfile = { 
-            id: 'admin_filipe',
-            email: idnt, 
-            role: 'admin', 
-            name: 'Filipe (Admin)' 
+      // 1. TENTAR AUTENTICAÇÃO NO FIREBASE AUTH
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const uid = userCredential.user.uid;
+
+      // 2. BUSCAR PERFIL NA COLEÇÃO 'users'
+      const userDoc = await getDoc(doc(db, 'users', uid));
+
+      if (userDoc.exists()) {
+        const userData = userDoc.data();
+        const profile: UserProfile = {
+          id: uid,
+          ...userData
+        } as UserProfile;
+
+        setCurrentUser(profile);
+      } else {
+        // Caso especial: Se o user existe no Auth mas não no Firestore (ex: Admin de Backup)
+        if (email === 'rochap.filipe@gmail.com') {
+          const adminProfile: UserProfile = {
+            id: uid,
+            email: email,
+            role: 'admin',
+            name: 'Filipe (Admin)'
           };
           setCurrentUser(adminProfile);
-          return;
+        } else {
+          setError("Perfil não encontrado no sistema.");
+          await auth.signOut();
         }
       }
 
-      // Acesso de Backup
-      if (idnt === 'rochap.filipe@gmail.com' && password === 'admin123') {
-        const adminProfile: UserProfile = { 
-          id: 'admin_filipe',
-          email: idnt, 
-          role: 'admin', 
-          name: 'Filipe (Admin)' 
-        };
-        setCurrentUser(adminProfile);
-        return;
-      }
-
-      // 2. VERIFICAÇÃO DE LOJISTAS (Procura por Email ou NIF)
-      const mRef = collection(db, 'merchants');
-      const qM_Email = query(mRef, where('email', '==', idnt));
-      const qM_Nif = query(mRef, where('nif', '==', idnt));
-      
-      const [sM_E, sM_N] = await Promise.all([getDocs(qM_Email), getDocs(qM_Nif)]);
-      const targetM = !sM_E.empty ? sM_E : sM_N;
-
-      if (!targetM.empty) {
-        const d = targetM.docs[0].data();
-        const correctPassword = d.password === password || d.temporaryPassword === password;
-        if (correctPassword) {
-          const merchantProfile: UserProfile = { 
-            id: targetM.docs[0].id, 
-            ...d, 
-            role: 'merchant' 
-          } as UserProfile;
-          setCurrentUser(merchantProfile);
-          return;
-        }
-      }
-
-      // 3. VERIFICAÇÃO DE CLIENTES (Procura por Email, NIF ou Cartão)
-      const cRef = collection(db, 'clients');
-      const qC_Email = query(cRef, where('email', '==', idnt));
-      const qC_Nif = query(cRef, where('nif', '==', idnt));
-      const qC_Card = query(cRef, where('cardNumber', '==', idnt));
-      
-      const [sC_E, sC_N, sC_C] = await Promise.all([
-        getDocs(qC_Email), 
-        getDocs(qC_Nif), 
-        getDocs(qC_Card)
-      ]);
-      
-      const targetC = !sC_E.empty ? sC_E : (!sC_N.empty ? sC_N : sC_C);
-
-      if (!targetC.empty) {
-        const d = targetC.docs[0].data();
-        if (d.password === password) {
-          const clientProfile: UserProfile = { 
-            id: targetC.docs[0].id, 
-            ...d, 
-            role: 'client' 
-          } as UserProfile;
-          setCurrentUser(clientProfile);
-          return;
-        }
-      }
-
-      setError("Credenciais incorretas. Verifique o identificador e a password.");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Erro no Login:", err);
-      setError("Erro de ligação ao servidor. Tente novamente.");
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
+        setError("Credenciais incorretas.");
+      } else {
+        setError("Erro de ligação ou acesso negado.");
+      }
     } finally {
       setIsLoading(false);
+      setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 font-sans">
-      
       <div className="mb-8">
         <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center shadow-2xl shadow-blue-900/10 border-2 border-slate-50 p-4 transform hover:rotate-3 transition-transform">
           <img src="/logo-vizinho.png" alt="Vizinho+" className="w-full h-full object-contain" />
@@ -136,13 +92,13 @@ const Login: React.FC = () => {
         
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Identificador</label>
+            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Email</label>
             <input 
-              type="text" 
+              type="email" 
               value={identifier} 
               onChange={(e) => setIdentifier(e.target.value)}
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-black"
-              placeholder="Email, NIF ou Cartão"
+              placeholder="seu@email.com"
               required
             />
           </div>
@@ -150,7 +106,7 @@ const Login: React.FC = () => {
           <div className="space-y-2">
             <div className="flex justify-between items-center ml-1">
               <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Palavra-Passe</label>
-              <Link to="/forgot-password" title="Funcionalidade em breve" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">
+              <Link to="/forgot-password" title="Recuperar acesso" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">
                 Esqueci-me ➔
               </Link>
             </div>
@@ -165,7 +121,7 @@ const Login: React.FC = () => {
           </div>
 
           {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border-2 border-red-100 animate-shake">
+            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border-2 border-red-100">
               ⚠️ {error}
             </div>
           )}
@@ -189,17 +145,6 @@ const Login: React.FC = () => {
           </p>
         </div>
       </div>
-
-      <footer className="mt-12 text-slate-400 text-[10px] font-black uppercase tracking-[0.2em] flex flex-col items-center gap-4">
-        <div className="flex items-center gap-3 grayscale opacity-50">
-           <img src="/logo-vizinho.png" alt="" className="h-4 w-4" />
-           <span>Vizinho+ • 2026</span>
-        </div>
-        <div className="flex gap-6">
-          <Link to="/" className="hover:text-[#0a2540] transition-colors">Início</Link>
-          <Link to="/admin" className="hover:text-[#0a2540] transition-colors">Admin</Link>
-        </div>
-      </footer>
     </div>
   );
 };
