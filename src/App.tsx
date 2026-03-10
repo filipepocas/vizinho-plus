@@ -19,14 +19,16 @@ const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#f6f9fc]">
-        <div className="text-[#0a2540] font-black animate-pulse">AUTENTICANDO...</div>
+        <div className="text-[#0a2540] font-black animate-pulse uppercase tracking-widest">AUTENTICANDO...</div>
       </div>
     );
   }
 
   const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'rochap.filipe@gmail.com';
   
+  // Só redireciona se o loading terminou e realmente não há user
   if (!currentUser) return <Navigate to="/login" replace />;
+  
   return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
 };
 

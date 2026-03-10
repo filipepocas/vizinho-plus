@@ -1,4 +1,3 @@
-// src/components/LoginSelector.tsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 
@@ -11,7 +10,7 @@ const LoginSelector: React.FC = () => {
         
         {/* Lado do Cliente (VIZINHO) */}
         <button 
-          onClick={() => navigate('/client')}
+          onClick={() => navigate('/login')} // Alterado: Passa pelo Login para autenticar
           className="group bg-white p-10 rounded-[40px] shadow-sm hover:shadow-xl transition-all border-2 border-transparent hover:border-[#00d66f] flex flex-col items-center text-center space-y-6"
         >
           <div className="w-20 h-20 bg-[#00d66f]/10 rounded-3xl flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
@@ -30,7 +29,7 @@ const LoginSelector: React.FC = () => {
 
         {/* Lado do Comerciante (LOJISTA) */}
         <button 
-          onClick={() => navigate('/merchant')} // AJUSTE: Vai direto para o terminal de vendas
+          onClick={() => navigate('/login')} // Alterado: Força o Login para identificar qual é a loja
           className="group bg-[#0a2540] p-10 rounded-[40px] shadow-2xl hover:bg-[#0f2d4a] transition-all flex flex-col items-center text-center space-y-6 border-b-8 border-black"
         >
           <div className="w-20 h-20 bg-white/10 rounded-3xl flex items-center justify-center text-4xl group-hover:scale-110 transition-transform">
@@ -50,7 +49,7 @@ const LoginSelector: React.FC = () => {
         {/* Link Discreto para Admin (Filipe) */}
         <div className="md:col-span-2 text-center pt-8">
           <button 
-            onClick={() => navigate('/admin')}
+            onClick={() => navigate('/login')} // Força login também para o Admin
             className="text-slate-300 hover:text-[#0a2540] text-[9px] font-black uppercase tracking-[0.3em] transition-colors p-2"
           >
             — SISTEMA DE GESTÃO CENTRAL (ADMIN) —
