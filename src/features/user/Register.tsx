@@ -12,7 +12,6 @@ const Register: React.FC = () => {
   const [formData, setFormData] = useState({
     name: '',
     nif: '',
-    freguesia: '',
     postalCode: '',
     phone: '',
     email: '',
@@ -68,14 +67,12 @@ const Register: React.FC = () => {
         formData.password
       );
 
-      // 5. Gravar perfil completo com o NOVO número gerado
-      // Corrigido: Passamos 'id' em vez de 'uid' para alinhar com UserProfile
+      // 5. Gravar perfil completo (FREGUESIA REMOVIDA)
       await registerClientProfile({
         id: userCredential.user.uid,
         customerNumber: customerNumber,
         name: formData.name,
         nif: formData.nif,
-        freguesia: formData.freguesia,
         postalCode: formData.postalCode,
         phone: formData.phone || undefined,
         email: formData.email,
@@ -85,11 +82,17 @@ const Register: React.FC = () => {
       // 6. Sucesso!
       navigate('/client');
     } catch (err: any) {
-      console.error(err);
+      console.error("ERRO DETALHADO NO REGISTO:", err);
+      
+      // Mapeamento de erros para serem claros no ecrã
       if (err.code === 'auth/email-already-in-use') {
         setError('Este email já está em uso.');
+      } else if (err.code === 'permission-denied') {
+        setError('Erro de permissão no servidor. Contacte o administrador.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('A password deve ter pelo menos 6 caracteres.');
       } else {
-        setError('Erro ao criar conta. Tente novamente.');
+        setError(`Erro: ${err.message || 'Falha ao criar conta. Tente novamente.'}`);
       }
     } finally {
       setLoading(false);
@@ -145,31 +148,16 @@ const Register: React.FC = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Código Postal</label>
-              <input 
-                type="text" 
-                required
-                placeholder="0000-000"
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
-                value={formData.postalCode}
-                onChange={e => setFormData({...formData, postalCode: e.target.value})}
-              />
-            </div>
-            <div>
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Freguesia</label>
-              <select 
-                required
-                className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] appearance-none"
-                value={formData.freguesia}
-                onChange={e => setFormData({...formData, freguesia: e.target.value})}
-              >
-                <option value="">Selecionar...</option>
-                <option value="Freguesia A">Freguesia A</option>
-                <option value="Freguesia B">Freguesia B</option>
-              </select>
-            </div>
+          <div>
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Código Postal</label>
+            <input 
+              type="text" 
+              required
+              placeholder="0000-000"
+              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f]"
+              value={formData.postalCode}
+              onChange={e => setFormData({...formData, postalCode: e.target.value})}
+            />
           </div>
 
           <div>
