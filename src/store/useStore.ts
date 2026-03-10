@@ -10,7 +10,7 @@ import {
   setDoc,
   doc 
 } from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
+import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 
 export interface Transaction {
@@ -27,17 +27,14 @@ export interface Transaction {
   createdAt: any;
 }
 
-// Interface unificada para Clientes, Lojistas e Admins
-// Alterada para tornar campos de perfil opcionais (?) e evitar erros no Login
 export interface UserProfile {
-  id: string; // ID do documento no Firestore
-  uid?: string; // UID do Firebase Auth (para clientes)
+  id: string; 
+  uid?: string; 
   customerNumber?: string; 
-  name?: string;     // Tornado opcional para aceitar logins parciais
-  nif?: string;      // Tornado opcional
-  email?: string;    // Tornado opcional
+  name?: string;     
+  nif?: string;      
+  email?: string;    
   role: 'client' | 'merchant' | 'admin';
-  // Campos específicos de Lojista
   cashbackPercent?: number;
   phone?: string;
   freguesia?: string;
@@ -51,7 +48,9 @@ export interface UserProfile {
 interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
+  isLoading: boolean; // Adicionado para resolver o erro no App.tsx
   setCurrentUser: (user: UserProfile | null) => void;
+  setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
@@ -61,13 +60,16 @@ interface StoreState {
 export const useStore = create<StoreState>((set) => ({
   transactions: [],
   currentUser: null,
+  isLoading: true, // Começa em true para aguardar a verificação inicial
 
-  setCurrentUser: (user) => set({ currentUser: user }),
+  setCurrentUser: (user) => set({ currentUser: user, isLoading: false }),
+  
+  setLoading: (loading) => set({ isLoading: loading }),
 
   logout: async () => {
     try {
       await signOut(auth);
-      set({ currentUser: null, transactions: [] });
+      set({ currentUser: null, transactions: [], isLoading: false });
     } catch (error) {
       console.error("Erro ao sair:", error);
     }
@@ -75,7 +77,6 @@ export const useStore = create<StoreState>((set) => ({
 
   registerClientProfile: async (profile) => {
     try {
-      // Usamos o uid se existir (clientes auth), caso contrário o id (lojistas manuais)
       const docId = profile.uid || profile.id;
       await setDoc(doc(db, 'users', docId), {
         ...profile,
@@ -103,13 +104,11 @@ export const useStore = create<StoreState>((set) => ({
     const transRef = collection(db, 'transactions');
     let q = query(transRef, orderBy('createdAt', 'desc'));
 
-    // Filtros por Role para garantir que ninguém vê o que não deve
     if (role === 'merchant' && identifier) {
       q = query(transRef, where('merchantId', '==', identifier), orderBy('createdAt', 'desc'));
     } else if (role === 'client' && identifier) {
       q = query(transRef, where('clientId', '==', identifier), orderBy('createdAt', 'desc'));
     } else if (role === 'admin') {
-      // Admin vê tudo por padrão
       q = query(transRef, orderBy('createdAt', 'desc'));
     }
 
@@ -124,3 +123,11 @@ export const useStore = create<StoreState>((set) => ({
     });
   },
 }));
+
+// Listener global para sincronizar o estado do Auth com o Store
+onAuthStateChanged(auth, (user) => {
+  if (!user) {
+    useStore.getState().setCurrentUser(null);
+  }
+  // Nota: O preenchimento do perfil completo (role, etc) continuará a ser feito no seu componente de Login
+});

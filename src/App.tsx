@@ -4,7 +4,7 @@ import { useStore } from './store/useStore';
 
 // 1. IMPORTAÇÕES DE COMPONENTES
 import Login from './features/auth/Login';
-import ForgotPassword from './features/auth/ForgotPassword'; // Novo: Recuperação autónoma
+import ForgotPassword from './features/auth/ForgotPassword';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
@@ -13,7 +13,17 @@ import LoginSelector from './components/LoginSelector';
 
 // 2. HELPER DE PROTEÇÃO DE ROTA ADMIN (PARA O FILIPE)
 const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const { currentUser } = useStore();
+  const { currentUser, isLoading } = useStore();
+  
+  // Se ainda estiver a carregar os dados do Firebase, mostramos um aviso visual simples
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#f6f9fc]">
+        <div className="text-[#0a2540] font-black animate-pulse">AUTENTICANDO...</div>
+      </div>
+    );
+  }
+
   const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'rochap.filipe@gmail.com';
   
   if (!currentUser) return <Navigate to="/login" replace />;
