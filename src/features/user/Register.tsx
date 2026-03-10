@@ -20,6 +20,7 @@ const Register: React.FC = () => {
 
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
 
   const generateCustomerNumber = () => {
     return Math.floor(1000000000 + Math.random() * 9000000000).toString();
@@ -43,7 +44,7 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      // 2. Criar utilizador no Firebase Auth PRIMEIRO
+      // 2. Criar utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
@@ -66,13 +67,19 @@ const Register: React.FC = () => {
           name: formData.name,
           nif: formData.nif,
           postalCode: formData.postalCode,
-          phone: formData.phone.trim() || undefined, // Ajuste: Se estiver vazio, envia undefined
+          phone: formData.phone.trim() || '', // Correção Passo 1: Envia string vazia em vez de undefined
           email: formData.email,
           role: 'client'
         });
         
-        // 5. Sucesso!
-        navigate('/client');
+        // 5. Sucesso! (Passo 2)
+        setIsSuccess(true);
+        
+        // Aguarda 2 segundos para o utilizador ver a mensagem antes de entrar
+        setTimeout(() => {
+          navigate('/client');
+        }, 2000);
+
       } catch (profileErr: any) {
         await deleteUser(newUser);
         throw profileErr;
@@ -91,7 +98,7 @@ const Register: React.FC = () => {
         setError(`Erro: ${err.message || 'Falha ao criar conta. Tente novamente.'}`);
       }
     } finally {
-      setLoading(false);
+      if (!isSuccess) setLoading(false);
     }
   };
 
@@ -109,6 +116,12 @@ const Register: React.FC = () => {
           </div>
         )}
 
+        {isSuccess && (
+          <div className="bg-[#00d66f]/10 text-[#00d66f] p-4 rounded-2xl text-xs font-bold mb-6 border border-[#00d66f]/20 text-center animate-bounce">
+            ✅ PERFIL CRIADO COM SUCESSO! A ENTRAR...
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Nome Completo</label>
@@ -119,6 +132,7 @@ const Register: React.FC = () => {
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
               value={formData.name}
               onChange={e => setFormData({...formData, name: e.target.value})}
+              disabled={isSuccess}
             />
           </div>
 
@@ -133,6 +147,7 @@ const Register: React.FC = () => {
                 className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.nif}
                 onChange={e => setFormData({...formData, nif: e.target.value})}
+                disabled={isSuccess}
               />
             </div>
             <div>
@@ -143,6 +158,7 @@ const Register: React.FC = () => {
                 className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.phone}
                 onChange={e => setFormData({...formData, phone: e.target.value})}
+                disabled={isSuccess}
               />
             </div>
           </div>
@@ -156,6 +172,7 @@ const Register: React.FC = () => {
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
               value={formData.postalCode}
               onChange={e => setFormData({...formData, postalCode: e.target.value})}
+              disabled={isSuccess}
             />
           </div>
 
@@ -168,6 +185,7 @@ const Register: React.FC = () => {
               className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
               value={formData.email}
               onChange={e => setFormData({...formData, email: e.target.value})}
+              disabled={isSuccess}
             />
           </div>
 
@@ -180,6 +198,7 @@ const Register: React.FC = () => {
                 className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.password}
                 onChange={e => setFormData({...formData, password: e.target.value})}
+                disabled={isSuccess}
               />
             </div>
             <div>
@@ -190,15 +209,16 @@ const Register: React.FC = () => {
                 className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.confirmPassword}
                 onChange={e => setFormData({...formData, confirmPassword: e.target.value})}
+                disabled={isSuccess}
               />
             </div>
           </div>
 
           <button 
-            disabled={loading}
+            disabled={loading || isSuccess}
             className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black hover:bg-black transition-all shadow-lg pt-4 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? 'A PROCESSAR...' : 'CRIAR MEU PERFIL ➔'}
+            {loading ? (isSuccess ? 'SUCESSO!' : 'A PROCESSAR...') : 'CRIAR MEU PERFIL ➔'}
           </button>
         </form>
 
