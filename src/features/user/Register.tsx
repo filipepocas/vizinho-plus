@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
-import { collection, query, where, getDocs } from 'firebase/firestore'; 
-import { auth, db } from '../../config/firebase';
+import { auth } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 
 const Register: React.FC = () => {
@@ -53,46 +52,41 @@ const Register: React.FC = () => {
 
       const newUser = userCredential.user;
 
-      // NOVO: Pequena pausa de segurança (500ms) para o Firebase propagar a sessão
-      // Isto evita o erro de permissão na consulta imediata do Firestore
+      // Pausa de segurança para propagação da sessão
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. Agora que estamos autenticados, verificamos o NIF
-      const usersRef = collection(db, 'users');
-      const q = query(usersRef, where('nif', '==', formData.nif));
-      const querySnapshot = await getDocs(q);
-
-      if (!querySnapshot.empty) {
-        // Se o NIF já existe, limpamos o Auth e avisamos o utilizador
-        await deleteUser(newUser);
-        setLoading(false);
-        return setError('Este NIF já está associado a uma conta ativa.');
-      }
-
-      // 4. Gerar o novo número de cliente
+      // 3. Gerar o novo número de cliente
       const customerNumber = generateCustomerNumber();
 
-      // 5. Gravar perfil completo (Usando o UID do user autenticado)
-      await registerClientProfile({
-        id: newUser.uid,
-        customerNumber: customerNumber,
-        name: formData.name,
-        nif: formData.nif,
-        postalCode: formData.postalCode,
-        phone: formData.phone || undefined,
-        email: formData.email,
-        role: 'client'
-      });
+      // 4. Gravar perfil completo
+      // REMOVIDA a consulta getDocs(q) que causava erro de permissão.
+      // O Firestore validará a escrita diretamente no documento do próprio utilizador.
+      try {
+        await registerClientProfile({
+          id: newUser.uid,
+          customerNumber: customerNumber,
+          name: formData.name,
+          nif: formData.nif,
+          postalCode: formData.postalCode,
+          phone: formData.phone || undefined,
+          email: formData.email,
+          role: 'client'
+        });
+        
+        // 5. Sucesso!
+        navigate('/client');
+      } catch (profileErr: any) {
+        // Se a gravação do perfil falhar, limpamos a conta Auth para não criar lixo
+        await deleteUser(newUser);
+        throw profileErr;
+      }
 
-      // 6. Sucesso!
-      navigate('/client');
     } catch (err: any) {
       console.error("ERRO DETALHADO NO REGISTO:", err);
       
       if (err.code === 'auth/email-already-in-use') {
         setError('Este email já está em uso.');
-      } else if (err.code === 'permission-denied') {
-        // AJUSTE: Texto alterado para "Administrador" como solicitado
+      } else if (err.code === 'permission-denied' || err.message?.includes('permission')) {
         setError('Erro de permissão no servidor. Por favor, tente novamente ou contacte o Administrador.');
       } else if (err.code === 'auth/weak-password') {
         setError('A password deve ter pelo menos 6 caracteres.');
