@@ -1,11 +1,5 @@
-// src/config/firebase.ts
 import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, 
-  initializeFirestore, 
-  persistentLocalCache, 
-  persistentMultipleTabManager 
-} from 'firebase/firestore';
+import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 
 const firebaseConfig = {
@@ -19,11 +13,6 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 
-// CONFIGURAÇÃO DE CACHE PERSISTENTE (OFFLINE-FIRST)
-export const db = initializeFirestore(app, {
-  localCache: persistentLocalCache({
-    tabManager: persistentMultipleTabManager()
-  })
-});
-
+// Usamos o getFirestore padrão primeiro para validar a conexão
+export const db = getFirestore(app);
 export const auth = getAuth(app);
