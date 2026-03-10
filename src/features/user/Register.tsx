@@ -69,9 +69,10 @@ const Register: React.FC = () => {
       );
 
       // 5. Gravar perfil completo com o NOVO número gerado
+      // Corrigido: Passamos 'id' em vez de 'uid' para alinhar com UserProfile
       await registerClientProfile({
-        uid: userCredential.user.uid,
-        customerNumber: customerNumber, // Campo novo para o cartão
+        id: userCredential.user.uid,
+        customerNumber: customerNumber,
         name: formData.name,
         nif: formData.nif,
         freguesia: formData.freguesia,
