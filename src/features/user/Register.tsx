@@ -45,7 +45,6 @@ const Register: React.FC = () => {
 
     try {
       // 2. Criar utilizador no Firebase Auth PRIMEIRO
-      // Isto garante que temos um 'uid' para passar as regras de segurança do Firestore
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
@@ -54,13 +53,17 @@ const Register: React.FC = () => {
 
       const newUser = userCredential.user;
 
+      // NOVO: Pequena pausa de segurança (500ms) para o Firebase propagar a sessão
+      // Isto evita o erro de permissão na consulta imediata do Firestore
+      await new Promise(resolve => setTimeout(resolve, 500));
+
       // 3. Agora que estamos autenticados, verificamos o NIF
       const usersRef = collection(db, 'users');
       const q = query(usersRef, where('nif', '==', formData.nif));
       const querySnapshot = await getDocs(q);
 
       if (!querySnapshot.empty) {
-        // Se o NIF já existe, temos de apagar o user criado no Auth para permitir nova tentativa limpa
+        // Se o NIF já existe, limpamos o Auth e avisamos o utilizador
         await deleteUser(newUser);
         setLoading(false);
         return setError('Este NIF já está associado a uma conta ativa.');
@@ -89,7 +92,8 @@ const Register: React.FC = () => {
       if (err.code === 'auth/email-already-in-use') {
         setError('Este email já está em uso.');
       } else if (err.code === 'permission-denied') {
-        setError('Erro de permissão: Verifique as regras do Firestore ou contacte o Filipe.');
+        // AJUSTE: Texto alterado para "Administrador" como solicitado
+        setError('Erro de permissão no servidor. Por favor, tente novamente ou contacte o Administrador.');
       } else if (err.code === 'auth/weak-password') {
         setError('A password deve ter pelo menos 6 caracteres.');
       } else {
