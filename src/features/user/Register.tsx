@@ -59,8 +59,6 @@ const Register: React.FC = () => {
       const customerNumber = generateCustomerNumber();
 
       // 4. Gravar perfil completo
-      // REMOVIDA a consulta getDocs(q) que causava erro de permissão.
-      // O Firestore validará a escrita diretamente no documento do próprio utilizador.
       try {
         await registerClientProfile({
           id: newUser.uid,
@@ -68,7 +66,7 @@ const Register: React.FC = () => {
           name: formData.name,
           nif: formData.nif,
           postalCode: formData.postalCode,
-          phone: formData.phone || undefined,
+          phone: formData.phone.trim() || undefined, // Ajuste: Se estiver vazio, envia undefined
           email: formData.email,
           role: 'client'
         });
@@ -76,7 +74,6 @@ const Register: React.FC = () => {
         // 5. Sucesso!
         navigate('/client');
       } catch (profileErr: any) {
-        // Se a gravação do perfil falhar, limpamos a conta Auth para não criar lixo
         await deleteUser(newUser);
         throw profileErr;
       }
@@ -139,10 +136,10 @@ const Register: React.FC = () => {
               />
             </div>
             <div>
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Telemóvel</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Telemóvel (Opcional)</label>
               <input 
                 type="tel" 
-                placeholder="Opcional"
+                placeholder="Ex: 912345678"
                 className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] transition-all"
                 value={formData.phone}
                 onChange={e => setFormData({...formData, phone: e.target.value})}
