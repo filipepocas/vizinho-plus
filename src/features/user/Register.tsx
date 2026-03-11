@@ -53,10 +53,9 @@ const Register: React.FC = () => {
 
       const newUser = userCredential.user;
 
-      // Pausa de segurança para propagação da sessão
+      // Pausa de segurança
       await new Promise(resolve => setTimeout(resolve, 500));
 
-      // 3. Gerar o novo número de cliente
       const customerNumber = generateCustomerNumber();
 
       // 4. Gravar perfil completo
@@ -67,20 +66,19 @@ const Register: React.FC = () => {
           name: formData.name,
           nif: formData.nif,
           postalCode: formData.postalCode,
-          phone: formData.phone.trim() || '', // Correção Passo 1: Envia string vazia em vez de undefined
+          phone: formData.phone.trim() || '', 
           email: formData.email,
           role: 'client'
         });
         
-        // 5. Sucesso! (Passo 2)
         setIsSuccess(true);
         
-        // Aguarda 2 segundos para o utilizador ver a mensagem antes de entrar
         setTimeout(() => {
           navigate('/client');
         }, 2000);
 
       } catch (profileErr: any) {
+        // Se falhar aqui, quase sempre será por NIF duplicado (bloqueio das Rules)
         await deleteUser(newUser);
         throw profileErr;
       }
@@ -91,7 +89,8 @@ const Register: React.FC = () => {
       if (err.code === 'auth/email-already-in-use') {
         setError('Este email já está em uso.');
       } else if (err.code === 'permission-denied' || err.message?.includes('permission')) {
-        setError('Erro de permissão no servidor. Por favor, tente novamente ou contacte o Administrador.');
+        // AJUSTE PASSO 3: Mensagem mais clara para NIF duplicado ou erro de regra
+        setError('Este NIF já está registado ou ocorreu um erro de permissão. Verifique os dados ou contacte o Administrador.');
       } else if (err.code === 'auth/weak-password') {
         setError('A password deve ter pelo menos 6 caracteres.');
       } else {
