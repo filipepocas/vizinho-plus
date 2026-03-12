@@ -1,3 +1,4 @@
+// src/store/useStore.ts
 import { create } from 'zustand';
 import { 
   collection, 
@@ -14,45 +15,7 @@ import {
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-
-export interface Transaction {
-  id: string;
-  clientId: string;
-  merchantId: string;
-  merchantName: string;
-  amount: number;
-  cashbackAmount: number;
-  type: 'earn' | 'redeem' | 'subtract';
-  documentNumber?: string;
-  operatorCode?: string;
-  status: 'pending' | 'available';
-  createdAt: any;
-  maturedAt?: any;
-}
-
-export interface UserProfile {
-  id: string; 
-  uid?: string; 
-  customerNumber?: string; 
-  name?: string;     
-  nif?: string;      
-  email?: string;    
-  role: 'client' | 'merchant' | 'admin' | 'user';
-  status?: 'active' | 'disabled' | 'pending';
-  cashbackPercent?: number;
-  phone?: string;
-  address?: string;    
-  city?: string;       
-  category?: string;   
-  zipCode?: string;
-  operators?: any[];
-  firstAccess?: boolean;
-  wallet?: {
-    available: number;
-    pending: number;
-  };
-  createdAt?: any;
-}
+import { Transaction, User as UserProfile } from '../types'; // Importando do ficheiro central
 
 interface StoreState {
   transactions: Transaction[];
@@ -97,7 +60,7 @@ export const useStore = create<StoreState>((set) => ({
 
   registerClientProfile: async (profile) => {
     try {
-      const docId = profile.uid || profile.id;
+      const docId = profile.id;
       const { id, ...dataToSave } = profile;
       await setDoc(doc(db, 'users', docId), {
         ...dataToSave,
@@ -145,10 +108,9 @@ export const useStore = create<StoreState>((set) => ({
   },
 }));
 
-// LISTENER DE SESSÃO MELHORADO
+// LISTENER DE SESSÃO
 onAuthStateChanged(auth, async (user) => {
   if (user) {
-    // Se o user entrar, vamos buscar os detalhes (role, etc) ao Firestore
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     if (userDoc.exists()) {
       useStore.getState().setCurrentUser({
@@ -156,13 +118,11 @@ onAuthStateChanged(auth, async (user) => {
         ...userDoc.data()
       } as UserProfile);
     } else {
-      // Caso especial para o teu email de admin se o doc ainda não existir
       if (user.email === 'rochap.filipe@gmail.com') {
         useStore.getState().setCurrentUser({
           id: user.uid,
-          email: user.email,
-          role: 'admin',
-          name: 'Filipe (Admin)'
+          email: user.email!,
+          role: 'admin'
         } as UserProfile);
       }
     }

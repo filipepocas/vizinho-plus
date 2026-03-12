@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom'; // Adicionado para navegação
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { 
   collection, 
@@ -40,17 +40,18 @@ import {
   Hash
 } from 'lucide-react';
 import AdminSettings from './AdminSettings';
+import { User as UserProfile, Transaction } from '../../types';
 
 const AdminDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout } = useStore();
-  const navigate = useNavigate(); // Hook para redirecionar
+  const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
   const [isProcessing, setIsProcessing] = useState(false);
   
-  const [merchants, setMerchants] = useState<any[]>([]);
-  const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
+  const [merchants, setMerchants] = useState<UserProfile[]>([]);
+  const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [newMerchant, setNewMerchant] = useState({
@@ -65,14 +66,12 @@ const AdminDashboard: React.FC = () => {
     cashbackPercent: 10 
   });
 
-  // Função de Logout melhorada
   const handleLogout = async () => {
     try {
       await logout();
       navigate('/login');
     } catch (error) {
       console.error("Erro ao sair:", error);
-      // Força o redirecionamento mesmo que haja erro no Firebase
       navigate('/login');
     }
   };
@@ -139,9 +138,9 @@ const AdminDashboard: React.FC = () => {
         setLoading(true);
         try {
           const usersSnap = await getDocs(collection(db, 'users'));
-          const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-          setMerchants(allData.filter((u: any) => u.role === 'merchant'));
-          setRegisteredUsers(allData.filter((u: any) => u.role === 'user' || u.role === 'client'));
+          const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
+          setMerchants(allData.filter(u => u.role === 'merchant'));
+          setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
         } catch (e) {
           console.error("Erro ao carregar dados:", e);
         } finally {
@@ -179,14 +178,20 @@ const AdminDashboard: React.FC = () => {
       const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, tempPassword);
       const authUser = userCredential.user;
 
-      await setDoc(doc(db, 'users', authUser.uid), {
-        ...newMerchant,
+      const merchantData: UserProfile = {
+        id: authUser.uid,
         email: cleanEmail,
-        status: 'active',
+        name: newMerchant.name,
+        nif: newMerchant.nif,
+        phone: newMerchant.phone,
+        cashbackPercent: newMerchant.cashbackPercent,
         role: 'merchant',
+        status: 'active',
         createdAt: serverTimestamp(),
         wallet: { available: 0, pending: 0 }
-      });
+      };
+
+      await setDoc(doc(db, 'users', authUser.uid), merchantData);
 
       try {
         await sendPasswordResetEmail(auth, cleanEmail);
@@ -221,7 +226,7 @@ const AdminDashboard: React.FC = () => {
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
       await updateDoc(doc(db, 'users', id), { status: newStatus });
-      setMerchants(prev => prev.map(m => m.id === id ? { ...m, status: newStatus } : m));
+      setMerchants(prev => prev.map(m => m.id === id ? { ...m, status: newStatus as any } : m));
     } catch (e) {
       alert("Erro ao atualizar status.");
     }
@@ -231,7 +236,7 @@ const AdminDashboard: React.FC = () => {
     const data = transactions.map(t => ({
       'Data': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString() : '---',
       'Loja': t.merchantName || '---',
-      'Vizinho (ID)': t.clientId || '---',
+      'Vizinho (NIF)': t.clientNif || '---',
       'Volume': (t.amount || 0).toFixed(2) + '€',
       'Cashback': (t.cashbackAmount || 0).toFixed(2) + '€',
       'Status': t.status || 'pending'
@@ -244,9 +249,12 @@ const AdminDashboard: React.FC = () => {
 
   const filteredTransactions = transactions.filter(t => {
     const q = searchQuery.toLowerCase();
-    return (t.clientId?.toLowerCase().includes(q) || 
-            t.merchantName?.toLowerCase().includes(q) || 
-            t.documentNumber?.toLowerCase().includes(q));
+    return (
+      t.clientId?.toLowerCase().includes(q) || 
+      t.clientNif?.toLowerCase().includes(q) ||
+      t.merchantName?.toLowerCase().includes(q) || 
+      t.documentNumber?.toLowerCase().includes(q)
+    );
   });
 
   if (currentView === 'settings') return <AdminSettings onBack={() => setCurrentView('overview')} />;
@@ -327,7 +335,7 @@ const AdminDashboard: React.FC = () => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f]" size={20} />
                 <input 
                   type="text" 
-                  placeholder="PROCURAR POR ID CLIENTE, LOJA OU DOCUMENTO..." 
+                  placeholder="PROCURAR POR NIF VIZINHO, LOJA OU DOCUMENTO..." 
                   className="w-full p-6 pl-12 rounded-3xl border-2 border-slate-100 outline-none focus:border-[#00d66f] font-black text-xs uppercase"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -348,7 +356,7 @@ const AdminDashboard: React.FC = () => {
                     <tr className="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-50">
                       <th className="p-8">Data</th>
                       <th className="p-8">Loja</th>
-                      <th className="p-8">ID Vizinho</th>
+                      <th className="p-8">NIF Vizinho</th>
                       <th className="p-8 text-right">Volume</th>
                       <th className="p-8 text-right">Status</th>
                       <th className="p-8 text-right">Cashback</th>
@@ -361,7 +369,7 @@ const AdminDashboard: React.FC = () => {
                           {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}
                         </td>
                         <td className="p-8 font-black uppercase text-sm tracking-tighter">{t.merchantName}</td>
-                        <td className="p-8 font-mono text-slate-400 font-bold text-[10px]">{t.clientId}</td>
+                        <td className="p-8 font-mono text-slate-400 font-bold text-[10px]">{t.clientNif || t.clientId}</td>
                         <td className="p-8 text-right font-black text-slate-400">{(t.amount || 0).toFixed(2)}€</td>
                         <td className="p-8 text-right uppercase text-[9px] font-black tracking-widest">
                           <span className={t.status === 'available' ? 'text-[#00d66f]' : 'text-amber-500'}>
@@ -391,7 +399,10 @@ const AdminDashboard: React.FC = () => {
                   <Plus size={18} strokeWidth={3} /> Registar Novo Parceiro
                 </button>
              </div>
-             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+             {loading ? (
+                <div className="flex justify-center p-20"><RefreshCw className="animate-spin text-[#00d66f]" size={40} /></div>
+             ) : (
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 {merchants.map(m => (
                   <div key={m.id} className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
                     <div className="flex justify-between items-start mb-6">
@@ -402,9 +413,6 @@ const AdminDashboard: React.FC = () => {
                     </div>
                     <h3 className="text-xl font-black uppercase italic tracking-tighter mb-1">{m.name}</h3>
                     <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">NIF: {m.nif}</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
-                      <Tag size={10} /> {m.category || 'Atividade não definida'}
-                    </p>
                     <p className="text-[9px] font-bold text-[#00d66f] uppercase mb-6 flex items-center gap-1">
                       <Percent size={10} /> {m.cashbackPercent}% Cashback
                     </p>
@@ -418,7 +426,8 @@ const AdminDashboard: React.FC = () => {
                     </div>
                   </div>
                 ))}
-             </div>
+               </div>
+             )}
           </div>
         )}
 
@@ -427,17 +436,22 @@ const AdminDashboard: React.FC = () => {
              <h3 className="text-3xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-10 flex items-center gap-4">
                 <Users size={32} className="text-[#00d66f]" /> Vizinhos na Plataforma
              </h3>
-             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+             {loading ? (
+                <div className="flex justify-center p-20"><RefreshCw className="animate-spin text-[#00d66f]" size={40} /></div>
+             ) : (
+               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 {registeredUsers.map(u => (
                   <div key={u.id} className="p-6 bg-slate-50 border-2 border-slate-100 rounded-[32px] group hover:border-[#0a2540] transition-all">
                     <p className="font-black text-[#0a2540] text-sm uppercase tracking-tighter">{u.name || 'Sem Nome'}</p>
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">{u.nif || 'NIF Pendente'}</p>
                     <div className="flex items-center gap-2 text-[8px] font-black uppercase text-[#00d66f]">
-                        <div className="w-1.5 h-1.5 rounded-full bg-[#00d66f]"></div> Conta Ativa
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#00d66f]"></div> 
+                        {u.status === 'active' ? 'Conta Ativa' : 'Pendente/Desativada'}
                     </div>
                   </div>
                 ))}
-             </div>
+               </div>
+             )}
           </div>
         )}
 
@@ -473,22 +487,6 @@ const AdminDashboard: React.FC = () => {
 
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
-                    <Tag size={12}/> Categoria
-                  </label>
-                  <select required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.category} onChange={e => setNewMerchant({...newMerchant, category: e.target.value})}>
-                    <option value="">Selecionar Categoria</option>
-                    <option value="Restauração">Restauração</option>
-                    <option value="Serviços">Serviços</option>
-                    <option value="Moda">Moda</option>
-                    <option value="Tecnologia">Tecnologia</option>
-                    <option value="Saúde">Saúde</option>
-                    <option value="Alimentação">Alimentação</option>
-                    <option value="Outros">Outros</option>
-                  </select>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
                     <Mail size={12}/> Email de Login
                   </label>
                   <input type="email" required placeholder="EMAIL@EXEMPLO.PT" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
@@ -499,23 +497,6 @@ const AdminDashboard: React.FC = () => {
                     <Phone size={12}/> Telemóvel
                   </label>
                   <input type="tel" required placeholder="912 345 678" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.phone} onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})} />
-                </div>
-
-                <div className="md:col-span-2 space-y-2 border-t-2 border-slate-50 pt-4">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
-                    <MapPin size={12}/> Morada Completa
-                  </label>
-                  <input type="text" required placeholder="RUA, NÚMERO, ANDAR..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.address} onChange={e => setNewMerchant({...newMerchant, address: e.target.value})} />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Código Postal</label>
-                  <input type="text" required placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.zipCode} onChange={e => setNewMerchant({...newMerchant, zipCode: e.target.value})} />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Cidade</label>
-                  <input type="text" required placeholder="EX: PORTO" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.city} onChange={e => setNewMerchant({...newMerchant, city: e.target.value})} />
                 </div>
 
                 <div className="md:col-span-2 bg-[#00d66f]/5 p-6 rounded-[32px] border-2 border-[#00d66f]/20">

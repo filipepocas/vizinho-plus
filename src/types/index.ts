@@ -1,27 +1,45 @@
 // src/types/index.ts
 
 export interface User {
-  id: string;
+  id: string; // Usamos id como base
+  uid?: string; // Adicionado para compatibilidade com Firebase Auth se necessário
   email: string;
-  role: 'admin' | 'merchant' | 'client';
+  role: 'admin' | 'merchant' | 'client' | 'user';
+  name?: string;
+  nif?: string;
+  customerNumber?: string;
+  phone?: string;
+  cashbackPercent?: number;
+  status?: 'active' | 'disabled' | 'pending';
+  operators?: any[];
+  wallet?: {
+    available: number;
+    pending: number;
+  };
+  // Novos campos para Perfil e Localização (Lojistas/Clientes)
+  address?: string;
+  category?: string;
+  postalCode?: string;
+  freguesia?: string;
+  createdAt?: any;
 }
 
 export interface Client {
   id: string;
-  cardNumber: string; // O ID de 9 dígitos
+  cardNumber: string;
   name: string;
-  nif: string; // Único
+  nif: string;
   email: string;
   phone: string;
   zipCode: string;
-  password?: string; // Para o login do cliente
+  password?: string;
   createdAt: Date;
 }
 
 export interface Operator {
   id: string;
   name: string;
-  code: string; // Código de 5 dígitos para validar operações
+  code: string;
 }
 
 export interface Merchant {
@@ -29,29 +47,36 @@ export interface Merchant {
   shopName: string;
   email: string;
   nif: string;
-  cashbackPercent: number; // Cada lojista define o seu (ex: 10, 5, 15)
+  cashbackPercent: number;
   primaryColor: string;
-  operators: Operator[]; // Lista de funcionários da loja
+  operators: Operator[];
   status: 'active' | 'inactive';
   createdAt: Date;
+  // Campos de endereço adicionados também aqui por consistência
+  address?: string;
+  category?: string;
+  postalCode?: string;
+  freguesia?: string;
 }
 
 export interface Transaction {
   id: string;
   clientId: string;
+  clientNif?: string;
   merchantId: string;
   merchantName: string;
-  amount: number; // Valor da venda
-  cashbackAmount: number; // Valor do cashback gerado
-  docNumber?: string; // Número da Fatura ou Nota de Crédito
-  operatorId?: string; // Quem fez a picação
+  amount: number;
+  cashbackAmount: number;
+  documentNumber?: string;
+  operatorId?: string; 
   operatorName?: string;
-  type: 'earn' | 'redeem' | 'subtract'; // Ganhar, Descontar ou Nota de Crédito
-  status: 'pending' | 'available'; // Regra das 48h
-  createdAt: Date;
+  operatorCode?: string;
+  type: 'earn' | 'redeem' | 'subtract';
+  status: 'pending' | 'available';
+  createdAt: any;
+  maturedAt?: any;
 }
 
-// Interface para o saldo por loja (Checklist Página 1)
 export interface StoreBalance {
   merchantId: string;
   merchantName: string;

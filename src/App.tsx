@@ -3,7 +3,10 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
-// IMPORTAÇÕES DOS COMPONENTES AUDITADOS (MOLÉCULAS CORRETAS)
+// IMPORTAÇÃO DO SCRIPT DE LIMPEZA (TEMPORÁRIO)
+import { cleanUserProfiles } from './utils/cleanDatabase';
+
+// IMPORTAÇÕES DOS COMPONENTES AUDITADOS
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import AdminDashboard from './features/admin/AdminDashboard';
@@ -25,7 +28,7 @@ const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ 
   if (!currentUser) return <Navigate to="/login" replace />;
   
   if (role && currentUser.role !== role && currentUser.email !== 'rochap.filipe@gmail.com') {
-    return <Navigate to="/" replace />;
+    return <Navigate to="/login" replace />;
   }
   
   return <>{children}</>;
@@ -34,10 +37,15 @@ const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ 
 function App() {
   const { subscribeToTransactions, currentUser } = useStore();
 
+  // 1. CICLO DE LIMPEZA DA BASE DE DADOS (Executa uma vez ao abrir)
+  useEffect(() => {
+    cleanUserProfiles();
+  }, []);
+
+  // 2. ESCUTA DE TRANSAÇÕES
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
     if (currentUser) {
-      // Subscreve às transações conforme o papel do utilizador
       unsubscribe = subscribeToTransactions(currentUser.role, currentUser.id);
     }
     return () => { if (unsubscribe) unsubscribe(); };
@@ -47,14 +55,14 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-[#f6f9fc]">
         <Routes>
-          {/* A Raiz agora envia para o Login para vermos o teu logotipo imediatamente */}
+          {/* Raiz redireciona para Login para validação visual */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           
-          {/* Rotas de Autenticação (As que corrigimos) */}
+          {/* Autenticação */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
-          {/* Área Admin (Filipe) */}
+          {/* Área Admin */}
           <Route 
             path="/admin" 
             element={
@@ -84,7 +92,7 @@ function App() {
             } 
           />
 
-          {/* Redirecionamento de Segurança */}
+          {/* Fallback de Segurança */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </div>
