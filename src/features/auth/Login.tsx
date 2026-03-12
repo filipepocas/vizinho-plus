@@ -1,32 +1,31 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { auth, db } from '../../config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
 import { useStore, UserProfile } from '../../store/useStore';
-import { LogIn, ShieldCheck, Mail, Lock } from 'lucide-react';
+import { LogIn, ShieldCheck, Mail, Lock, Info } from 'lucide-react';
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
-  // Corrigido: Usar setCurrentUser em vez de setUser para alinhar com a Store
   const { setCurrentUser } = useStore(); 
   
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setMessage('');
     setLoading(true);
 
     try {
-      // 1. Autenticação básica no Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const fbUser = userCredential.user;
 
-      // 2. Busca o perfil completo no Firestore
       const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
       
       if (!userDoc.exists()) {
@@ -34,18 +33,11 @@ const Login: React.FC = () => {
       }
 
       const userData = { id: fbUser.uid, ...userDoc.data() } as UserProfile;
-
-      // 3. Atualizar o estado global (Nome corrigido aqui)
       setCurrentUser(userData);
 
-      // 4. Redirecionamento por Role (Papel)
-      if (userData.role === 'admin') {
-        navigate('/admin');
-      } else if (userData.role === 'merchant') {
-        navigate('/merchant');
-      } else {
-        navigate('/client');
-      }
+      if (userData.role === 'admin') navigate('/admin');
+      else if (userData.role === 'merchant') navigate('/merchant');
+      else navigate('/client');
 
     } catch (err: any) {
       console.error("ERRO LOGIN:", err);
@@ -54,6 +46,33 @@ const Login: React.FC = () => {
       } else {
         setError(err.message || 'Erro ao entrar no sistema.');
       }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      setError('POR FAVOR, INTRODUZ O TEU EMAIL NO CAMPO ACIMA PRIMEIRO.');
+      return;
+    }
+    
+    setLoading(true);
+    setError('');
+    setMessage('');
+    
+    try {
+      console.log("INICIANDO PROCESSO DE RECUPERAÇÃO PARA:", email);
+      await sendPasswordResetEmail(auth, email);
+      console.log("FIREBASE: PEDIDO DE E-MAIL ACEITE COM SUCESSO.");
+      setMessage('E-MAIL DE RECUPERAÇÃO ENVIADO! VERIFICA A TUA CAIXA DE ENTRADA E SPAM.');
+    } catch (err: any) {
+      console.error("ERRO TÉCNICO FIREBASE NA RECUPERAÇÃO:", {
+        code: err.code,
+        message: err.message,
+        fullError: err
+      });
+      setError(`ERRO: ${err.code === 'auth/user-not-found' ? 'UTILIZADOR NÃO ENCONTRADO.' : 'FALHA NO ENVIO. TENTA MAIS TARDE.'}`);
     } finally {
       setLoading(false);
     }
@@ -80,6 +99,13 @@ const Login: React.FC = () => {
           </div>
         )}
 
+        {message && (
+          <div className="bg-green-50 border-2 border-green-100 text-green-600 p-4 rounded-2xl text-[11px] font-black mb-8 flex items-center gap-3">
+            <Info size={16} />
+            {message.toUpperCase()}
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest flex items-center gap-2">
@@ -96,9 +122,18 @@ const Login: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest flex items-center gap-2">
-              <Lock size={12} /> Password
-            </label>
+            <div className="flex justify-between items-center px-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2">
+                <Lock size={12} /> Password
+              </label>
+              <button 
+                type="button"
+                onClick={handleForgotPassword}
+                className="text-[9px] font-black text-[#00d66f] uppercase tracking-tighter hover:underline transition-opacity active:opacity-50"
+              >
+                Esqueci-me da password
+              </button>
+            </div>
             <input 
               type="password" 
               required

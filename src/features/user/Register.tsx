@@ -62,11 +62,15 @@ const Register: React.FC = () => {
       const newUser = userCredential.user;
 
       // Pequena pausa para garantir que o Auth context está pronto
-      await new Promise(resolve => setTimeout(resolve, 600));
+      await new Promise(resolve => setTimeout(resolve, 800));
 
       const customerNumber = generateCustomerNumber();
 
       // 4. Gravar perfil completo no Firestore
+      // IMPORTANTE: Definimos o role dinamicamente. 
+      // Se o email for o que pretendes para comerciante, forçamos o role 'merchant'
+      const isMerchantEmail = formData.email.toLowerCase() === 'vmcli1@hotmail.com';
+
       try {
         await registerClientProfile({
           id: newUser.uid,
@@ -75,24 +79,30 @@ const Register: React.FC = () => {
           nif: formData.nif,
           zipCode: formData.postalCode,
           phone: formData.phone.trim() || '', 
-          email: formData.email,
-          role: 'client',
+          email: formData.email.toLowerCase(),
+          role: isMerchantEmail ? 'merchant' : 'client',
           status: 'active',
           wallet: {
             available: 0,
             pending: 0
-          }
+          },
+          createdAt: new Date().toISOString()
         });
         
         setIsSuccess(true);
         
         // Redirecionamento após feedback visual de sucesso
         setTimeout(() => {
-          navigate('/client');
+          if (isMerchantEmail) {
+            navigate('/merchant');
+          } else {
+            navigate('/client');
+          }
         }, 1500);
 
       } catch (profileErr: any) {
-        // FAIL-SAFE: Se o Firestore falhar, apaga o user do Auth para permitir nova tentativa
+        console.error("ERRO AO CRIAR PERFIL NO FIRESTORE:", profileErr);
+        // FAIL-SAFE: Se o Firestore falhar, apaga o user do Auth para não criar contas fantasma
         await deleteUser(newUser);
         throw profileErr;
       }
@@ -101,11 +111,11 @@ const Register: React.FC = () => {
       console.error("ERRO NO REGISTO:", err);
       
       if (err.code === 'auth/email-already-in-use') {
-        setError('Este email já está em uso.');
+        setError('Este email já está em uso no sistema de autenticação.');
       } else if (err.code === 'auth/weak-password') {
         setError('A password deve ter pelo menos 6 caracteres.');
       } else if (err.code === 'permission-denied') {
-        setError('Erro de permissão no servidor. Contacte o suporte.');
+        setError('Permissão negada. O e-mail já pode existir no banco de dados.');
       } else {
         setError(err.message || 'Falha ao criar conta. Tente novamente.');
       }
@@ -118,7 +128,6 @@ const Register: React.FC = () => {
     <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-4 font-sans">
       <div className="bg-white p-8 md:p-10 rounded-[44px] shadow-2xl w-full max-w-md border-2 border-slate-50 relative overflow-hidden">
         
-        {/* Elemento Decorativo Brutalista */}
         <div className="absolute top-0 right-0 w-32 h-32 bg-[#00d66f]/5 rounded-bl-[100px] -mr-10 -mt-10" />
 
         <div className="text-center mb-10 relative">
