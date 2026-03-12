@@ -16,12 +16,26 @@ const ForgotPassword: React.FC = () => {
     setError('');
     setLoading(true);
 
+    // CONFIGURAÇÃO PARA O SITE REAL
+    const actionCodeSettings = {
+      // SUBSTITUI pelo teu URL real de produção
+      url: 'https://vizinho-plus.web.app/login', 
+      handleCodeInApp: true,
+    };
+
     try {
-      await sendPasswordResetEmail(auth, email);
+      await sendPasswordResetEmail(auth, email, actionCodeSettings);
       setMessage('Verifique a sua caixa de entrada. Enviamos um link para definir a nova password.');
+      setEmail('');
     } catch (err: any) {
-      console.error(err);
-      setError('Erro ao enviar email. Verifique se o endereço está correto.');
+      console.error("Erro detalhado:", err.code);
+      if (err.code === 'auth/user-not-found') {
+        setError('Este e-mail não está registado.');
+      } else if (err.code === 'auth/unauthorized-domain') {
+        setError('Este domínio ainda não está autorizado no Firebase Console.');
+      } else {
+        setError('Erro ao enviar email. Tente novamente mais tarde.');
+      }
     } finally {
       setLoading(false);
     }
@@ -61,6 +75,7 @@ const ForgotPassword: React.FC = () => {
           </div>
 
           <button 
+            type="submit"
             disabled={loading}
             className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black hover:bg-black transition-all shadow-lg pt-4 disabled:opacity-50"
           >
