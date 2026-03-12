@@ -1,3 +1,4 @@
+// src/features/auth/RegisterPage.tsx
 import React, { useState } from 'react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../config/firebase';
@@ -29,7 +30,7 @@ const RegisterPage: React.FC = () => {
         name: name,
         nif: nif,
         email: email.toLowerCase().trim(),
-        role: 'client', // Definido como cliente por padrão
+        role: 'client',
         wallet: {
           available: 0,
           pending: 0
@@ -51,8 +52,26 @@ const RegisterPage: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white p-8 border-b-8 border-[#00d66f] shadow-2xl">
+    <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-4 relative overflow-hidden">
+      
+      {/* Marca de Água no Fundo */}
+      <img 
+        src="/logo-vizinho.png" 
+        alt="" 
+        className="absolute bottom-[-50px] right-[-50px] w-96 h-96 opacity-10 pointer-events-none grayscale brightness-200"
+      />
+
+      <div className="max-w-md w-full bg-white p-8 border-b-8 border-[#00d66f] shadow-2xl z-10">
+        
+        {/* Logótipo no Topo */}
+        <div className="mb-6 flex justify-center">
+          <img 
+            src="/logo-vizinho.png" 
+            alt="Vizinho+ Logo" 
+            className="h-16 w-auto"
+          />
+        </div>
+
         <h2 className="text-3xl font-black text-[#0a2540] mb-2 uppercase tracking-tighter">Criar Conta</h2>
         <p className="text-gray-400 text-xs font-bold mb-8 uppercase tracking-widest">Novo Cliente Vizinho+</p>
         
@@ -71,7 +90,7 @@ const RegisterPage: React.FC = () => {
             />
           </div>
           <div>
-            <label className="block text-[10px] font-black uppercase mb-1">NIF (Obrigatório para Cashback)</label>
+            <label className="block text-[10px] font-black uppercase mb-1">NIF</label>
             <input 
               required
               type="text" 
@@ -112,7 +131,7 @@ const RegisterPage: React.FC = () => {
           </button>
         </form>
 
-        <div className="mt-6 text-center">
+        <div className="mt-6 text-center border-t-2 border-gray-100 pt-6">
           <Link to="/login" className="text-[10px] font-black uppercase text-gray-400 hover:text-[#0a2540] transition-colors">
             Já tem conta? Faça Login aqui
           </Link>
