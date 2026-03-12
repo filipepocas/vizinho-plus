@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom'; // Adicionado para navegação
 import { useStore } from '../../store/useStore';
 import { 
   collection, 
@@ -14,7 +15,7 @@ import {
   setDoc,
   Timestamp
 } from 'firebase/firestore';
-import { sendPasswordResetEmail } from 'firebase/auth';
+import { sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../../config/firebase';
 import * as XLSX from 'xlsx';
 import { 
@@ -31,12 +32,18 @@ import {
   XCircle,
   Clock,
   RefreshCw,
-  Tag
-} from 'lucide-react'; // CORRIGIDO: de lucide-center para lucide-react
+  Tag,
+  Mail,
+  MapPin,
+  Phone,
+  Percent,
+  Hash
+} from 'lucide-react';
 import AdminSettings from './AdminSettings';
 
 const AdminDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout } = useStore();
+  const navigate = useNavigate(); // Hook para redirecionar
   const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
@@ -58,7 +65,18 @@ const AdminDashboard: React.FC = () => {
     cashbackPercent: 10 
   });
 
-  // FUNÇÃO DE MATURAÇÃO (clientId)
+  // Função de Logout melhorada
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+      // Força o redirecionamento mesmo que haja erro no Firebase
+      navigate('/login');
+    }
+  };
+
   const processMaturation = async () => {
     setIsProcessing(true);
     try {
@@ -153,31 +171,50 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateMerchant = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsProcessing(true);
     const cleanEmail = newMerchant.email.toLowerCase().trim();
+    const tempPassword = `parceiro${Math.floor(1000 + Math.random() * 9000)}`;
+    
     try {
-      const merchantId = `mch_${Date.now()}`;
-      await setDoc(doc(db, 'users', merchantId), {
+      const userCredential = await createUserWithEmailAndPassword(auth, cleanEmail, tempPassword);
+      const authUser = userCredential.user;
+
+      await setDoc(doc(db, 'users', authUser.uid), {
         ...newMerchant,
         email: cleanEmail,
-        status: 'pending',
+        status: 'active',
         role: 'merchant',
         createdAt: serverTimestamp(),
         wallet: { available: 0, pending: 0 }
       });
+
       try {
         await sendPasswordResetEmail(auth, cleanEmail);
-        alert('Lojista pré-registado e e-mail enviado!');
+        alert(`Lojista criado com sucesso!\n\nEmail enviado para ${cleanEmail}.\nPassword temporária: ${tempPassword}`);
       } catch (authErr) {
-        alert('Lojista guardado. E-mail manual necessário.');
+        console.warn("Falha no envio do email:", authErr);
+        alert('Lojista criado, mas falhou o envio do e-mail de recuperação. Verifique as configurações do Firebase.');
       }
+
       setIsModalOpen(false);
       setNewMerchant({ 
         name: '', address: '', city: '', category: '', 
         nif: '', zipCode: '', phone: '', email: '', 
         cashbackPercent: 10 
       });
+      
+      setCurrentView('overview');
+      setTimeout(() => setCurrentView('merchants'), 100);
+
     } catch (error: any) {
-      alert('Erro ao criar lojista.');
+      console.error("Erro ao criar lojista:", error);
+      if (error.code === 'auth/email-already-in-use') {
+        alert('Este e-mail já está registado no sistema!');
+      } else {
+        alert('Erro ao criar lojista: ' + error.message);
+      }
+    } finally {
+      setIsProcessing(false);
     }
   };
 
@@ -244,7 +281,7 @@ const AdminDashboard: React.FC = () => {
                 <item.icon size={16} strokeWidth={3} /> {item.label}
               </button>
             ))}
-            <button onClick={logout} className="p-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
+            <button onClick={handleLogout} className="p-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
               <LogOut size={20} strokeWidth={3} />
             </button>
           </nav>
@@ -365,8 +402,11 @@ const AdminDashboard: React.FC = () => {
                     </div>
                     <h3 className="text-xl font-black uppercase italic tracking-tighter mb-1">{m.name}</h3>
                     <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">NIF: {m.nif}</p>
-                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-6 flex items-center gap-1">
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-2 flex items-center gap-1">
                       <Tag size={10} /> {m.category || 'Atividade não definida'}
+                    </p>
+                    <p className="text-[9px] font-bold text-[#00d66f] uppercase mb-6 flex items-center gap-1">
+                      <Percent size={10} /> {m.cashbackPercent}% Cashback
                     </p>
                     <div className="flex gap-2">
                        {m.status !== 'active' ? (
@@ -405,29 +445,107 @@ const AdminDashboard: React.FC = () => {
 
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[48px] p-10 shadow-2xl overflow-y-auto max-h-[95vh] border-4 border-[#00d66f]">
+          <div className="bg-white w-full max-w-3xl rounded-[48px] p-10 shadow-2xl overflow-y-auto max-h-[95vh] border-4 border-[#00d66f]">
             <div className="flex justify-between items-start mb-8">
               <div>
-                <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
+                <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Registo de Parceiro</h2>
+                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest">Preenche todos os dados do estabelecimento</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-red-500 transition-colors"><XCircle size={24} /></button>
             </div>
+            
             <form onSubmit={handleCreateMerchant} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome da Loja</label>
-                  <input type="text" required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
+                    <Store size={12}/> Nome Comercial
+                  </label>
+                  <input type="text" required placeholder="NOME DA LOJA" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
                 </div>
+
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">NIF</label>
-                  <input type="text" required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})} />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
+                    <Hash size={12}/> NIF Empresa
+                  </label>
+                  <input type="text" required maxLength={9} placeholder="9 DÍGITOS" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value.replace(/\D/g, '')})} />
                 </div>
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email (Login)</label>
-                  <input type="email" required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
+                    <Tag size={12}/> Categoria
+                  </label>
+                  <select required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.category} onChange={e => setNewMerchant({...newMerchant, category: e.target.value})}>
+                    <option value="">Selecionar Categoria</option>
+                    <option value="Restauração">Restauração</option>
+                    <option value="Serviços">Serviços</option>
+                    <option value="Moda">Moda</option>
+                    <option value="Tecnologia">Tecnologia</option>
+                    <option value="Saúde">Saúde</option>
+                    <option value="Alimentação">Alimentação</option>
+                    <option value="Outros">Outros</option>
+                  </select>
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
+                    <Mail size={12}/> Email de Login
+                  </label>
+                  <input type="email" required placeholder="EMAIL@EXEMPLO.PT" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
+                    <Phone size={12}/> Telemóvel
+                  </label>
+                  <input type="tel" required placeholder="912 345 678" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.phone} onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})} />
+                </div>
+
+                <div className="md:col-span-2 space-y-2 border-t-2 border-slate-50 pt-4">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-2">
+                    <MapPin size={12}/> Morada Completa
+                  </label>
+                  <input type="text" required placeholder="RUA, NÚMERO, ANDAR..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.address} onChange={e => setNewMerchant({...newMerchant, address: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Código Postal</label>
+                  <input type="text" required placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.zipCode} onChange={e => setNewMerchant({...newMerchant, zipCode: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Cidade</label>
+                  <input type="text" required placeholder="EX: PORTO" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.city} onChange={e => setNewMerchant({...newMerchant, city: e.target.value})} />
+                </div>
+
+                <div className="md:col-span-2 bg-[#00d66f]/5 p-6 rounded-[32px] border-2 border-[#00d66f]/20">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest flex items-center gap-2">
+                        <Percent size={14}/> Percentagem de Cashback
+                      </label>
+                      <p className="text-[9px] font-bold text-slate-500 uppercase">Valor que o vizinho recebe de volta</p>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <input type="range" min="1" max="50" step="0.5" className="w-32 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#00d66f]" value={newMerchant.cashbackPercent} onChange={e => setNewMerchant({...newMerchant, cashbackPercent: parseFloat(e.target.value)})} />
+                      <span className="text-2xl font-black text-[#0a2540] w-16 text-right">{newMerchant.cashbackPercent}%</span>
+                    </div>
+                  </div>
+                </div>
+
               </div>
-              <button type="submit" className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl">Registar Parceiro</button>
+
+              <button 
+                type="submit" 
+                disabled={isProcessing}
+                className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-[0.2em] shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3 mt-4"
+              >
+                {isProcessing ? (
+                  <RefreshCw size={20} className="animate-spin" />
+                ) : (
+                  <>Finalizar Registo do Parceiro <CheckCircle2 size={20}/></>
+                )}
+              </button>
             </form>
           </div>
         </div>
