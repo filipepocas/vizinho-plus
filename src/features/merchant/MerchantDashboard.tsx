@@ -55,7 +55,7 @@ const MerchantDashboard: React.FC = () => {
       const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
       return () => { if (unsubscribe) unsubscribe(); };
     }
-  }, [currentUser, subscribeToTransactions]);
+  }, [currentUser?.id, subscribeToTransactions]);
 
   // QR CODE SCANNER
   useEffect(() => {
@@ -111,25 +111,17 @@ const MerchantDashboard: React.FC = () => {
   };
 
   const stats = useMemo(() => {
-    const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
-    let theoretical = 0;
-    let available = 0;
+    // Usamos o saldo real do documento do utilizador (wallet) que vem do useStore
+    const available = currentUser?.wallet?.available || 0;
+    
+    // Calculamos o teórico com base nas transações carregadas
+    const theoretical = transactions.reduce((acc, t) => {
+      if (t.type === 'earn') return acc + (t.cashbackAmount || 0);
+      return acc - (t.cashbackAmount || 0);
+    }, 0);
 
-    transactions.forEach(t => {
-      const txTime = t.createdAt?.seconds ? t.createdAt.seconds * 1000 : Date.now();
-      const val = t.cashbackAmount || 0;
-      const isMature = txTime <= fortyEightHoursAgo;
-
-      if (t.type === 'earn') {
-        theoretical += val;
-        if (isMature) available += val;
-      } else {
-        theoretical -= val;
-        available -= val;
-      }
-    });
     return { theoretical, available };
-  }, [transactions]);
+  }, [transactions, currentUser?.wallet]);
 
   const filteredHistory = useMemo(() => {
     return transactions.filter(t => {
@@ -164,7 +156,11 @@ const MerchantDashboard: React.FC = () => {
   const processAction = async (type: 'earn' | 'redeem') => {
     const val = parseFloat(amount);
     if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber || !currentUser) return alert("Preencha todos os campos.");
-    if (type === 'redeem' && val > stats.available) return alert(`Saldo insuficiente na conta do lojista!`);
+    
+    // Na utilização de saldo, verificamos se o lojista tem saldo disponível na carteira
+    if (type === 'redeem' && val > stats.available) {
+      return alert(`Saldo insuficiente! O seu saldo disponível é de ${stats.available.toFixed(2)}€`);
+    }
 
     try {
       setIsLoading(true);
@@ -180,16 +176,19 @@ const MerchantDashboard: React.FC = () => {
         status: type === 'earn' ? 'pending' : 'available'
       });
       setMessage({ type: 'success', text: "Operação Concluída!" });
-      setAmount(''); setDocumentNumber('');
+      setAmount(''); setDocumentNumber(''); setCardNumber('');
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-    } catch (error) { alert("Erro na operação."); } finally { setIsLoading(false); }
+    } catch (error) { 
+      alert("Erro na operação. Verifique a ligação."); 
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] pb-12 font-sans">
       <div className="max-w-7xl mx-auto p-4 lg:p-10">
         
-        {/* HEADER BRUTALISTA */}
         <header className="bg-[#0a2540] p-8 rounded-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-10 gap-8 border-b-4 border-[#00d66f] relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-5 pointer-events-none">
             <Store size={150} className="rotate-12" />
@@ -232,7 +231,6 @@ const MerchantDashboard: React.FC = () => {
           </nav>
         </header>
 
-        {/* GESTÃO DE OPERADORES */}
         {showOpManager && (
           <div className="bg-white p-10 rounded-[48px] shadow-xl border-2 border-slate-100 mb-10 animate-in slide-in-from-top-4 duration-300">
             <div className="flex items-center gap-4 mb-10">
@@ -270,7 +268,6 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* TERMINAL VIEW */}
         {view === 'terminal' ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 animate-in fade-in duration-500">
             <div className="lg:col-span-2 bg-white p-10 md:p-14 rounded-[56px] shadow-xl border-2 border-slate-100 space-y-12">
@@ -473,7 +470,6 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* SCANNER MODAL */}
         {showScanner && (
           <div className="fixed inset-0 bg-[#0a2540]/98 backdrop-blur-3xl z-50 p-6 flex flex-col items-center justify-center">
             <div className="bg-white p-8 rounded-[64px] shadow-[0_0_100px_rgba(0,214,111,0.4)] w-full max-w-xl relative border-8 border-[#00d66f] animate-in zoom-in-90">

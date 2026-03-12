@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { 
   collection, 
-  addDoc, 
   onSnapshot, 
   query, 
   orderBy, 
@@ -9,7 +8,9 @@ import {
   serverTimestamp,
   setDoc,
   doc,
-  getDocs 
+  getDoc,
+  getDocs,
+  addDoc
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -46,8 +47,6 @@ export interface UserProfile {
   zipCode?: string;
   operators?: any[];
   firstAccess?: boolean;
-  temporaryPassword?: string;
-  password?: string;
   wallet?: {
     available: number;
     pending: number;
@@ -99,7 +98,6 @@ export const useStore = create<StoreState>((set) => ({
   registerClientProfile: async (profile) => {
     try {
       const docId = profile.uid || profile.id;
-      // Garante que não enviamos IDs duplicados ou campos indefinidos
       const { id, ...dataToSave } = profile;
       await setDoc(doc(db, 'users', docId), {
         ...dataToSave,
@@ -128,12 +126,10 @@ export const useStore = create<StoreState>((set) => ({
     const transRef = collection(db, 'transactions');
     let q;
 
-    // Lógica de filtragem por Role
     if ((role === 'merchant' || role === 'client' || role === 'user') && identifier) {
       const field = (role === 'merchant') ? 'merchantId' : 'clientId';
       q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'));
     } else {
-      // Para Admin ou quando não há identificador, mostra tudo por data
       q = query(transRef, orderBy('createdAt', 'desc'));
     }
 
@@ -144,14 +140,33 @@ export const useStore = create<StoreState>((set) => ({
       })) as Transaction[];
       set({ transactions: transData });
     }, (error) => {
-      // Se houver erro de permissão (ex: regras do Firebase), logamos aqui
       console.error("Erro na escuta de transações:", error.message);
     });
   },
 }));
 
-onAuthStateChanged(auth, (user) => {
-  if (!user) {
+// LISTENER DE SESSÃO MELHORADO
+onAuthStateChanged(auth, async (user) => {
+  if (user) {
+    // Se o user entrar, vamos buscar os detalhes (role, etc) ao Firestore
+    const userDoc = await getDoc(doc(db, 'users', user.uid));
+    if (userDoc.exists()) {
+      useStore.getState().setCurrentUser({
+        id: user.uid,
+        ...userDoc.data()
+      } as UserProfile);
+    } else {
+      // Caso especial para o teu email de admin se o doc ainda não existir
+      if (user.email === 'rochap.filipe@gmail.com') {
+        useStore.getState().setCurrentUser({
+          id: user.uid,
+          email: user.email,
+          role: 'admin',
+          name: 'Filipe (Admin)'
+        } as UserProfile);
+      }
+    }
+  } else {
     useStore.getState().setCurrentUser(null);
   }
 });

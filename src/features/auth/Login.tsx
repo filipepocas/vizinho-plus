@@ -1,148 +1,130 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { useStore, UserProfile } from '../../store/useStore';
-import { doc, getDoc } from 'firebase/firestore';
+import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { db, auth } from '../../config/firebase';
+import { auth, db } from '../../config/firebase';
+import { doc, getDoc } from 'firebase/firestore';
+import { useStore, UserProfile } from '../../store/useStore';
+import { LogIn, ShieldCheck, Mail, Lock } from 'lucide-react';
 
 const Login: React.FC = () => {
-  const [identifier, setIdentifier] = useState('');
-  const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const { setCurrentUser, currentUser, setLoading } = useStore();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (currentUser) {
-      if (currentUser.role === 'admin') navigate('/admin');
-      else if (currentUser.role === 'merchant') navigate('/merchant');
-      else if (currentUser.role === 'client') navigate('/client');
-    }
-  }, [currentUser, navigate]);
+  // Corrigido: Usar setCurrentUser em vez de setUser para alinhar com a Store
+  const { setCurrentUser } = useStore(); 
+  
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    setLoading(true);
     setError('');
-    
-    const email = identifier.toLowerCase().trim();
+    setLoading(true);
 
     try {
-      // 1. TENTAR AUTENTICAÇÃO NO FIREBASE AUTH
+      // 1. Autenticação básica no Firebase Auth
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const uid = userCredential.user.uid;
+      const fbUser = userCredential.user;
 
-      // 2. BUSCAR PERFIL NA COLEÇÃO 'users'
-      const userDoc = await getDoc(doc(db, 'users', uid));
+      // 2. Busca o perfil completo no Firestore
+      const userDoc = await getDoc(doc(db, 'users', fbUser.uid));
+      
+      if (!userDoc.exists()) {
+        throw new Error('Perfil não encontrado na base de dados.');
+      }
 
-      if (userDoc.exists()) {
-        const userData = userDoc.data();
-        const profile: UserProfile = {
-          id: uid,
-          ...userData
-        } as UserProfile;
+      const userData = { id: fbUser.uid, ...userDoc.data() } as UserProfile;
 
-        setCurrentUser(profile);
+      // 3. Atualizar o estado global (Nome corrigido aqui)
+      setCurrentUser(userData);
+
+      // 4. Redirecionamento por Role (Papel)
+      if (userData.role === 'admin') {
+        navigate('/admin');
+      } else if (userData.role === 'merchant') {
+        navigate('/merchant');
       } else {
-        // Caso especial: Se o user existe no Auth mas não no Firestore (ex: Admin de Backup)
-        if (email === 'rochap.filipe@gmail.com') {
-          const adminProfile: UserProfile = {
-            id: uid,
-            email: email,
-            role: 'admin',
-            name: 'Filipe (Admin)'
-          };
-          setCurrentUser(adminProfile);
-        } else {
-          setError("Perfil não encontrado no sistema.");
-          await auth.signOut();
-        }
+        navigate('/client');
       }
 
     } catch (err: any) {
-      console.error("Erro no Login:", err);
-      if (err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        setError("Credenciais incorretas.");
+      console.error("ERRO LOGIN:", err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+        setError('Email ou password incorretos.');
       } else {
-        setError("Erro de ligação ou acesso negado.");
+        setError(err.message || 'Erro ao entrar no sistema.');
       }
     } finally {
-      setIsLoading(false);
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 font-sans">
-      <div className="mb-8">
-        <div className="w-24 h-24 bg-white rounded-[32px] flex items-center justify-center shadow-2xl shadow-blue-900/10 border-2 border-slate-50 p-4 transform hover:rotate-3 transition-transform">
-          <img src="/logo-vizinho.png" alt="Vizinho+" className="w-full h-full object-contain" />
-        </div>
-      </div>
-
-      <div className="bg-white p-10 rounded-[40px] shadow-[0_20px_60px_rgba(10,37,64,0.08)] w-full max-w-md border border-slate-100 relative overflow-hidden">
-        <div className="absolute top-0 right-0 w-32 h-32 bg-[#00d66f]/5 rounded-full -mr-16 -mt-16 pointer-events-none"></div>
-
-        <div className="text-center mb-10">
-          <h1 className="text-3xl font-black text-[#0a2540] tracking-tight uppercase italic">VIZINHO+</h1>
-          <p className="text-slate-400 mt-2 text-sm font-bold uppercase tracking-widest">Painel de Acesso</p>
-        </div>
+    <div className="min-h-screen bg-[#f6f9fc] flex items-center justify-center p-6 font-sans">
+      <div className="bg-white p-10 rounded-[44px] shadow-2xl w-full max-w-md border-2 border-slate-50 relative overflow-hidden">
         
+        <div className="absolute -top-10 -left-10 w-40 h-40 bg-[#00d66f]/5 rounded-full blur-3xl" />
+
+        <div className="text-center mb-10 relative">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-[#0a2540] rounded-[28px] mb-6 shadow-2xl transform -rotate-3">
+            <ShieldCheck className="text-[#00d66f]" size={40} />
+          </div>
+          <h1 className="text-4xl font-black italic text-[#0a2540] tracking-tighter">VIZINHO+</h1>
+          <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em] mt-2">Plataforma de Fidelização</p>
+        </div>
+
+        {error && (
+          <div className="bg-red-50 border-2 border-red-100 text-red-600 p-4 rounded-2xl text-[11px] font-black mb-8 flex items-center gap-3">
+            <div className="w-2 h-2 bg-red-600 rounded-full animate-pulse" />
+            {error.toUpperCase()}
+          </div>
+        )}
+
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
-            <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 ml-1">Email</label>
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest flex items-center gap-2">
+              <Mail size={12} /> Email
+            </label>
             <input 
               type="email" 
-              value={identifier} 
-              onChange={(e) => setIdentifier(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-black"
-              placeholder="seu@email.com"
               required
-            />
-          </div>
-          
-          <div className="space-y-2">
-            <div className="flex justify-between items-center ml-1">
-              <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">Palavra-Passe</label>
-              <Link to="/forgot-password" title="Recuperar acesso" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">
-                Esqueci-me ➔
-              </Link>
-            </div>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all text-[#0a2540] font-black"
-              placeholder="********"
-              required
+              className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[22px] outline-none focus:border-[#00d66f] transition-all font-bold text-sm"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              disabled={loading}
             />
           </div>
 
-          {error && (
-            <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border-2 border-red-100">
-              ⚠️ {error}
-            </div>
-          )}
+          <div className="space-y-2">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 tracking-widest flex items-center gap-2">
+              <Lock size={12} /> Password
+            </label>
+            <input 
+              type="password" 
+              required
+              className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-[22px] outline-none focus:border-[#00d66f] transition-all font-bold text-sm"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              disabled={loading}
+            />
+          </div>
 
           <button 
             type="submit"
-            disabled={isLoading}
-            className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black text-lg hover:bg-black active:scale-[0.98] transition-all shadow-xl shadow-blue-900/10 flex items-center justify-center gap-3 group"
+            disabled={loading}
+            className="w-full bg-[#0a2540] text-white p-5 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-3"
           >
-            {isLoading ? (
-              <div className="w-6 h-6 border-4 border-white/20 border-t-white rounded-full animate-spin"></div>
-            ) : (
-              <>ENTRAR <span className="group-hover:translate-x-1 transition-transform">➔</span></>
-            )}
+            {loading ? 'A AUTENTICAR...' : <>ENTRAR NO PAINEL <LogIn size={18} /></>}
           </button>
         </form>
 
-        <div className="mt-8 text-center border-t-2 border-slate-50 pt-8">
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest">
-            Novo por aqui? <Link to="/client/register" className="text-[#00d66f] hover:underline">Registe-se agora</Link>
-          </p>
+        <div className="mt-10 pt-8 border-t-2 border-slate-50 text-center">
+          <button 
+            onClick={() => navigate('/register')} 
+            className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter hover:text-[#00d66f]"
+          >
+            Não tens conta? <span className="text-[#00d66f] font-black underline">REGISTA-TE</span>
+          </button>
         </div>
       </div>
     </div>

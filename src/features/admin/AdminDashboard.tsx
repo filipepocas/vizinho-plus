@@ -2,7 +2,6 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { 
   collection, 
-  addDoc, 
   serverTimestamp, 
   getDocs, 
   updateDoc, 
@@ -11,10 +10,12 @@ import {
   where, 
   getDoc, 
   writeBatch, 
-  increment 
+  increment,
+  setDoc,
+  Timestamp
 } from 'firebase/firestore';
-import { sendPasswordResetEmail } from 'firebase/auth'; // Importado para automação
-import { db, auth } from '../../config/firebase'; // Adicionado 'auth'
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { db, auth } from '../../config/firebase';
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, 
@@ -30,10 +31,8 @@ import {
   XCircle,
   Clock,
   RefreshCw,
-  MapPin,
-  Phone,
   Tag
-} from 'lucide-react';
+} from 'lucide-react'; // CORRIGIDO: de lucide-center para lucide-react
 import AdminSettings from './AdminSettings';
 
 const AdminDashboard: React.FC = () => {
@@ -56,10 +55,10 @@ const AdminDashboard: React.FC = () => {
     zipCode: '', 
     phone: '', 
     email: '', 
-    password: '', 
     cashbackPercent: 10 
   });
 
+  // FUNÇÃO DE MATURAÇÃO (clientId)
   const processMaturation = async () => {
     setIsProcessing(true);
     try {
@@ -73,32 +72,39 @@ const AdminDashboard: React.FC = () => {
       const q = query(
         collection(db, 'transactions'), 
         where('status', '==', 'pending'),
-        where('createdAt', '<=', limitDate)
+        where('createdAt', '<=', Timestamp.fromDate(limitDate))
       );
 
       const querySnapshot = await getDocs(q);
+      
       if (querySnapshot.empty) {
+        alert(`Nenhum cashback pendente (+${hours}h) para processar.`);
         setIsProcessing(false);
         return;
       }
 
       const batch = writeBatch(db);
+      
       querySnapshot.docs.forEach((txDoc) => {
         const txData = txDoc.data();
+        
         batch.update(doc(db, 'transactions', txDoc.id), {
           status: 'available',
           maturedAt: serverTimestamp()
         });
-        const userRef = doc(db, 'users', txData.userId);
+
+        const userRef = doc(db, 'users', txData.clientId);
         batch.update(userRef, {
-          'wallet.available': increment(txData.amount),
-          'wallet.pending': increment(-txData.amount)
+          'wallet.available': increment(txData.cashbackAmount || 0),
+          'wallet.pending': increment(-(txData.cashbackAmount || 0))
         });
       });
 
       await batch.commit();
+      alert(`${querySnapshot.size} transações maturadas com sucesso!`);
     } catch (error) {
       console.error("Erro na maturação:", error);
+      alert("Erro ao processar maturação.");
     } finally {
       setIsProcessing(false);
     }
@@ -106,7 +112,6 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const unsubscribe = subscribeToTransactions('admin');
-    processMaturation();
     return () => { if (unsubscribe) unsubscribe(); };
   }, [subscribeToTransactions]);
 
@@ -149,32 +154,30 @@ const AdminDashboard: React.FC = () => {
   const handleCreateMerchant = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = newMerchant.email.toLowerCase().trim();
-    
     try {
-      // 1. Gravar dados no Firestore
-      await addDoc(collection(db, 'users'), {
+      const merchantId = `mch_${Date.now()}`;
+      await setDoc(doc(db, 'users', merchantId), {
         ...newMerchant,
         email: cleanEmail,
-        temporaryPassword: newMerchant.password,
-        status: 'active',
+        status: 'pending',
         role: 'merchant',
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        wallet: { available: 0, pending: 0 }
       });
-
-      // 2. Automático: Enviar e-mail de criação de acesso/reset
-      // Isto fará com que o utilizador seja criado no Auth assim que definir a pass
-      await sendPasswordResetEmail(auth, cleanEmail);
-
-      alert('Lojista registado! Um e-mail de ativação foi enviado para o comerciante definir a sua password de acesso.');
+      try {
+        await sendPasswordResetEmail(auth, cleanEmail);
+        alert('Lojista pré-registado e e-mail enviado!');
+      } catch (authErr) {
+        alert('Lojista guardado. E-mail manual necessário.');
+      }
       setIsModalOpen(false);
       setNewMerchant({ 
         name: '', address: '', city: '', category: '', 
         nif: '', zipCode: '', phone: '', email: '', 
-        password: '', cashbackPercent: 10 
+        cashbackPercent: 10 
       });
     } catch (error: any) {
-      console.error(error);
-      alert('Erro ao criar lojista. Verifique se o e-mail é válido.');
+      alert('Erro ao criar lojista.');
     }
   };
 
@@ -191,22 +194,22 @@ const AdminDashboard: React.FC = () => {
     const data = transactions.map(t => ({
       'Data': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString() : '---',
       'Loja': t.merchantName || '---',
-      'Cliente': t.clientId || '---',
-      'Valor Bruto': (t.amount || 0).toFixed(2) + '€',
+      'Vizinho (ID)': t.clientId || '---',
+      'Volume': (t.amount || 0).toFixed(2) + '€',
       'Cashback': (t.cashbackAmount || 0).toFixed(2) + '€',
       'Status': t.status || 'pending'
     }));
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatório Global");
-    XLSX.writeFile(wb, `VizinhoPlus_Global_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Relatório");
+    XLSX.writeFile(wb, `VizinhoPlus_Admin.xlsx`);
   };
 
   const filteredTransactions = transactions.filter(t => {
-    const query = searchQuery.toLowerCase();
-    return (t.clientId?.toLowerCase().includes(query) || 
-            t.merchantName?.toLowerCase().includes(query) || 
-            t.documentNumber?.toLowerCase().includes(query));
+    const q = searchQuery.toLowerCase();
+    return (t.clientId?.toLowerCase().includes(q) || 
+            t.merchantName?.toLowerCase().includes(q) || 
+            t.documentNumber?.toLowerCase().includes(q));
   });
 
   if (currentView === 'settings') return <AdminSettings onBack={() => setCurrentView('overview')} />;
@@ -258,17 +261,22 @@ const AdminDashboard: React.FC = () => {
                  <h3 className="text-3xl font-black italic tracking-tighter">{stats.volume.toFixed(2)}€</h3>
               </div>
               <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
-                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Pendente (48h)</p>
+                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Pendente (+48h)</p>
                  <h3 className="text-3xl font-black italic tracking-tighter">{stats.pending.toFixed(2)}€</h3>
                  <div className="mt-2 flex items-center gap-2 text-[8px] font-black uppercase text-slate-300">
-                   <Clock size={10}/> A aguardar maturação
+                   <Clock size={10}/> Aguardando maturação
                  </div>
               </div>
               <div className="bg-[#00d66f] p-8 rounded-[40px] shadow-xl border-2 border-[#00d66f] text-[#0a2540]">
-                 <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">Cashback Disponível</p>
+                 <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">Gestão de Saldos</p>
                  <h3 className="text-3xl font-black italic tracking-tighter">{(stats.cashback - stats.pending).toFixed(2)}€</h3>
-                 <button onClick={processMaturation} disabled={isProcessing} className="mt-4 flex items-center gap-2 text-[9px] font-black uppercase hover:underline">
-                   <RefreshCw size={12} className={isProcessing ? 'animate-spin' : ''}/> Forçar Varredura
+                 <button 
+                  onClick={processMaturation} 
+                  disabled={isProcessing} 
+                  className="mt-4 flex items-center gap-2 text-[10px] font-black uppercase bg-[#0a2540] text-white px-4 py-2 rounded-xl hover:scale-105 transition-all disabled:opacity-50"
+                 >
+                   <RefreshCw size={12} className={isProcessing ? 'animate-spin' : ''}/> 
+                   {isProcessing ? 'A Processar...' : 'Gerar Cashback'}
                  </button>
               </div>
               <div className="bg-[#0a2540] p-8 rounded-[40px] shadow-xl text-white">
@@ -282,7 +290,7 @@ const AdminDashboard: React.FC = () => {
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f]" size={20} />
                 <input 
                   type="text" 
-                  placeholder="PROCURAR POR NIF, LOJA OU DOCUMENTO..." 
+                  placeholder="PROCURAR POR ID CLIENTE, LOJA OU DOCUMENTO..." 
                   className="w-full p-6 pl-12 rounded-3xl border-2 border-slate-100 outline-none focus:border-[#00d66f] font-black text-xs uppercase"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -303,7 +311,7 @@ const AdminDashboard: React.FC = () => {
                     <tr className="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-50">
                       <th className="p-8">Data</th>
                       <th className="p-8">Loja</th>
-                      <th className="p-8">Vizinho</th>
+                      <th className="p-8">ID Vizinho</th>
                       <th className="p-8 text-right">Volume</th>
                       <th className="p-8 text-right">Status</th>
                       <th className="p-8 text-right">Cashback</th>
@@ -316,7 +324,7 @@ const AdminDashboard: React.FC = () => {
                           {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}
                         </td>
                         <td className="p-8 font-black uppercase text-sm tracking-tighter">{t.merchantName}</td>
-                        <td className="p-8 font-mono text-slate-400 font-bold text-xs">{t.clientId}</td>
+                        <td className="p-8 font-mono text-slate-400 font-bold text-[10px]">{t.clientId}</td>
                         <td className="p-8 text-right font-black text-slate-400">{(t.amount || 0).toFixed(2)}€</td>
                         <td className="p-8 text-right uppercase text-[9px] font-black tracking-widest">
                           <span className={t.status === 'available' ? 'text-[#00d66f]' : 'text-amber-500'}>
@@ -385,7 +393,7 @@ const AdminDashboard: React.FC = () => {
                     <p className="font-black text-[#0a2540] text-sm uppercase tracking-tighter">{u.name || 'Sem Nome'}</p>
                     <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-4">{u.nif || 'NIF Pendente'}</p>
                     <div className="flex items-center gap-2 text-[8px] font-black uppercase text-[#00d66f]">
-                       <div className="w-1.5 h-1.5 rounded-full bg-[#00d66f]"></div> Conta Ativa
+                        <div className="w-1.5 h-1.5 rounded-full bg-[#00d66f]"></div> Conta Ativa
                     </div>
                   </div>
                 ))}
@@ -395,85 +403,31 @@ const AdminDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAL DE REGISTO ATUALIZADO */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-2xl rounded-[48px] p-10 shadow-2xl overflow-y-auto max-h-[95vh] border-4 border-[#00d66f]">
             <div className="flex justify-between items-start mb-8">
               <div>
                 <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
-                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest mt-2">O comerciante receberá um e-mail para ativar a conta</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-red-500 transition-colors"><XCircle size={24} /></button>
             </div>
-            
             <form onSubmit={handleCreateMerchant} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome Comercial da Loja</label>
-                  <input type="text" required placeholder="Ex: Pastelaria Central" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome da Loja</label>
+                  <input type="text" required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">NIF</label>
-                  <input type="text" required maxLength={9} placeholder="9 dígitos" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})} />
+                  <input type="text" required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})} />
                 </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><Phone size={10}/> Telefone</label>
-                  <input type="tel" required placeholder="Ex: 912345678" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.phone} onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})} />
-                </div>
-
                 <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><Tag size={10}/> Atividade Principal</label>
-                  <select 
-                    required 
-                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase"
-                    value={newMerchant.category}
-                    onChange={e => setNewMerchant({...newMerchant, category: e.target.value})}
-                  >
-                    <option value="">Selecione uma atividade...</option>
-                    <option value="Café / Pastelaria">Café / Pastelaria</option>
-                    <option value="Minimercado / Mercearia">Minimercado / Mercearia</option>
-                    <option value="Restaurante / Take-away">Restaurante / Take-away</option>
-                    <option value="Cabeleireiro / Estética">Cabeleireiro / Estética</option>
-                    <option value="Oficina / Serviços">Oficina / Serviços</option>
-                    <option value="Vestuário / Calçado">Vestuário / Calçado</option>
-                    <option value="Outros">Outros</option>
-                  </select>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email (Login)</label>
+                  <input type="email" required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
                 </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><MapPin size={10}/> Morada</label>
-                  <input type="text" required placeholder="Rua, Número, Bloco..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.address} onChange={e => setNewMerchant({...newMerchant, address: e.target.value})} />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Código Postal</label>
-                  <input type="text" required placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.zipCode} onChange={e => setNewMerchant({...newMerchant, zipCode: e.target.value})} />
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Cidade</label>
-                  <input type="text" required placeholder="Ex: Gondomar" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.city} onChange={e => setNewMerchant({...newMerchant, city: e.target.value})} />
-                </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor (Para Login)</label>
-                  <input type="email" required placeholder="gestor@email.com" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
-                </div>
-
-                <div className="md:col-span-2 space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">% Cashback Base</label>
-                  <div className="flex items-center bg-green-50 rounded-2xl px-6 border-2 border-green-100">
-                     <input type="number" step="0.1" className="w-full py-4 bg-transparent text-2xl font-black outline-none text-[#0a2540]" value={newMerchant.cashbackPercent} onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})} />
-                     <span className="font-black text-[#0a2540] text-xl">%</span>
-                  </div>
-                </div>
-
               </div>
-              <button type="submit" className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-black transition-all">Confirmar Adesão e Enviar Convite</button>
+              <button type="submit" className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl">Registar Parceiro</button>
             </form>
           </div>
         </div>
