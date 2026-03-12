@@ -13,7 +13,8 @@ import {
   writeBatch, 
   increment 
 } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { sendPasswordResetEmail } from 'firebase/auth'; // Importado para automação
+import { db, auth } from '../../config/firebase'; // Adicionado 'auth'
 import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, 
@@ -46,7 +47,6 @@ const AdminDashboard: React.FC = () => {
   const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // NOVO: newMerchant com todos os campos obrigatórios
   const [newMerchant, setNewMerchant] = useState({
     name: '', 
     address: '', 
@@ -148,24 +148,33 @@ const AdminDashboard: React.FC = () => {
 
   const handleCreateMerchant = async (e: React.FormEvent) => {
     e.preventDefault();
+    const cleanEmail = newMerchant.email.toLowerCase().trim();
+    
     try {
+      // 1. Gravar dados no Firestore
       await addDoc(collection(db, 'users'), {
         ...newMerchant,
-        email: newMerchant.email.toLowerCase().trim(),
+        email: cleanEmail,
         temporaryPassword: newMerchant.password,
         status: 'active',
         role: 'merchant',
         createdAt: serverTimestamp()
       });
-      alert('Lojista registado com sucesso!');
+
+      // 2. Automático: Enviar e-mail de criação de acesso/reset
+      // Isto fará com que o utilizador seja criado no Auth assim que definir a pass
+      await sendPasswordResetEmail(auth, cleanEmail);
+
+      alert('Lojista registado! Um e-mail de ativação foi enviado para o comerciante definir a sua password de acesso.');
       setIsModalOpen(false);
       setNewMerchant({ 
         name: '', address: '', city: '', category: '', 
         nif: '', zipCode: '', phone: '', email: '', 
         password: '', cashbackPercent: 10 
       });
-    } catch (error) {
-      alert('Erro ao criar lojista.');
+    } catch (error: any) {
+      console.error(error);
+      alert('Erro ao criar lojista. Verifique se o e-mail é válido.');
     }
   };
 
@@ -386,14 +395,14 @@ const AdminDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAL DE REGISTO ATUALIZADO COM NOVOS CAMPOS */}
+      {/* MODAL DE REGISTO ATUALIZADO */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-2xl rounded-[48px] p-10 shadow-2xl overflow-y-auto max-h-[95vh] border-4 border-[#00d66f]">
             <div className="flex justify-between items-start mb-8">
               <div>
                 <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
-                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest mt-2">Dados obrigatórios para o diretório</p>
+                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest mt-2">O comerciante receberá um e-mail para ativar a conta</p>
               </div>
               <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-red-500 transition-colors"><XCircle size={24} /></button>
             </div>
@@ -401,7 +410,6 @@ const AdminDashboard: React.FC = () => {
             <form onSubmit={handleCreateMerchant} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 
-                {/* Nome e NIF */}
                 <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome Comercial da Loja</label>
                   <input type="text" required placeholder="Ex: Pastelaria Central" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
@@ -417,7 +425,6 @@ const AdminDashboard: React.FC = () => {
                   <input type="tel" required placeholder="Ex: 912345678" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.phone} onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})} />
                 </div>
 
-                {/* Atividade */}
                 <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><Tag size={10}/> Atividade Principal</label>
                   <select 
@@ -437,7 +444,6 @@ const AdminDashboard: React.FC = () => {
                   </select>
                 </div>
 
-                {/* Localização */}
                 <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><MapPin size={10}/> Morada</label>
                   <input type="text" required placeholder="Rua, Número, Bloco..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.address} onChange={e => setNewMerchant({...newMerchant, address: e.target.value})} />
@@ -453,18 +459,11 @@ const AdminDashboard: React.FC = () => {
                   <input type="text" required placeholder="Ex: Gondomar" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.city} onChange={e => setNewMerchant({...newMerchant, city: e.target.value})} />
                 </div>
 
-                {/* Acesso */}
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor</label>
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor (Para Login)</label>
                   <input type="email" required placeholder="gestor@email.com" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
                 </div>
 
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Password Inicial</label>
-                  <input type="text" required placeholder="Password segura" className="w-full p-4 bg-slate-100 border-2 border-slate-200 rounded-2xl outline-none focus:border-[#0a2540] font-black text-[#00d66f] text-xs" value={newMerchant.password} onChange={e => setNewMerchant({...newMerchant, password: e.target.value})} />
-                </div>
-
-                {/* Cashback */}
                 <div className="md:col-span-2 space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">% Cashback Base</label>
                   <div className="flex items-center bg-green-50 rounded-2xl px-6 border-2 border-green-100">
@@ -474,7 +473,7 @@ const AdminDashboard: React.FC = () => {
                 </div>
 
               </div>
-              <button type="submit" className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-black transition-all">Confirmar Adesão e Gravar no Diretório</button>
+              <button type="submit" className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-black transition-all">Confirmar Adesão e Enviar Convite</button>
             </form>
           </div>
         </div>
