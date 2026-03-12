@@ -3,6 +3,7 @@ import { useStore } from '../../store/useStore';
 import { collection, query, where, getDocs, updateDoc, doc, arrayUnion } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
+import { useNavigate } from 'react-router-dom';
 import { 
   LayoutDashboard, 
   History, 
@@ -23,6 +24,7 @@ import {
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout, setCurrentUser } = useStore();
+  const navigate = useNavigate();
   
   // ESTADOS DE VISUALIZAÇÃO
   const [view, setView] = useState<'terminal' | 'history' | 'profile'>('terminal');
@@ -110,16 +112,21 @@ const MerchantDashboard: React.FC = () => {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/login');
+    } catch (error) {
+      console.error("Erro ao sair:", error);
+    }
+  };
+
   const stats = useMemo(() => {
-    // Usamos o saldo real do documento do utilizador (wallet) que vem do useStore
     const available = currentUser?.wallet?.available || 0;
-    
-    // Calculamos o teórico com base nas transações carregadas
     const theoretical = transactions.reduce((acc, t) => {
       if (t.type === 'earn') return acc + (t.cashbackAmount || 0);
       return acc - (t.cashbackAmount || 0);
     }, 0);
-
     return { theoretical, available };
   }, [transactions, currentUser?.wallet]);
 
@@ -157,7 +164,6 @@ const MerchantDashboard: React.FC = () => {
     const val = parseFloat(amount);
     if (!cardNumber || isNaN(val) || val <= 0 || !documentNumber || !currentUser) return alert("Preencha todos os campos.");
     
-    // Na utilização de saldo, verificamos se o lojista tem saldo disponível na carteira
     if (type === 'redeem' && val > stats.available) {
       return alert(`Saldo insuficiente! O seu saldo disponível é de ${stats.available.toFixed(2)}€`);
     }
@@ -225,7 +231,7 @@ const MerchantDashboard: React.FC = () => {
             <button onClick={() => setShowOpManager(!showOpManager)} className={`flex items-center gap-2 px-6 py-4 rounded-2xl font-black text-[12px] uppercase tracking-widest transition-all ${showOpManager ? 'bg-white text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>
               <Users size={18} strokeWidth={3} /> Equipa
             </button>
-            <button onClick={() => logout()} className="flex items-center gap-2 px-6 py-4 rounded-2xl font-black text-[12px] uppercase tracking-widest text-red-400 hover:bg-red-500/20 transition-all">
+            <button onClick={handleLogout} className="flex items-center gap-2 px-6 py-4 rounded-2xl font-black text-[12px] uppercase tracking-widest text-red-400 hover:bg-red-500/20 transition-all">
               <LogOut size={18} strokeWidth={3} />
             </button>
           </nav>

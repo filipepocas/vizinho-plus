@@ -5,7 +5,8 @@ import ClientDashboard from '../features/client/ClientDashboard';
 import MerchantDashboard from '../features/merchant/MerchantDashboard';
 import AdminDashboard from '../features/admin/AdminDashboard';
 import LoginPage from '../features/auth/LoginPage';
-import PrivateRoute from './PrivateRoute'; // O nosso novo segurança
+import RegisterPage from '../features/auth/RegisterPage'; // Importado o novo componente
+import PrivateRoute from './PrivateRoute';
 
 const AppRoutes = () => {
   return (
@@ -13,6 +14,7 @@ const AppRoutes = () => {
       <Routes>
         {/* Rotas Públicas */}
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
         <Route path="/cliente" element={<ClientDashboard />} />
         <Route path="/comerciante" element={<MerchantDashboard />} />
 
