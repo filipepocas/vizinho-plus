@@ -1,95 +1,91 @@
+// src/App.tsx
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
-// 1. IMPORTAÇÕES DE COMPONENTES
-import Login from './features/auth/Login';
-import ForgotPassword from './features/auth/ForgotPassword';
+// IMPORTAÇÕES DOS COMPONENTES AUDITADOS (MOLÉCULAS CORRETAS)
+import LoginPage from './features/auth/LoginPage';
+import RegisterPage from './features/auth/RegisterPage';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
-import Register from './features/user/Register';
-import LoginSelector from './components/LoginSelector';
 
-// 2. HELPER DE PROTEÇÃO DE ROTA ADMIN (PARA O FILIPE)
-const AdminRoute: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+// HELPER DE PROTEÇÃO DE ROTA (ADMIN E GERAL)
+const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
   const { currentUser, isLoading } = useStore();
   
-  // Se ainda estiver a carregar os dados do Firebase, mostramos um aviso visual simples
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#f6f9fc]">
-        <div className="text-[#0a2540] font-black animate-pulse uppercase tracking-widest">AUTENTICANDO...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#1C305C]">
+        <div className="text-white font-black animate-pulse uppercase tracking-widest">A carregar...</div>
       </div>
     );
   }
 
-  const isAdmin = currentUser?.role === 'admin' || currentUser?.email === 'rochap.filipe@gmail.com';
-  
-  // Só redireciona se o loading terminou e realmente não há user
   if (!currentUser) return <Navigate to="/login" replace />;
   
-  return isAdmin ? <>{children}</> : <Navigate to="/" replace />;
+  if (role && currentUser.role !== role && currentUser.email !== 'rochap.filipe@gmail.com') {
+    return <Navigate to="/" replace />;
+  }
+  
+  return <>{children}</>;
 };
 
-// 3. COMPONENTE PRINCIPAL
 function App() {
   const { subscribeToTransactions, currentUser } = useStore();
 
-  // ESCUTA DE DADOS EM TEMPO REAL (Cérebro da App)
   useEffect(() => {
     let unsubscribe: (() => void) | undefined;
-
     if (currentUser) {
-      if (currentUser.role === 'admin' || currentUser.email === 'rochap.filipe@gmail.com') {
-        unsubscribe = subscribeToTransactions('admin');
-      }
+      // Subscreve às transações conforme o papel do utilizador
+      unsubscribe = subscribeToTransactions(currentUser.role, currentUser.id);
     }
-
-    return () => { 
-      if (unsubscribe) unsubscribe(); 
-    };
+    return () => { if (unsubscribe) unsubscribe(); };
   }, [currentUser, subscribeToTransactions]);
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[#f6f9fc] selection:bg-[#00d66f] selection:text-[#0a2540]">
+      <div className="min-h-screen bg-[#f6f9fc]">
         <Routes>
+          {/* A Raiz agora envia para o Login para vermos o teu logotipo imediatamente */}
+          <Route path="/" element={<Navigate to="/login" replace />} />
           
-          {/* ROTA 1: PORTAL DE ENTRADA */}
-          <Route path="/" element={<LoginSelector />} />
+          {/* Rotas de Autenticação (As que corrigimos) */}
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
 
-          {/* ROTA 2: LOGIN FORMAL (Admin e Lojistas) */}
-          <Route path="/login" element={<Login />} />
-
-          {/* ROTA 3: RECUPERAÇÃO DE PASSWORD (Autónoma) */}
-          <Route path="/forgot-password" element={<ForgotPassword />} />
-          
-          {/* ROTA 4: ÁREA DO FILIPE (ADMIN CONTROL) */}
+          {/* Área Admin (Filipe) */}
           <Route 
             path="/admin" 
             element={
-              <AdminRoute>
+              <PrivateRoute role="admin">
                 <AdminDashboard />
-              </AdminRoute>
+              </PrivateRoute>
             } 
           />
 
-          {/* ROTA 5: ÁREA DO LOJISTA */}
-          <Route path="/merchant" element={<MerchantDashboard />} />
+          {/* Área Comerciante */}
+          <Route 
+            path="/merchant" 
+            element={
+              <PrivateRoute role="merchant">
+                <MerchantDashboard />
+              </PrivateRoute>
+            } 
+          />
 
-          {/* ROTA 6: ÁREA DO CLIENTE (VIZINHO) */}
+          {/* Área Cliente (Vizinho) */}
           <Route 
             path="/client" 
-            element={currentUser ? <UserDashboard /> : <Navigate to="/client/register" replace />} 
+            element={
+              <PrivateRoute role="client">
+                <UserDashboard />
+              </PrivateRoute>
+            } 
           />
-          
-          {/* ROTA 7: REGISTO DO CLIENTE */}
-          <Route path="/client/register" element={<Register />} />
 
-          {/* ROTA 8: REDIRECIONAMENTO DE SEGURANÇA */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-          
+          {/* Redirecionamento de Segurança */}
+          <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </div>
     </BrowserRouter>
