@@ -6,7 +6,8 @@ import { useStore } from '../../store/useStore';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  const { registerClientProfile } = useStore();
+  // Adicionado checkNifExists do store
+  const { registerClientProfile, checkNifExists } = useStore();
   
   const [formData, setFormData] = useState({
     name: '',
@@ -44,6 +45,13 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
+      // NOVO PASSO 3: Verificar se o NIF já existe antes de criar a conta Auth
+      const nifExists = await checkNifExists(formData.nif);
+      if (nifExists) {
+        setLoading(false);
+        return setError('Este NIF já se encontra registado no sistema.');
+      }
+
       // 2. Criar utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
@@ -53,12 +61,12 @@ const Register: React.FC = () => {
 
       const newUser = userCredential.user;
 
-      // Pausa de segurança
+      // Pausa de segurança para propagação da sessão
       await new Promise(resolve => setTimeout(resolve, 500));
 
       const customerNumber = generateCustomerNumber();
 
-      // 4. Gravar perfil completo
+      // 4. Gravar perfil completo no Firestore
       try {
         await registerClientProfile({
           id: newUser.uid,
@@ -71,6 +79,7 @@ const Register: React.FC = () => {
           role: 'client'
         });
         
+        // 5. Sucesso! (Passo 2)
         setIsSuccess(true);
         
         setTimeout(() => {
@@ -78,7 +87,7 @@ const Register: React.FC = () => {
         }, 2000);
 
       } catch (profileErr: any) {
-        // Se falhar aqui, quase sempre será por NIF duplicado (bloqueio das Rules)
+        // Se a gravação do perfil falhar, removemos o utilizador do Auth para evitar lixo
         await deleteUser(newUser);
         throw profileErr;
       }
@@ -89,8 +98,7 @@ const Register: React.FC = () => {
       if (err.code === 'auth/email-already-in-use') {
         setError('Este email já está em uso.');
       } else if (err.code === 'permission-denied' || err.message?.includes('permission')) {
-        // AJUSTE PASSO 3: Mensagem mais clara para NIF duplicado ou erro de regra
-        setError('Este NIF já está registado ou ocorreu um erro de permissão. Verifique os dados ou contacte o Administrador.');
+        setError('Erro de permissão no servidor. Verifique os dados ou contacte o Administrador.');
       } else if (err.code === 'auth/weak-password') {
         setError('A password deve ter pelo menos 6 caracteres.');
       } else {

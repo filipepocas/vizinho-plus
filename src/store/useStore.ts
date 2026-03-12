@@ -8,7 +8,8 @@ import {
   where,
   serverTimestamp,
   setDoc,
-  doc 
+  doc,
+  getDocs 
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -48,22 +49,22 @@ export interface UserProfile {
 interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
-  isLoading: boolean; // Adicionado para resolver o erro no App.tsx
+  isLoading: boolean;
   setCurrentUser: (user: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
   registerClientProfile: (profile: UserProfile) => Promise<void>;
+  checkNifExists: (nif: string) => Promise<boolean>;
 }
 
 export const useStore = create<StoreState>((set) => ({
   transactions: [],
   currentUser: null,
-  isLoading: true, // Começa em true para aguardar a verificação inicial
+  isLoading: true,
 
   setCurrentUser: (user) => set({ currentUser: user, isLoading: false }),
-  
   setLoading: (loading) => set({ isLoading: loading }),
 
   logout: async () => {
@@ -72,6 +73,17 @@ export const useStore = create<StoreState>((set) => ({
       set({ currentUser: null, transactions: [], isLoading: false });
     } catch (error) {
       console.error("Erro ao sair:", error);
+    }
+  },
+
+  checkNifExists: async (nif: string) => {
+    try {
+      const q = query(collection(db, 'users'), where('nif', '==', nif));
+      const querySnapshot = await getDocs(q);
+      return !querySnapshot.empty;
+    } catch (error) {
+      console.error("Erro ao verificar NIF:", error);
+      return false;
     }
   },
 
@@ -124,10 +136,8 @@ export const useStore = create<StoreState>((set) => ({
   },
 }));
 
-// Listener global para sincronizar o estado do Auth com o Store
 onAuthStateChanged(auth, (user) => {
   if (!user) {
     useStore.getState().setCurrentUser(null);
   }
-  // Nota: O preenchimento do perfil completo (role, etc) continuará a ser feito no seu componente de Login
 });
