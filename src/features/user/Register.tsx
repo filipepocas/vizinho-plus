@@ -6,13 +6,12 @@ import { useStore } from '../../store/useStore';
 
 const Register: React.FC = () => {
   const navigate = useNavigate();
-  // Adicionado checkNifExists do store
   const { registerClientProfile, checkNifExists } = useStore();
   
   const [formData, setFormData] = useState({
     name: '',
     nif: '',
-    postalCode: '',
+    postalCode: '', // Mantemos localmente como postalCode para o input
     phone: '',
     email: '',
     password: '',
@@ -45,14 +44,14 @@ const Register: React.FC = () => {
     setLoading(true);
 
     try {
-      // NOVO PASSO 3: Verificar se o NIF já existe antes de criar a conta Auth
+      // 2. Verificar se o NIF já existe
       const nifExists = await checkNifExists(formData.nif);
       if (nifExists) {
         setLoading(false);
         return setError('Este NIF já se encontra registado no sistema.');
       }
 
-      // 2. Criar utilizador no Firebase Auth
+      // 3. Criar utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email, 
@@ -73,13 +72,17 @@ const Register: React.FC = () => {
           customerNumber: customerNumber,
           name: formData.name,
           nif: formData.nif,
-          postalCode: formData.postalCode,
+          zipCode: formData.postalCode, // Mapeado de postalCode para zipCode conforme useStore
           phone: formData.phone.trim() || '', 
           email: formData.email,
-          role: 'client'
+          role: 'client',
+          status: 'active',
+          wallet: {
+            available: 0,
+            pending: 0
+          }
         });
         
-        // 5. Sucesso! (Passo 2)
         setIsSuccess(true);
         
         setTimeout(() => {

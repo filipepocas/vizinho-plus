@@ -28,7 +28,10 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  RefreshCw
+  RefreshCw,
+  MapPin,
+  Phone,
+  Tag
 } from 'lucide-react';
 import AdminSettings from './AdminSettings';
 
@@ -43,12 +46,20 @@ const AdminDashboard: React.FC = () => {
   const [registeredUsers, setRegisteredUsers] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
+  // NOVO: newMerchant com todos os campos obrigatórios
   const [newMerchant, setNewMerchant] = useState({
-    name: '', address: '', nif: '', zipCode: '', 
-    phone: '', email: '', password: '', cashbackPercent: 10 
+    name: '', 
+    address: '', 
+    city: '',
+    category: '',
+    nif: '', 
+    zipCode: '', 
+    phone: '', 
+    email: '', 
+    password: '', 
+    cashbackPercent: 10 
   });
 
-  // 1. MOTOR DE MATURAÇÃO (NOVA LÓGICA INTEGRADA)
   const processMaturation = async () => {
     setIsProcessing(true);
     try {
@@ -95,7 +106,7 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const unsubscribe = subscribeToTransactions('admin');
-    processMaturation(); // Executa ao entrar
+    processMaturation();
     return () => { if (unsubscribe) unsubscribe(); };
   }, [subscribeToTransactions]);
 
@@ -107,7 +118,7 @@ const AdminDashboard: React.FC = () => {
           const usersSnap = await getDocs(collection(db, 'users'));
           const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() }));
           setMerchants(allData.filter((u: any) => u.role === 'merchant'));
-          setRegisteredUsers(allData.filter((u: any) => u.role === 'user'));
+          setRegisteredUsers(allData.filter((u: any) => u.role === 'user' || u.role === 'client'));
         } catch (e) {
           console.error("Erro ao carregar dados:", e);
         } finally {
@@ -148,7 +159,11 @@ const AdminDashboard: React.FC = () => {
       });
       alert('Lojista registado com sucesso!');
       setIsModalOpen(false);
-      setNewMerchant({ name: '', address: '', nif: '', zipCode: '', phone: '', email: '', password: '', cashbackPercent: 10 });
+      setNewMerchant({ 
+        name: '', address: '', city: '', category: '', 
+        nif: '', zipCode: '', phone: '', email: '', 
+        password: '', cashbackPercent: 10 
+      });
     } catch (error) {
       alert('Erro ao criar lojista.');
     }
@@ -228,7 +243,6 @@ const AdminDashboard: React.FC = () => {
         
         {currentView === 'overview' && (
           <div className="space-y-10 animate-in fade-in duration-500">
-            {/* CARDS DE MÉTRICAS COM MATURAÇÃO */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
               <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume de Vendas</p>
@@ -333,7 +347,10 @@ const AdminDashboard: React.FC = () => {
                       </span>
                     </div>
                     <h3 className="text-xl font-black uppercase italic tracking-tighter mb-1">{m.name}</h3>
-                    <p className="text-[10px] font-black text-slate-400 uppercase mb-6 tracking-widest">NIF: {m.nif}</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase mb-2 tracking-widest">NIF: {m.nif}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase mb-6 flex items-center gap-1">
+                      <Tag size={10} /> {m.category || 'Atividade não definida'}
+                    </p>
                     <div className="flex gap-2">
                        {m.status !== 'active' ? (
                          <button onClick={() => handleUpdateStatus(m.id, 'active')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px] flex items-center justify-center gap-2 shadow-md"><CheckCircle2 size={14} /> Ativar</button>
@@ -369,39 +386,95 @@ const AdminDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAL DE REGISTO MANTIDO */}
+      {/* MODAL DE REGISTO ATUALIZADO COM NOVOS CAMPOS */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4">
-          <div className="bg-white w-full max-w-2xl rounded-[48px] p-12 shadow-2xl overflow-y-auto max-h-[90vh]">
-            <div className="flex justify-between items-start mb-10">
-              <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
+          <div className="bg-white w-full max-w-2xl rounded-[48px] p-10 shadow-2xl overflow-y-auto max-h-[95vh] border-4 border-[#00d66f]">
+            <div className="flex justify-between items-start mb-8">
+              <div>
+                <h2 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter">Novo Parceiro</h2>
+                <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest mt-2">Dados obrigatórios para o diretório</p>
+              </div>
               <button onClick={() => setIsModalOpen(false)} className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:text-red-500 transition-colors"><XCircle size={24} /></button>
             </div>
-            <form onSubmit={handleCreateMerchant} className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome Comercial</label>
-                <input type="text" required className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor</label>
-                <input type="email" required className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">NIF</label>
-                <input type="text" required maxLength={9} className="w-full p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Password Inicial</label>
-                <input type="text" required className="w-full p-5 bg-slate-100 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#0a2540] font-black text-[#00d66f] text-xs" value={newMerchant.password} onChange={e => setNewMerchant({...newMerchant, password: e.target.value})} />
-              </div>
-              <div className="md:col-span-2 space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">% Cashback Base</label>
-                <div className="flex items-center bg-green-50 rounded-3xl px-6 border-2 border-green-100">
-                   <input type="number" step="0.1" className="w-full py-5 bg-transparent text-2xl font-black outline-none text-[#0a2540]" value={newMerchant.cashbackPercent} onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})} />
-                   <span className="font-black text-[#0a2540] text-xl">%</span>
+            
+            <form onSubmit={handleCreateMerchant} className="space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                
+                {/* Nome e NIF */}
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Nome Comercial da Loja</label>
+                  <input type="text" required placeholder="Ex: Pastelaria Central" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.name} onChange={e => setNewMerchant({...newMerchant, name: e.target.value})} />
                 </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">NIF</label>
+                  <input type="text" required maxLength={9} placeholder="9 dígitos" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.nif} onChange={e => setNewMerchant({...newMerchant, nif: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><Phone size={10}/> Telefone</label>
+                  <input type="tel" required placeholder="Ex: 912345678" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.phone} onChange={e => setNewMerchant({...newMerchant, phone: e.target.value})} />
+                </div>
+
+                {/* Atividade */}
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><Tag size={10}/> Atividade Principal</label>
+                  <select 
+                    required 
+                    className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase"
+                    value={newMerchant.category}
+                    onChange={e => setNewMerchant({...newMerchant, category: e.target.value})}
+                  >
+                    <option value="">Selecione uma atividade...</option>
+                    <option value="Café / Pastelaria">Café / Pastelaria</option>
+                    <option value="Minimercado / Mercearia">Minimercado / Mercearia</option>
+                    <option value="Restaurante / Take-away">Restaurante / Take-away</option>
+                    <option value="Cabeleireiro / Estética">Cabeleireiro / Estética</option>
+                    <option value="Oficina / Serviços">Oficina / Serviços</option>
+                    <option value="Vestuário / Calçado">Vestuário / Calçado</option>
+                    <option value="Outros">Outros</option>
+                  </select>
+                </div>
+
+                {/* Localização */}
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest flex items-center gap-1"><MapPin size={10}/> Morada</label>
+                  <input type="text" required placeholder="Rua, Número, Bloco..." className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.address} onChange={e => setNewMerchant({...newMerchant, address: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Código Postal</label>
+                  <input type="text" required placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.zipCode} onChange={e => setNewMerchant({...newMerchant, zipCode: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Cidade</label>
+                  <input type="text" required placeholder="Ex: Gondomar" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs uppercase" value={newMerchant.city} onChange={e => setNewMerchant({...newMerchant, city: e.target.value})} />
+                </div>
+
+                {/* Acesso */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Email do Gestor</label>
+                  <input type="email" required placeholder="gestor@email.com" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-black text-xs" value={newMerchant.email} onChange={e => setNewMerchant({...newMerchant, email: e.target.value})} />
+                </div>
+
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">Password Inicial</label>
+                  <input type="text" required placeholder="Password segura" className="w-full p-4 bg-slate-100 border-2 border-slate-200 rounded-2xl outline-none focus:border-[#0a2540] font-black text-[#00d66f] text-xs" value={newMerchant.password} onChange={e => setNewMerchant({...newMerchant, password: e.target.value})} />
+                </div>
+
+                {/* Cashback */}
+                <div className="md:col-span-2 space-y-2">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-4 tracking-widest">% Cashback Base</label>
+                  <div className="flex items-center bg-green-50 rounded-2xl px-6 border-2 border-green-100">
+                     <input type="number" step="0.1" className="w-full py-4 bg-transparent text-2xl font-black outline-none text-[#0a2540]" value={newMerchant.cashbackPercent} onChange={e => setNewMerchant({...newMerchant, cashbackPercent: Number(e.target.value)})} />
+                     <span className="font-black text-[#0a2540] text-xl">%</span>
+                  </div>
+                </div>
+
               </div>
-              <button type="submit" className="md:col-span-2 p-6 bg-[#00d66f] text-[#0a2540] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl">Confirmar Adesão da Loja</button>
+              <button type="submit" className="w-full p-6 bg-[#0a2540] text-[#00d66f] rounded-3xl font-black uppercase text-xs tracking-widest shadow-xl hover:bg-black transition-all">Confirmar Adesão e Gravar no Diretório</button>
             </form>
           </div>
         </div>

@@ -26,6 +26,7 @@ export interface Transaction {
   operatorCode?: string;
   status: 'pending' | 'available';
   createdAt: any;
+  maturedAt?: any;
 }
 
 export interface UserProfile {
@@ -35,15 +36,23 @@ export interface UserProfile {
   name?: string;     
   nif?: string;      
   email?: string;    
-  role: 'client' | 'merchant' | 'admin';
+  role: 'client' | 'merchant' | 'admin' | 'user';
+  status?: 'active' | 'disabled' | 'pending';
   cashbackPercent?: number;
   phone?: string;
-  freguesia?: string;
-  postalCode?: string;
+  address?: string;    
+  city?: string;       
+  category?: string;   
+  zipCode?: string;
   operators?: any[];
   firstAccess?: boolean;
   temporaryPassword?: string;
   password?: string;
+  wallet?: {
+    available: number;
+    pending: number;
+  };
+  createdAt?: any;
 }
 
 interface StoreState {
@@ -90,10 +99,13 @@ export const useStore = create<StoreState>((set) => ({
   registerClientProfile: async (profile) => {
     try {
       const docId = profile.uid || profile.id;
+      // Garante que não enviamos IDs duplicados ou campos indefinidos
+      const { id, ...dataToSave } = profile;
       await setDoc(doc(db, 'users', docId), {
-        ...profile,
+        ...dataToSave,
         createdAt: serverTimestamp(),
-      });
+        wallet: profile.wallet || { available: 0, pending: 0 }
+      }, { merge: true });
     } catch (error) {
       console.error("Erro ao registar perfil:", error);
       throw error;
@@ -114,13 +126,14 @@ export const useStore = create<StoreState>((set) => ({
 
   subscribeToTransactions: (role, identifier) => {
     const transRef = collection(db, 'transactions');
-    let q = query(transRef, orderBy('createdAt', 'desc'));
+    let q;
 
-    if (role === 'merchant' && identifier) {
-      q = query(transRef, where('merchantId', '==', identifier), orderBy('createdAt', 'desc'));
-    } else if (role === 'client' && identifier) {
-      q = query(transRef, where('clientId', '==', identifier), orderBy('createdAt', 'desc'));
-    } else if (role === 'admin') {
+    // Lógica de filtragem por Role
+    if ((role === 'merchant' || role === 'client' || role === 'user') && identifier) {
+      const field = (role === 'merchant') ? 'merchantId' : 'clientId';
+      q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'));
+    } else {
+      // Para Admin ou quando não há identificador, mostra tudo por data
       q = query(transRef, orderBy('createdAt', 'desc'));
     }
 
@@ -131,7 +144,8 @@ export const useStore = create<StoreState>((set) => ({
       })) as Transaction[];
       set({ transactions: transData });
     }, (error) => {
-      console.error("Erro na escuta de transações:", error);
+      // Se houver erro de permissão (ex: regras do Firebase), logamos aqui
+      console.error("Erro na escuta de transações:", error.message);
     });
   },
 }));
