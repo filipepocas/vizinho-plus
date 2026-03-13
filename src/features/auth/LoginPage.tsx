@@ -89,6 +89,14 @@ const LoginPage: React.FC = () => {
               className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
               placeholder="••••••••"
             />
+            <div className="mt-2 text-right">
+              <Link 
+                to="/forgot-password" 
+                className="text-[9px] font-black uppercase text-gray-400 hover:text-[#00d66f] transition-all"
+              >
+                Esqueceu-se da palavra-passe?
+              </Link>
+            </div>
           </div>
           <button 
             type="submit"

@@ -9,6 +9,7 @@ const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
   const [nif, setNif] = useState('');
   const [email, setEmail] = useState('');
+  const [zipCode, setZipCode] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -26,6 +27,13 @@ const RegisterPage: React.FC = () => {
     // Validação básica de NIF (9 dígitos)
     if (nif.trim().length !== 9) {
       setError('O NIF deve ter exatamente 9 dígitos.');
+      setIsLoading(false);
+      return;
+    }
+
+    // Validação básica de Código Postal (Formato simplificado ou 8 caracteres)
+    if (zipCode.trim().length < 4) {
+      setError('Por favor, insira um Código Postal válido.');
       setIsLoading(false);
       return;
     }
@@ -53,6 +61,7 @@ const RegisterPage: React.FC = () => {
         name: name.trim(),
         nif: nif.trim(),
         email: userEmail,
+        zipCode: zipCode.trim(),
         role: userRole,
         status: 'active',
         wallet: { available: 0, pending: 0 },
@@ -118,17 +127,31 @@ const RegisterPage: React.FC = () => {
               placeholder="O teu nome"
             />
           </div>
-          <div>
-            <label className="block text-[10px] font-black uppercase mb-1 text-[#1C305C]">NIF</label>
-            <input 
-              required
-              type="text" 
-              maxLength={9}
-              value={nif}
-              onChange={(e) => setNif(e.target.value.replace(/\D/g, ''))}
-              className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
-              placeholder="123456789"
-            />
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-[#1C305C]">NIF</label>
+              <input 
+                required
+                type="text" 
+                maxLength={9}
+                value={nif}
+                onChange={(e) => setNif(e.target.value.replace(/\D/g, ''))}
+                className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
+                placeholder="123456789"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-[#1C305C]">Código Postal</label>
+              <input 
+                required
+                type="text" 
+                maxLength={8}
+                value={zipCode}
+                onChange={(e) => setZipCode(e.target.value)}
+                className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
+                placeholder="0000-000"
+              />
+            </div>
           </div>
           <div>
             <label className="block text-[10px] font-black uppercase mb-1 text-[#1C305C]">E-mail</label>
