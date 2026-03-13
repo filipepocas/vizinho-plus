@@ -67,19 +67,21 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       if (confirmSecond) {
         setIsDeleting(true);
         try {
-          // CORREÇÃO DE TIPO: Mapear o role para garantir compatibilidade com a função deleteUserWithHistory
+          // 1. Guardar os dados necessários antes de limpar o estado
+          const userId = currentUser.id;
           const roleToDelete: 'merchant' | 'client' = currentUser.role === 'merchant' ? 'merchant' : 'client';
           
-          // 1. Eliminar dados e histórico na Firestore
-          await deleteUserWithHistory(currentUser.id, roleToDelete);
-          
-          // 2. Logout e limpeza do estado
+          // 2. LOGOUT PRIMEIRO: Para evitar erros de "Assertion Failed" no Firestore,
+          // fechamos a sessão e os listeners antes de apagar os dados.
           await logout();
+          
+          // 3. Eliminar dados e histórico na Firestore em segundo plano
+          await deleteUserWithHistory(userId, roleToDelete);
           
           alert("Conta eliminada com sucesso. Até breve!");
         } catch (error) {
           console.error("Erro ao eliminar conta:", error);
-          alert("Ocorreu um erro ao eliminar a conta. Por favor, contacta o suporte.");
+          alert("A sessão foi encerrada, mas pode ter ocorrido um erro ao limpar o histórico. Contacta o suporte.");
         } finally {
           setIsDeleting(false);
         }
