@@ -1,4 +1,3 @@
-// src/store/useStore.ts
 import { create } from 'zustand';
 import { 
   collection, 
@@ -22,6 +21,7 @@ interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
   isLoading: boolean;
+  isInitialized: boolean;
   setCurrentUser: (user: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
@@ -29,14 +29,16 @@ interface StoreState {
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
   registerClientProfile: (profile: UserProfile) => Promise<void>;
   checkNifExists: (nif: string) => Promise<boolean>;
+  initializeAuth: () => () => void;
 }
 
-export const useStore = create<StoreState>((set, get) => ({
+export const useStore = create<StoreState>((set) => ({
   transactions: [],
   currentUser: null,
   isLoading: true,
+  isInitialized: false,
 
-  setCurrentUser: (user) => set({ currentUser: user, isLoading: false }),
+  setCurrentUser: (user) => set({ currentUser: user, isLoading: false, isInitialized: true }),
   setLoading: (loading) => set({ isLoading: loading }),
 
   logout: async () => {
@@ -76,25 +78,12 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addTransaction: async (transactionData) => {
     try {
-      // Criamos a referência para o novo documento
-      const docRef = await addDoc(collection(db, 'transactions'), {
+      // Removemos a atualização manual do estado aqui.
+      // O onSnapshot tratará de adicionar a transação à lista assim que ela for gravada.
+      await addDoc(collection(db, 'transactions'), {
         ...transactionData,
         createdAt: serverTimestamp(),
       });
-
-      // SINCRONIZAÇÃO IMEDIATA: 
-      // Para evitar que o lojista fique na dúvida, adicionamos manualmente 
-      // a transação ao estado local antes mesmo do Firebase devolver o Snapshot
-      const newTransaction: Transaction = {
-        ...transactionData,
-        id: docRef.id,
-        createdAt: Timestamp.now(), // Usamos um timestamp local temporário
-      } as Transaction;
-
-      set((state) => ({
-        transactions: [newTransaction, ...state.transactions]
-      }));
-
     } catch (error) {
       console.error("Erro ao adicionar transação:", error);
       throw error;
@@ -118,33 +107,40 @@ export const useStore = create<StoreState>((set, get) => ({
         ...doc.data()
       })) as Transaction[];
       
-      // Atualizamos o estado local com os dados reais e ordenados do servidor
       set({ transactions: transData });
     }, (error) => {
       console.error("Erro na escuta de transações:", error.message);
     });
   },
-}));
 
-// LISTENER DE SESSÃO - PADRONIZAÇÃO DE ID
-onAuthStateChanged(auth, async (user) => {
-  if (user) {
-    const userDoc = await getDoc(doc(db, 'users', user.uid));
-    if (userDoc.exists()) {
-      useStore.getState().setCurrentUser({
-        ...userDoc.data(),
-        id: user.uid, 
-      } as UserProfile);
-    } else {
-      if (user.email === 'rochap.filipe@gmail.com') {
-        useStore.getState().setCurrentUser({
-          id: user.uid,
-          email: user.email!,
-          role: 'admin'
-        } as UserProfile);
+  initializeAuth: () => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const userDoc = await getDoc(doc(db, 'users', user.uid));
+          if (userDoc.exists()) {
+            set({ 
+              currentUser: { ...userDoc.data(), id: user.uid } as UserProfile,
+              isLoading: false,
+              isInitialized: true
+            });
+          } else {
+            // Caso especial: Admin ou novo utilizador sem documento ainda
+            const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
+            set({ 
+              currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile,
+              isLoading: false,
+              isInitialized: true
+            });
+          }
+        } catch (error) {
+          console.error("Erro no initializeAuth:", error);
+          set({ isLoading: false, isInitialized: true });
+        }
+      } else {
+        set({ currentUser: null, isLoading: false, isInitialized: true });
       }
-    }
-  } else {
-    useStore.getState().setCurrentUser(null);
+    });
+    return unsubscribe;
   }
-});
+}));

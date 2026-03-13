@@ -1,4 +1,3 @@
-// src/App.tsx
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
@@ -15,19 +14,22 @@ import UserDashboard from './features/user/UserDashboard';
 
 // HELPER DE PROTEÇÃO DE ROTA (ADMIN E GERAL)
 const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
-  const { currentUser, isLoading } = useStore();
+  const { currentUser, isLoading, isInitialized } = useStore();
   
-  if (isLoading) {
+  // Esperamos a inicialização completa para evitar redirecionamentos errados no refresh
+  if (!isInitialized || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-[#1C305C]">
-        <div className="text-white font-black animate-pulse uppercase tracking-widest">A carregar...</div>
+      <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
+        <div className="text-[#00d66f] font-black animate-pulse uppercase tracking-widest text-xs">
+          A validar sessão...
+        </div>
       </div>
     );
   }
 
   if (!currentUser) return <Navigate to="/login" replace />;
   
-  if (role && currentUser.role !== role && currentUser.email !== 'rochap.filipe@gmail.com') {
+  if (role && currentUser.role !== role) {
     return <Navigate to="/login" replace />;
   }
   
@@ -35,25 +37,31 @@ const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ 
 };
 
 function App() {
-  const { subscribeToTransactions, currentUser } = useStore();
+  const { subscribeToTransactions, currentUser, initializeAuth } = useStore();
 
-  // 1. CICLO DE LIMPEZA DA BASE DE DADOS (Executa uma vez ao abrir)
+  // 1. INICIALIZAÇÃO DA SESSÃO (Firebase Auth)
+  useEffect(() => {
+    const unsubscribe = initializeAuth();
+    return () => unsubscribe();
+  }, [initializeAuth]);
+
+  // 2. CICLO DE LIMPEZA DA BASE DE DADOS (Executa uma vez ao abrir)
   useEffect(() => {
     cleanUserProfiles();
   }, []);
 
-  // 2. ESCUTA DE TRANSAÇÕES
+  // 3. ESCUTA DE TRANSAÇÕES
   useEffect(() => {
-    let unsubscribe: (() => void) | undefined;
+    let unsubscribeTrans: (() => void) | undefined;
     if (currentUser) {
-      unsubscribe = subscribeToTransactions(currentUser.role, currentUser.id);
+      unsubscribeTrans = subscribeToTransactions(currentUser.role, currentUser.id);
     }
-    return () => { if (unsubscribe) unsubscribe(); };
+    return () => { if (unsubscribeTrans) unsubscribeTrans(); };
   }, [currentUser, subscribeToTransactions]);
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[#f6f9fc]">
+      <div className="min-h-screen bg-[#f8fafc]">
         <Routes>
           {/* Raiz redireciona para Login para validação visual */}
           <Route path="/" element={<Navigate to="/login" replace />} />
