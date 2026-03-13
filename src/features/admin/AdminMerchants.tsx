@@ -31,9 +31,9 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   const filteredMerchants = merchants.filter(m => {
     const q = searchQuery.toLowerCase();
     return (
-      m.name?.toLowerCase().includes(q) || 
-      m.nif?.toLowerCase().includes(q) || 
-      m.email?.toLowerCase().includes(q)
+      (m.name?.toLowerCase() || '').includes(q) || 
+      (m.nif?.toLowerCase() || '').includes(q) || 
+      (m.email?.toLowerCase() || '').includes(q)
     );
   });
 
