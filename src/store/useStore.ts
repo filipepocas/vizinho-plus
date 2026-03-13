@@ -15,7 +15,7 @@ import {
   writeBatch,
   deleteDoc
 } from 'firebase/firestore';
-import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth'; // ADICIONADO: sendPasswordResetEmail
+import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, User as UserProfile } from '../types';
 
@@ -27,7 +27,7 @@ interface StoreState {
   setCurrentUser: (user: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
-  resetPassword: (email: string) => Promise<void>; // ADICIONADO
+  resetPassword: (email: string) => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   cancelTransaction: (transactionId: string) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
@@ -55,7 +55,6 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  // NOVA FUNÇÃO: Recuperar Password
   resetPassword: async (email: string) => {
     try {
       await sendPasswordResetEmail(auth, email);
@@ -83,7 +82,6 @@ export const useStore = create<StoreState>((set, get) => ({
       await setDoc(doc(db, 'users', docId), {
         ...dataToSave,
         createdAt: serverTimestamp(),
-        wallet: profile.wallet || { available: 0, pending: 0 }
       }, { merge: true });
     } catch (error) {
       console.error("Erro ao registar perfil:", error);
@@ -93,6 +91,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addTransaction: async (transactionData) => {
     const clientRef = doc(db, 'users', transactionData.clientId);
+    const mId = transactionData.merchantId;
     
     try {
       await runTransaction(db, async (transaction) => {
@@ -100,22 +99,34 @@ export const useStore = create<StoreState>((set, get) => ({
         if (!clientDoc.exists()) throw new Error("Cliente não encontrado.");
 
         const userData = clientDoc.data() as UserProfile;
-        const currentAvailable = userData.wallet?.available || 0;
-        const currentPending = userData.wallet?.pending || 0;
+        
+        // Aceder à carteira específica da loja
+        const storeWallets = userData.storeWallets || {};
+        const currentStoreWallet = storeWallets[mId] || { 
+          available: 0, 
+          pending: 0, 
+          merchantName: transactionData.merchantName 
+        };
+
+        const currentAvailable = currentStoreWallet.available || 0;
+        const currentPending = currentStoreWallet.pending || 0;
 
         let walletUpdate = {};
 
         if (transactionData.type === 'earn') {
           walletUpdate = {
-            'wallet.pending': currentPending + transactionData.cashbackAmount
+            [`storeWallets.${mId}.pending`]: currentPending + transactionData.cashbackAmount,
+            [`storeWallets.${mId}.merchantName`]: transactionData.merchantName,
+            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
           };
         } 
         else if (transactionData.type === 'redeem') {
           if (currentAvailable < transactionData.cashbackAmount) {
-            throw new Error("Saldo disponível insuficiente.");
+            throw new Error("Saldo disponível insuficiente nesta loja.");
           }
           walletUpdate = {
-            'wallet.available': currentAvailable - transactionData.cashbackAmount
+            [`storeWallets.${mId}.available`]: currentAvailable - transactionData.cashbackAmount,
+            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
           };
         }
         else if (transactionData.type === 'cancel' || transactionData.type === 'subtract') {
@@ -132,8 +143,9 @@ export const useStore = create<StoreState>((set, get) => ({
           }
 
           walletUpdate = {
-            'wallet.available': newAvailable,
-            'wallet.pending': newPending
+            [`storeWallets.${mId}.available`]: newAvailable,
+            [`storeWallets.${mId}.pending`]: newPending,
+            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
           };
         }
 
@@ -162,14 +174,18 @@ export const useStore = create<StoreState>((set, get) => ({
         const transData = transDoc.data() as Transaction;
         if (transData.status === 'cancelled') throw new Error("Esta transação já foi anulada.");
 
+        const mId = transData.merchantId;
         const clientRef = doc(db, 'users', transData.clientId);
         const clientDoc = await transaction.get(clientRef);
         
         if (!clientDoc.exists()) throw new Error("Cliente não encontrado.");
         
         const userData = clientDoc.data() as UserProfile;
-        const currentAvailable = userData.wallet?.available || 0;
-        const currentPending = userData.wallet?.pending || 0;
+        const storeWallets = userData.storeWallets || {};
+        const currentStoreWallet = storeWallets[mId] || { available: 0, pending: 0, merchantName: transData.merchantName };
+
+        const currentAvailable = currentStoreWallet.available || 0;
+        const currentPending = currentStoreWallet.pending || 0;
         const amountToCancel = transData.cashbackAmount;
 
         let walletUpdate = {};
@@ -186,13 +202,15 @@ export const useStore = create<StoreState>((set, get) => ({
           }
 
           walletUpdate = {
-            'wallet.available': newAvailable,
-            'wallet.pending': newPending
+            [`storeWallets.${mId}.available`]: newAvailable,
+            [`storeWallets.${mId}.pending`]: newPending,
+            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
           };
         } 
         else if (transData.type === 'redeem') {
           walletUpdate = {
-            'wallet.available': currentAvailable + amountToCancel
+            [`storeWallets.${mId}.available`]: currentAvailable + amountToCancel,
+            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
           };
         }
 

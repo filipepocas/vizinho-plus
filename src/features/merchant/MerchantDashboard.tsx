@@ -36,7 +36,9 @@ const MerchantDashboard: React.FC = () => {
   const [documentNumber, setDocumentNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
-  const [foundClientName, setFoundClientName] = useState<string | null>(null);
+  
+  // Dados do cliente identificado
+  const [foundClient, setFoundClient] = useState<any>(null);
 
   const [filterNif, setFilterNif] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -46,7 +48,6 @@ const MerchantDashboard: React.FC = () => {
   const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
 
-  // UTILS: FORMATAÇÃO DE MOEDA (0,00€)
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-PT', {
       style: 'currency',
@@ -54,32 +55,35 @@ const MerchantDashboard: React.FC = () => {
     }).format(value);
   };
 
-  // UTILS: MÁSCARA NIF (XXX XXX XXX)
   const formatNIF = (value: string) => {
     const digits = value.replace(/\D/g, '');
     return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
   };
 
-  // UTILS: MÁSCARA TELEFONE (XXX XXX XXX)
   const formatPhone = (value: string) => {
     const digits = value.replace(/\D/g, '');
     return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
   };
 
-  // CÁLCULO DE CASHBACK EM TEMPO REAL
+  // CÁLCULO DE CASHBACK A ATRIBUIR
   const liveCashback = useMemo(() => {
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) return 0;
     return val * ((currentUser?.cashbackPercent || 0) / 100);
   }, [amount, currentUser?.cashbackPercent]);
 
-  // VALIDAÇÃO MOLECULAR DE NIF
+  // SALDO DO CLIENTE NESTA LOJA ESPECÍFICA
+  const clientStoreBalance = useMemo(() => {
+    if (!foundClient || !currentUser?.id) return 0;
+    return foundClient.storeWallets?.[currentUser.id]?.available || 0;
+  }, [foundClient, currentUser?.id]);
+
   const isNifValid = useMemo(() => {
     const cleanNif = cardNumber.trim().replace(/\s/g, '');
     return /^[0-9]{9}$/.test(cleanNif);
   }, [cardNumber]);
 
-  // BUSCA AUTOMÁTICA DE CLIENTE AO DIGITAR NIF
+  // BUSCA DE CLIENTE E SEUS SALDOS
   useEffect(() => {
     const searchClient = async () => {
       const cleanNif = cardNumber.trim().replace(/\s/g, '');
@@ -88,16 +92,16 @@ const MerchantDashboard: React.FC = () => {
           const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
           const snap = await getDocs(q);
           if (!snap.empty) {
-            setFoundClientName(snap.docs[0].data().name);
+            setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() });
           } else {
-            setFoundClientName(null);
+            setFoundClient(null);
           }
         } catch (err) {
-          console.error("Erro na busca rápida:", err);
-          setFoundClientName(null);
+          console.error("Erro na busca:", err);
+          setFoundClient(null);
         }
       } else {
-        setFoundClientName(null);
+        setFoundClient(null);
       }
     };
     searchClient();
@@ -129,11 +133,7 @@ const MerchantDashboard: React.FC = () => {
 
   const handleFirebaseError = (error: any, defaultMsg: string) => {
     console.error("Erro Firebase:", error);
-    if (!navigator.onLine) {
-      setMessage({ type: 'error', text: "Sem ligação à internet. Verifique a rede." });
-    } else {
-      setMessage({ type: 'error', text: defaultMsg });
-    }
+    setMessage({ type: 'error', text: !navigator.onLine ? "Sem ligação à internet." : defaultMsg });
     setTimeout(() => setMessage({ type: '', text: '' }), 5000);
   };
 
@@ -193,8 +193,8 @@ const MerchantDashboard: React.FC = () => {
     const val = parseFloat(amount);
     const cleanNif = cardNumber.trim().replace(/\s/g, '');
 
-    if (!isNifValid) {
-      setMessage({ type: 'error', text: "NIF Inválido. Deve conter 9 dígitos." });
+    if (!isNifValid || !foundClient) {
+      setMessage({ type: 'error', text: "Identifique um cliente válido primeiro." });
       return;
     }
     
@@ -203,23 +203,17 @@ const MerchantDashboard: React.FC = () => {
       return;
     }
 
+    // VALIDAÇÃO CRÍTICA: Se for resgate, o cliente tem saldo nesta loja?
+    if (type === 'redeem' && val > clientStoreBalance) {
+      setMessage({ type: 'error', text: `Saldo insuficiente nesta loja. Disponível: ${formatCurrency(clientStoreBalance)}` });
+      return;
+    }
+
     try {
       setIsLoading(true);
 
-      const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
-      const querySnapshot = await getDocs(q);
-      
-      if (querySnapshot.empty) {
-        setMessage({ type: 'error', text: "Cliente não encontrado!" });
-        setIsLoading(false);
-        return;
-      }
-
-      const clientDoc = querySnapshot.docs[0];
-      const clientId = clientDoc.id;
-
       const transactionData = {
-        clientId: clientId,
+        clientId: foundClient.id,
         clientNif: cleanNif,
         merchantId: currentUser.id,
         merchantName: currentUser.name || 'Loja Vizinho+',
@@ -238,7 +232,7 @@ const MerchantDashboard: React.FC = () => {
       await addTransaction(transactionData as any);
 
       setMessage({ type: 'success', text: "Operação Concluída!" });
-      setAmount(''); setDocumentNumber(''); setCardNumber('');
+      setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     } catch (error: any) { 
       handleFirebaseError(error, error.message || "Erro ao processar.");
@@ -270,7 +264,7 @@ const MerchantDashboard: React.FC = () => {
                   NIF: {formatNIF(currentUser?.nif || '')}
                 </span>
                 <span className="text-[10px] font-black text-white/50 uppercase">
-                  v2.4 Audit Protected
+                  v2.5 Multi-Wallet System
                 </span>
               </div>
             </div>
@@ -377,41 +371,48 @@ const MerchantDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-4">
+              {/* CARD DE INFORMAÇÃO DO CLIENTE COM SALDO LOCAL */}
               {isNifValid && (
-                <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClientName ? 'bg-white border-[#00d66f] shadow-[0_10px_40px_-15px_rgba(0,214,111,0.3)]' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
-                  <div className={`p-3 rounded-2xl ${foundClientName ? 'bg-[#00d66f] text-white' : 'bg-slate-200 text-slate-400'}`}>
+                <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClient ? 'bg-white border-[#00d66f] shadow-lg' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
+                  <div className={`p-3 rounded-2xl ${foundClient ? 'bg-[#00d66f] text-white' : 'bg-slate-200 text-slate-400'}`}>
                     <User size={24} strokeWidth={3} />
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Identificado como:</p>
-                    <h4 className={`text-lg font-black uppercase italic ${foundClientName ? 'text-[#0f172a]' : 'text-slate-400'}`}>
-                      {foundClientName || 'Não registado'}
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cliente:</p>
+                    <h4 className={`text-lg font-black uppercase italic ${foundClient ? 'text-[#0f172a]' : 'text-slate-400'}`}>
+                      {foundClient?.name || 'Não registado'}
                     </h4>
+                    {foundClient && (
+                      <div className="mt-2 py-1 px-4 bg-[#0a2540] rounded-full">
+                        <p className="text-[10px] font-black text-white uppercase">Saldo nesta Loja:</p>
+                        <p className="text-sm font-black text-[#00d66f]">{formatCurrency(clientStoreBalance)}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               )}
 
               <button 
                 onClick={() => processAction('earn')} 
-                disabled={isLoading || !isNifValid || !foundClientName}
+                disabled={isLoading || !isNifValid || !foundClient}
                 className="flex-1 bg-[#00d66f] p-6 rounded-[32px] text-[#0f172a] transition-all hover:scale-[1.02] shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
                 <Coins size={32} strokeWidth={3} />
-                <span className="font-black text-lg uppercase italic tracking-tighter">Atribuir</span>
+                <span className="font-black text-lg uppercase italic tracking-tighter">Atribuir Cashback</span>
               </button>
 
               <button 
                 onClick={() => processAction('redeem')} 
-                disabled={isLoading || !isNifValid || !foundClientName}
+                disabled={isLoading || !isNifValid || !foundClient || clientStoreBalance <= 0}
                 className="flex-1 bg-[#0f172a] p-6 rounded-[32px] text-white transition-all hover:bg-black shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
                 <Gift size={32} className="text-[#00d66f]" strokeWidth={3} />
-                <span className="font-black text-lg uppercase italic tracking-tighter text-[#00d66f]">Utilizar</span>
+                <span className="font-black text-lg uppercase italic tracking-tighter text-[#00d66f]">Utilizar Saldo Loja</span>
               </button>
 
               <button 
                 onClick={() => processAction('cancel')} 
-                disabled={isLoading || !isNifValid || !foundClientName}
+                disabled={isLoading || !isNifValid || !foundClient}
                 className="flex-1 bg-white p-6 rounded-[32px] text-red-500 border-4 border-red-500 transition-all hover:bg-red-50 shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
                 <RotateCcw size={32} strokeWidth={3} />
@@ -420,9 +421,7 @@ const MerchantDashboard: React.FC = () => {
 
               {message.text && (
                 <div className={`p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${
-                  message.type === 'success' 
-                    ? 'bg-green-500 text-white border-green-700' 
-                    : 'bg-red-500 text-white border-red-700'
+                  message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'
                 }`}>
                   {message.type === 'success' ? <CheckCircle2 size={16} strokeWidth={3} /> : <XCircle size={16} strokeWidth={3} />}
                   {message.text}
@@ -455,7 +454,7 @@ const MerchantDashboard: React.FC = () => {
                     <th className="pb-4">Cliente (NIF)</th>
                     <th className="pb-4">Documento</th>
                     <th className="pb-4">Tipo</th>
-                    <th className="pb-4 text-right">Valor</th>
+                    <th className="pb-4 text-right">Valor Original</th>
                     <th className="pb-4 text-right">Cashback</th>
                   </tr>
                 </thead>

@@ -1,3 +1,5 @@
+// src/types/index.ts
+
 export interface User {
   id: string; // Usamos id como base
   uid?: string; // Adicionado para compatibilidade com Firebase Auth se necessário
@@ -10,10 +12,24 @@ export interface User {
   cashbackPercent?: number;
   status?: 'active' | 'disabled' | 'pending';
   operators?: any[];
+  
+  // NOVA ESTRUTURA: Carteiras segmentadas por loja
+  // A chave será o merchantId (ID da loja)
+  storeWallets?: {
+    [merchantId: string]: {
+      merchantName: string;
+      available: number;
+      pending: number;
+      lastUpdate?: any;
+    }
+  };
+
+  // Mantido para compatibilidade temporária durante a transição, se necessário
   wallet?: {
     available: number;
     pending: number;
   };
+
   // Campos de endereço uniformizados para evitar erros de compilação
   address?: string;
   category?: string;
