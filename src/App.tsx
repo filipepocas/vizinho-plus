@@ -16,7 +16,7 @@ import UserDashboard from './features/user/UserDashboard';
 const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
   const { currentUser, isLoading, isInitialized } = useStore();
   
-  // Esperamos a inicialização completa para evitar redirecionamentos errados no refresh
+  // Enquanto o Firebase não inicializar, mostramos o ecrã de carregamento
   if (!isInitialized || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
@@ -27,8 +27,10 @@ const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ 
     );
   }
 
+  // Se já inicializou e não há utilizador, vai para o login
   if (!currentUser) return <Navigate to="/login" replace />;
   
+  // Se o utilizador não tiver o cargo (role) necessário, vai para o login
   if (role && currentUser.role !== role) {
     return <Navigate to="/login" replace />;
   }
@@ -40,9 +42,10 @@ function App() {
   const { subscribeToTransactions, currentUser, initializeAuth } = useStore();
 
   // 1. INICIALIZAÇÃO DA SESSÃO (Firebase Auth)
+  // Ativa o "motor" de autenticação assim que o App carrega
   useEffect(() => {
     const unsubscribe = initializeAuth();
-    return () => unsubscribe();
+    return () => unsubscribe(); // Limpeza automática ao fechar
   }, [initializeAuth]);
 
   // 2. CICLO DE LIMPEZA DA BASE DE DADOS (Executa uma vez ao abrir)
@@ -50,7 +53,7 @@ function App() {
     cleanUserProfiles();
   }, []);
 
-  // 3. ESCUTA DE TRANSAÇÕES
+  // 3. ESCUTA DE TRANSAÇÕES EM TEMPO REAL
   useEffect(() => {
     let unsubscribeTrans: (() => void) | undefined;
     if (currentUser) {
@@ -63,7 +66,7 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc]">
         <Routes>
-          {/* Raiz redireciona para Login para validação visual */}
+          {/* Raiz redireciona para Login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           
           {/* Autenticação */}
@@ -100,7 +103,7 @@ function App() {
             } 
           />
 
-          {/* Fallback de Segurança */}
+          {/* Fallback de Segurança para rotas inexistentes */}
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </div>
