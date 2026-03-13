@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 export interface User {
   id: string; // Usamos id como base
   uid?: string; // Adicionado para compatibilidade com Firebase Auth se necessário
@@ -16,11 +14,11 @@ export interface User {
     available: number;
     pending: number;
   };
-  // Campos de endereço uniformizados
+  // Campos de endereço uniformizados para evitar erros de compilação
   address?: string;
   category?: string;
   zipCode?: string; 
-  postalCode?: string; // Adicionado para total compatibilidade com os componentes
+  postalCode?: string; 
   freguesia?: string;
   createdAt?: any;
 }
@@ -33,7 +31,7 @@ export interface Client {
   email: string;
   phone: string;
   zipCode: string;
-  postalCode?: string; // Adicionado para compatibilidade
+  postalCode?: string; 
   password?: string;
   createdAt: Date;
 }
@@ -57,7 +55,7 @@ export interface Merchant {
   address?: string;
   category?: string;
   zipCode?: string; 
-  postalCode?: string; // Adicionado para compatibilidade
+  postalCode?: string; 
   freguesia?: string;
 }
 
@@ -74,8 +72,9 @@ export interface Transaction {
   operatorId?: string; 
   operatorName?: string;
   operatorCode?: string;
-  type: 'earn' | 'redeem' | 'cancel' | 'subtract'; // Adicionado 'cancel' e mantido 'subtract' para segurança
-  status: 'pending' | 'available' | 'cancelled';
+  // Tipo 'cancel' e 'cancelled' autorizados para a auditoria audit1303261100
+  type: 'earn' | 'redeem' | 'cancel' | 'subtract'; 
+  status: 'pending' | 'available' | 'cancelled' | 'rejected';
   createdAt: any;
   maturedAt?: any;
 }

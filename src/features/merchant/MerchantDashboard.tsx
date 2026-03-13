@@ -100,7 +100,6 @@ const MerchantDashboard: React.FC = () => {
         setFoundClientName(null);
       }
     };
-
     searchClient();
   }, [cardNumber]);
 
@@ -152,8 +151,7 @@ const MerchantDashboard: React.FC = () => {
       await updateDoc(doc(db, 'users', currentUser.id), updates);
       setCurrentUser({ ...currentUser, ...updates } as UserProfile);
       setMessage({ type: 'success', text: "Perfil atualizado!" });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
-      setView('terminal');
+      setTimeout(() => { setMessage({ type: '', text: '' }); setView('terminal'); }, 2000);
     } catch (err) {
       handleFirebaseError(err, "Erro ao atualizar perfil.");
     } finally {
@@ -220,8 +218,6 @@ const MerchantDashboard: React.FC = () => {
       const clientDoc = querySnapshot.docs[0];
       const clientId = clientDoc.id;
 
-      // Montamos os dados para enviar ao useStore.addTransaction
-      // A lógica de saldos agora é feita lá dentro de forma atómica.
       const transactionData = {
         clientId: clientId,
         clientNif: cleanNif,
@@ -236,6 +232,7 @@ const MerchantDashboard: React.FC = () => {
         documentNumber: documentNumber,
         operatorCode: 'LOJA', 
         status: type === 'earn' ? 'pending' : (type === 'cancel' ? 'cancelled' : 'available'),
+        createdAt: Timestamp.now()
       };
 
       await addTransaction(transactionData as any);
@@ -254,7 +251,7 @@ const MerchantDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] pb-12 font-sans">
       <div className="max-w-7xl mx-auto p-4 lg:p-8">
         
-        {/* HEADER BRUTALISTA */}
+        {/* HEADER BRUTALISTA v2.4 */}
         <header className="bg-[#0f172a] p-8 rounded-[32px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f] relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
             <Store size={120} className="rotate-12 text-white" />
@@ -287,7 +284,7 @@ const MerchantDashboard: React.FC = () => {
             ].map((item) => (
               <button 
                 key={item.id}
-                onClick={() => { setView(item.id as any); }} 
+                onClick={() => setView(item.id as any)} 
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${view === item.id ? 'bg-[#00d66f] text-[#0f172a] shadow-lg scale-105' : 'text-white hover:bg-white/10'}`}
               >
                 <item.icon size={16} strokeWidth={3} /> {item.label}

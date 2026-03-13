@@ -10,7 +10,7 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc,
+  updateDoc,
   runTransaction
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
@@ -26,6 +26,7 @@ interface StoreState {
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
+  cancelTransaction: (transactionId: string) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
   registerClientProfile: (profile: UserProfile) => Promise<void>;
   checkNifExists: (nif: string) => Promise<boolean>;
@@ -90,14 +91,13 @@ export const useStore = create<StoreState>((set) => ({
 
         let walletUpdate = {};
 
-        // 1. EARN (Atribuição): Aumenta o Pendente
+        // 1. ATRIBUIÇÃO DE CASHBACK (EARN)
         if (transactionData.type === 'earn') {
           walletUpdate = {
             'wallet.pending': currentPending + transactionData.cashbackAmount
           };
         } 
-        
-        // 2. REDEEM (Utilização): Diminui o Disponível
+        // 2. UTILIZAÇÃO DE SALDO (REDEEM)
         else if (transactionData.type === 'redeem') {
           if (currentAvailable < transactionData.cashbackAmount) {
             throw new Error("Saldo disponível insuficiente.");
@@ -106,18 +106,20 @@ export const useStore = create<StoreState>((set) => ({
             'wallet.available': currentAvailable - transactionData.cashbackAmount
           };
         }
-
-        // 3. CANCEL (Anulação): Abate no Disponível, depois no Pendente
-        else if (transactionData.type === 'cancel') {
+        // 3. ANULAÇÃO OU SUBTRAÇÃO MANUAL (CANCEL / SUBTRACT)
+        else if (transactionData.type === 'cancel' || transactionData.type === 'subtract') {
           const totalToSubtract = transactionData.cashbackAmount;
           let newAvailable = currentAvailable;
           let newPending = currentPending;
 
+          // Se tiver saldo disponível, retira de lá primeiro
           if (currentAvailable >= totalToSubtract) {
             newAvailable = currentAvailable - totalToSubtract;
           } else {
+            // Se não chegar, zera o disponível e retira o resto do pendente
             newAvailable = 0;
-            newPending = currentPending - (totalToSubtract - currentAvailable);
+            const remaining = totalToSubtract - currentAvailable;
+            newPending = Math.max(0, currentPending - remaining);
           }
 
           walletUpdate = {
@@ -126,18 +128,72 @@ export const useStore = create<StoreState>((set) => ({
           };
         }
 
-        // Criar o registo da transação
         const newTransRef = doc(collection(db, 'transactions'));
         transaction.set(newTransRef, {
           ...transactionData,
           createdAt: serverTimestamp(),
         });
 
-        // Atualizar o perfil do cliente com os novos saldos
         transaction.update(clientRef, walletUpdate);
       });
     } catch (error) {
       console.error("Erro na transação atómica:", error);
+      throw error;
+    }
+  },
+
+  cancelTransaction: async (transactionId) => {
+    try {
+      await runTransaction(db, async (transaction) => {
+        const transRef = doc(db, 'transactions', transactionId);
+        const transDoc = await transaction.get(transRef);
+        
+        if (!transDoc.exists()) throw new Error("Transação não encontrada.");
+        
+        const transData = transDoc.data() as Transaction;
+        if (transData.status === 'cancelled') throw new Error("Esta transação já foi anulada.");
+
+        const clientRef = doc(db, 'users', transData.clientId);
+        const clientDoc = await transaction.get(clientRef);
+        
+        if (!clientDoc.exists()) throw new Error("Cliente não encontrado.");
+        
+        const userData = clientDoc.data() as UserProfile;
+        const currentAvailable = userData.wallet?.available || 0;
+        const currentPending = userData.wallet?.pending || 0;
+        const amountToCancel = transData.cashbackAmount;
+
+        let walletUpdate = {};
+
+        // Se era uma atribuição, removemos o saldo que foi dado (reversão segura)
+        if (transData.type === 'earn') {
+          let newAvailable = currentAvailable;
+          let newPending = currentPending;
+
+          if (currentAvailable >= amountToCancel) {
+            newAvailable = currentAvailable - amountToCancel;
+          } else {
+            newAvailable = 0;
+            newPending = Math.max(0, currentPending - (amountToCancel - currentAvailable));
+          }
+
+          walletUpdate = {
+            'wallet.available': newAvailable,
+            'wallet.pending': newPending
+          };
+        } 
+        // Se era uma utilização, devolvemos o saldo ao cliente
+        else if (transData.type === 'redeem') {
+          walletUpdate = {
+            'wallet.available': currentAvailable + amountToCancel
+          };
+        }
+
+        transaction.update(transRef, { status: 'cancelled' });
+        transaction.update(clientRef, walletUpdate);
+      });
+    } catch (error) {
+      console.error("Erro ao anular transação:", error);
       throw error;
     }
   },
