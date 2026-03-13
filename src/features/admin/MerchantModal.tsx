@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate } from 'lucide-react';
+import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag } from 'lucide-react';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -9,6 +9,31 @@ interface MerchantModalProps {
   onClose: () => void;
   onSuccess: () => void;
 }
+
+// Lista de 20 setores principais de comércio local + Outros
+const MERCH_CATEGORIES = [
+  "Restauração & Bebidas",
+  "Mercearias & Supermercados",
+  "Talhos & Peixarias",
+  "Padarias & Pastelarias",
+  "Moda & Acessórios",
+  "Saúde & Farmácias",
+  "Beleza & Cabeleireiros",
+  "Oficinas & Automóveis",
+  "Construção & Bricolage",
+  "Artigos para Casa & Decoração",
+  "Papelarias & Livrarias",
+  "Floristas & Jardinagem",
+  "Petshops & Veterinários",
+  "Tecnologia & Informática",
+  "Desporto & Lazer",
+  "Ópticas",
+  "Ourivesarias & Relojoarias",
+  "Lavandarias & Engomadoria",
+  "Sapateiros & Reparações",
+  "Educação & Centros de Explicações",
+  "Outros"
+];
 
 const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [loading, setLoading] = useState(false);
@@ -20,6 +45,7 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
     password: '',
     nif: '',
     cashbackPercent: '5',
+    category: '',
     freguesia: '',
     zipCode: ''
   });
@@ -38,6 +64,12 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validação de Categoria
+    if (!formData.category) {
+      setError('POR FAVOR, SELECIONE UM SETOR DE ATIVIDADE.');
+      return;
+    }
+
     // Validar formato do Código Postal antes de enviar
     const zipCodeRegex = /^\d{4}-\d{3}$/;
     if (!zipCodeRegex.test(formData.zipCode)) {
@@ -64,6 +96,7 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
         nif: formData.nif.trim(),
         role: 'merchant',
         status: 'active',
+        category: formData.category,
         cashbackPercent: Number(formData.cashbackPercent),
         freguesia: formData.freguesia.trim(),
         zipCode: formData.zipCode.trim(),
@@ -114,6 +147,26 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
                 <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
                 <input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
                   value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div className="md:col-span-2">
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor de Atividade</label>
+              <div className="relative">
+                <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <select 
+                  required 
+                  className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none"
+                  value={formData.category} 
+                  onChange={e => setFormData({...formData, category: e.target.value})}
+                >
+                  <option value="">SELECIONE O SETOR...</option>
+                  {MERCH_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{cat.toUpperCase()}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>

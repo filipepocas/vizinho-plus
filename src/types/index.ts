@@ -19,7 +19,8 @@ export interface User {
   // Campos de endereço uniformizados
   address?: string;
   category?: string;
-  zipCode?: string; // Alterado de postalCode para zipCode para bater com o código dos componentes
+  zipCode?: string; 
+  postalCode?: string; // Adicionado para total compatibilidade com os componentes
   freguesia?: string;
   createdAt?: any;
 }
@@ -32,6 +33,7 @@ export interface Client {
   email: string;
   phone: string;
   zipCode: string;
+  postalCode?: string; // Adicionado para compatibilidade
   password?: string;
   createdAt: Date;
 }
@@ -54,7 +56,8 @@ export interface Merchant {
   createdAt: Date;
   address?: string;
   category?: string;
-  zipCode?: string; // Uniformizado aqui também
+  zipCode?: string; 
+  postalCode?: string; // Adicionado para compatibilidade
   freguesia?: string;
 }
 
@@ -66,13 +69,13 @@ export interface Transaction {
   merchantName: string;
   amount: number;
   cashbackAmount: number;
-  cashbackPercent?: number; // Adicionado para o Report de Excel não dar erro
+  cashbackPercent?: number; // Garante que o Report de Excel e Dashboard funcionem
   documentNumber?: string;
   operatorId?: string; 
   operatorName?: string;
   operatorCode?: string;
-  type: 'earn' | 'redeem' | 'subtract';
-  status: 'pending' | 'available';
+  type: 'earn' | 'redeem' | 'cancel' | 'subtract'; // Adicionado 'cancel' e mantido 'subtract' para segurança
+  status: 'pending' | 'available' | 'cancelled';
   createdAt: any;
   maturedAt?: any;
 }

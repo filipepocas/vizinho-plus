@@ -11,7 +11,7 @@ import {
   getDoc,
   getDocs,
   addDoc,
-  Timestamp
+  runTransaction
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -77,15 +77,67 @@ export const useStore = create<StoreState>((set) => ({
   },
 
   addTransaction: async (transactionData) => {
+    const clientRef = doc(db, 'users', transactionData.clientId);
+    
     try {
-      // Removemos a atualização manual do estado aqui.
-      // O onSnapshot tratará de adicionar a transação à lista assim que ela for gravada.
-      await addDoc(collection(db, 'transactions'), {
-        ...transactionData,
-        createdAt: serverTimestamp(),
+      await runTransaction(db, async (transaction) => {
+        const clientDoc = await transaction.get(clientRef);
+        if (!clientDoc.exists()) throw new Error("Cliente não encontrado.");
+
+        const userData = clientDoc.data() as UserProfile;
+        const currentAvailable = userData.wallet?.available || 0;
+        const currentPending = userData.wallet?.pending || 0;
+
+        let walletUpdate = {};
+
+        // 1. EARN (Atribuição): Aumenta o Pendente
+        if (transactionData.type === 'earn') {
+          walletUpdate = {
+            'wallet.pending': currentPending + transactionData.cashbackAmount
+          };
+        } 
+        
+        // 2. REDEEM (Utilização): Diminui o Disponível
+        else if (transactionData.type === 'redeem') {
+          if (currentAvailable < transactionData.cashbackAmount) {
+            throw new Error("Saldo disponível insuficiente.");
+          }
+          walletUpdate = {
+            'wallet.available': currentAvailable - transactionData.cashbackAmount
+          };
+        }
+
+        // 3. CANCEL (Anulação): Abate no Disponível, depois no Pendente
+        else if (transactionData.type === 'cancel') {
+          const totalToSubtract = transactionData.cashbackAmount;
+          let newAvailable = currentAvailable;
+          let newPending = currentPending;
+
+          if (currentAvailable >= totalToSubtract) {
+            newAvailable = currentAvailable - totalToSubtract;
+          } else {
+            newAvailable = 0;
+            newPending = currentPending - (totalToSubtract - currentAvailable);
+          }
+
+          walletUpdate = {
+            'wallet.available': newAvailable,
+            'wallet.pending': newPending
+          };
+        }
+
+        // Criar o registo da transação
+        const newTransRef = doc(collection(db, 'transactions'));
+        transaction.set(newTransRef, {
+          ...transactionData,
+          createdAt: serverTimestamp(),
+        });
+
+        // Atualizar o perfil do cliente com os novos saldos
+        transaction.update(clientRef, walletUpdate);
       });
     } catch (error) {
-      console.error("Erro ao adicionar transação:", error);
+      console.error("Erro na transação atómica:", error);
       throw error;
     }
   },
@@ -125,7 +177,6 @@ export const useStore = create<StoreState>((set) => ({
               isInitialized: true
             });
           } else {
-            // Caso especial: Admin ou novo utilizador sem documento ainda
             const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
             set({ 
               currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile,

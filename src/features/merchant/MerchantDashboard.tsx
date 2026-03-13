@@ -1,11 +1,10 @@
-// src/features/merchant/MerchantDashboard.tsx
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, updateDoc, doc, arrayUnion, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
-import { Transaction } from '../../types';
+import { Transaction, User as UserProfile } from '../../types';
 import { 
   LayoutDashboard, 
   History, 
@@ -21,7 +20,8 @@ import {
   Search,
   AlertCircle,
   User,
-  ArrowRight
+  ArrowRight,
+  RotateCcw
 } from 'lucide-react';
 
 const MerchantDashboard: React.FC = () => {
@@ -132,10 +132,6 @@ const MerchantDashboard: React.FC = () => {
     console.error("Erro Firebase:", error);
     if (!navigator.onLine) {
       setMessage({ type: 'error', text: "Sem ligação à internet. Verifique a rede." });
-    } else if (error.code === 'permission-denied') {
-      setMessage({ type: 'error', text: "Acesso negado. Contacte o suporte." });
-    } else if (error.code === 'unavailable') {
-      setMessage({ type: 'error', text: "Serviço temporariamente indisponível." });
     } else {
       setMessage({ type: 'error', text: defaultMsg });
     }
@@ -154,7 +150,7 @@ const MerchantDashboard: React.FC = () => {
         cashbackPercent: editCashback
       };
       await updateDoc(doc(db, 'users', currentUser.id), updates);
-      setCurrentUser({ ...currentUser, ...updates });
+      setCurrentUser({ ...currentUser, ...updates } as UserProfile);
       setMessage({ type: 'success', text: "Perfil atualizado!" });
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       setView('terminal');
@@ -195,19 +191,17 @@ const MerchantDashboard: React.FC = () => {
     a.href = url; a.download = `relatorio_${currentUser?.name || 'loja'}.csv`; a.click();
   };
 
-  const processAction = async (type: 'earn' | 'redeem') => {
+  const processAction = async (type: 'earn' | 'redeem' | 'cancel') => {
     const val = parseFloat(amount);
     const cleanNif = cardNumber.trim().replace(/\s/g, '');
 
     if (!isNifValid) {
       setMessage({ type: 'error', text: "NIF Inválido. Deve conter 9 dígitos." });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       return;
     }
     
     if (isNaN(val) || val <= 0 || !documentNumber || !currentUser) {
       setMessage({ type: 'error', text: "Preencha o valor e fatura corretamente." });
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       return;
     }
 
@@ -218,47 +212,39 @@ const MerchantDashboard: React.FC = () => {
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
+        setMessage({ type: 'error', text: "Cliente não encontrado!" });
         setIsLoading(false);
-        setMessage({ type: 'error', text: "Cliente não encontrado! O cliente deve registar-se na App primeiro." });
-        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
         return;
       }
 
       const clientDoc = querySnapshot.docs[0];
-      const clientData = clientDoc.data();
       const clientId = clientDoc.id;
 
-      if (type === 'redeem') {
-        const availableBalance = clientData.wallet?.available || 0;
-        if (val > availableBalance) {
-          setIsLoading(false);
-          setMessage({ type: 'error', text: `Saldo insuficiente! Disponível: ${formatCurrency(availableBalance)}` });
-          setTimeout(() => setMessage({ type: '', text: '' }), 5000);
-          return;
-        }
-      }
-
-      const transactionData: Omit<Transaction, 'id'> = {
+      // Montamos os dados para enviar ao useStore.addTransaction
+      // A lógica de saldos agora é feita lá dentro de forma atómica.
+      const transactionData = {
         clientId: clientId,
         clientNif: cleanNif,
         merchantId: currentUser.id,
         merchantName: currentUser.name || 'Loja Vizinho+',
-        amount: type === 'earn' ? val : 0,
-        cashbackAmount: type === 'earn' ? (val * ((currentUser.cashbackPercent || 0) / 100)) : val,
+        amount: type === 'earn' || type === 'cancel' ? val : 0,
+        cashbackAmount: type === 'earn' || type === 'cancel' 
+          ? (val * ((currentUser.cashbackPercent || 0) / 100)) 
+          : val,
+        cashbackPercent: currentUser.cashbackPercent,
         type: type,
         documentNumber: documentNumber,
         operatorCode: 'LOJA', 
-        status: type === 'earn' ? 'pending' : 'available',
-        createdAt: Timestamp.now()
+        status: type === 'earn' ? 'pending' : (type === 'cancel' ? 'cancelled' : 'available'),
       };
 
-      await addTransaction(transactionData as Transaction);
+      await addTransaction(transactionData as any);
 
-      setMessage({ type: 'success', text: "Operação Concluída com Sucesso!" });
+      setMessage({ type: 'success', text: "Operação Concluída!" });
       setAmount(''); setDocumentNumber(''); setCardNumber('');
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
-    } catch (error) { 
-      handleFirebaseError(error, "Erro ao processar venda. Tente novamente.");
+    } catch (error: any) { 
+      handleFirebaseError(error, error.message || "Erro ao processar.");
     } finally { 
       setIsLoading(false); 
     }
@@ -287,7 +273,7 @@ const MerchantDashboard: React.FC = () => {
                   NIF: {formatNIF(currentUser?.nif || '')}
                 </span>
                 <span className="text-[10px] font-black text-white/50 uppercase">
-                  v2.3 Protected
+                  v2.4 Audit Protected
                 </span>
               </div>
             </div>
@@ -319,7 +305,7 @@ const MerchantDashboard: React.FC = () => {
             <div className="lg:col-span-2 bg-white p-8 md:p-12 rounded-[40px] shadow-xl border-2 border-slate-100">
               <div className="space-y-10">
                 
-                {/* INPUT NIF COM MÁSCARA E VALIDAÇÃO */}
+                {/* INPUT NIF */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-2">
                     <label className="flex items-center gap-3 text-xs font-black uppercase text-slate-400 tracking-widest">
@@ -336,7 +322,7 @@ const MerchantDashboard: React.FC = () => {
                     <input 
                       type="text"
                       inputMode="numeric"
-                      maxLength={11} // Com espaços
+                      maxLength={11}
                       value={cardNumber} 
                       onChange={e => setCardNumber(formatNIF(e.target.value))} 
                       placeholder="000 000 000" 
@@ -361,7 +347,7 @@ const MerchantDashboard: React.FC = () => {
                   {/* VALOR VENDA */}
                   <div className="space-y-4">
                     <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-2">
-                      Valor Total da Venda (€)
+                      Valor da Fatura (€)
                     </label>
                     <input 
                       type="number" 
@@ -370,12 +356,11 @@ const MerchantDashboard: React.FC = () => {
                       placeholder="0.00" 
                       className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0f172a] outline-none focus:border-[#00d66f]" 
                     />
-                    {/* CÁLCULO AUTOMÁTICO VISUAL */}
                     {parseFloat(amount) > 0 && (
                       <div className="flex items-center gap-3 bg-[#00d66f]/10 p-4 rounded-2xl border-2 border-[#00d66f]/20 animate-in zoom-in">
                         <ArrowRight size={16} className="text-[#00d66f]" />
                         <span className="text-[11px] font-black uppercase text-[#0f172a]">
-                          O cliente recebe <span className="text-[#00d66f] text-sm">{formatCurrency(liveCashback)}</span> de cashback
+                          Retorno de <span className="text-[#00d66f] text-sm">{formatCurrency(liveCashback)}</span> para o cliente
                         </span>
                       </div>
                     )}
@@ -396,19 +381,17 @@ const MerchantDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* BOTÕES DE AÇÃO */}
+            {/* AÇÕES */}
             <div className="flex flex-col gap-4">
-              
-              {/* CONFIRMAÇÃO VISUAL DO CLIENTE */}
               {isNifValid && (
                 <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClientName ? 'bg-white border-[#00d66f] shadow-[0_10px_40px_-15px_rgba(0,214,111,0.3)]' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
                   <div className={`p-3 rounded-2xl ${foundClientName ? 'bg-[#00d66f] text-white' : 'bg-slate-200 text-slate-400'}`}>
                     <User size={24} strokeWidth={3} />
                   </div>
                   <div className="text-center">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Confirmar para:</p>
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Identificado como:</p>
                     <h4 className={`text-lg font-black uppercase italic ${foundClientName ? 'text-[#0f172a]' : 'text-slate-400'}`}>
-                      {foundClientName || 'Cliente não registado'}
+                      {foundClientName || 'Não registado'}
                     </h4>
                   </div>
                 </div>
@@ -417,38 +400,45 @@ const MerchantDashboard: React.FC = () => {
               <button 
                 onClick={() => processAction('earn')} 
                 disabled={isLoading || !isNifValid || !foundClientName}
-                className="flex-1 bg-[#00d66f] p-8 rounded-[40px] text-[#0f172a] transition-all hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-4 disabled:opacity-30 disabled:grayscale disabled:scale-100"
+                className="flex-1 bg-[#00d66f] p-6 rounded-[32px] text-[#0f172a] transition-all hover:scale-[1.02] shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
-                <Coins size={48} strokeWidth={3} />
-                <span className="font-black text-xl uppercase italic tracking-tighter">Atribuir Cashback</span>
-                <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest">({currentUser?.cashbackPercent}% de retorno)</span>
+                <Coins size={32} strokeWidth={3} />
+                <span className="font-black text-lg uppercase italic tracking-tighter">Atribuir</span>
               </button>
 
               <button 
                 onClick={() => processAction('redeem')} 
                 disabled={isLoading || !isNifValid || !foundClientName}
-                className="flex-1 bg-[#0f172a] p-8 rounded-[40px] text-white transition-all hover:bg-black shadow-xl flex flex-col items-center justify-center gap-4 disabled:opacity-30 disabled:grayscale disabled:scale-100"
+                className="flex-1 bg-[#0f172a] p-6 rounded-[32px] text-white transition-all hover:bg-black shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
-                <Gift size={48} className="text-[#00d66f]" strokeWidth={3} />
-                <span className="font-black text-xl uppercase italic tracking-tighter text-[#00d66f]">Utilizar Saldo</span>
-                <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest">(Desconto Imediato)</span>
+                <Gift size={32} className="text-[#00d66f]" strokeWidth={3} />
+                <span className="font-black text-lg uppercase italic tracking-tighter text-[#00d66f]">Utilizar</span>
               </button>
 
-              {/* MENSAGENS DE SISTEMA */}
+              <button 
+                onClick={() => processAction('cancel')} 
+                disabled={isLoading || !isNifValid || !foundClientName}
+                className="flex-1 bg-white p-6 rounded-[32px] text-red-500 border-4 border-red-500 transition-all hover:bg-red-50 shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
+              >
+                <RotateCcw size={32} strokeWidth={3} />
+                <span className="font-black text-lg uppercase italic tracking-tighter">Anular Compra</span>
+                <span className="text-[8px] font-bold uppercase opacity-60">Estorno de Saldo</span>
+              </button>
+
               {message.text && (
-                <div className={`p-6 rounded-3xl font-black text-center text-xs uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${
+                <div className={`p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${
                   message.type === 'success' 
                     ? 'bg-green-500 text-white border-green-700' 
                     : 'bg-red-500 text-white border-red-700'
                 }`}>
-                  {message.type === 'success' ? <CheckCircle2 size={20} strokeWidth={3} /> : <XCircle size={20} strokeWidth={3} />}
+                  {message.type === 'success' ? <CheckCircle2 size={16} strokeWidth={3} /> : <XCircle size={16} strokeWidth={3} />}
                   {message.text}
                 </div>
               )}
             </div>
           </div>
         ) : view === 'history' ? (
-          /* HISTÓRICO DE VENDAS */
+          /* HISTÓRICO */
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 animate-in slide-in-from-bottom-4">
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
               <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter">Últimos Movimentos</h3>
@@ -472,6 +462,7 @@ const MerchantDashboard: React.FC = () => {
                     <th className="pb-4">Data</th>
                     <th className="pb-4">Cliente (NIF)</th>
                     <th className="pb-4">Documento</th>
+                    <th className="pb-4">Tipo</th>
                     <th className="pb-4 text-right">Valor</th>
                     <th className="pb-4 text-right">Cashback</th>
                   </tr>
@@ -484,14 +475,24 @@ const MerchantDashboard: React.FC = () => {
                       </td>
                       <td className="py-4 font-black">{formatNIF(t.clientNif || '')}</td>
                       <td className="py-4 uppercase text-slate-400">{t.documentNumber}</td>
+                      <td className="py-4 uppercase">
+                        <span className={`px-2 py-1 rounded-md text-[9px] font-black ${
+                          t.type === 'earn' ? 'bg-green-100 text-green-600' : 
+                          t.type === 'redeem' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'
+                        }`}>
+                          {t.type === 'earn' ? 'Atribuição' : t.type === 'redeem' ? 'Utilização' : 'Anulação'}
+                        </span>
+                      </td>
                       <td className="py-4 text-right">{t.amount > 0 ? formatCurrency(t.amount) : '---'}</td>
-                      <td className={`py-4 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                      <td className={`py-4 text-right font-black ${
+                        t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'
+                      }`}>
                         {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}
                       </td>
                     </tr>
                   )) : (
                     <tr>
-                      <td colSpan={5} className="py-10 text-center text-slate-300 font-black uppercase text-xs">Sem movimentos registados</td>
+                      <td colSpan={6} className="py-10 text-center text-slate-300 font-black uppercase text-xs">Sem movimentos registados</td>
                     </tr>
                   )}
                 </tbody>
@@ -499,7 +500,7 @@ const MerchantDashboard: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* CONFIGURAÇÕES DO PERFIL */
+          /* CONFIGURAÇÕES */
           <div className="max-w-2xl mx-auto bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-2xl">
             <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-8 text-center">Configurações da Loja</h3>
             <form onSubmit={handleUpdateProfile} className="space-y-6">
@@ -528,7 +529,6 @@ const MerchantDashboard: React.FC = () => {
                   />
                   <div className="text-[#00d66f] font-black text-2xl">%</div>
                 </div>
-                <p className="text-[9px] text-[#00d66f]/60 font-bold uppercase mt-2 tracking-widest">Este valor será aplicado a todas as novas vendas.</p>
               </div>
               <button disabled={isLoading} className="w-full bg-[#0f172a] text-white p-5 rounded-2xl font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all">
                 {isLoading ? 'A Guardar...' : 'Atualizar Perfil'}
