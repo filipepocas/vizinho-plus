@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Store, Mail, Hash, Percent, MapPin, Loader2 } from 'lucide-react';
+import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate } from 'lucide-react';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -20,13 +20,31 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
     password: '',
     nif: '',
     cashbackPercent: '5',
-    freguesia: ''
+    freguesia: '',
+    zipCode: ''
   });
 
   if (!isOpen) return null;
 
+  // Máscara para Código Postal (xxxx-xxx)
+  const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 4) {
+      value = value.substring(0, 4) + '-' + value.substring(4, 7);
+    }
+    setFormData({ ...formData, zipCode: value });
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validar formato do Código Postal antes de enviar
+    const zipCodeRegex = /^\d{4}-\d{3}$/;
+    if (!zipCodeRegex.test(formData.zipCode)) {
+      setError('CÓDIGO POSTAL INVÁLIDO. USE O FORMATO 0000-000');
+      return;
+    }
+
     setLoading(true);
     setError('');
 
@@ -48,6 +66,7 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
         status: 'active',
         cashbackPercent: Number(formData.cashbackPercent),
         freguesia: formData.freguesia.trim(),
+        zipCode: formData.zipCode.trim(),
         wallet: { available: 0, pending: 0 },
         createdAt: serverTimestamp()
       });
@@ -124,12 +143,28 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
             </div>
           </div>
 
-          <div>
-            <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia / Localidade</label>
-            <div className="relative">
-              <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-              <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                value={formData.freguesia} onChange={e => setFormData({...formData, freguesia: e.target.value})} />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia</label>
+              <div className="relative">
+                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
+                  value={formData.freguesia} onChange={e => setFormData({...formData, freguesia: e.target.value})} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Código Postal</label>
+              <div className="relative">
+                <Locate className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input 
+                  required 
+                  maxLength={8}
+                  placeholder="0000-000"
+                  className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
+                  value={formData.zipCode} 
+                  onChange={handleZipCodeChange} 
+                />
+              </div>
             </div>
           </div>
 

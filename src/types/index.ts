@@ -16,10 +16,10 @@ export interface User {
     available: number;
     pending: number;
   };
-  // Novos campos para Perfil e Localização (Lojistas/Clientes)
+  // Campos de endereço uniformizados
   address?: string;
   category?: string;
-  postalCode?: string;
+  zipCode?: string; // Alterado de postalCode para zipCode para bater com o código dos componentes
   freguesia?: string;
   createdAt?: any;
 }
@@ -52,10 +52,9 @@ export interface Merchant {
   operators: Operator[];
   status: 'active' | 'inactive';
   createdAt: Date;
-  // Campos de endereço adicionados também aqui por consistência
   address?: string;
   category?: string;
-  postalCode?: string;
+  zipCode?: string; // Uniformizado aqui também
   freguesia?: string;
 }
 
@@ -67,6 +66,7 @@ export interface Transaction {
   merchantName: string;
   amount: number;
   cashbackAmount: number;
+  cashbackPercent?: number; // Adicionado para o Report de Excel não dar erro
   documentNumber?: string;
   operatorId?: string; 
   operatorName?: string;

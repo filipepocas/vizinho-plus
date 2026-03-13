@@ -10,7 +10,9 @@ import {
   Percent, 
   Hash,
   MapPin,
-  AlertCircle
+  AlertCircle,
+  Mail,
+  Locate
 } from 'lucide-react';
 
 interface AdminMerchantsProps {
@@ -33,7 +35,9 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
     return (
       (m.name?.toLowerCase() || '').includes(q) || 
       (m.nif?.toLowerCase() || '').includes(q) || 
-      (m.email?.toLowerCase() || '').includes(q)
+      (m.email?.toLowerCase() || '').includes(q) ||
+      (m.zipCode?.toLowerCase() || '').includes(q) ||
+      (m.freguesia?.toLowerCase() || '').includes(q)
     );
   });
 
@@ -54,7 +58,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
           <input 
             type="text" 
-            placeholder="PESQUISAR LOJA OU NIF..." 
+            placeholder="PESQUISAR LOJA, NIF, EMAIL OU CÓDIGO POSTAL..." 
             className="w-full p-4 pl-14 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
@@ -93,8 +97,16 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
 
               <div className="space-y-2 mb-8">
                 <div className="flex items-center gap-2 text-slate-400">
+                  <Mail size={12} className="text-[#00d66f]" />
+                  <span className="text-[10px] font-bold lowercase tracking-tight truncate">{m.email}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-400">
                   <Hash size={12} className="text-[#00d66f]" />
                   <span className="text-[10px] font-bold uppercase tracking-tight">NIF: {m.nif || '---'}</span>
+                </div>
+                <div className="flex items-center gap-2 text-slate-400">
+                  <Locate size={12} className="text-[#00d66f]" />
+                  <span className="text-[10px] font-bold uppercase tracking-tight">CP: {m.zipCode || '0000-000'}</span>
                 </div>
                 <div className="flex items-center gap-2 text-slate-400">
                   <MapPin size={12} />

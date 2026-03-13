@@ -8,7 +8,8 @@ import {
   FileText,
   Calendar,
   Store,
-  User
+  User,
+  Hash
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -23,22 +24,39 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
     return new Intl.NumberFormat('pt-PT', {
       style: 'currency',
       currency: 'EUR',
-    }).format(value);
+    }).format(value || 0);
   };
 
   const exportToExcel = () => {
+    // Preparação de dados detalhada para o Admin (Filipe)
     const data = transactions.map(t => ({
-      'Data': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString() : '---',
-      'Loja': t.merchantName || '---',
-      'Vizinho (NIF)': t.clientNif || '---',
-      'Volume': formatCurrency(t.amount || 0),
-      'Cashback': formatCurrency(t.cashbackAmount || 0),
-      'Status': t.status === 'available' ? 'Disponível' : 'Pendente'
+      'DATA REGISTO': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT') : '---',
+      'HORA': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleTimeString('pt-PT') : '---',
+      'LOJA / PARCEIRO': t.merchantName || '---',
+      'VIZINHO (NIF)': t.clientNif || '---',
+      'DOCUMENTO': t.documentNumber || 'S/ Doc',
+      'VALOR DA VENDA': t.amount || 0,
+      'VALOR CASHBACK': t.cashbackAmount || 0,
+      'PERCENTAGEM APLICADA': t.cashbackPercent ? `${t.cashbackPercent}%` : '---',
+      'ESTADO': t.status === 'available' ? 'MATURADO' : 'PENDENTE',
+      'TIPO': t.type === 'earn' ? 'ACUMULAÇÃO' : 'RESGATE'
     }));
+
     const ws = XLSX.utils.json_to_sheet(data);
+    
+    // Ajustar largura das colunas para o Excel ficar legível
+    const wscols = [
+      {wch: 15}, {wch: 10}, {wch: 30}, {wch: 15}, {wch: 15}, 
+      {wch: 15}, {wch: 15}, {wch: 20}, {wch: 15}, {wch: 15}
+    ];
+    ws['!cols'] = wscols;
+
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatório Global");
-    XLSX.writeFile(wb, `VizinhoPlus_Transacoes_Total.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Relatório Geral Vizinho+");
+    
+    // Nome do ficheiro com a data atual
+    const dateStr = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(wb, `VizinhoPlus_Auditoria_${dateStr}.xlsx`);
   };
 
   const filteredTransactions = transactions.filter(t => {
@@ -70,7 +88,7 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
           onClick={exportToExcel} 
           className="bg-[#0a2540] text-white px-10 py-6 rounded-3xl font-black text-[10px] uppercase tracking-[0.2em] hover:bg-black transition-all flex items-center justify-center gap-3 shadow-[4px_4px_0px_0px_#00d66f] active:scale-95"
         >
-          <Download size={18} strokeWidth={3} /> Exportar Report
+          <Download size={18} strokeWidth={3} /> Exportar Report Excel
         </button>
       </div>
 
@@ -89,7 +107,7 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
                 <th className="p-8 text-[10px] font-black text-[#0a2540] uppercase tracking-widest">
                   <div className="flex items-center gap-2"><User size={14}/> Vizinho</div>
                 </th>
-                <th className="p-8 text-right text-[10px] font-black text-[#0a2540] uppercase tracking-widest">Volume</th>
+                <th className="p-8 text-right text-[10px] font-black text-[#0a2540] uppercase tracking-widest">Volume Bruto</th>
                 <th className="p-8 text-center text-[10px] font-black text-[#0a2540] uppercase tracking-widest">Status</th>
                 <th className="p-8 text-right text-[10px] font-black text-[#0a2540] uppercase tracking-widest">Cashback</th>
               </tr>
@@ -100,7 +118,7 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
                   <tr key={t.id} className="hover:bg-[#00d66f]/5 transition-colors group">
                     <td className="p-8">
                       <p className="text-xs font-black text-[#0a2540]">
-                        {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}
+                        {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT') : '---'}
                       </p>
                       <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">
                         {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : ''}
@@ -114,8 +132,11 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
                         </span>
                       </div>
                     </td>
-                    <td className="p-8 font-mono text-[#0a2540] font-black text-[11px] bg-slate-50/50 group-hover:bg-transparent">
-                      {t.clientNif || t.clientId?.substring(0, 9)}
+                    <td className="p-8">
+                      <div className="flex flex-col">
+                        <span className="font-mono text-[#0a2540] font-black text-[11px]">{t.clientNif || '---'}</span>
+                        <span className="text-[8px] text-slate-400 uppercase font-bold flex items-center gap-1"><Hash size={8}/> {t.clientId?.substring(0, 8)}...</span>
+                      </div>
                     </td>
                     <td className="p-8 text-right font-black text-slate-400 text-sm">
                       {formatCurrency(t.amount || 0)}

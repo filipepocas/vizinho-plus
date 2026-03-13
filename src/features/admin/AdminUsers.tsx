@@ -9,7 +9,9 @@ import {
   ShieldAlert,
   Mail,
   Hash,
-  ArrowUpRight
+  ArrowUpRight,
+  Locate,
+  MapPin
 } from 'lucide-react';
 
 interface AdminUsersProps {
@@ -33,7 +35,8 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, onUpdateStatus, loading 
     const userName = u.name?.toLowerCase() || '';
     const userNif = u.nif?.toLowerCase() || '';
     const userEmail = u.email?.toLowerCase() || '';
-    return userName.includes(q) || userNif.includes(q) || userEmail.includes(q);
+    const userZip = u.zipCode?.toLowerCase() || '';
+    return userName.includes(q) || userNif.includes(q) || userEmail.includes(q) || userZip.includes(q);
   });
 
   if (loading) {
@@ -54,7 +57,7 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, onUpdateStatus, loading 
         </div>
         <input 
           type="text" 
-          placeholder="PESQUISAR VIZINHO POR NOME, NIF OU EMAIL..." 
+          placeholder="PESQUISAR VIZINHO POR NOME, NIF, EMAIL OU CÓDIGO POSTAL..." 
           className="w-full p-6 pl-14 bg-white border-2 border-[#0a2540] rounded-3xl outline-none shadow-[4px_4px_0px_0px_#0a2540] focus:shadow-none focus:translate-x-1 focus:translate-y-1 transition-all font-black text-xs uppercase tracking-wider"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -93,11 +96,21 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, onUpdateStatus, loading 
                 </div>
               </div>
 
-              <div className="space-y-3 mb-8">
+              <div className="space-y-2 mb-8">
                 <div className="flex items-center gap-3 text-slate-400">
-                  <Mail size={14} />
+                  <Mail size={14} className="text-[#00d66f]" />
                   <span className="text-xs font-bold truncate">{u.email}</span>
                 </div>
+                <div className="flex items-center gap-3 text-slate-400">
+                  <Locate size={14} className="text-[#00d66f]" />
+                  <span className="text-xs font-bold uppercase">{u.zipCode || '0000-000'}</span>
+                </div>
+                {u.freguesia && (
+                  <div className="flex items-center gap-3 text-slate-400">
+                    <MapPin size={14} />
+                    <span className="text-xs font-bold uppercase truncate">{u.freguesia}</span>
+                  </div>
+                )}
               </div>
 
               {/* ÁREA DE SALDOS */}
