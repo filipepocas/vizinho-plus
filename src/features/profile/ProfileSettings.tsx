@@ -1,7 +1,7 @@
 // src/features/profile/ProfileSettings.tsx
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { db } from '../../config/firebase';
+import { db, auth } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, 
@@ -11,15 +11,19 @@ import {
   Tag, 
   Save, 
   ShieldCheck,
-  CheckCircle2
+  CheckCircle2,
+  Trash2,
+  AlertTriangle,
+  RefreshCw
 } from 'lucide-react';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { currentUser } = useStore();
+  const { currentUser, deleteUserWithHistory, logout } = useStore();
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Estados do formulário - Usando currentUser.id conforme o novo padrão
+  // Estados do formulário
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
     phone: currentUser?.phone || '',
@@ -31,13 +35,10 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // CORREÇÃO: Alterado de .uid para .id para alinhar com o useStore
     if (!currentUser?.id) return;
 
     setLoading(true);
     try {
-      // CORREÇÃO: Usando currentUser.id para referenciar o documento no Firestore
       const userRef = doc(db, 'users', currentUser.id);
       await updateDoc(userRef, formData);
       setSaved(true);
@@ -47,6 +48,42 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       alert("Erro ao guardar alterações.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!currentUser?.id) return;
+
+    const confirmFirst = window.confirm(
+      "Tens a certeza que queres eliminar a tua conta?\n\n" +
+      "Esta ação irá apagar permanentemente o teu perfil e todo o teu histórico de cashback. Não poderás recuperar estes dados."
+    );
+
+    if (confirmFirst) {
+      const confirmSecond = window.confirm(
+        "ÚLTIMO AVISO: Todos os teus dados serão destruídos agora. Confirmas?"
+      );
+
+      if (confirmSecond) {
+        setIsDeleting(true);
+        try {
+          // CORREÇÃO DE TIPO: Mapear o role para garantir compatibilidade com a função deleteUserWithHistory
+          const roleToDelete: 'merchant' | 'client' = currentUser.role === 'merchant' ? 'merchant' : 'client';
+          
+          // 1. Eliminar dados e histórico na Firestore
+          await deleteUserWithHistory(currentUser.id, roleToDelete);
+          
+          // 2. Logout e limpeza do estado
+          await logout();
+          
+          alert("Conta eliminada com sucesso. Até breve!");
+        } catch (error) {
+          console.error("Erro ao eliminar conta:", error);
+          alert("Ocorreu um erro ao eliminar a conta. Por favor, contacta o suporte.");
+        } finally {
+          setIsDeleting(false);
+        }
+      }
     }
   };
 
@@ -171,10 +208,34 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 ml-7">O NIF não pode ser alterado manualmente por motivos de segurança.</p>
           </div>
 
+          {/* ÁREA DE PERIGO: ELIMINAÇÃO */}
+          <div className="pt-8 mt-8 border-t-2 border-slate-100">
+            <div className="flex items-center gap-2 mb-4 text-red-500">
+              <AlertTriangle size={16} />
+              <h4 className="text-[10px] font-black uppercase tracking-widest">Zona de Perigo</h4>
+            </div>
+            <button 
+              type="button"
+              onClick={handleDeleteAccount}
+              disabled={isDeleting}
+              className="w-full py-4 rounded-2xl bg-white border-2 border-red-100 text-red-400 font-black uppercase text-[10px] tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all flex items-center justify-center gap-3"
+            >
+              {isDeleting ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" /> A eliminar conta...
+                </>
+              ) : (
+                <>
+                  <Trash2 size={14} /> Eliminar Minha Conta
+                </>
+              )}
+            </button>
+          </div>
+
           {/* BOTÃO GUARDAR */}
           <button 
             type="submit"
-            disabled={loading}
+            disabled={loading || isDeleting}
             className={`w-full py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all ${
               saved 
                 ? 'bg-[#00d66f] text-[#0f172a]' 
