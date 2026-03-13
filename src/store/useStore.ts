@@ -15,7 +15,7 @@ import {
   writeBatch,
   deleteDoc
 } from 'firebase/firestore';
-import { signOut, onAuthStateChanged } from 'firebase/auth';
+import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth'; // ADICIONADO: sendPasswordResetEmail
 import { db, auth } from '../config/firebase';
 import { Transaction, User as UserProfile } from '../types';
 
@@ -27,6 +27,7 @@ interface StoreState {
   setCurrentUser: (user: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>; // ADICIONADO
   addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
   cancelTransaction: (transactionId: string) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
@@ -51,6 +52,16 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ currentUser: null, transactions: [], isLoading: false });
     } catch (error) {
       console.error("Erro ao sair:", error);
+    }
+  },
+
+  // NOVA FUNÇÃO: Recuperar Password
+  resetPassword: async (email: string) => {
+    try {
+      await sendPasswordResetEmail(auth, email);
+    } catch (error) {
+      console.error("Erro ao enviar email de recuperação:", error);
+      throw error;
     }
   },
 
@@ -261,25 +272,15 @@ export const useStore = create<StoreState>((set, get) => ({
     set({ isLoading: true });
     try {
       const batch = writeBatch(db);
-
-      // 1. Identificar transações (por merchantId ou clientId conforme o papel)
       const fieldToMatch = role === 'merchant' ? 'merchantId' : 'clientId';
       const q = query(collection(db, 'transactions'), where(fieldToMatch, '==', userId));
       const querySnapshot = await getDocs(q);
-
-      // 2. Adicionar eliminações das transações ao batch
       querySnapshot.forEach((transactionDoc) => {
         batch.delete(transactionDoc.ref);
       });
-
-      // 3. Adicionar eliminação do perfil do utilizador ao batch
       const userRef = doc(db, 'users', userId);
       batch.delete(userRef);
-
-      // 4. Execução final atómica
       await batch.commit();
-      
-      console.log(`Auditoria: Sucesso na remoção total do ${role} ${userId}`);
     } catch (error) {
       console.error("Erro ao eliminar dados históricos:", error);
       throw error;

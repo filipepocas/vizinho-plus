@@ -8,15 +8,14 @@ const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [message, setMessage] = useState(''); // Para feedback de sucesso
   const [isLoading, setIsLoading] = useState(false);
   
-  const { currentUser, isInitialized } = useStore();
+  const { currentUser, isInitialized, resetPassword } = useStore();
   const navigate = useNavigate();
 
-  // Caminho dinâmico para o logo
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
-  // Redirecionamento automático se já estiver logado
   useEffect(() => {
     if (isInitialized && currentUser) {
       if (currentUser.role === 'admin') navigate('/admin');
@@ -29,10 +28,10 @@ const LoginPage: React.FC = () => {
     e.preventDefault();
     setIsLoading(true);
     setError('');
+    setMessage('');
 
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      // O redirecionamento será tratado pelo useEffect acima assim que o estado mudar
     } catch (err: any) {
       console.error("Erro ao entrar:", err);
       setError('Credenciais inválidas ou erro de ligação.');
@@ -40,10 +39,26 @@ const LoginPage: React.FC = () => {
     }
   };
 
+  // Função para lidar com a recuperação de password
+  const handleForgotPassword = async () => {
+    const userEmail = prompt("Introduza o seu e-mail para recuperar a palavra-passe:");
+    if (!userEmail) return;
+
+    try {
+      setIsLoading(true);
+      await resetPassword(userEmail.trim());
+      setMessage('E-mail de recuperação enviado! Verifique a sua caixa de entrada.');
+      setError('');
+    } catch (err: any) {
+      setError('Erro ao enviar e-mail. Verifique se o endereço está correto.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#1C305C] flex items-center justify-center p-4 relative overflow-hidden">
       
-      {/* Marca de Água no Fundo */}
       <img 
         src={logoPath} 
         alt="" 
@@ -53,7 +68,6 @@ const LoginPage: React.FC = () => {
 
       <div className="max-w-md w-full bg-white p-8 border-b-8 border-[#00d66f] shadow-2xl z-10">
         
-        {/* Logótipo no Topo */}
         <div className="mb-6 flex justify-center">
           <img 
             src={logoPath} 
@@ -66,6 +80,7 @@ const LoginPage: React.FC = () => {
         <p className="text-gray-400 text-[10px] font-bold mb-8 uppercase tracking-widest">Acesso Restrito Vizinho+</p>
         
         {error && <p className="bg-red-100 text-red-600 p-3 mb-6 text-xs font-bold border-l-4 border-red-600">{error}</p>}
+        {message && <p className="bg-green-100 text-green-600 p-3 mb-6 text-xs font-bold border-l-4 border-[#00d66f]">{message}</p>}
         
         <form onSubmit={handleLogin} className="space-y-6">
           <div>
@@ -90,12 +105,13 @@ const LoginPage: React.FC = () => {
               placeholder="••••••••"
             />
             <div className="mt-2 text-right">
-              <Link 
-                to="/forgot-password" 
+              <button 
+                type="button"
+                onClick={handleForgotPassword}
                 className="text-[9px] font-black uppercase text-gray-400 hover:text-[#00d66f] transition-all"
               >
                 Esqueceu-se da palavra-passe?
-              </Link>
+              </button>
             </div>
           </div>
           <button 
@@ -103,7 +119,7 @@ const LoginPage: React.FC = () => {
             disabled={isLoading}
             className="w-full bg-[#1C305C] text-white p-4 font-black uppercase hover:bg-[#00d66f] hover:text-[#1C305C] transition-all disabled:opacity-50"
           >
-            {isLoading ? 'A entrar...' : 'Entrar no Sistema'}
+            {isLoading ? 'A processar...' : 'Entrar no Sistema'}
           </button>
         </form>
 
