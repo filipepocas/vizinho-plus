@@ -11,7 +11,9 @@ import {
   getDoc,
   getDocs,
   updateDoc,
-  runTransaction
+  runTransaction,
+  writeBatch,
+  deleteDoc
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -31,6 +33,7 @@ interface StoreState {
   registerClientProfile: (profile: UserProfile) => Promise<void>;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
+  deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -218,14 +221,12 @@ export const useStore = create<StoreState>((set, get) => ({
     let userUnsubscribe: (() => void) | null = null;
 
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
-      // Se mudar o utilizador, paramos a escuta do anterior
       if (userUnsubscribe) {
         userUnsubscribe();
         userUnsubscribe = null;
       }
 
       if (user) {
-        // ESCUTA EM TEMPO REAL DO PERFIL DO UTILIZADOR
         userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
           if (userDoc.exists()) {
             set({ 
@@ -234,7 +235,6 @@ export const useStore = create<StoreState>((set, get) => ({
               isInitialized: true
             });
           } else {
-            // Caso o documento ainda não exista (durante o registo)
             const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
             set({ 
               currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile,
@@ -255,5 +255,36 @@ export const useStore = create<StoreState>((set, get) => ({
       authUnsubscribe();
       if (userUnsubscribe) userUnsubscribe();
     };
+  },
+
+  deleteUserWithHistory: async (userId, role) => {
+    set({ isLoading: true });
+    try {
+      const batch = writeBatch(db);
+
+      // 1. Identificar transações (por merchantId ou clientId conforme o papel)
+      const fieldToMatch = role === 'merchant' ? 'merchantId' : 'clientId';
+      const q = query(collection(db, 'transactions'), where(fieldToMatch, '==', userId));
+      const querySnapshot = await getDocs(q);
+
+      // 2. Adicionar eliminações das transações ao batch
+      querySnapshot.forEach((transactionDoc) => {
+        batch.delete(transactionDoc.ref);
+      });
+
+      // 3. Adicionar eliminação do perfil do utilizador ao batch
+      const userRef = doc(db, 'users', userId);
+      batch.delete(userRef);
+
+      // 4. Execução final atómica
+      await batch.commit();
+      
+      console.log(`Auditoria: Sucesso na remoção total do ${role} ${userId}`);
+    } catch (error) {
+      console.error("Erro ao eliminar dados históricos:", error);
+      throw error;
+    } finally {
+      set({ isLoading: false });
+    }
   }
 }));

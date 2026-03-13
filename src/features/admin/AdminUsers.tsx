@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
 import { 
   Search, 
@@ -11,7 +12,9 @@ import {
   Hash,
   ArrowUpRight,
   Locate,
-  MapPin
+  MapPin,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 
 interface AdminUsersProps {
@@ -22,12 +25,33 @@ interface AdminUsersProps {
 
 const AdminUsers: React.FC<AdminUsersProps> = ({ users, onUpdateStatus, loading }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const { deleteUserWithHistory, isLoading: isDeleting } = useStore();
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-PT', {
       style: 'currency',
       currency: 'EUR',
     }).format(value || 0);
+  };
+
+  const handleDeleteUser = async (userId: string, userName: string) => {
+    const confirmed = window.confirm(
+      `ATENÇÃO: Estás prestes a eliminar DEFINITIVAMENTE o Vizinho "${userName}".\n\n` +
+      `Isto irá apagar:\n` +
+      `- O perfil do utilizador\n` +
+      `- Todo o histórico de transações e cashback\n\n` +
+      `Esta ação não pode ser desfeita. Desejas continuar?`
+    );
+
+    if (confirmed) {
+      try {
+        await deleteUserWithHistory(userId, 'client');
+        alert("Vizinho e histórico eliminados com sucesso.");
+        // O onSnapshot no AdminDashboard irá atualizar a lista automaticamente
+      } catch (error) {
+        alert("Erro ao eliminar vizinho. Verifica a consola.");
+      }
+    }
   };
 
   const filteredUsers = users.filter(u => {
@@ -70,8 +94,16 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, onUpdateStatus, loading 
           filteredUsers.map((u) => (
             <div key={u.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative overflow-hidden group hover:-translate-y-1 transition-all">
               
-              {/* STATUS INDICATOR */}
-              <div className="absolute top-6 right-8">
+              {/* STATUS INDICATOR & DELETE */}
+              <div className="absolute top-6 right-8 flex items-center gap-2">
+                <button 
+                  onClick={() => handleDeleteUser(u.id, u.name || u.email)}
+                  disabled={isDeleting}
+                  className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                  title="Eliminar permanentemente"
+                >
+                  {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                </button>
                 <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest border-2 ${
                   u.status === 'active' 
                     ? 'bg-green-50 text-green-600 border-green-200' 

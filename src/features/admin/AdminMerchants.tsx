@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
 import { 
   Search, 
@@ -12,7 +13,9 @@ import {
   MapPin,
   AlertCircle,
   Mail,
-  Locate
+  Locate,
+  Trash2,
+  RefreshCw
 } from 'lucide-react';
 
 interface AdminMerchantsProps {
@@ -29,6 +32,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   loading 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const { deleteUserWithHistory, isLoading: isDeleting } = useStore();
 
   const filteredMerchants = merchants.filter(m => {
     const q = searchQuery.toLowerCase();
@@ -40,6 +44,25 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
       (m.freguesia?.toLowerCase() || '').includes(q)
     );
   });
+
+  const handleDeleteMerchant = async (merchantId: string, shopName: string) => {
+    const confirmed = window.confirm(
+      `ALERTA CRÍTICO: Estás a eliminar o Parceiro "${shopName}".\n\n` +
+      `Esta ação irá apagar permanentemente:\n` +
+      `- O perfil do Lojista\n` +
+      `- TODAS as transações registadas por esta loja\n\n` +
+      `Esta operação é irreversível. Confirmas a eliminação total?`
+    );
+
+    if (confirmed) {
+      try {
+        await deleteUserWithHistory(merchantId, 'merchant');
+        alert("Parceiro e histórico eliminados com sucesso.");
+      } catch (error) {
+        alert("Erro ao eliminar parceiro. Verifica a consola.");
+      }
+    }
+  };
 
   if (loading) {
     return (
@@ -82,13 +105,23 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                 <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
                   <Store size={24} strokeWidth={2.5} />
                 </div>
-                <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-[0.15em] border-2 ${
-                  m.status === 'active' 
-                    ? 'bg-green-50 text-green-600 border-green-200' 
-                    : 'bg-amber-50 text-amber-600 border-amber-200'
-                }`}>
-                  {m.status || 'Pendente'}
-                </span>
+                <div className="flex items-center gap-2">
+                  <button 
+                    onClick={() => handleDeleteMerchant(m.id, m.name || m.email)}
+                    disabled={isDeleting}
+                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                    title="Eliminar parceiro e histórico"
+                  >
+                    {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                  </button>
+                  <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-[0.15em] border-2 ${
+                    m.status === 'active' 
+                      ? 'bg-green-50 text-green-600 border-green-200' 
+                      : 'bg-amber-50 text-amber-600 border-amber-200'
+                  }`}>
+                    {m.status || 'Pendente'}
+                  </span>
+                </div>
               </div>
 
               <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 leading-none">
