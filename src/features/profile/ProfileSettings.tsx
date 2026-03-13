@@ -25,7 +25,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     phone: currentUser?.phone || '',
     address: currentUser?.address || '',
     category: currentUser?.category || '',
-    postalCode: currentUser?.postalCode || '',
+    zipCode: currentUser?.zipCode || '',
     freguesia: currentUser?.freguesia || ''
   });
 
@@ -143,8 +143,8 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Código Postal</label>
                     <input 
                       type="text"
-                      value={formData.postalCode}
-                      onChange={(e) => setFormData({...formData, postalCode: e.target.value})}
+                      value={formData.zipCode}
+                      onChange={(e) => setFormData({...formData, zipCode: e.target.value})}
                       className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] transition-all"
                     />
                   </div>
