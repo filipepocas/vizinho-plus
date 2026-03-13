@@ -12,11 +12,9 @@ import {
   getDoc, 
   writeBatch, 
   increment,
-  setDoc,
   Timestamp
 } from 'firebase/firestore';
-import { sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
-import { db, auth } from '../../config/firebase';
+import { db } from '../../config/firebase';
 import { 
   ShieldCheck, 
   Users, 
@@ -36,12 +34,11 @@ import AdminMerchants from '../../features/admin/AdminMerchants';
 import { User as UserProfile } from '../../types/index';
 
 const AdminDashboard: React.FC = () => {
-  const { transactions, subscribeToTransactions, logout } = useStore();
+  const { transactions, subscribeToTransactions, logout, currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
   
-  // ESTADOS DE NAVEGAÇÃO E MODAL
+  // ESTADOS DE NAVEGAÇÃO
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
-  const [isModalOpen, setIsModalOpen] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -49,14 +46,12 @@ const AdminDashboard: React.FC = () => {
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
 
-  // FORMULÁRIO DE NOVO PARCEIRO (Mantido aqui para lógica de Auth)
-  const [newMerchant, setNewMerchant] = useState({
-    name: '', 
-    nif: '', 
-    phone: '', 
-    email: '', 
-    cashbackPercent: 10 
-  });
+  // 1. PROTEÇÃO DE ACESSO (Audit1303261100)
+  useEffect(() => {
+    if (isInitialized && (!currentUser || currentUser.role !== 'admin')) {
+      navigate('/login');
+    }
+  }, [currentUser, isInitialized, navigate]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-PT', {
@@ -127,9 +122,11 @@ const AdminDashboard: React.FC = () => {
 
   // SUBSCRIPÇÃO E FETCH DE DADOS
   useEffect(() => {
-    const unsubscribe = subscribeToTransactions('admin');
-    return () => { if (unsubscribe) unsubscribe(); };
-  }, [subscribeToTransactions]);
+    if (currentUser?.role === 'admin') {
+      const unsubscribe = subscribeToTransactions('admin');
+      return () => { if (unsubscribe) unsubscribe(); };
+    }
+  }, [subscribeToTransactions, currentUser]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -150,13 +147,13 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [currentView]);
 
-  // CÁLCULO DE ESTATÍSTICAS
+  // CÁLCULO DE ESTATÍSTICAS SEGURO
   const stats = useMemo(() => {
-    const totalVolume = transactions.reduce((acc, t) => acc + (t.amount || 0), 0);
-    const totalCashback = transactions.reduce((acc, t) => acc + (t.cashbackAmount || 0), 0);
+    const totalVolume = transactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
+    const totalCashback = transactions.reduce((acc, t) => acc + (Number(t.cashbackAmount) || 0), 0);
     const pendingCashback = transactions
       .filter(t => t.status === 'pending')
-      .reduce((acc, t) => acc + (t.cashbackAmount || 0), 0);
+      .reduce((acc, t) => acc + (Number(t.cashbackAmount) || 0), 0);
     const uniqueClients = new Set(transactions.map(t => t.clientId)).size;
     
     return {
@@ -168,7 +165,6 @@ const AdminDashboard: React.FC = () => {
     };
   }, [transactions]);
 
-  // GESTÃO DE STATUS (CLIENTES E LOJISTAS)
   const handleUpdateStatus = async (id: string, newStatus: string) => {
     try {
       await updateDoc(doc(db, 'users', id), { status: newStatus });
@@ -178,6 +174,15 @@ const AdminDashboard: React.FC = () => {
       alert("Erro ao atualizar status.");
     }
   };
+
+  // Enquanto a sessão inicializa, evitamos mostrar o dashboard
+  if (!isInitialized) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0a2540]">
+        <div className="text-[#00d66f] font-black animate-pulse uppercase tracking-widest">A carregar consola...</div>
+      </div>
+    );
+  }
 
   if (currentView === 'settings') return <AdminSettings onBack={() => setCurrentView('overview')} />;
 
@@ -221,7 +226,6 @@ const AdminDashboard: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-6">
         
-        {/* VISTA: OVERVIEW / DASHBOARD */}
         {currentView === 'overview' && (
           <div className="space-y-12 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
@@ -264,17 +268,15 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* VISTA: LOJAS (MODULARIZADO) */}
         {currentView === 'merchants' && (
           <AdminMerchants 
             merchants={merchants}
             loading={loading}
             onUpdateStatus={handleUpdateStatus}
-            onOpenModal={() => setIsModalOpen(true)}
+            onOpenModal={() => {}} // Lógica de modal deve ser tratada no componente ou aqui se necessário
           />
         )}
 
-        {/* VISTA: VIZINHOS (MODULARIZADO) */}
         {currentView === 'users' && (
           <AdminUsers 
             users={registeredUsers} 
@@ -282,10 +284,7 @@ const AdminDashboard: React.FC = () => {
             loading={loading} 
           />
         )}
-
       </main>
-
-      {/* O Modal de Registo de Lojista pode ser movido no futuro para dentro do AdminMerchants se necessário, por agora mantemos a lógica de Auth no Dashboard por segurança estrutural */}
     </div>
   );
 };

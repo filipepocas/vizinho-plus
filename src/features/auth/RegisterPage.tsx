@@ -1,9 +1,9 @@
-// src/features/auth/RegisterPage.tsx
 import React, { useState } from 'react';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { auth, db } from '../../config/firebase';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { useNavigate, Link } from 'react-router-dom';
+import { useStore } from '../../store/useStore';
 
 const RegisterPage: React.FC = () => {
   const [name, setName] = useState('');
@@ -13,6 +13,7 @@ const RegisterPage: React.FC = () => {
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { checkNifExists } = useStore();
 
   // Caminho dinâmico para o logo
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
@@ -22,24 +23,54 @@ const RegisterPage: React.FC = () => {
     setIsLoading(true);
     setError('');
 
+    // Validação básica de NIF (9 dígitos)
+    if (nif.trim().length !== 9) {
+      setError('O NIF deve ter exatamente 9 dígitos.');
+      setIsLoading(false);
+      return;
+    }
+
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+      // 1. Verificar se o NIF já existe antes de criar a conta Auth
+      const nifExists = await checkNifExists(nif.trim());
+      if (nifExists) {
+        setError('Este NIF já está registado no sistema.');
+        setIsLoading(false);
+        return;
+      }
+
+      // 2. Criar utilizador no Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(auth, email.trim(), password);
       const user = userCredential.user;
 
+      // 3. Definir Role (Admin para o Filipe, Client para os restantes)
+      const userEmail = email.toLowerCase().trim();
+      const userRole = userEmail === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
+
+      // 4. Criar documento de perfil no Firestore
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
-        name: name,
-        nif: nif,
-        email: email.toLowerCase().trim(),
-        role: 'client',
+        name: name.trim(),
+        nif: nif.trim(),
+        email: userEmail,
+        role: userRole,
         wallet: { available: 0, pending: 0 },
-        createdAt: new Date().toISOString()
+        createdAt: serverTimestamp()
       });
 
-      navigate('/cliente');
+      // 5. Redirecionar conforme a role
+      if (userRole === 'admin') {
+        navigate('/admin');
+      } else {
+        navigate('/client');
+      }
+
     } catch (err: any) {
+      console.error("Erro no registo:", err);
       if (err.code === 'auth/email-already-in-use') {
         setError('Este e-mail já está em utilização.');
+      } else if (err.code === 'auth/weak-password') {
+        setError('A palavra-passe deve ter pelo menos 6 caracteres.');
       } else {
         setError('Erro ao criar conta. Verifique os dados.');
       }
@@ -92,8 +123,9 @@ const RegisterPage: React.FC = () => {
             <input 
               required
               type="text" 
+              maxLength={9}
               value={nif}
-              onChange={(e) => setNif(e.target.value)}
+              onChange={(e) => setNif(e.target.value.replace(/\D/g, ''))}
               className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
               placeholder="123456789"
             />

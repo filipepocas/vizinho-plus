@@ -1,25 +1,42 @@
-// src/features/auth/LoginPage.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../config/firebase';
 import { useNavigate, Link } from 'react-router-dom';
+import { useStore } from '../../store/useStore';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  
+  const { currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
 
-  // Caminho dinâmico para garantir que o logo carrega em qualquer sub-rota
+  // Caminho dinâmico para o logo
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
+
+  // Redirecionamento automático se já estiver logado
+  useEffect(() => {
+    if (isInitialized && currentUser) {
+      if (currentUser.role === 'admin') navigate('/admin');
+      else if (currentUser.role === 'merchant') navigate('/merchant');
+      else navigate('/client');
+    }
+  }, [currentUser, isInitialized, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError('');
+
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      navigate('/admin');
+      await signInWithEmailAndPassword(auth, email.trim(), password);
+      // O redirecionamento será tratado pelo useEffect acima assim que o estado mudar
     } catch (err: any) {
+      console.error("Erro ao entrar:", err);
       setError('Credenciais inválidas ou erro de ligação.');
+      setIsLoading(false);
     }
   };
 
@@ -36,13 +53,12 @@ const LoginPage: React.FC = () => {
 
       <div className="max-w-md w-full bg-white p-8 border-b-8 border-[#00d66f] shadow-2xl z-10">
         
-        {/* Logótipo no Topo do Formulário */}
+        {/* Logótipo no Topo */}
         <div className="mb-6 flex justify-center">
           <img 
             src={logoPath} 
             alt="Vizinho+" 
             className="h-16 w-auto object-contain"
-            onError={() => console.error("Logo não encontrado em: " + logoPath)}
           />
         </div>
 
@@ -55,28 +71,31 @@ const LoginPage: React.FC = () => {
           <div>
             <label className="block text-[10px] font-black uppercase mb-1 text-[#1C305C]">E-mail</label>
             <input 
+              required
               type="email" 
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold"
+              className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
               placeholder="exemplo@gmail.com"
             />
           </div>
           <div>
             <label className="block text-[10px] font-black uppercase mb-1 text-[#1C305C]">Palavra-passe</label>
             <input 
+              required
               type="password" 
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold"
+              className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
               placeholder="••••••••"
             />
           </div>
           <button 
             type="submit"
-            className="w-full bg-[#1C305C] text-white p-4 font-black uppercase hover:bg-[#00d66f] hover:text-[#1C305C] transition-all"
+            disabled={isLoading}
+            className="w-full bg-[#1C305C] text-white p-4 font-black uppercase hover:bg-[#00d66f] hover:text-[#1C305C] transition-all disabled:opacity-50"
           >
-            Entrar no Sistema
+            {isLoading ? 'A entrar...' : 'Entrar no Sistema'}
           </button>
         </form>
 
