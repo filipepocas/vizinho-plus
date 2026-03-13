@@ -15,7 +15,7 @@ const RegisterPage: React.FC = () => {
   const navigate = useNavigate();
   const { checkNifExists } = useStore();
 
-  // Caminho dinâmico para o logo
+  // Caminho dinâmico para garantir que o logo carrega
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -31,7 +31,7 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
-      // 1. Verificar se o NIF já existe antes de criar a conta Auth
+      // 1. Verificar se o NIF já existe
       const nifExists = await checkNifExists(nif.trim());
       if (nifExists) {
         setError('Este NIF já está registado no sistema.');
@@ -47,13 +47,14 @@ const RegisterPage: React.FC = () => {
       const userEmail = email.toLowerCase().trim();
       const userRole = userEmail === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
 
-      // 4. Criar documento de perfil no Firestore
+      // 4. Criar documento de perfil no Firestore (Estrutura ADN Limpa)
       await setDoc(doc(db, 'users', user.uid), {
         id: user.uid,
         name: name.trim(),
         nif: nif.trim(),
         email: userEmail,
         role: userRole,
+        status: 'active',
         wallet: { available: 0, pending: 0 },
         createdAt: serverTimestamp()
       });
@@ -92,7 +93,6 @@ const RegisterPage: React.FC = () => {
 
       <div className="max-w-md w-full bg-white p-8 border-b-8 border-[#00d66f] shadow-2xl z-10">
         
-        {/* Logótipo no Topo */}
         <div className="mb-6 flex justify-center">
           <img 
             src={logoPath} 
