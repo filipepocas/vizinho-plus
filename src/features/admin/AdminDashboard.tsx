@@ -17,35 +17,30 @@ import {
 } from 'firebase/firestore';
 import { sendPasswordResetEmail, createUserWithEmailAndPassword } from 'firebase/auth';
 import { db, auth } from '../../config/firebase';
-import * as XLSX from 'xlsx';
 import { 
   ShieldCheck, 
   Users, 
   Store, 
   TrendingUp, 
-  Download, 
   Plus, 
   Settings, 
   LogOut, 
-  Search,
   CheckCircle2,
   XCircle,
   Clock,
   RefreshCw,
-  Tag,
   Mail,
-  MapPin,
   Phone,
   Percent,
   Hash
 } from 'lucide-react';
 import AdminSettings from './AdminSettings';
-import { User as UserProfile, Transaction } from '../../types';
+import AdminTransactions from './AdminTransactions';
+import { User as UserProfile } from '../../types';
 
 const AdminDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
-  const [searchQuery, setSearchQuery] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -65,6 +60,13 @@ const AdminDashboard: React.FC = () => {
     email: '', 
     cashbackPercent: 10 
   });
+
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-PT', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(value);
+  };
 
   const handleLogout = async () => {
     try {
@@ -198,7 +200,7 @@ const AdminDashboard: React.FC = () => {
         alert(`Lojista criado com sucesso!\n\nEmail enviado para ${cleanEmail}.\nPassword temporária: ${tempPassword}`);
       } catch (authErr) {
         console.warn("Falha no envio do email:", authErr);
-        alert('Lojista criado, mas falhou o envio do e-mail de recuperação. Verifique as configurações do Firebase.');
+        alert('Lojista criado, mas falhou o envio do e-mail de recuperação.');
       }
 
       setIsModalOpen(false);
@@ -207,17 +209,11 @@ const AdminDashboard: React.FC = () => {
         nif: '', zipCode: '', phone: '', email: '', 
         cashbackPercent: 10 
       });
-      
-      setCurrentView('overview');
-      setTimeout(() => setCurrentView('merchants'), 100);
+      setCurrentView('merchants');
 
     } catch (error: any) {
       console.error("Erro ao criar lojista:", error);
-      if (error.code === 'auth/email-already-in-use') {
-        alert('Este e-mail já está registado no sistema!');
-      } else {
-        alert('Erro ao criar lojista: ' + error.message);
-      }
+      alert('Erro ao criar lojista: ' + error.message);
     } finally {
       setIsProcessing(false);
     }
@@ -231,31 +227,6 @@ const AdminDashboard: React.FC = () => {
       alert("Erro ao atualizar status.");
     }
   };
-
-  const exportToExcel = () => {
-    const data = transactions.map(t => ({
-      'Data': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleString() : '---',
-      'Loja': t.merchantName || '---',
-      'Vizinho (NIF)': t.clientNif || '---',
-      'Volume': (t.amount || 0).toFixed(2) + '€',
-      'Cashback': (t.cashbackAmount || 0).toFixed(2) + '€',
-      'Status': t.status || 'pending'
-    }));
-    const ws = XLSX.utils.json_to_sheet(data);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatório");
-    XLSX.writeFile(wb, `VizinhoPlus_Admin.xlsx`);
-  };
-
-  const filteredTransactions = transactions.filter(t => {
-    const q = searchQuery.toLowerCase();
-    return (
-      t.clientId?.toLowerCase().includes(q) || 
-      t.clientNif?.toLowerCase().includes(q) ||
-      t.merchantName?.toLowerCase().includes(q) || 
-      t.documentNumber?.toLowerCase().includes(q)
-    );
-  });
 
   if (currentView === 'settings') return <AdminSettings onBack={() => setCurrentView('overview')} />;
 
@@ -299,29 +270,30 @@ const AdminDashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto px-6">
         
         {currentView === 'overview' && (
-          <div className="space-y-10 animate-in fade-in duration-500">
+          <div className="space-y-12 animate-in fade-in duration-500">
+            {/* CARDS DE ESTATÍSTICAS */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
+              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100">
                  <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume de Vendas</p>
-                 <h3 className="text-3xl font-black italic tracking-tighter">{stats.volume.toFixed(2)}€</h3>
+                 <h3 className="text-3xl font-black italic tracking-tighter">{formatCurrency(stats.volume)}</h3>
               </div>
-              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 group">
-                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Pendente (+48h)</p>
-                 <h3 className="text-3xl font-black italic tracking-tighter">{stats.pending.toFixed(2)}€</h3>
+              <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100">
+                 <p className="text-[10px] font-black text-amber-500 uppercase tracking-widest mb-1">Pendente</p>
+                 <h3 className="text-3xl font-black italic tracking-tighter">{formatCurrency(stats.pending)}</h3>
                  <div className="mt-2 flex items-center gap-2 text-[8px] font-black uppercase text-slate-300">
-                   <Clock size={10}/> Aguardando maturação
+                   <Clock size={10}/> Em Maturação
                  </div>
               </div>
               <div className="bg-[#00d66f] p-8 rounded-[40px] shadow-xl border-2 border-[#00d66f] text-[#0a2540]">
-                 <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">Gestão de Saldos</p>
-                 <h3 className="text-3xl font-black italic tracking-tighter">{(stats.cashback - stats.pending).toFixed(2)}€</h3>
+                 <p className="text-[10px] font-black uppercase tracking-widest mb-1 opacity-60">Saldos Maturados</p>
+                 <h3 className="text-3xl font-black italic tracking-tighter">{formatCurrency(stats.cashback - stats.pending)}</h3>
                  <button 
                   onClick={processMaturation} 
                   disabled={isProcessing} 
                   className="mt-4 flex items-center gap-2 text-[10px] font-black uppercase bg-[#0a2540] text-white px-4 py-2 rounded-xl hover:scale-105 transition-all disabled:opacity-50"
                  >
                    <RefreshCw size={12} className={isProcessing ? 'animate-spin' : ''}/> 
-                   {isProcessing ? 'A Processar...' : 'Gerar Cashback'}
+                   {isProcessing ? 'A Processar...' : 'Libertar Cashback'}
                  </button>
               </div>
               <div className="bg-[#0a2540] p-8 rounded-[40px] shadow-xl text-white">
@@ -330,60 +302,13 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-4">
-              <div className="relative flex-1 group">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f]" size={20} />
-                <input 
-                  type="text" 
-                  placeholder="PROCURAR POR NIF VIZINHO, LOJA OU DOCUMENTO..." 
-                  className="w-full p-6 pl-12 rounded-3xl border-2 border-slate-100 outline-none focus:border-[#00d66f] font-black text-xs uppercase"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
+            {/* COMPONENTE DE TRANSAÇÕES (NOVO) */}
+            <div className="space-y-6">
+              <div className="flex items-center gap-4 ml-4">
+                <div className="h-2 w-12 bg-[#00d66f] rounded-full"></div>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter">Histórico de Movimentos</h2>
               </div>
-              <button 
-                onClick={exportToExcel} 
-                className="bg-white border-2 border-slate-100 px-8 py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest hover:bg-[#0a2540] hover:text-white transition-all flex items-center gap-3 shadow-sm"
-              >
-                <Download size={18} /> Exportar Excel
-              </button>
-            </div>
-
-            <div className="bg-white rounded-[48px] shadow-xl border-2 border-slate-100 overflow-hidden">
-              <div className="overflow-x-auto">
-                <table className="w-full text-left">
-                  <thead>
-                    <tr className="text-[10px] font-black text-slate-300 uppercase tracking-widest border-b border-slate-50">
-                      <th className="p-8">Data</th>
-                      <th className="p-8">Loja</th>
-                      <th className="p-8">NIF Vizinho</th>
-                      <th className="p-8 text-right">Volume</th>
-                      <th className="p-8 text-right">Status</th>
-                      <th className="p-8 text-right">Cashback</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-50">
-                    {filteredTransactions.map((t) => (
-                      <tr key={t.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="p-8 text-xs font-bold text-slate-400">
-                          {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---'}
-                        </td>
-                        <td className="p-8 font-black uppercase text-sm tracking-tighter">{t.merchantName}</td>
-                        <td className="p-8 font-mono text-slate-400 font-bold text-[10px]">{t.clientNif || t.clientId}</td>
-                        <td className="p-8 text-right font-black text-slate-400">{(t.amount || 0).toFixed(2)}€</td>
-                        <td className="p-8 text-right uppercase text-[9px] font-black tracking-widest">
-                          <span className={t.status === 'available' ? 'text-[#00d66f]' : 'text-amber-500'}>
-                            {t.status === 'available' ? 'Disponível' : 'Pendente'}
-                          </span>
-                        </td>
-                        <td className={`p-8 text-right font-black text-lg ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                          {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)}€
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <AdminTransactions transactions={transactions} />
             </div>
           </div>
         )}
@@ -457,6 +382,7 @@ const AdminDashboard: React.FC = () => {
 
       </main>
 
+      {/* MODAL DE REGISTO DE PARCEIRO */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-xl flex items-center justify-center z-50 p-4">
           <div className="bg-white w-full max-w-3xl rounded-[48px] p-10 shadow-2xl overflow-y-auto max-h-[95vh] border-4 border-[#00d66f]">

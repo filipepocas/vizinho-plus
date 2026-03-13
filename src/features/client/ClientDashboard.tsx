@@ -21,6 +21,14 @@ const ClientDashboard: React.FC = () => {
   const [view, setView] = useState<'home' | 'history' | 'partners'>('home');
   const [merchants, setMerchants] = useState<any[]>([]);
 
+  // Função auxiliar para formatar moeda no padrão Europeu/Português
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-PT', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(value);
+  };
+
   // 1. SUBSCREVER TRANSAÇÕES DO CLIENTE
   useEffect(() => {
     if (currentUser?.id) {
@@ -102,7 +110,7 @@ const ClientDashboard: React.FC = () => {
             <div className="space-y-1 mb-8">
               <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Saldo Disponível</p>
               <h3 className="text-5xl font-black italic tracking-tighter">
-                {walletStats.available.toFixed(2)}€
+                {formatCurrency(walletStats.available)}
               </h3>
             </div>
 
@@ -113,7 +121,7 @@ const ClientDashboard: React.FC = () => {
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Pendente</p>
-                <p className="text-sm font-black text-[#00d66f]">{walletStats.pending.toFixed(2)}€</p>
+                <p className="text-sm font-black text-[#00d66f]">{formatCurrency(walletStats.pending)}</p>
               </div>
             </div>
           </div>
@@ -124,7 +132,7 @@ const ClientDashboard: React.FC = () => {
           <div className="bg-blue-50 border-2 border-blue-100 p-4 rounded-2xl flex items-start gap-3">
             <Clock size={18} className="text-blue-500 mt-0.5 shrink-0" />
             <p className="text-[10px] font-bold text-blue-700 leading-relaxed uppercase">
-              Tens <span className="underline">{walletStats.pending.toFixed(2)}€</span> a processar. O cashback fica disponível para uso 48h após a compra por segurança.
+              Tens <span className="underline">{formatCurrency(walletStats.pending)}</span> a processar. O cashback fica disponível para uso 48h após a compra por segurança.
             </p>
           </div>
         )}
@@ -178,7 +186,7 @@ const ClientDashboard: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <p className={`font-black italic ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                        {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount?.toFixed(2)}€
+                        {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}
                       </p>
                     </div>
                   </div>
@@ -197,7 +205,7 @@ const ClientDashboard: React.FC = () => {
                       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest italic">{t.documentNumber}</p>
                     </div>
                     <p className={`font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                      {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount?.toFixed(2)}€
+                      {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}
                     </p>
                  </div>
                ))}
@@ -217,7 +225,6 @@ const ClientDashboard: React.FC = () => {
                       <div>
                         <p className="text-sm font-black text-[#0a2540] uppercase tracking-tighter">{m.name}</p>
                         <div className="flex items-center gap-1 text-[#00d66f]">
-                          <Star size={12} fill="#00d66f" />
                           <span className="text-[10px] font-black uppercase tracking-widest">{m.cashbackPercent}% Cashback</span>
                         </div>
                       </div>

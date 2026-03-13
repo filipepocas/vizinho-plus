@@ -1,3 +1,4 @@
+// src/features/profile/ProfileSettings.tsx
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { db } from '../../config/firebase';
@@ -18,7 +19,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  // Estados do formulário
+  // Estados do formulário - Usando currentUser.id conforme o novo padrão
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
     phone: currentUser?.phone || '',
@@ -30,11 +31,14 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser?.uid) return;
+    
+    // CORREÇÃO: Alterado de .uid para .id para alinhar com o useStore
+    if (!currentUser?.id) return;
 
     setLoading(true);
     try {
-      const userRef = doc(db, 'users', currentUser.uid);
+      // CORREÇÃO: Usando currentUser.id para referenciar o documento no Firestore
+      const userRef = doc(db, 'users', currentUser.id);
       await updateDoc(userRef, formData);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);

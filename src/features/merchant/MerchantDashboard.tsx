@@ -10,7 +10,6 @@ import {
   LayoutDashboard, 
   History, 
   UserCircle, 
-  Users, 
   LogOut, 
   Camera, 
   Coins, 
@@ -19,7 +18,10 @@ import {
   Store,
   XCircle,
   CheckCircle2,
-  Search
+  Search,
+  AlertCircle,
+  User,
+  ArrowRight
 } from 'lucide-react';
 
 const MerchantDashboard: React.FC = () => {
@@ -27,7 +29,6 @@ const MerchantDashboard: React.FC = () => {
   const navigate = useNavigate();
   
   const [view, setView] = useState<'terminal' | 'history' | 'profile'>('terminal');
-  const [showOpManager, setShowOpManager] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
 
   const [cardNumber, setCardNumber] = useState('');
@@ -35,17 +36,73 @@ const MerchantDashboard: React.FC = () => {
   const [documentNumber, setDocumentNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+  const [foundClientName, setFoundClientName] = useState<string | null>(null);
 
   const [filterNif, setFilterNif] = useState('');
   const [filterType, setFilterType] = useState('all');
-
-  const [newOpName, setNewOpName] = useState('');
-  const [newOpPass, setNewOpPass] = useState('');
 
   const [editName, setEditName] = useState(currentUser?.name || '');
   const [editEmail, setEditEmail] = useState(currentUser?.email || '');
   const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
+
+  // UTILS: FORMATAÇÃO DE MOEDA (0,00€)
+  const formatCurrency = (value: number) => {
+    return new Intl.NumberFormat('pt-PT', {
+      style: 'currency',
+      currency: 'EUR',
+    }).format(value);
+  };
+
+  // UTILS: MÁSCARA NIF (XXX XXX XXX)
+  const formatNIF = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
+  };
+
+  // UTILS: MÁSCARA TELEFONE (XXX XXX XXX)
+  const formatPhone = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
+  };
+
+  // CÁLCULO DE CASHBACK EM TEMPO REAL
+  const liveCashback = useMemo(() => {
+    const val = parseFloat(amount);
+    if (isNaN(val) || val <= 0) return 0;
+    return val * ((currentUser?.cashbackPercent || 0) / 100);
+  }, [amount, currentUser?.cashbackPercent]);
+
+  // VALIDAÇÃO MOLECULAR DE NIF
+  const isNifValid = useMemo(() => {
+    const cleanNif = cardNumber.trim().replace(/\s/g, '');
+    return /^[0-9]{9}$/.test(cleanNif);
+  }, [cardNumber]);
+
+  // BUSCA AUTOMÁTICA DE CLIENTE AO DIGITAR NIF
+  useEffect(() => {
+    const searchClient = async () => {
+      const cleanNif = cardNumber.trim().replace(/\s/g, '');
+      if (cleanNif.length === 9) {
+        try {
+          const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            setFoundClientName(snap.docs[0].data().name);
+          } else {
+            setFoundClientName(null);
+          }
+        } catch (err) {
+          console.error("Erro na busca rápida:", err);
+          setFoundClientName(null);
+        }
+      } else {
+        setFoundClientName(null);
+      }
+    };
+
+    searchClient();
+  }, [cardNumber]);
 
   useEffect(() => {
     if (currentUser?.id) {
@@ -59,7 +116,7 @@ const MerchantDashboard: React.FC = () => {
       const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
       scanner.render(
         (text) => {
-          setCardNumber(text);
+          setCardNumber(formatNIF(text));
           setShowScanner(false);
           scanner.clear();
         },
@@ -71,6 +128,20 @@ const MerchantDashboard: React.FC = () => {
     }
   }, [showScanner]);
 
+  const handleFirebaseError = (error: any, defaultMsg: string) => {
+    console.error("Erro Firebase:", error);
+    if (!navigator.onLine) {
+      setMessage({ type: 'error', text: "Sem ligação à internet. Verifique a rede." });
+    } else if (error.code === 'permission-denied') {
+      setMessage({ type: 'error', text: "Acesso negado. Contacte o suporte." });
+    } else if (error.code === 'unavailable') {
+      setMessage({ type: 'error', text: "Serviço temporariamente indisponível." });
+    } else {
+      setMessage({ type: 'error', text: defaultMsg });
+    }
+    setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+  };
+
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
@@ -79,7 +150,7 @@ const MerchantDashboard: React.FC = () => {
       const updates = {
         name: editName,
         email: editEmail.toLowerCase().trim(),
-        phone: editPhone.trim(),
+        phone: editPhone.trim().replace(/\s/g, ''),
         cashbackPercent: editCashback
       };
       await updateDoc(doc(db, 'users', currentUser.id), updates);
@@ -88,7 +159,7 @@ const MerchantDashboard: React.FC = () => {
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       setView('terminal');
     } catch (err) {
-      alert("Erro ao atualizar perfil.");
+      handleFirebaseError(err, "Erro ao atualizar perfil.");
     } finally {
       setIsLoading(false);
     }
@@ -105,7 +176,8 @@ const MerchantDashboard: React.FC = () => {
 
   const filteredHistory = useMemo(() => {
     return transactions.filter(t => {
-      const matchNif = filterNif ? (t.clientNif || "").includes(filterNif) : true;
+      const cleanFilter = filterNif.replace(/\s/g, '');
+      const matchNif = cleanFilter ? (t.clientNif || "").includes(cleanFilter) : true;
       const matchType = filterType === 'all' ? true : t.type === filterType;
       return matchNif && matchType;
     });
@@ -123,46 +195,46 @@ const MerchantDashboard: React.FC = () => {
     a.href = url; a.download = `relatorio_${currentUser?.name || 'loja'}.csv`; a.click();
   };
 
-  const handleAddOperator = async () => {
-    if (!newOpName || newOpPass.length < 4 || !currentUser) return alert("Dados inválidos.");
-    const newOp = { id: `op_${Date.now()}`, name: newOpName, password: newOpPass, createdAt: new Date().toISOString() };
-    try {
-      await updateDoc(doc(db, 'users', currentUser.id), { operators: arrayUnion(newOp) });
-      setCurrentUser({ ...currentUser, operators: [...(currentUser.operators || []), newOp] });
-      setNewOpName(''); setNewOpPass('');
-    } catch (error) { alert("Erro ao adicionar operador."); }
-  };
-
   const processAction = async (type: 'earn' | 'redeem') => {
     const val = parseFloat(amount);
     const cleanNif = cardNumber.trim().replace(/\s/g, '');
 
-    if (!cleanNif || isNaN(val) || val <= 0 || !documentNumber || !currentUser) {
-      return alert("Preencha todos os campos corretamente.");
+    if (!isNifValid) {
+      setMessage({ type: 'error', text: "NIF Inválido. Deve conter 9 dígitos." });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      return;
+    }
+    
+    if (isNaN(val) || val <= 0 || !documentNumber || !currentUser) {
+      setMessage({ type: 'error', text: "Preencha o valor e fatura corretamente." });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      return;
     }
 
     try {
       setIsLoading(true);
 
-      // Procurar cliente pelo NIF
       const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
         setIsLoading(false);
-        return alert("NIF não encontrado. O cliente deve registar-se na App Vizinho+ primeiro.");
+        setMessage({ type: 'error', text: "Cliente não encontrado! O cliente deve registar-se na App primeiro." });
+        setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+        return;
       }
 
       const clientDoc = querySnapshot.docs[0];
       const clientData = clientDoc.data();
       const clientId = clientDoc.id;
 
-      // Se for resgate, verificar saldo
       if (type === 'redeem') {
         const availableBalance = clientData.wallet?.available || 0;
         if (val > availableBalance) {
           setIsLoading(false);
-          return alert(`Saldo insuficiente! O cliente tem apenas ${availableBalance.toFixed(2)}€ disponíveis.`);
+          setMessage({ type: 'error', text: `Saldo insuficiente! Disponível: ${formatCurrency(availableBalance)}` });
+          setTimeout(() => setMessage({ type: '', text: '' }), 5000);
+          return;
         }
       }
 
@@ -186,8 +258,7 @@ const MerchantDashboard: React.FC = () => {
       setAmount(''); setDocumentNumber(''); setCardNumber('');
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     } catch (error) { 
-      console.error(error);
-      alert("Erro ao processar. Tente novamente."); 
+      handleFirebaseError(error, "Erro ao processar venda. Tente novamente.");
     } finally { 
       setIsLoading(false); 
     }
@@ -213,10 +284,10 @@ const MerchantDashboard: React.FC = () => {
               </h2>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-[10px] font-black text-[#00d66f] uppercase bg-[#00d66f]/10 py-1 px-3 rounded-full border border-[#00d66f]/20">
-                  NIF: {currentUser?.nif}
+                  NIF: {formatNIF(currentUser?.nif || '')}
                 </span>
                 <span className="text-[10px] font-black text-white/50 uppercase">
-                  v2.0 Stable
+                  v2.3 Protected
                 </span>
               </div>
             </div>
@@ -230,7 +301,7 @@ const MerchantDashboard: React.FC = () => {
             ].map((item) => (
               <button 
                 key={item.id}
-                onClick={() => { setView(item.id as any); setShowOpManager(false); }} 
+                onClick={() => { setView(item.id as any); }} 
                 className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all ${view === item.id ? 'bg-[#00d66f] text-[#0f172a] shadow-lg scale-105' : 'text-white hover:bg-white/10'}`}
               >
                 <item.icon size={16} strokeWidth={3} /> {item.label}
@@ -248,21 +319,38 @@ const MerchantDashboard: React.FC = () => {
             <div className="lg:col-span-2 bg-white p-8 md:p-12 rounded-[40px] shadow-xl border-2 border-slate-100">
               <div className="space-y-10">
                 
-                {/* INPUT NIF */}
+                {/* INPUT NIF COM MÁSCARA E VALIDAÇÃO */}
                 <div className="space-y-4">
-                  <label className="flex items-center gap-3 text-xs font-black uppercase text-slate-400 tracking-widest">
-                    <Search size={14} /> Identificar Cliente (NIF)
-                  </label>
+                  <div className="flex justify-between items-center px-2">
+                    <label className="flex items-center gap-3 text-xs font-black uppercase text-slate-400 tracking-widest">
+                      <Search size={14} /> Identificar Cliente (NIF)
+                    </label>
+                    {cardNumber.length > 0 && (
+                      <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${isNifValid ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                        {isNifValid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                        {isNifValid ? 'NIF Válido' : 'Precisa de 9 dígitos'}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex gap-4">
                     <input 
+                      type="text"
+                      inputMode="numeric"
+                      maxLength={11} // Com espaços
                       value={cardNumber} 
-                      onChange={e => setCardNumber(e.target.value)} 
-                      placeholder="000000000" 
-                      className="flex-grow p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-3xl font-black text-[#0f172a] outline-none focus:border-[#00d66f] transition-all" 
+                      onChange={e => setCardNumber(formatNIF(e.target.value))} 
+                      placeholder="000 000 000" 
+                      className={`flex-grow p-6 bg-slate-50 border-4 rounded-3xl text-3xl font-black text-[#0f172a] outline-none transition-all ${
+                        cardNumber.length === 0 
+                          ? 'border-slate-100' 
+                          : isNifValid 
+                            ? 'border-[#00d66f]' 
+                            : 'border-red-100 focus:border-red-500'
+                      }`} 
                     />
                     <button 
                       onClick={() => setShowScanner(true)} 
-                      className="bg-[#0f172a] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all"
+                      className="bg-[#0f172a] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-lg"
                     >
                       <Camera size={32} strokeWidth={3} />
                     </button>
@@ -282,6 +370,15 @@ const MerchantDashboard: React.FC = () => {
                       placeholder="0.00" 
                       className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0f172a] outline-none focus:border-[#00d66f]" 
                     />
+                    {/* CÁLCULO AUTOMÁTICO VISUAL */}
+                    {parseFloat(amount) > 0 && (
+                      <div className="flex items-center gap-3 bg-[#00d66f]/10 p-4 rounded-2xl border-2 border-[#00d66f]/20 animate-in zoom-in">
+                        <ArrowRight size={16} className="text-[#00d66f]" />
+                        <span className="text-[11px] font-black uppercase text-[#0f172a]">
+                          O cliente recebe <span className="text-[#00d66f] text-sm">{formatCurrency(liveCashback)}</span> de cashback
+                        </span>
+                      </div>
+                    )}
                   </div>
                   {/* DOCUMENTO */}
                   <div className="space-y-4">
@@ -301,10 +398,26 @@ const MerchantDashboard: React.FC = () => {
 
             {/* BOTÕES DE AÇÃO */}
             <div className="flex flex-col gap-4">
+              
+              {/* CONFIRMAÇÃO VISUAL DO CLIENTE */}
+              {isNifValid && (
+                <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClientName ? 'bg-white border-[#00d66f] shadow-[0_10px_40px_-15px_rgba(0,214,111,0.3)]' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
+                  <div className={`p-3 rounded-2xl ${foundClientName ? 'bg-[#00d66f] text-white' : 'bg-slate-200 text-slate-400'}`}>
+                    <User size={24} strokeWidth={3} />
+                  </div>
+                  <div className="text-center">
+                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Confirmar para:</p>
+                    <h4 className={`text-lg font-black uppercase italic ${foundClientName ? 'text-[#0f172a]' : 'text-slate-400'}`}>
+                      {foundClientName || 'Cliente não registado'}
+                    </h4>
+                  </div>
+                </div>
+              )}
+
               <button 
                 onClick={() => processAction('earn')} 
-                disabled={isLoading}
-                className="flex-1 bg-[#00d66f] p-8 rounded-[40px] text-[#0f172a] transition-all hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-4 disabled:opacity-50"
+                disabled={isLoading || !isNifValid || !foundClientName}
+                className="flex-1 bg-[#00d66f] p-8 rounded-[40px] text-[#0f172a] transition-all hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-4 disabled:opacity-30 disabled:grayscale disabled:scale-100"
               >
                 <Coins size={48} strokeWidth={3} />
                 <span className="font-black text-xl uppercase italic tracking-tighter">Atribuir Cashback</span>
@@ -313,19 +426,22 @@ const MerchantDashboard: React.FC = () => {
 
               <button 
                 onClick={() => processAction('redeem')} 
-                disabled={isLoading}
-                className="flex-1 bg-[#0f172a] p-8 rounded-[40px] text-white transition-all hover:bg-black shadow-xl flex flex-col items-center justify-center gap-4 disabled:opacity-50"
+                disabled={isLoading || !isNifValid || !foundClientName}
+                className="flex-1 bg-[#0f172a] p-8 rounded-[40px] text-white transition-all hover:bg-black shadow-xl flex flex-col items-center justify-center gap-4 disabled:opacity-30 disabled:grayscale disabled:scale-100"
               >
                 <Gift size={48} className="text-[#00d66f]" strokeWidth={3} />
                 <span className="font-black text-xl uppercase italic tracking-tighter text-[#00d66f]">Utilizar Saldo</span>
                 <span className="text-[10px] font-bold opacity-60 uppercase tracking-widest">(Desconto Imediato)</span>
               </button>
 
+              {/* MENSAGENS DE SISTEMA */}
               {message.text && (
-                <div className={`p-6 rounded-3xl font-black text-center text-sm uppercase flex items-center justify-center gap-3 animate-pulse shadow-lg ${
-                  message.type === 'success' ? 'bg-green-500 text-white' : 'bg-red-500 text-white'
+                <div className={`p-6 rounded-3xl font-black text-center text-xs uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${
+                  message.type === 'success' 
+                    ? 'bg-green-500 text-white border-green-700' 
+                    : 'bg-red-500 text-white border-red-700'
                 }`}>
-                  {message.type === 'success' ? <CheckCircle2 size={20} /> : <XCircle size={20} />}
+                  {message.type === 'success' ? <CheckCircle2 size={20} strokeWidth={3} /> : <XCircle size={20} strokeWidth={3} />}
                   {message.text}
                 </div>
               )}
@@ -340,7 +456,7 @@ const MerchantDashboard: React.FC = () => {
                 <input 
                   placeholder="FILTRAR NIF..." 
                   value={filterNif}
-                  onChange={e => setFilterNif(e.target.value)}
+                  onChange={e => setFilterNif(formatNIF(e.target.value))}
                   className="bg-slate-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 ring-[#00d66f]"
                 />
                 <button onClick={handleExportCSV} className="bg-[#0f172a] text-white px-5 py-2 rounded-xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2">
@@ -366,11 +482,11 @@ const MerchantDashboard: React.FC = () => {
                       <td className="py-4 text-slate-400 font-medium">
                         {t.createdAt instanceof Timestamp ? t.createdAt.toDate().toLocaleDateString() : '---'}
                       </td>
-                      <td className="py-4 font-black">{t.clientNif}</td>
+                      <td className="py-4 font-black">{formatNIF(t.clientNif || '')}</td>
                       <td className="py-4 uppercase text-slate-400">{t.documentNumber}</td>
-                      <td className="py-4 text-right">{t.amount > 0 ? `${t.amount.toFixed(2)}€` : '---'}</td>
+                      <td className="py-4 text-right">{t.amount > 0 ? formatCurrency(t.amount) : '---'}</td>
                       <td className={`py-4 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                        {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount?.toFixed(2)}€
+                        {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}
                       </td>
                     </tr>
                   )) : (
@@ -390,6 +506,15 @@ const MerchantDashboard: React.FC = () => {
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome Comercial</label>
                 <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-[#00d66f] outline-none" />
+              </div>
+              <div>
+                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Telefone de Contacto</label>
+                <input 
+                  value={editPhone} 
+                  onChange={e => setEditPhone(formatPhone(e.target.value))} 
+                  placeholder="912 345 678"
+                  className="w-full p-5 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-[#00d66f] outline-none" 
+                />
               </div>
               <div className="p-6 bg-[#00d66f]/5 rounded-3xl border-2 border-[#00d66f]/20">
                 <label className="text-[10px] font-black text-[#00d66f] uppercase mb-2 block">Percentagem de Cashback (%)</label>

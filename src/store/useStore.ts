@@ -11,11 +11,12 @@ import {
   doc,
   getDoc,
   getDocs,
-  addDoc
+  addDoc,
+  Timestamp
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-import { Transaction, User as UserProfile } from '../types'; // Importando do ficheiro central
+import { Transaction, User as UserProfile } from '../types';
 
 interface StoreState {
   transactions: Transaction[];
@@ -30,7 +31,7 @@ interface StoreState {
   checkNifExists: (nif: string) => Promise<boolean>;
 }
 
-export const useStore = create<StoreState>((set) => ({
+export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
   isLoading: true,
@@ -75,10 +76,25 @@ export const useStore = create<StoreState>((set) => ({
 
   addTransaction: async (transactionData) => {
     try {
-      await addDoc(collection(db, 'transactions'), {
+      // Criamos a referência para o novo documento
+      const docRef = await addDoc(collection(db, 'transactions'), {
         ...transactionData,
         createdAt: serverTimestamp(),
       });
+
+      // SINCRONIZAÇÃO IMEDIATA: 
+      // Para evitar que o lojista fique na dúvida, adicionamos manualmente 
+      // a transação ao estado local antes mesmo do Firebase devolver o Snapshot
+      const newTransaction: Transaction = {
+        ...transactionData,
+        id: docRef.id,
+        createdAt: Timestamp.now(), // Usamos um timestamp local temporário
+      } as Transaction;
+
+      set((state) => ({
+        transactions: [newTransaction, ...state.transactions]
+      }));
+
     } catch (error) {
       console.error("Erro ao adicionar transação:", error);
       throw error;
@@ -101,6 +117,8 @@ export const useStore = create<StoreState>((set) => ({
         id: doc.id,
         ...doc.data()
       })) as Transaction[];
+      
+      // Atualizamos o estado local com os dados reais e ordenados do servidor
       set({ transactions: transData });
     }, (error) => {
       console.error("Erro na escuta de transações:", error.message);
@@ -108,14 +126,14 @@ export const useStore = create<StoreState>((set) => ({
   },
 }));
 
-// LISTENER DE SESSÃO
+// LISTENER DE SESSÃO - PADRONIZAÇÃO DE ID
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     const userDoc = await getDoc(doc(db, 'users', user.uid));
     if (userDoc.exists()) {
       useStore.getState().setCurrentUser({
-        id: user.uid,
-        ...userDoc.data()
+        ...userDoc.data(),
+        id: user.uid, 
       } as UserProfile);
     } else {
       if (user.email === 'rochap.filipe@gmail.com') {
