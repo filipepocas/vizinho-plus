@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { 
@@ -31,6 +31,7 @@ import AdminSettings from '../../features/admin/AdminSettings';
 import AdminTransactions from '../../features/admin/AdminTransactions';
 import AdminUsers from '../../features/admin/AdminUsers';
 import AdminMerchants from '../../features/admin/AdminMerchants';
+import MerchantModal from '../../features/admin/MerchantModal';
 import { User as UserProfile } from '../../types/index';
 
 const AdminDashboard: React.FC = () => {
@@ -41,6 +42,7 @@ const AdminDashboard: React.FC = () => {
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   // ESTADOS DE DADOS
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
@@ -69,6 +71,27 @@ const AdminDashboard: React.FC = () => {
       navigate('/login');
     }
   };
+
+  // FETCH DE DADOS (Extraído para função para poder ser chamado após novo registo)
+  const fetchData = useCallback(async () => {
+    if (currentView === 'merchants' || currentView === 'users') {
+      setLoading(true);
+      try {
+        const usersSnap = await getDocs(collection(db, 'users'));
+        const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
+        setMerchants(allData.filter(u => u.role === 'merchant'));
+        setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
+      } catch (e) {
+        console.error("Erro ao carregar dados:", e);
+      } finally {
+        setLoading(false);
+      }
+    }
+  }, [currentView]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   // LÓGICA DE MATURAÇÃO DE CASHBACK
   const processMaturation = async () => {
@@ -128,25 +151,6 @@ const AdminDashboard: React.FC = () => {
     }
   }, [subscribeToTransactions, currentUser]);
 
-  useEffect(() => {
-    const fetchData = async () => {
-      if (currentView === 'merchants' || currentView === 'users') {
-        setLoading(true);
-        try {
-          const usersSnap = await getDocs(collection(db, 'users'));
-          const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
-          setMerchants(allData.filter(u => u.role === 'merchant'));
-          setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
-        } catch (e) {
-          console.error("Erro ao carregar dados:", e);
-        } finally {
-          setLoading(false);
-        }
-      }
-    };
-    fetchData();
-  }, [currentView]);
-
   // CÁLCULO DE ESTATÍSTICAS SEGURO
   const stats = useMemo(() => {
     const totalVolume = transactions.reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
@@ -175,7 +179,6 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // Enquanto a sessão inicializa, evitamos mostrar o dashboard
   if (!isInitialized) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0a2540]">
@@ -273,7 +276,7 @@ const AdminDashboard: React.FC = () => {
             merchants={merchants}
             loading={loading}
             onUpdateStatus={handleUpdateStatus}
-            onOpenModal={() => {}} // Lógica de modal deve ser tratada no componente ou aqui se necessário
+            onOpenModal={() => setIsModalOpen(true)}
           />
         )}
 
@@ -285,6 +288,13 @@ const AdminDashboard: React.FC = () => {
           />
         )}
       </main>
+
+      {/* MODAL DE REGISTO DE LOJISTAS */}
+      <MerchantModal 
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        onSuccess={fetchData}
+      />
     </div>
   );
 };
