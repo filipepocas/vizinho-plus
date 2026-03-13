@@ -251,7 +251,7 @@ const MerchantDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] pb-12 font-sans">
       <div className="max-w-7xl mx-auto p-4 lg:p-8">
         
-        {/* HEADER BRUTALISTA v2.4 */}
+        {/* HEADER */}
         <header className="bg-[#0f172a] p-8 rounded-[32px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f] relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
             <Store size={120} className="rotate-12 text-white" />
@@ -341,7 +341,6 @@ const MerchantDashboard: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                  {/* VALOR VENDA */}
                   <div className="space-y-4">
                     <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-2">
                       Valor da Fatura (€)
@@ -362,7 +361,6 @@ const MerchantDashboard: React.FC = () => {
                       </div>
                     )}
                   </div>
-                  {/* DOCUMENTO */}
                   <div className="space-y-4">
                     <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-2">
                       Nº Fatura / Recibo
@@ -378,7 +376,6 @@ const MerchantDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* AÇÕES */}
             <div className="flex flex-col gap-4">
               {isNifValid && (
                 <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClientName ? 'bg-white border-[#00d66f] shadow-[0_10px_40px_-15px_rgba(0,214,111,0.3)]' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
@@ -419,7 +416,6 @@ const MerchantDashboard: React.FC = () => {
               >
                 <RotateCcw size={32} strokeWidth={3} />
                 <span className="font-black text-lg uppercase italic tracking-tighter">Anular Compra</span>
-                <span className="text-[8px] font-bold uppercase opacity-60">Estorno de Saldo</span>
               </button>
 
               {message.text && (
@@ -435,7 +431,6 @@ const MerchantDashboard: React.FC = () => {
             </div>
           </div>
         ) : view === 'history' ? (
-          /* HISTÓRICO */
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 animate-in slide-in-from-bottom-4">
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
               <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter">Últimos Movimentos</h3>
@@ -497,7 +492,6 @@ const MerchantDashboard: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* CONFIGURAÇÕES */
           <div className="max-w-2xl mx-auto bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-2xl">
             <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-8 text-center">Configurações da Loja</h3>
             <form onSubmit={handleUpdateProfile} className="space-y-6">
@@ -535,7 +529,6 @@ const MerchantDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* SCANNER OVERLAY */}
       {showScanner && (
         <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center">
           <div className="bg-white p-6 rounded-[40px] w-full max-w-lg relative border-4 border-[#00d66f]">

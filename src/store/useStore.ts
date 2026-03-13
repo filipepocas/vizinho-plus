@@ -33,7 +33,7 @@ interface StoreState {
   initializeAuth: () => () => void;
 }
 
-export const useStore = create<StoreState>((set) => ({
+export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
   isLoading: true,
@@ -91,13 +91,11 @@ export const useStore = create<StoreState>((set) => ({
 
         let walletUpdate = {};
 
-        // 1. ATRIBUIÇÃO DE CASHBACK (EARN)
         if (transactionData.type === 'earn') {
           walletUpdate = {
             'wallet.pending': currentPending + transactionData.cashbackAmount
           };
         } 
-        // 2. UTILIZAÇÃO DE SALDO (REDEEM)
         else if (transactionData.type === 'redeem') {
           if (currentAvailable < transactionData.cashbackAmount) {
             throw new Error("Saldo disponível insuficiente.");
@@ -106,17 +104,14 @@ export const useStore = create<StoreState>((set) => ({
             'wallet.available': currentAvailable - transactionData.cashbackAmount
           };
         }
-        // 3. ANULAÇÃO OU SUBTRAÇÃO MANUAL (CANCEL / SUBTRACT)
         else if (transactionData.type === 'cancel' || transactionData.type === 'subtract') {
           const totalToSubtract = transactionData.cashbackAmount;
           let newAvailable = currentAvailable;
           let newPending = currentPending;
 
-          // Se tiver saldo disponível, retira de lá primeiro
           if (currentAvailable >= totalToSubtract) {
             newAvailable = currentAvailable - totalToSubtract;
           } else {
-            // Se não chegar, zera o disponível e retira o resto do pendente
             newAvailable = 0;
             const remaining = totalToSubtract - currentAvailable;
             newPending = Math.max(0, currentPending - remaining);
@@ -165,7 +160,6 @@ export const useStore = create<StoreState>((set) => ({
 
         let walletUpdate = {};
 
-        // Se era uma atribuição, removemos o saldo que foi dado (reversão segura)
         if (transData.type === 'earn') {
           let newAvailable = currentAvailable;
           let newPending = currentPending;
@@ -182,7 +176,6 @@ export const useStore = create<StoreState>((set) => ({
             'wallet.pending': newPending
           };
         } 
-        // Se era uma utilização, devolvemos o saldo ao cliente
         else if (transData.type === 'redeem') {
           walletUpdate = {
             'wallet.available': currentAvailable + amountToCancel
@@ -222,10 +215,18 @@ export const useStore = create<StoreState>((set) => ({
   },
 
   initializeAuth: () => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let userUnsubscribe: (() => void) | null = null;
+
+    const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      // Se mudar o utilizador, paramos a escuta do anterior
+      if (userUnsubscribe) {
+        userUnsubscribe();
+        userUnsubscribe = null;
+      }
+
       if (user) {
-        try {
-          const userDoc = await getDoc(doc(db, 'users', user.uid));
+        // ESCUTA EM TEMPO REAL DO PERFIL DO UTILIZADOR
+        userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
           if (userDoc.exists()) {
             set({ 
               currentUser: { ...userDoc.data(), id: user.uid } as UserProfile,
@@ -233,6 +234,7 @@ export const useStore = create<StoreState>((set) => ({
               isInitialized: true
             });
           } else {
+            // Caso o documento ainda não exista (durante o registo)
             const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
             set({ 
               currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile,
@@ -240,14 +242,18 @@ export const useStore = create<StoreState>((set) => ({
               isInitialized: true
             });
           }
-        } catch (error) {
-          console.error("Erro no initializeAuth:", error);
+        }, (error) => {
+          console.error("Erro na escuta do perfil:", error);
           set({ isLoading: false, isInitialized: true });
-        }
+        });
       } else {
         set({ currentUser: null, isLoading: false, isInitialized: true });
       }
     });
-    return unsubscribe;
+
+    return () => {
+      authUnsubscribe();
+      if (userUnsubscribe) userUnsubscribe();
+    };
   }
 }));
