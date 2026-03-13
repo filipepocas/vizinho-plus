@@ -14,7 +14,9 @@ import {
   Clock,
   Percent,
   Activity,
-  Wallet
+  Wallet,
+  ExternalLink,
+  Star
 } from 'lucide-react';
 
 const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -33,7 +35,9 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     globalServiceFee: 0,
     maturationHours: 48,
     minRedeemAmount: 5.00,
-    platformStatus: 'active'
+    platformStatus: 'active',
+    supportEmail: 'ajuda@vizinho-plus.pt',
+    vantagensUrl: '' // NOVO: URL para o botão dourado
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -46,7 +50,15 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         const docRef = doc(db, 'system', 'config');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          setSysConfig(docSnap.data() as any);
+          const data = docSnap.data();
+          setSysConfig({
+            globalServiceFee: data.globalServiceFee || 0,
+            maturationHours: data.maturationHours || 48,
+            minRedeemAmount: data.minRedeemAmount || 5.00,
+            platformStatus: data.platformStatus || 'active',
+            supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt',
+            vantagensUrl: data.vantagensUrl || ''
+          });
         }
       } catch (e) {
         console.error("Erro ao carregar sistema:", e);
@@ -124,7 +136,7 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* SELETOR DE ABAS BRUTALISTA */}
+          {/* SELETOR DE ABAS */}
           <div className="flex bg-white border-2 border-[#0a2540] p-1 rounded-2xl shadow-[4px_4px_0px_0px_#0a2540]">
             <button 
               onClick={() => setActiveTab('security')}
@@ -215,9 +227,41 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         {activeTab === 'system' && (
           <div className="bg-white rounded-[40px] border-2 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540] p-8 md:p-12 animate-in fade-in slide-in-from-bottom-4">
             <form onSubmit={handleUpdateSystem} className="space-y-10">
+              
+              {/* E-MAIL DE SUPORTE - PONTO 8 */}
+              <div className="space-y-4">
+                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
+                  <Mail size={14} className="text-[#00d66f]" /> E-mail de Suporte Público
+                </label>
+                <input 
+                  type="email" 
+                  value={sysConfig.supportEmail}
+                  onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})}
+                  className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
+                />
+              </div>
+
+              {/* URL VANTAGENS+ (BOTÃO DOURADO) */}
+              <div className="space-y-4 bg-amber-50 p-6 rounded-[32px] border-2 border-amber-200">
+                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-amber-700 ml-1">
+                  <Star size={14} className="text-amber-500 fill-amber-500" /> Link "Vantagens+" (Botão Dourado)
+                </label>
+                <div className="relative group">
+                  <input 
+                    type="url" 
+                    placeholder="https://exemplo.com/vantagens"
+                    value={sysConfig.vantagensUrl}
+                    onChange={e => setSysConfig({...sysConfig, vantagensUrl: e.target.value})}
+                    className="w-full p-6 bg-white border-2 border-amber-300 rounded-3xl outline-none focus:border-amber-500 font-black text-[#0a2540] transition-all"
+                  />
+                  <ExternalLink className="absolute right-6 top-1/2 -translate-y-1/2 text-amber-400" size={20} />
+                </div>
+                <p className="text-[9px] font-bold text-amber-600 uppercase mt-2 px-2 italic">
+                  * Este link será aberto quando os utilizadores clicarem no botão dourado.
+                </p>
+              </div>
+
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                
-                {/* Taxa de Serviço */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
                     <Percent size={14} className="text-[#00d66f]" /> Taxa de Serviço Global
@@ -233,7 +277,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   </div>
                 </div>
 
-                {/* Tempo de Maturação */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
                     <Clock size={14} className="text-[#00d66f]" /> Maturação do Cashback
@@ -249,7 +292,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   </div>
                 </div>
 
-                {/* Valor Mínimo de Resgate */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
                     <Wallet size={14} className="text-[#00d66f]" /> Levantamento Mínimo
@@ -265,7 +307,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   </div>
                 </div>
 
-                {/* Estado da Rede */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
                     <Activity size={14} className="text-amber-500" /> Status da Plataforma
@@ -286,7 +327,7 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 disabled={isSaving} 
                 className="w-full bg-[#00d66f] text-[#0a2540] p-7 rounded-3xl font-black text-xs uppercase tracking-[0.2em] hover:bg-[#00c265] transition-all shadow-[0px_10px_20px_-5px_rgba(0,214,111,0.3)] flex items-center justify-center gap-4 disabled:opacity-50"
               >
-                {isSaving ? "A GUARDAR..." : <><Settings size={20} /> Gravar Configurações Master</>}
+                {isSaving ? "A GUARDAR..." : <><Save size={20} /> Gravar Configurações Master</>}
               </button>
             </form>
           </div>

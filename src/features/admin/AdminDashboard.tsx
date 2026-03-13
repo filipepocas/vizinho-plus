@@ -12,7 +12,8 @@ import {
   getDoc, 
   writeBatch, 
   increment,
-  Timestamp
+  Timestamp,
+  orderBy
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { 
@@ -25,7 +26,12 @@ import {
   Clock,
   RefreshCw,
   FileSpreadsheet,
-  Calendar
+  Calendar,
+  MessageSquare,
+  Star,
+  Smile,
+  Frown,
+  Meh
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -42,7 +48,7 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   
   // ESTADOS DE NAVEGAÇÃO
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings' | 'reviews'>('overview');
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -50,12 +56,16 @@ const AdminDashboard: React.FC = () => {
   // ESTADOS DE DADOS
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
+  const [reviews, setReviews] = useState<any[]>([]);
+  const [supportEmail, setSupportEmail] = useState('ajuda@vizinho-plus.pt');
+  const [vantagensUrl, setVantagensUrl] = useState(''); // NOVO: URL Vantagens+
   
-  // ESTADOS PARA RELATÓRIO
+  // ESTADOS PARA RELATÓRIO E FILTROS
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
+  const [filterMerchant, setFilterMerchant] = useState('');
 
-  // 1. PROTEÇÃO DE ACESSO (Audit1303261100)
+  // 1. PROTEÇÃO DE ACESSO
   useEffect(() => {
     if (isInitialized && (!currentUser || currentUser.role !== 'admin')) {
       navigate('/login');
@@ -82,10 +92,24 @@ const AdminDashboard: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
+      // Carregar utilizadores e lojistas
       const usersSnap = await getDocs(collection(db, 'users'));
       const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
       setMerchants(allData.filter(u => u.role === 'merchant'));
       setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
+
+      // PONTO 8: Carregar e-mail de suporte e URL Vantagens das configurações
+      const configSnap = await getDoc(doc(db, 'system', 'config'));
+      if (configSnap.exists()) {
+        const configData = configSnap.data();
+        setSupportEmail(configData.supportEmail || 'ajuda@vizinho-plus.pt');
+        setVantagensUrl(configData.vantagensUrl || ''); // Carrega o link salvo
+      }
+
+      // PONTO 9: Carregar Avaliações
+      const reviewsSnap = await getDocs(query(collection(db, 'reviews'), orderBy('createdAt', 'desc')));
+      setReviews(reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+
     } catch (e) {
       console.error("Erro ao carregar dados:", e);
     } finally {
@@ -97,6 +121,7 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
+  // Lógica de Maturação (Ponto 5)
   const processMaturation = async () => {
     setIsProcessing(true);
     try {
@@ -131,8 +156,8 @@ const AdminDashboard: React.FC = () => {
 
         const userRef = doc(db, 'users', txData.clientId);
         batch.update(userRef, {
-          'wallet.available': increment(txData.cashbackAmount || 0),
-          'wallet.pending': increment(-(txData.cashbackAmount || 0))
+          [`storeWallets.${txData.merchantId}.available`]: increment(txData.cashbackAmount || 0),
+          [`storeWallets.${txData.merchantId}.pending`]: increment(-(txData.cashbackAmount || 0))
         });
       });
 
@@ -153,14 +178,9 @@ const AdminDashboard: React.FC = () => {
     }
   }, [subscribeToTransactions, currentUser]);
 
-  // CÁLCULO DE ESTATÍSTICAS CORRIGIDO (Ponto 1)
   const stats = useMemo(() => {
     const salesVolume = transactions
       .filter(t => t.type === 'earn' && t.status !== 'cancelled')
-      .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
-
-    const cancelVolume = transactions
-      .filter(t => t.status === 'cancelled' || t.type === 'cancel')
       .reduce((acc, t) => acc + (Number(t.amount) || 0), 0);
 
     const totalCashbackEmitido = transactions
@@ -171,84 +191,44 @@ const AdminDashboard: React.FC = () => {
       .filter(t => t.status === 'pending')
       .reduce((acc, t) => acc + (Number(t.cashbackAmount) || 0), 0);
 
-    const uniqueClients = new Set(transactions.map(t => t.clientId)).size;
-    
     return {
       volume: salesVolume,
-      cancellations: cancelVolume,
       cashback: totalCashbackEmitido,
       pending: pendingCashback,
-      clients: uniqueClients,
-      count: transactions.length
+      clients: new Set(transactions.map(t => t.clientId)).size,
     };
   }, [transactions]);
 
-  // FUNÇÃO DE EXPORTAÇÃO EXCEL (Ponto 2)
-  const exportToExcel = () => {
-    const allUsers = [...merchants, ...registeredUsers];
-    
-    const reportData = allUsers.map(user => {
-      const userTransactions = transactions.filter(t => {
-        const txDate = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt);
-        const isInRange = (!startDate || txDate >= new Date(startDate)) && 
-                          (!endDate || txDate <= new Date(endDate));
-        const isUserTx = t.clientId === user.id || t.merchantId === user.id;
-        return isInRange && isUserTx;
-      });
-
-      const valorTransacoes = userTransactions
-        .filter(t => t.type === 'earn' && t.status !== 'cancelled')
-        .reduce((acc, t) => acc + (t.amount || 0), 0);
-
-      const cashbackEmitido = userTransactions
-        .filter(t => t.type === 'earn' && t.status !== 'cancelled')
-        .reduce((acc, t) => acc + (t.cashbackAmount || 0), 0);
-
-      const cashbackUtilizado = userTransactions
-        .filter(t => t.type === 'redeem' && t.status !== 'cancelled')
-        .reduce((acc, t) => acc + (t.cashbackAmount || 0), 0);
-
-      // CORREÇÃO MOLECULAR: Usamos casting seguro para 'any' para ler campos específicos de Lojista ou Cliente
-      const userData = user as any;
-
-      return {
-        'Tipo': user.role === 'merchant' ? 'Comercial' : 'Cliente',
-        'Nome': userData.name || userData.shopName || 'N/A',
-        'Contato': userData.phone || 'N/A',
-        'Email': userData.email,
-        'Código Postal': userData.zipCode || userData.postalCode || 'N/A',
-        'Qtd Transações': userTransactions.length,
-        'Valor Transações (€)': valorTransacoes.toFixed(2),
-        'Cashback Emitido (€)': cashbackEmitido.toFixed(2),
-        'Cashback Utilizado (€)': cashbackUtilizado.toFixed(2)
-      };
+  // Filtro de Avaliações (Ponto 9)
+  const filteredReviews = useMemo(() => {
+    return reviews.filter(r => {
+      const rDate = r.createdAt?.toDate ? r.createdAt.toDate() : new Date();
+      const matchDate = (!startDate || rDate >= new Date(startDate)) && 
+                        (!endDate || rDate <= new Date(endDate));
+      const matchMerchant = !filterMerchant || r.merchantId === filterMerchant;
+      return matchDate && matchMerchant;
     });
+  }, [reviews, startDate, endDate, filterMerchant]);
 
-    const ws = XLSX.utils.json_to_sheet(reportData);
+  const exportToExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(filteredReviews);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Relatorio_Geral");
-    XLSX.writeFile(wb, `Relatorio_VizinhoPlus_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.utils.book_append_sheet(wb, ws, "Avaliacoes");
+    XLSX.writeFile(wb, `Avaliacoes_VizinhoPlus_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const handleUpdateStatus = async (id: string, newStatus: string) => {
-    try {
-      await updateDoc(doc(db, 'users', id), { status: newStatus });
-      setMerchants(prev => prev.map(m => m.id === id ? { ...m, status: newStatus as any } : m));
-      setRegisteredUsers(prev => prev.map(u => u.id === id ? { ...u, status: newStatus as any } : u));
-    } catch (e) {
-      alert("Erro ao atualizar status.");
-    }
+  const renderRatingFace = (rating: number) => {
+    if (rating <= 2) return <Frown className="text-red-500" size={24} />;
+    if (rating === 3) return <Meh className="text-amber-500" size={24} />;
+    return <Smile className="text-[#00d66f]" size={24} />;
   };
 
-  if (!isInitialized) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a2540]">
-        <div className="text-[#00d66f] font-black animate-pulse uppercase tracking-widest">A carregar consola...</div>
-      </div>
-    );
-  }
+  if (!isInitialized) return <div className="min-h-screen bg-[#0a2540]" />;
 
-  if (currentView === 'settings') return <AdminSettings onBack={() => setCurrentView('overview')} />;
+  if (currentView === 'settings') return <AdminSettings onBack={() => {
+    setCurrentView('overview');
+    fetchData(); // Recarrega dados ao voltar para atualizar e-mail/links no header
+  }} />;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-20 text-[#0a2540]">
@@ -257,12 +237,12 @@ const AdminDashboard: React.FC = () => {
       <header className="bg-[#0a2540] text-white p-8 rounded-b-[64px] shadow-2xl mb-12 border-b-8 border-[#00d66f] relative overflow-hidden">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
           <div className="flex items-center gap-6">
-            <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-lg rotate-3">
+            <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-lg">
               <ShieldCheck size={40} strokeWidth={3} />
             </div>
             <div>
               <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Admin <span className="text-[#00d66f]">Console</span></h1>
-              <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.3em] mt-3">Gestão Central Vizinho+</p>
+              <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.3em] mt-3">Suporte: {supportEmail}</p>
             </div>
           </div>
 
@@ -271,6 +251,7 @@ const AdminDashboard: React.FC = () => {
               { id: 'overview', label: 'Dashboard', icon: TrendingUp },
               { id: 'merchants', label: 'Lojas', icon: Store },
               { id: 'users', label: 'Vizinhos', icon: Users },
+              { id: 'reviews', label: 'Feedback', icon: MessageSquare },
               { id: 'settings', label: 'Definições', icon: Settings },
             ].map(item => (
               <button 
@@ -281,7 +262,7 @@ const AdminDashboard: React.FC = () => {
                 <item.icon size={16} strokeWidth={3} /> {item.label}
               </button>
             ))}
-            <button onClick={handleLogout} className="p-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
+            <button onClick={handleLogout} className="p-4 rounded-2xl text-red-400">
               <LogOut size={20} strokeWidth={3} />
             </button>
           </nav>
@@ -292,80 +273,88 @@ const AdminDashboard: React.FC = () => {
         
         {currentView === 'overview' && (
           <div className="space-y-12 animate-in fade-in duration-500">
-            
-            {/* FILTROS E RELATÓRIO */}
-            <div className="bg-white p-6 rounded-[32px] shadow-sm border border-slate-100 flex flex-wrap items-end gap-6">
-              <div className="flex-1 min-w-[200px]">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 flex items-center gap-2">
-                  <Calendar size={12}/> Data Início
-                </label>
-                <input 
-                  type="date" 
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm focus:ring-2 focus:ring-[#00d66f]"
-                />
+            {/* ESTATÍSTICAS RÁPIDAS */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-white p-8 rounded-[32px] shadow-sm border-b-4 border-blue-500">
+                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Vendas Totais</p>
+                 <h3 className="text-3xl font-black italic">{formatCurrency(stats.volume)}</h3>
               </div>
-              <div className="flex-1 min-w-[200px]">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 flex items-center gap-2">
-                  <Calendar size={12}/> Data Fim
-                </label>
-                <input 
-                  type="date" 
-                  value={endDate}
-                  onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm focus:ring-2 focus:ring-[#00d66f]"
-                />
+              <div className="bg-white p-8 rounded-[32px] shadow-sm border-b-4 border-amber-500">
+                 <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Pendente (48h)</p>
+                 <h3 className="text-3xl font-black italic text-amber-600">{formatCurrency(stats.pending)}</h3>
               </div>
-              <button 
-                onClick={exportToExcel}
-                className="bg-[#0a2540] text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest flex items-center gap-3 hover:bg-[#00d66f] hover:text-[#0a2540] transition-all shadow-lg"
-              >
-                <FileSpreadsheet size={18} /> Exportar Excel
+              <div className="bg-[#00d66f] p-8 rounded-[32px] shadow-lg">
+                 <p className="text-[10px] font-black text-[#0a2540]/60 uppercase mb-2">Cashback Ativo</p>
+                 <h3 className="text-3xl font-black italic">{formatCurrency(stats.cashback)}</h3>
+              </div>
+              <div className="bg-[#0a2540] p-8 rounded-[32px] shadow-lg text-white">
+                 <p className="text-[10px] font-black text-white/40 uppercase mb-2">Total Vizinhos</p>
+                 <h3 className="text-3xl font-black italic">{stats.clients}</h3>
+              </div>
+            </div>
+            <AdminTransactions transactions={transactions} />
+          </div>
+        )}
+
+        {currentView === 'reviews' && (
+          <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
+              <div className="flex flex-wrap gap-4 flex-1">
+                <div className="flex-1 min-w-[200px]">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Filtrar por Loja</label>
+                  <select 
+                    value={filterMerchant}
+                    onChange={(e) => setFilterMerchant(e.target.value)}
+                    className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm"
+                  >
+                    <option value="">Todas as Lojas</option>
+                    {merchants.map(m => (
+                      <option key={m.id} value={m.id}>{(m as any).shopName || m.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex-1 min-w-[150px]">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Início</label>
+                  <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" />
+                </div>
+                <div className="flex-1 min-w-[150px]">
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block">Fim</label>
+                  <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm" />
+                </div>
+              </div>
+              <button onClick={exportToExcel} className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black uppercase text-[11px] tracking-widest flex items-center gap-3 shadow-xl hover:bg-[#00d66f] hover:text-[#0a2540] transition-all">
+                <FileSpreadsheet size={20} /> Relatório Excel
               </button>
             </div>
 
-            {/* CARTÕES DE ESTATÍSTICAS */}
-            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-              <div className="bg-white p-6 rounded-[32px] shadow-xl border-b-4 border-blue-500">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume de Vendas</p>
-                 <h3 className="text-2xl font-black italic tracking-tighter text-blue-600">{formatCurrency(stats.volume)}</h3>
-              </div>
-              <div className="bg-white p-6 rounded-[32px] shadow-xl border-b-4 border-red-500">
-                 <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Volume Anulações</p>
-                 <h3 className="text-2xl font-black italic tracking-tighter text-red-600">{formatCurrency(stats.cancellations)}</h3>
-              </div>
-              <div className="bg-white p-6 rounded-[32px] shadow-xl border-b-4 border-amber-500">
-                 <p className="text-[9px] font-black text-amber-500 uppercase tracking-widest mb-1">Pendente</p>
-                 <h3 className="text-2xl font-black italic tracking-tighter">{formatCurrency(stats.pending)}</h3>
-                 <div className="mt-1 flex items-center gap-1 text-[8px] font-black uppercase text-slate-300">
-                   <Clock size={8}/> Em Maturação
-                 </div>
-              </div>
-              <div className="bg-[#00d66f] p-6 rounded-[32px] shadow-xl text-[#0a2540]">
-                 <p className="text-[9px] font-black uppercase tracking-widest mb-1 opacity-60">Cashback Emitido</p>
-                 <h3 className="text-2xl font-black italic tracking-tighter">{formatCurrency(stats.cashback)}</h3>
-                 <button 
-                  onClick={processMaturation} 
-                  disabled={isProcessing} 
-                  className="mt-3 flex items-center gap-2 text-[9px] font-black uppercase bg-[#0a2540] text-white px-3 py-2 rounded-xl hover:scale-105 transition-all disabled:opacity-50"
-                 >
-                   <RefreshCw size={10} className={isProcessing ? 'animate-spin' : ''}/> 
-                   Libertar
-                 </button>
-              </div>
-              <div className="bg-[#0a2540] p-6 rounded-[32px] shadow-xl text-white">
-                 <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">Vizinhos Ativos</p>
-                 <h3 className="text-2xl font-black italic tracking-tighter">{stats.clients}</h3>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div className="flex items-center gap-4 ml-4">
-                <div className="h-2 w-12 bg-[#00d66f] rounded-full"></div>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter">Histórico de Movimentos</h2>
-              </div>
-              <AdminTransactions transactions={transactions} />
+            <div className="grid grid-cols-1 gap-4">
+              {filteredReviews.length > 0 ? filteredReviews.map((review) => (
+                <div key={review.id} className="bg-white p-6 rounded-[32px] border-2 border-slate-50 flex items-center justify-between shadow-sm hover:border-[#00d66f] transition-all">
+                  <div className="flex items-center gap-6">
+                    <div className="p-4 bg-slate-50 rounded-2xl">
+                      {renderRatingFace(review.rating)}
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest mb-1">{review.merchantName}</p>
+                      <p className="text-sm font-black text-[#0a2540] uppercase tracking-tighter">"{review.comment || 'Sem comentário'}"</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
+                        Cliente: {review.clientName} • {review.createdAt?.toDate().toLocaleDateString()}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="flex gap-1">
+                      {[1,2,3,4,5].map(star => (
+                        <Star key={star} size={12} className={star <= review.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'} />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )) : (
+                <div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-100 text-center text-slate-300 font-black uppercase italic">
+                  Nenhuma avaliação encontrada com estes filtros.
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -374,7 +363,7 @@ const AdminDashboard: React.FC = () => {
           <AdminMerchants 
             merchants={merchants}
             loading={loading}
-            onUpdateStatus={handleUpdateStatus}
+            onUpdateStatus={(id, status) => updateDoc(doc(db, 'users', id), { status })}
             onOpenModal={() => setIsModalOpen(true)}
           />
         )}
@@ -382,18 +371,13 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'users' && (
           <AdminUsers 
             users={registeredUsers} 
-            onUpdateStatus={handleUpdateStatus} 
+            onUpdateStatus={(id, status) => updateDoc(doc(db, 'users', id), { status })} 
             loading={loading} 
           />
         )}
       </main>
 
-      {/* MODAL DE REGISTO DE LOJISTAS */}
-      <MerchantModal 
-        isOpen={isModalOpen}
-        onClose={() => setIsModalOpen(false)}
-        onSuccess={fetchData}
-      />
+      <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={fetchData} />
     </div>
   );
 };

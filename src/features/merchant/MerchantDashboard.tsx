@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, updateDoc, doc, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, updateDoc, doc, Timestamp, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +21,9 @@ import {
   AlertCircle,
   User,
   ArrowRight,
-  RotateCcw
+  RotateCcw,
+  LifeBuoy,
+  Crown
 } from 'lucide-react';
 
 const MerchantDashboard: React.FC = () => {
@@ -37,7 +39,6 @@ const MerchantDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   
-  // Dados do cliente identificado
   const [foundClient, setFoundClient] = useState<any>(null);
 
   const [filterNif, setFilterNif] = useState('');
@@ -47,6 +48,7 @@ const MerchantDashboard: React.FC = () => {
   const [editEmail, setEditEmail] = useState(currentUser?.email || '');
   const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
+  const [supportEmail, setSupportEmail] = useState('suporte@vizinhoplus.pt');
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-PT', {
@@ -65,14 +67,12 @@ const MerchantDashboard: React.FC = () => {
     return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
   };
 
-  // CÁLCULO DE CASHBACK A ATRIBUIR
   const liveCashback = useMemo(() => {
     const val = parseFloat(amount);
     if (isNaN(val) || val <= 0) return 0;
     return val * ((currentUser?.cashbackPercent || 0) / 100);
   }, [amount, currentUser?.cashbackPercent]);
 
-  // SALDO DO CLIENTE NESTA LOJA ESPECÍFICA
   const clientStoreBalance = useMemo(() => {
     if (!foundClient || !currentUser?.id) return 0;
     return foundClient.storeWallets?.[currentUser.id]?.available || 0;
@@ -83,7 +83,21 @@ const MerchantDashboard: React.FC = () => {
     return /^[0-9]{9}$/.test(cleanNif);
   }, [cardNumber]);
 
-  // BUSCA DE CLIENTE E SEUS SALDOS
+  // Carregar configurações de suporte
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'app'));
+        if (settingsDoc.exists() && settingsDoc.data().supportEmail) {
+          setSupportEmail(settingsDoc.data().supportEmail);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar suporte:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   useEffect(() => {
     const searchClient = async () => {
       const cleanNif = cardNumber.trim().replace(/\s/g, '');
@@ -130,6 +144,12 @@ const MerchantDashboard: React.FC = () => {
       };
     }
   }, [showScanner]);
+
+  const handleHelp = () => {
+    const subject = encodeURIComponent(`Suporte Loja: ${currentUser?.name}`);
+    const body = encodeURIComponent(`Olá Equipa Vizinho+,\n\nPreciso de ajuda com:\n\nLoja: ${currentUser?.name}\nNIF: ${currentUser?.nif}`);
+    window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+  };
 
   const handleFirebaseError = (error: any, defaultMsg: string) => {
     console.error("Erro Firebase:", error);
@@ -203,7 +223,6 @@ const MerchantDashboard: React.FC = () => {
       return;
     }
 
-    // VALIDAÇÃO CRÍTICA: Se for resgate, o cliente tem saldo nesta loja?
     if (type === 'redeem' && val > clientStoreBalance) {
       setMessage({ type: 'error', text: `Saldo insuficiente nesta loja. Disponível: ${formatCurrency(clientStoreBalance)}` });
       return;
@@ -242,29 +261,45 @@ const MerchantDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-12 font-sans">
-      <div className="max-w-7xl mx-auto p-4 lg:p-8">
+    <div className="min-h-screen bg-[#f8fafc] pb-12 font-sans relative">
+      <div 
+        className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
+        style={{
+          backgroundImage: `url('https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media')`,
+          backgroundSize: '200px',
+          backgroundRepeat: 'repeat'
+        }}
+      />
+
+      <div className="max-w-7xl mx-auto p-4 lg:p-8 relative z-10">
         
-        {/* HEADER */}
         <header className="bg-[#0f172a] p-8 rounded-[32px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f] relative overflow-hidden">
           <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
             <Store size={120} className="rotate-12 text-white" />
           </div>
 
           <div className="flex items-center gap-6 relative z-10">
-            <div className="w-16 h-16 bg-[#00d66f] rounded-2xl flex items-center justify-center text-[#0f172a] rotate-3 shadow-lg">
-              <Store size={32} strokeWidth={3} />
+            <div className="flex flex-col items-center">
+              <img 
+                src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
+                alt="Vizinho+" 
+                className="h-10 w-auto object-contain mb-2"
+              />
+              <div className="h-1 w-full bg-[#00d66f] rounded-full"></div>
             </div>
+
+            <div className="w-[2px] h-12 bg-white/10 mx-2 hidden lg:block"></div>
+
             <div>
               <h2 className="text-2xl font-black text-white uppercase tracking-tighter italic">
                 {currentUser?.name}
               </h2>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-1">
                 <span className="text-[10px] font-black text-[#00d66f] uppercase bg-[#00d66f]/10 py-1 px-3 rounded-full border border-[#00d66f]/20">
-                  NIF: {formatNIF(currentUser?.nif || '')}
+                  LOJA PARCEIRA
                 </span>
-                <span className="text-[10px] font-black text-white/50 uppercase">
-                  v2.5 Multi-Wallet System
+                <span className="text-[10px] font-black text-white/40 uppercase">
+                  NIF: {formatNIF(currentUser?.nif || '')}
                 </span>
               </div>
             </div>
@@ -284,19 +319,33 @@ const MerchantDashboard: React.FC = () => {
                 <item.icon size={16} strokeWidth={3} /> {item.label}
               </button>
             ))}
+            
+            {/* BOTÃO VANTAGENS DOURADO NO MENU */}
+            <button 
+              onClick={() => navigate('/vantagens')} 
+              className="flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all bg-gradient-to-r from-[#bf953f] via-[#fcf6ba] to-[#b38728] text-[#0f172a] shadow-lg hover:scale-105 border-b-2 border-[#8a6d29]"
+            >
+              <Crown size={16} strokeWidth={3} /> VIP
+            </button>
+
+            <button 
+              onClick={handleHelp} 
+              className="p-3 text-[#00d66f] hover:bg-[#00d66f]/10 rounded-xl transition-all"
+              title="Ajuda / Suporte"
+            >
+              <LifeBuoy size={20} strokeWidth={3} />
+            </button>
             <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
               <LogOut size={20} strokeWidth={3} />
             </button>
           </nav>
         </header>
 
-        {/* TERMINAL DE VENDAS */}
         {view === 'terminal' ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
             <div className="lg:col-span-2 bg-white p-8 md:p-12 rounded-[40px] shadow-xl border-2 border-slate-100">
               <div className="space-y-10">
                 
-                {/* INPUT NIF */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-2">
                     <label className="flex items-center gap-3 text-xs font-black uppercase text-slate-400 tracking-widest">
@@ -371,7 +420,6 @@ const MerchantDashboard: React.FC = () => {
             </div>
 
             <div className="flex flex-col gap-4">
-              {/* CARD DE INFORMAÇÃO DO CLIENTE COM SALDO LOCAL */}
               {isNifValid && (
                 <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClient ? 'bg-white border-[#00d66f] shadow-lg' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
                   <div className={`p-3 rounded-2xl ${foundClient ? 'bg-[#00d66f] text-white' : 'bg-slate-200 text-slate-400'}`}>
@@ -494,6 +542,16 @@ const MerchantDashboard: React.FC = () => {
           <div className="max-w-2xl mx-auto bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-2xl">
             <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-8 text-center">Configurações da Loja</h3>
             <form onSubmit={handleUpdateProfile} className="space-y-6">
+              <div className="flex justify-center mb-8">
+                <div className="w-32 h-32 bg-[#0f172a] rounded-3xl flex items-center justify-center border-4 border-[#00d66f] shadow-lg rotate-3">
+                   <img 
+                    src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
+                    alt="V+" 
+                    className="w-16"
+                  />
+                </div>
+              </div>
+
               <div>
                 <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome Comercial</label>
                 <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-[#00d66f] outline-none" />
@@ -527,6 +585,15 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
       </div>
+
+      {/* BOTÃO FLUTUANTE DE SUPORTE */}
+      <button 
+        onClick={handleHelp}
+        className="fixed bottom-6 right-6 bg-[#00d66f] text-[#0f172a] p-4 rounded-full shadow-2xl hover:scale-110 transition-all z-40 border-4 border-[#0f172a]"
+        title="Precisa de Ajuda?"
+      >
+        <LifeBuoy size={28} strokeWidth={3} />
+      </button>
 
       {showScanner && (
         <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center">

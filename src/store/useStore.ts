@@ -13,7 +13,8 @@ import {
   updateDoc,
   runTransaction,
   writeBatch,
-  deleteDoc
+  deleteDoc,
+  Timestamp
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -35,6 +36,7 @@ interface StoreState {
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
+  processPendingCashback: (userId: string) => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -89,6 +91,63 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  // NOVO: Função para processar cashback pendente após 48h
+  processPendingCashback: async (userId: string) => {
+    try {
+      const now = new Date();
+      const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
+      
+      // Procurar transações pendentes antigas
+      const q = query(
+        collection(db, 'transactions'),
+        where('clientId', '==', userId),
+        where('status', '==', 'pending'),
+        where('type', '==', 'earn')
+      );
+
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return;
+
+      await runTransaction(db, async (transaction) => {
+        const clientRef = doc(db, 'users', userId);
+        const clientDoc = await transaction.get(clientRef);
+        
+        if (!clientDoc.exists()) return;
+        const userData = clientDoc.data() as UserProfile;
+        const storeWallets = { ...(userData.storeWallets || {}) };
+        let hasChanges = false;
+
+        snapshot.docs.forEach((transDoc) => {
+          const transData = transDoc.data() as Transaction;
+          const createdAt = (transData.createdAt as Timestamp).toDate();
+
+          if (createdAt <= fortyEightHoursAgo) {
+            const mId = transData.merchantId;
+            const amount = transData.cashbackAmount;
+
+            // Atualizar carteira da loja
+            if (!storeWallets[mId]) {
+              storeWallets[mId] = { available: 0, pending: 0, merchantName: transData.merchantName };
+            }
+
+            storeWallets[mId].pending = Math.max(0, (storeWallets[mId].pending || 0) - amount);
+            storeWallets[mId].available = (storeWallets[mId].available || 0) + amount;
+            
+            // Marcar transação como disponível
+            transaction.update(transDoc.ref, { status: 'available' });
+            hasChanges = true;
+          }
+        });
+
+        if (hasChanges) {
+          transaction.update(clientRef, { storeWallets });
+        }
+      });
+    } catch (error) {
+      console.error("Erro ao processar cashback automático:", error);
+    }
+  },
+
   addTransaction: async (transactionData) => {
     const clientRef = doc(db, 'users', transactionData.clientId);
     const mId = transactionData.merchantId;
@@ -100,7 +159,6 @@ export const useStore = create<StoreState>((set, get) => ({
 
         const userData = clientDoc.data() as UserProfile;
         
-        // Aceder à carteira específica da loja
         const storeWallets = userData.storeWallets || {};
         const currentStoreWallet = storeWallets[mId] || { 
           available: 0, 
@@ -152,6 +210,7 @@ export const useStore = create<StoreState>((set, get) => ({
         const newTransRef = doc(collection(db, 'transactions'));
         transaction.set(newTransRef, {
           ...transactionData,
+          status: transactionData.type === 'earn' ? 'pending' : 'available',
           createdAt: serverTimestamp(),
         });
 
@@ -194,11 +253,11 @@ export const useStore = create<StoreState>((set, get) => ({
           let newAvailable = currentAvailable;
           let newPending = currentPending;
 
-          if (currentAvailable >= amountToCancel) {
-            newAvailable = currentAvailable - amountToCancel;
+          // Se a transação já estava disponível, retira do disponível. Se estava pendente, retira do pendente.
+          if (transData.status === 'available') {
+            newAvailable = Math.max(0, currentAvailable - amountToCancel);
           } else {
-            newAvailable = 0;
-            newPending = Math.max(0, currentPending - (amountToCancel - currentAvailable));
+            newPending = Math.max(0, currentPending - amountToCancel);
           }
 
           walletUpdate = {
@@ -256,6 +315,9 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       if (user) {
+        // Ao detetar o utilizador, corremos a verificação de 48h
+        get().processPendingCashback(user.uid);
+
         userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
           if (userDoc.exists()) {
             set({ 
