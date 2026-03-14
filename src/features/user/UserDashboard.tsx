@@ -1,10 +1,10 @@
-// src/features/user/UserDashboard.tsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
 import MerchantExplore from './MerchantExplore';
-import ProfileSettings from '../profile/ProfileSettings'; // Importação adicionada
-import { Timestamp } from 'firebase/firestore';
+import ProfileSettings from '../profile/ProfileSettings';
+import { Timestamp, getDoc, doc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
 import { 
   LogOut, 
   Store, 
@@ -16,15 +16,17 @@ import {
   History,
   CheckCircle2,
   Zap,
-  ChevronRight
+  ChevronRight,
+  Crown,
+  LifeBuoy
 } from 'lucide-react';
 
 const UserDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout, currentUser } = useStore();
   
-  // Atualizado para incluir a vista de perfil
   const [view, setView] = useState<'home' | 'merchants' | 'profile'>('home');
   const [dateFilter, setDateFilter] = useState('all'); 
+  const [supportEmail, setSupportEmail] = useState('suporte@vizinhoplus.pt');
 
   useEffect(() => {
     if (currentUser?.nif) {
@@ -33,7 +35,21 @@ const UserDashboard: React.FC = () => {
     }
   }, [currentUser?.nif, subscribeToTransactions]);
 
-  // Cálculo de saldos (Disponível vs Pendente) com lógica de 48h
+  // Carregar configurações de suporte
+  useEffect(() => {
+    const fetchSettings = async () => {
+      try {
+        const settingsDoc = await getDoc(doc(db, 'settings', 'app'));
+        if (settingsDoc.exists() && settingsDoc.data().supportEmail) {
+          setSupportEmail(settingsDoc.data().supportEmail);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar suporte:", err);
+      }
+    };
+    fetchSettings();
+  }, []);
+
   const merchantBalances = useMemo(() => {
     const fortyEightHoursAgo = Date.now() - (48 * 60 * 60 * 1000);
     const balances: { [key: string]: { name: string, available: number, pending: number, total: number } } = {};
@@ -88,17 +104,15 @@ const UserDashboard: React.FC = () => {
     });
   }, [transactions, dateFilter]);
 
-  // Navegação para Exploração de Lojas
-  if (view === 'merchants') {
-    return <MerchantExplore onBack={() => setView('home')} />;
-  }
+  const handleHelp = () => {
+    const subject = encodeURIComponent(`Suporte Vizinho: ${currentUser?.name}`);
+    const body = encodeURIComponent(`Olá Equipa Vizinho+,\n\nPreciso de ajuda com a minha conta:\n\nNome: ${currentUser?.name}\nNIF: ${currentUser?.nif}`);
+    window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+  };
 
-  // Navegação para Configurações de Perfil
-  if (view === 'profile') {
-    return <ProfileSettings onBack={() => setView('home')} />;
-  }
+  if (view === 'merchants') return <MerchantExplore onBack={() => setView('home')} />;
+  if (view === 'profile') return <ProfileSettings onBack={() => setView('home')} />;
 
-  // Se ainda estiver a carregar o utilizador
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-6 text-center">
@@ -109,102 +123,124 @@ const UserDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
-      
-      {/* HEADER BRUTALISTA */}
-      <header className="bg-[#0f172a] px-6 py-10 text-white rounded-b-[50px] shadow-2xl mb-12 border-b-8 border-[#00d66f] relative overflow-hidden">
+    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative">
+      <div 
+        className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
+        style={{
+          backgroundImage: `url('https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media')`,
+          backgroundSize: '200px',
+          backgroundRepeat: 'repeat'
+        }}
+      />
+
+      <header className="bg-[#0f172a] px-6 pt-12 pb-24 text-white rounded-b-[60px] shadow-2xl relative overflow-hidden">
+        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
+          <Wallet size={150} className="rotate-12 text-white" />
+        </div>
+
         <div className="max-w-5xl mx-auto flex justify-between items-center relative z-10">
           <div className="flex items-center gap-4">
             <div className="bg-[#00d66f] p-3 rounded-2xl rotate-[-8deg] shadow-[4px_4px_0px_#ffffff]">
-              <Wallet size={28} className="text-[#0f172a]" strokeWidth={3} />
+              <img 
+                src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
+                alt="V+" 
+                className="h-6 w-auto"
+              />
             </div>
             <div>
-              <h1 className="font-black italic text-2xl tracking-tighter uppercase leading-none">Minha Carteira</h1>
-              <p className="text-[#00d66f] text-[9px] font-black uppercase tracking-[0.2em] mt-1">Vizinho+ Oficial</p>
+              <h1 className="font-black italic text-2xl tracking-tighter uppercase leading-none">Minha Área</h1>
+              <p className="text-[#00d66f] text-[9px] font-black uppercase tracking-[0.2em] mt-1 italic">Vizinho+ Oficial</p>
             </div>
           </div>
-          <button 
-            onClick={() => logout()} 
-            className="bg-white/5 hover:bg-red-500 text-white p-4 rounded-2xl transition-all border-2 border-white/10 active:scale-90"
-          >
-            <LogOut size={20} strokeWidth={3} />
-          </button>
+          <div className="flex gap-2">
+            <button onClick={handleHelp} className="bg-white/5 hover:bg-[#00d66f]/20 text-[#00d66f] p-4 rounded-2xl transition-all border-2 border-[#00d66f]/20">
+              <LifeBuoy size={20} strokeWidth={3} />
+            </button>
+            <button onClick={() => logout()} className="bg-white/5 hover:bg-red-500 text-white p-4 rounded-2xl transition-all border-2 border-white/10">
+              <LogOut size={20} strokeWidth={3} />
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6">
+      <main className="max-w-2xl mx-auto px-6 relative z-10">
         
-        {/* CARTÃO VIRTUAL */}
-        <div className="bg-white rounded-[50px] shadow-2xl border-4 border-[#0f172a] overflow-hidden mb-12 relative -mt-20 z-20">
-          <div className="p-8">
-            <div className="flex justify-between items-start mb-10">
-              <div>
-                <span className="bg-[#0f172a] text-[#00d66f] px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest">
-                  Membro Ativo
-                </span>
-                <h2 className="text-4xl font-black text-[#0f172a] tracking-tighter uppercase mt-4 leading-none">
-                  {(currentUser?.name || 'Vizinho').split(' ')[0]}
+        {/* O CARTÃO DE CRÉDITO BLACK/GOLD */}
+        <div className="relative -mt-16 mb-12 perspective-1000">
+          <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-[40px] p-8 shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-2 border-white/10 relative overflow-hidden min-h-[260px] flex flex-col justify-between group transition-transform duration-500 hover:rotate-x-2">
+            
+            {/* Elementos Decorativos do Cartão */}
+            <div className="absolute top-0 right-0 w-64 h-64 bg-[#00d66f] opacity-[0.03] rounded-full -mr-32 -mt-32 blur-3xl"></div>
+            <div className="absolute bottom-0 left-0 w-40 h-40 bg-white opacity-[0.02] rounded-full -ml-20 -mb-20 blur-2xl"></div>
+
+            <div className="flex justify-between items-start relative z-10">
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Vizinho+</span>
+                <h2 className="text-3xl font-black text-white tracking-tighter uppercase italic">
+                  {currentUser?.name}
                 </h2>
               </div>
+              <div className="bg-gradient-to-br from-[#bf953f] via-[#fcf6ba] to-[#b38728] w-14 h-10 rounded-lg shadow-inner flex items-center justify-center border border-white/20">
+                <div className="w-10 h-6 border border-black/10 rounded flex items-center justify-center overflow-hidden opacity-30">
+                  <div className="w-1/3 h-full bg-black/20 mr-1"></div>
+                  <div className="w-1/3 h-full bg-black/20 mr-1"></div>
+                  <div className="w-1/3 h-full bg-black/20"></div>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-end justify-between relative z-10">
+              <div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">Saldo Disponível</p>
+                <div className="flex items-baseline gap-2">
+                  <span className="text-5xl font-black text-white tracking-tighter italic">{totalAvailable.toFixed(2)}</span>
+                  <span className="text-2xl font-black text-[#00d66f]">€</span>
+                </div>
+              </div>
               <div className="text-right">
-                <p className="text-[10px] font-black text-slate-300 uppercase tracking-widest mb-1">Acumulado</p>
-                <p className="text-4xl font-black text-[#0f172a] italic tracking-tighter leading-none">{totalBalance.toFixed(2)}€</p>
-              </div>
-            </div>
-
-            {/* QR CODE AREA */}
-            <div className="bg-slate-50 p-8 rounded-[40px] border-4 border-dashed border-slate-200 flex flex-col items-center gap-6 mb-8 group">
-              <div className="bg-white p-6 rounded-[35px] shadow-xl border-2 border-[#0f172a] group-hover:scale-105 transition-transform duration-500">
-                <QRCodeSVG value={currentUser?.nif || "NO-NIF"} size={160} level="H" includeMargin={false} />
-              </div>
-              <div className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-2">Teu NIF para Cashback</p>
-                <div className="bg-[#0f172a] text-[#00d66f] px-6 py-2 rounded-xl">
-                    <p className="text-2xl font-mono font-black tracking-[0.2em]">
-                        {currentUser?.nif || '--- --- ---'}
-                    </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 bg-green-50 rounded-2xl flex items-center justify-center">
-                    <CheckCircle2 size={24} className="text-[#00d66f]" />
-                </div>
-                <div>
-                    <p className="text-[9px] font-black text-slate-400 uppercase leading-none">Status</p>
-                    <p className="text-xs font-black text-[#0f172a] uppercase">Verificado</p>
-                </div>
-              </div>
-              <div className="bg-[#00d66f] px-8 py-4 rounded-[25px] shadow-lg shadow-[#00d66f]/30 border-2 border-[#0f172a]">
-                <p className="text-[10px] font-black text-[#0f172a] uppercase opacity-70 mb-1 leading-none text-center">Disponível</p>
-                <p className="text-3xl font-black text-[#0f172a] leading-none tracking-tighter">{totalAvailable.toFixed(2)}€</p>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-widest mb-1">NIF Associado</p>
+                <p className="text-lg font-mono font-black text-white tracking-[0.1em]">{currentUser?.nif}</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* ACÇÕES RÁPIDAS */}
-        <div className="grid grid-cols-2 gap-6 mb-12">
+        {/* ÁREA QR CODE EXPANSÍVEL */}
+        <div className="bg-white rounded-[40px] p-8 shadow-xl border-4 border-[#0f172a] mb-12 flex flex-col items-center gap-6">
+          <div className="bg-slate-50 p-4 rounded-[30px] border-2 border-dashed border-slate-200">
+            <QRCodeSVG value={currentUser?.nif || "NO-NIF"} size={140} level="H" includeMargin={false} />
+          </div>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest text-center px-8">Apresente este código na loja para acumular ou usar cashback</p>
+        </div>
+
+        {/* BOTÕES DE ACÇÃO COM VANTAGENS DOURADO */}
+        <div className="grid grid-cols-2 gap-4 mb-12">
+          <button 
+            onClick={() => window.location.href = '/vantagens'}
+            className="col-span-2 group bg-gradient-to-r from-[#bf953f] via-[#fcf6ba] to-[#b38728] p-6 rounded-[30px] flex items-center justify-center gap-4 shadow-[0_10px_30px_rgba(184,134,11,0.3)] hover:scale-[1.02] transition-all border-b-4 border-[#8a6d29]"
+          >
+            <Crown size={28} className="text-[#0f172a]" strokeWidth={3} />
+            <span className="text-lg font-black uppercase italic tracking-tighter text-[#0f172a]">Vantagens Exclusivas</span>
+          </button>
+
           <button 
             onClick={() => setView('merchants')}
-            className="group bg-[#0f172a] text-white p-8 rounded-[40px] flex flex-col items-center gap-4 hover:bg-black transition-all shadow-xl border-b-8 border-black active:translate-y-1 active:border-b-0"
+            className="group bg-[#0f172a] text-white p-8 rounded-[40px] flex flex-col items-center gap-4 hover:bg-black transition-all shadow-xl border-b-8 border-black active:translate-y-1"
           >
             <div className="bg-[#00d66f] p-3 rounded-2xl group-hover:rotate-12 transition-transform">
-                <Store size={28} className="text-[#0f172a]" strokeWidth={3} />
+              <Store size={28} className="text-[#0f172a]" strokeWidth={3} />
             </div>
-            <span className="text-xs font-black uppercase tracking-widest">Onde Ganhar</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Lojas</span>
           </button>
           
           <button 
             onClick={() => setView('profile')}
-            className="group bg-white text-[#0f172a] p-8 rounded-[40px] flex flex-col items-center gap-4 border-4 border-[#0f172a] shadow-xl hover:bg-slate-50 transition-all active:translate-y-1"
+            className="group bg-white text-[#0f172a] p-8 rounded-[40px] flex flex-col items-center gap-4 border-4 border-[#0f172a] shadow-xl hover:bg-slate-50 transition-all"
           >
             <div className="bg-slate-100 p-3 rounded-2xl group-hover:rotate-[-12deg] transition-transform">
-                <Settings size={28} strokeWidth={3} />
+              <Settings size={28} strokeWidth={3} />
             </div>
-            <span className="text-xs font-black uppercase tracking-widest">Perfil</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Perfil</span>
           </button>
         </div>
 
@@ -237,7 +273,7 @@ const UserDashboard: React.FC = () => {
               </div>
             )) : (
                 <div className="w-full bg-slate-100/50 p-8 rounded-[35px] border-2 border-dashed border-slate-200 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Começa a comprar para acumular saldo!</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Ainda não tens cashback acumulado.</p>
                 </div>
             )}
           </div>
@@ -290,15 +326,21 @@ const UserDashboard: React.FC = () => {
               </div>
             ) : (
               <div className="p-20 text-center">
-                <div className="bg-slate-50 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 border-2 border-dashed border-slate-200">
-                    <History size={32} className="text-slate-200" />
-                </div>
                 <p className="text-slate-300 font-black uppercase text-[10px] tracking-widest">Sem movimentos registados</p>
               </div>
             )}
           </div>
         </div>
       </main>
+
+      {/* BOTÃO FLUTUANTE DE AJUDA */}
+      <button 
+        onClick={handleHelp}
+        className="fixed bottom-6 right-6 bg-[#00d66f] text-[#0f172a] p-4 rounded-full shadow-2xl hover:scale-110 transition-all z-40 border-4 border-[#0f172a]"
+        title="Ajuda / Suporte"
+      >
+        <LifeBuoy size={28} strokeWidth={3} />
+      </button>
     </div>
   );
 };

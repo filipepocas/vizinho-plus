@@ -10,13 +10,14 @@ import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
-import UserDashboard from './features/user/UserDashboard';
+// CORREÇÃO: Importando o componente correto do Cliente
+import UserDashboard from './features/user/UserDashboard'; 
+// Se o ficheiro se chamar ClientDashboard, altere acima para ./features/client/ClientDashboard
 
 // HELPER DE PROTEÇÃO DE ROTA (ADMIN E GERAL)
 const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ children, role }) => {
   const { currentUser, isLoading, isInitialized } = useStore();
   
-  // Enquanto o Firebase não inicializar, mostramos o ecrã de carregamento
   if (!isInitialized || isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#0f172a]">
@@ -27,10 +28,8 @@ const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ 
     );
   }
 
-  // Se já inicializou e não há utilizador, vai para o login
   if (!currentUser) return <Navigate to="/login" replace />;
   
-  // Se o utilizador não tiver o cargo (role) necessário, vai para o login
   if (role && currentUser.role !== role) {
     return <Navigate to="/login" replace />;
   }
@@ -41,19 +40,15 @@ const PrivateRoute: React.FC<{ children: React.ReactNode; role?: string }> = ({ 
 function App() {
   const { subscribeToTransactions, currentUser, initializeAuth } = useStore();
 
-  // 1. INICIALIZAÇÃO DA SESSÃO (Firebase Auth)
-  // Ativa o "motor" de autenticação assim que o App carrega
   useEffect(() => {
     const unsubscribe = initializeAuth();
-    return () => unsubscribe(); // Limpeza automática ao fechar
+    return () => unsubscribe();
   }, [initializeAuth]);
 
-  // 2. CICLO DE LIMPEZA DA BASE DE DADOS (Executa uma vez ao abrir)
   useEffect(() => {
     cleanUserProfiles();
   }, []);
 
-  // 3. ESCUTA DE TRANSAÇÕES EM TEMPO REAL
   useEffect(() => {
     let unsubscribeTrans: (() => void) | undefined;
     if (currentUser) {
@@ -66,10 +61,8 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc]">
         <Routes>
-          {/* Raiz redireciona para Login */}
           <Route path="/" element={<Navigate to="/login" replace />} />
           
-          {/* Autenticação */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
 
@@ -103,7 +96,17 @@ function App() {
             } 
           />
 
-          {/* Fallback de Segurança para rotas inexistentes */}
+          {/* NOVA ROTA: Vantagens (VIP) */}
+          <Route 
+            path="/vantagens" 
+            element={
+              <PrivateRoute>
+                {/* Aqui você pode criar um componente VantagensPage ou redirecionar */}
+                <div className="p-8 text-center font-black uppercase">Página de Vantagens em breve...</div>
+              </PrivateRoute>
+            } 
+          />
+
           <Route path="*" element={<Navigate to="/login" replace />} />
         </Routes>
       </div>
