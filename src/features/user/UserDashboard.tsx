@@ -3,9 +3,8 @@ import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
 import MerchantExplore from './MerchantExplore';
 import ProfileSettings from '../profile/ProfileSettings';
-// CORREÇÃO MOLECULAR: Caminho verificado na árvore de pastas
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
-import { Timestamp, getDoc, doc } from 'firebase/firestore';
+import { Timestamp, getDoc, doc, collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { 
   LogOut, 
@@ -32,11 +31,12 @@ const UserDashboard: React.FC = () => {
   
   const [view, setView] = useState<'home' | 'merchants' | 'profile'>('home');
   const [dateFilter, setDateFilter] = useState('all'); 
-  
-  // Estado para gerir a avaliação de uma transação
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<any | null>(null);
   
-  // Estados de Configuração do Sistema
+  // Estado para armazenar TODAS as lojas parceiras (Correção Ponto 1)
+  const [allMerchants, setAllMerchants] = useState<any[]>([]);
+
+  // Estados de Configuração do Sistema (Sincronizados com Admin - Pontos 2 e 3)
   const [sysConfig, setSysConfig] = useState({
     supportEmail: 'ajuda@vizinho-plus.pt',
     vantagensUrl: '',
@@ -50,65 +50,79 @@ const UserDashboard: React.FC = () => {
     }
   }, [currentUser?.nif, subscribeToTransactions]);
 
+  // Carregamento Robusto das Configurações do Admin e de todas as Lojas
   useEffect(() => {
-    const fetchSettings = async () => {
+    const fetchData = async () => {
       try {
+        // 1. Carregar Configurações (Email e URL VIP)
         const docRef = doc(db, 'system', 'config');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data();
           setSysConfig({
             supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt',
-            vantagensUrl: data.vantagensUrl || '',
+            vantagensUrl: data.vipUrl || data.vantagensUrl || '', 
             maturationHours: data.maturationHours || 48
           });
         }
+
+        // 2. Carregar Todas as Lojas (Correção Ponto 1: Mostrar lojas mesmo sem saldo)
+        const merchantsQuery = query(collection(db, 'users'), where('role', '==', 'merchant'));
+        const merchantsSnap = await getDocs(merchantsQuery);
+        const merchantsList = merchantsSnap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setAllMerchants(merchantsList);
+
       } catch (err) {
-        console.error("Erro ao carregar sistema:", err);
+        console.error("Erro ao carregar dados do sistema:", err);
       }
     };
-    fetchSettings();
+    fetchData();
   }, []);
 
+  // Lógica de Saldos Cruzada com a Lista de Lojas
   const merchantBalances = useMemo(() => {
     const maturationMs = sysConfig.maturationHours * 60 * 60 * 1000;
     const maturityThreshold = Date.now() - maturationMs;
     
-    const balances: { [key: string]: { name: string, available: number, pending: number, total: number } } = {};
+    // Primeiro, mapeamos as transações por loja
+    const txBalances: { [key: string]: { available: number, pending: number, total: number } } = {};
 
     transactions.forEach(t => {
-      const merchantId = t.merchantId || 'unknown';
-      if (!balances[merchantId]) {
-        balances[merchantId] = { name: t.merchantName || 'Loja Parceira', available: 0, pending: 0, total: 0 };
+      if (t.status === 'cancelled') return;
+      const mId = t.merchantId;
+      if (!mId) return;
+
+      if (!txBalances[mId]) {
+        txBalances[mId] = { available: 0, pending: 0, total: 0 };
       }
 
       const txTime = t.createdAt instanceof Timestamp ? t.createdAt.toMillis() : Date.now();
-      const isAvailable = txTime <= maturityThreshold;
-      const amount = t.cashbackAmount || 0;
+      const isAvailable = t.status === 'available' || (t.status === 'pending' && txTime <= maturityThreshold);
+      const amount = Number(t.cashbackAmount) || 0;
 
       if (t.type === 'earn') {
-        balances[merchantId].total += amount;
-        if (isAvailable) {
-          balances[merchantId].available += amount;
-        } else {
-          balances[merchantId].pending += amount;
-        }
+        txBalances[mId].total += amount;
+        if (isAvailable) txBalances[mId].available += amount;
+        else txBalances[mId].pending += amount;
       } else if (t.type === 'redeem') {
-        let remainingToDebit = amount;
-        if (balances[merchantId].available >= remainingToDebit) {
-          balances[merchantId].available -= remainingToDebit;
-          remainingToDebit = 0;
-        } else {
-          remainingToDebit -= balances[merchantId].available;
-          balances[merchantId].available = 0;
-          balances[merchantId].pending -= remainingToDebit;
-        }
-        balances[merchantId].total -= amount;
+        txBalances[mId].available -= amount;
+        txBalances[mId].total -= amount;
       }
     });
 
-    return Object.values(balances);
-  }, [transactions, sysConfig.maturationHours]);
+    // Agora, cruzamos com todas as lojas existentes para garantir que aparecem (Correção Ponto 1)
+    return allMerchants.map(merchant => {
+      const balance = txBalances[merchant.uid || merchant.id] || { available: 0, pending: 0, total: 0 };
+      return {
+        id: merchant.uid || merchant.id,
+        name: merchant.storeName || merchant.name || 'Loja Parceira',
+        ...balance
+      };
+    });
+  }, [transactions, allMerchants, sysConfig.maturationHours]);
 
   const totalAvailable = useMemo(() => 
     merchantBalances.reduce((acc, curr) => acc + curr.available, 0), 
@@ -127,17 +141,19 @@ const UserDashboard: React.FC = () => {
     });
   }, [transactions, dateFilter]);
 
+  // CORREÇÃO Ponto 2: Função de Suporte (Email dinâmico do Admin)
   const handleHelp = () => {
-    const subject = encodeURIComponent(`Suporte Vizinho: ${currentUser?.name}`);
-    const body = encodeURIComponent(`Olá Equipa Vizinho+,\n\nPreciso de ajuda com a minha conta:\n\nNome: ${currentUser?.name}\nNIF: ${currentUser?.nif}`);
+    const subject = encodeURIComponent(`Suporte Vizinho+: ${currentUser?.name}`);
+    const body = encodeURIComponent(`Olá,\n\nPreciso de ajuda com a minha conta:\n\nNome: ${currentUser?.name}\nNIF: ${currentUser?.nif}\n\n[Descreva aqui o seu problema]`);
     window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
   };
 
+  // CORREÇÃO Ponto 3: Função Vantagens (Link dinâmico do Admin)
   const handleVantagens = () => {
-    if (sysConfig.vantagensUrl) {
+    if (sysConfig.vantagensUrl && sysConfig.vantagensUrl.trim() !== "") {
       window.open(sysConfig.vantagensUrl, '_blank');
     } else {
-      alert("A secção de vantagens exclusivas está a ser preparada. Fica atento!");
+      alert("As vantagens exclusivas estão a ser preparadas. Tenta novamente mais tarde!");
     }
   };
 
@@ -164,14 +180,13 @@ const UserDashboard: React.FC = () => {
         }}
       />
 
-      {/* Verificação segura para evitar erros de renderização do TS */}
-      {selectedTxForFeedback && currentUser?.uid && currentUser?.name && (
+      {selectedTxForFeedback && (
         <FeedbackForm
           transactionId={selectedTxForFeedback.id}
           merchantId={selectedTxForFeedback.merchantId}
           merchantName={selectedTxForFeedback.merchantName}
-          userId={currentUser.uid}
-          userName={currentUser.name}
+          userId={currentUser.uid || ''}
+          userName={currentUser.name || ''}
           onClose={() => setSelectedTxForFeedback(null)}
         />
       )}
@@ -208,10 +223,9 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 relative z-10">
         
-        {/* DESIGN DO CARTÃO REALISTA PREMIUM */}
+        {/* CARTÃO PREMIUM */}
         <div className="relative -mt-24 mb-12 perspective-1000">
           <div className="bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-black rounded-[30px] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.5)] border border-white/20 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between group transition-all duration-500 hover:scale-[1.02] border-t-white/30 border-l-white/20">
-            
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
             <div className="absolute top-[-20%] right-[-10%] w-[70%] h-[120%] bg-[#00d66f] opacity-[0.07] rounded-full blur-[100px]"></div>
             
@@ -242,7 +256,7 @@ const UserDashboard: React.FC = () => {
             <div className="flex items-end justify-between relative z-10 pt-4">
               <div className="flex flex-col">
                 <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">Titular</p>
-                <h2 className="text-xl font-black text-white tracking-tight uppercase italic drop-shadow-md">
+                <h2 className="text-xl font-black text-white tracking-tight uppercase italic drop-shadow-md truncate max-w-[200px]">
                   {currentUser?.name}
                 </h2>
               </div>
@@ -251,12 +265,10 @@ const UserDashboard: React.FC = () => {
                 <p className="text-lg font-mono font-black text-white tracking-[0.2em]">{currentUser?.nif}</p>
               </div>
             </div>
-            
-            <div className="absolute bottom-8 right-32 w-10 h-10 bg-gradient-to-tr from-white/10 via-[#00d66f]/20 to-transparent rounded-full blur-sm"></div>
           </div>
         </div>
 
-        {/* QR CODE OTIMIZADO PARA LEITURA */}
+        {/* QR CODE */}
         <div className="bg-white rounded-[40px] p-8 shadow-xl border-4 border-[#0f172a] mb-12 flex flex-col items-center gap-6 group hover:border-[#00d66f] transition-colors">
           <div className="bg-white p-5 rounded-[30px] border-4 border-[#0f172a] group-hover:border-[#00d66f] shadow-[8px_8px_0px_#0f172a] transition-all">
             <QRCodeSVG 
@@ -268,11 +280,12 @@ const UserDashboard: React.FC = () => {
             />
           </div>
           <div className="text-center">
-            <p className="text-[11px] font-black text-[#0f172a] uppercase tracking-widest mb-1">Código de Cliente Ativo</p>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight px-8">Apresente este código para leitura no terminal do lojista</p>
+            <p className="text-[11px] font-black text-[#0f172a] uppercase tracking-widest mb-1">O TEU CÓDIGO NIF</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight px-8">Apresenta ao lojista para acumular ou usar saldo</p>
           </div>
         </div>
 
+        {/* BOTÕES DE ACÇÃO */}
         <div className="grid grid-cols-2 gap-4 mb-12">
           <button 
             onClick={handleVantagens}
@@ -289,7 +302,7 @@ const UserDashboard: React.FC = () => {
             <div className="bg-[#00d66f] p-3 rounded-2xl group-hover:rotate-12 transition-transform">
               <Store size={28} className="text-[#0f172a]" strokeWidth={3} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Lojas</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Explorar Lojas</span>
           </button>
           
           <button 
@@ -299,14 +312,15 @@ const UserDashboard: React.FC = () => {
             <div className="bg-slate-100 p-3 rounded-2xl group-hover:rotate-[-12deg] transition-transform">
               <Settings size={28} strokeWidth={3} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Perfil</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Definições</span>
           </button>
         </div>
 
+        {/* LISTA DE SALDOS (CORREÇÃO PONTO 1: Mostra todas as lojas da base de dados) */}
         <div className="mb-12">
           <div className="flex items-center gap-3 mb-6 ml-2">
             <Zap size={20} className="text-[#00d66f]" fill="#00d66f" />
-            <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">O Teu Cashback por Loja</h4>
+            <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">As Nossas Lojas Parceiras</h4>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-6 no-scrollbar -mx-6 px-6">
             {merchantBalances.length > 0 ? merchantBalances.map((m, idx) => (
@@ -319,7 +333,7 @@ const UserDashboard: React.FC = () => {
                 <p className="text-4xl font-black text-[#0f172a] mb-6 italic tracking-tighter relative z-10">{m.total.toFixed(2)}€</p>
                 <div className="flex justify-between items-end pt-4 border-t-4 border-slate-50 relative z-10">
                   <div>
-                    <p className="text-[9px] font-black text-[#00d66f] uppercase tracking-tighter mb-1">Podes Gastar Aqui</p>
+                    <p className="text-[9px] font-black text-[#00d66f] uppercase tracking-tighter mb-1">Disponível</p>
                     <p className="text-2xl font-black text-[#0f172a]">{m.available.toFixed(2)}€</p>
                   </div>
                   {m.pending > 0 && (
@@ -332,17 +346,18 @@ const UserDashboard: React.FC = () => {
               </div>
             )) : (
                 <div className="w-full bg-slate-100/50 p-12 rounded-[35px] border-4 border-dashed border-slate-200 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">Ainda não tens cashback acumulado.</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">A carregar lojas parceiras...</p>
                 </div>
             )}
           </div>
         </div>
 
+        {/* HISTÓRICO */}
         <div className="space-y-6 pb-12">
           <div className="flex justify-between items-center px-2">
             <div className="flex items-center gap-3">
                 <History size={20} className="text-[#0f172a]" />
-                <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">Histórico</h4>
+                <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">Movimentos</h4>
             </div>
             <select 
                 value={dateFilter}
@@ -361,7 +376,7 @@ const UserDashboard: React.FC = () => {
                 {filteredTransactions.map((t) => (
                   <div 
                     key={t.id} 
-                    onClick={() => setSelectedTxForFeedback(t)}
+                    onClick={() => t.type === 'earn' && setSelectedTxForFeedback(t)}
                     className="p-8 flex justify-between items-center hover:bg-slate-50 transition-all group cursor-pointer active:bg-[#00d66f]/5"
                   >
                     <div className="flex gap-5 items-center">
@@ -373,18 +388,18 @@ const UserDashboard: React.FC = () => {
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <p className="font-black text-[#0f172a] text-sm uppercase tracking-tight leading-none group-hover:text-[#00d66f] transition-colors">{t.merchantName}</p>
-                          <Star size={12} className="text-[#00d66f] fill-[#00d66f] animate-pulse" />
+                          {t.status === 'pending' && <Clock size={12} className="text-orange-400" />}
                         </div>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase flex items-center gap-2">
-                          <Clock size={12} /> {t.createdAt instanceof Timestamp ? t.createdAt.toDate().toLocaleDateString() : '---'}
+                        <p className="text-[10px] text-slate-400 font-bold uppercase">
+                          {t.createdAt instanceof Timestamp ? t.createdAt.toDate().toLocaleDateString() : '---'}
                         </p>
                       </div>
                     </div>
                     <div className="text-right">
                       <p className={`text-xl font-black italic tracking-tighter ${t.type === 'earn' ? 'text-[#0f172a]' : 'text-red-500'}`}>
-                        {t.type === 'earn' ? '+' : '-'}{(t.cashbackAmount || 0).toFixed(2)}€
+                        {t.type === 'earn' ? '+' : '-'}{(Number(t.cashbackAmount) || 0).toFixed(2)}€
                       </p>
-                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">Cashback</span>
+                      <span className="text-[9px] font-black text-slate-300 uppercase tracking-widest">{t.status === 'cancelled' ? 'Anulado' : 'Cashback'}</span>
                     </div>
                   </div>
                 ))}
@@ -398,10 +413,10 @@ const UserDashboard: React.FC = () => {
         </div>
       </main>
 
+      {/* BOTÃO FLUTUANTE DE SUPORTE (PONTO 2: Email dinâmico) */}
       <button 
         onClick={handleHelp}
         className="fixed bottom-6 right-6 bg-[#00d66f] text-[#0f172a] p-4 rounded-full shadow-2xl hover:scale-110 transition-all z-40 border-4 border-[#0f172a] active:scale-95"
-        title="Ajuda / Suporte"
       >
         <LifeBuoy size={28} strokeWidth={3} />
       </button>

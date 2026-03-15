@@ -16,11 +16,12 @@ import {
 
 interface Merchant {
   id: string;
-  name: string;
-  category: string;
-  postalCode: string;
-  freguesia: string;
-  cashbackPercent: number;
+  name?: string;
+  storeName?: string; // Adicionado para suportar ambos os mapeamentos
+  category?: string;
+  postalCode?: string;
+  freguesia?: string;
+  cashbackPercent?: number;
   address?: string;
   phone?: string;
 }
@@ -37,13 +38,16 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   useEffect(() => {
     const fetchMerchants = async () => {
       try {
+        // Busca apenas utilizadores que são lojistas
         const q = query(collection(db, 'users'), where('role', '==', 'merchant'));
         const querySnapshot = await getDocs(q);
         const merchantList = querySnapshot.docs.map(doc => ({
           id: doc.id,
           ...doc.data()
         })) as Merchant[];
-        setMerchants(merchantList);
+        
+        // Filtra para garantir que apenas lojas com nome válido aparecem
+        setMerchants(merchantList.filter(m => m.name || m.storeName));
       } catch (error) {
         console.error("Erro ao carregar lojas:", error);
       } finally {
@@ -55,14 +59,17 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   }, []);
 
   const categories = useMemo(() => {
-    const cats = merchants.map(m => m.category).filter(Boolean);
+    const cats = merchants
+      .map(m => m.category)
+      .filter((cat): cat is string => !!cat && cat.trim() !== '');
     return ['all', ...Array.from(new Set(cats))];
   }, [merchants]);
 
   const filteredMerchants = useMemo(() => {
     return merchants.filter(m => {
+      const nameToSearch = (m.storeName || m.name || '').toLowerCase();
       const matchZip = (m.postalCode || '').toLowerCase().includes(searchZip.toLowerCase());
-      const matchName = (m.name || '').toLowerCase().includes(searchName.toLowerCase());
+      const matchName = nameToSearch.includes(searchName.toLowerCase());
       const matchCat = selectedCategory === 'all' || m.category === selectedCategory;
       return matchZip && matchName && matchCat;
     });
@@ -74,6 +81,7 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setSelectedCategory('all');
   };
 
+  // CORREÇÃO MOLECULAR: URL oficial corrigida para Google Maps
   const openInMaps = (address: string, name: string) => {
     const mapQuery = encodeURIComponent(`${name}, ${address}`);
     window.open(`https://www.google.com/maps/search/?api=1&query=${mapQuery}`, '_blank');
@@ -115,7 +123,7 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       <main className="max-w-2xl mx-auto px-6">
         
-        {/* FILTROS COM DESIGN DE ALTO IMPACTO */}
+        {/* FILTROS */}
         <div className="bg-white p-8 rounded-[40px] shadow-2xl border-4 border-[#0f172a] mb-12 -mt-20 relative z-20">
           <div className="space-y-6">
             <div className="space-y-2">
@@ -195,7 +203,7 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               filteredMerchants.map(m => (
                 <div key={m.id} className="bg-white rounded-[50px] shadow-xl border-4 border-slate-100 overflow-hidden group hover:border-[#00d66f] transition-all duration-500">
                   <div className="flex flex-col sm:flex-row">
-                    {/* INFO LATERAL / MOBILE TOP */}
+                    {/* INFO LATERAL */}
                     <div className="bg-[#0f172a] p-8 sm:w-48 flex flex-col items-center justify-center gap-2 shrink-0">
                       <div className="bg-[#00d66f] w-full py-4 rounded-3xl shadow-lg shadow-[#00d66f]/20 transform group-hover:scale-110 transition-transform text-center border-b-4 border-black/20">
                         <p className="text-[10px] font-black text-[#0f172a] uppercase leading-none mb-1">Retorno</p>
@@ -212,7 +220,7 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             {m.category || 'Comércio Local'}
                           </span>
                           <h3 className="font-black text-[#0f172a] text-2xl uppercase tracking-tighter leading-none group-hover:text-[#00d66f] transition-colors mb-2">
-                            {m.name}
+                            {m.storeName || m.name}
                           </h3>
                         </div>
                         <div className="bg-slate-50 p-3 rounded-2xl text-slate-300 group-hover:text-[#00d66f] transition-colors">
@@ -230,15 +238,15 @@ const MerchantExplore: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                             <div className="flex items-center gap-2">
                               <Navigation size={12} className="text-slate-300" />
                               <p className="text-[10px] font-bold text-slate-400 uppercase">
-                                {m.postalCode} • {m.freguesia}
+                                {m.postalCode} {m.freguesia ? `• ${m.freguesia}` : ''}
                               </p>
                             </div>
                           </div>
                         </div>
 
-                        {m.address && (
+                        {(m.address || m.name || m.storeName) && (
                           <button 
-                            onClick={() => openInMaps(m.address!, m.name)}
+                            onClick={() => openInMaps(m.address || '', m.storeName || m.name || '')}
                             className="bg-[#0f172a] text-white px-6 py-3 rounded-2xl flex items-center gap-2 text-[10px] font-black uppercase hover:bg-black transition-all shadow-lg active:translate-y-1"
                           >
                             <ExternalLink size={14} /> Ver Mapa

@@ -50,7 +50,10 @@ const MerchantDashboard: React.FC = () => {
   const [editEmail, setEditEmail] = useState(currentUser?.email || '');
   const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
+  
+  // Configurações do Sistema
   const [supportEmail, setSupportEmail] = useState('suporte@vizinhoplus.pt');
+  const [vipUrl, setVipUrl] = useState('');
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-PT', {
@@ -88,15 +91,18 @@ const MerchantDashboard: React.FC = () => {
     return /^[0-9]{9}$/.test(cleanNif);
   }, [cardNumber]);
 
+  // Carregar Configurações Globais (Suporte e VIP)
   useEffect(() => {
     const fetchSettings = async () => {
       try {
-        const settingsDoc = await getDoc(doc(db, 'settings', 'app'));
-        if (settingsDoc.exists() && settingsDoc.data().supportEmail) {
-          setSupportEmail(settingsDoc.data().supportEmail);
+        const settingsDoc = await getDoc(doc(db, 'system', 'config'));
+        if (settingsDoc.exists()) {
+          const data = settingsDoc.data();
+          if (data.supportEmail) setSupportEmail(data.supportEmail);
+          if (data.vipUrl) setVipUrl(data.vipUrl);
         }
       } catch (err) {
-        console.error("Erro ao carregar suporte:", err);
+        console.error("Erro ao carregar configurações do sistema:", err);
       }
     };
     fetchSettings();
@@ -181,6 +187,14 @@ const MerchantDashboard: React.FC = () => {
     const subject = encodeURIComponent(`Suporte Loja: ${currentUser?.name}`);
     const body = encodeURIComponent(`Olá Equipa Vizinho+,\n\nPreciso de ajuda com:\n\nLoja: ${currentUser?.name}\nNIF: ${currentUser?.nif}`);
     window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
+  };
+
+  const handleVIPClick = () => {
+    if (vipUrl) {
+      window.open(vipUrl, '_blank');
+    } else {
+      handleHelp();
+    }
   };
 
   const handleFirebaseError = (error: any, defaultMsg: string) => {
@@ -354,7 +368,7 @@ const MerchantDashboard: React.FC = () => {
             ))}
             
             <button 
-              onClick={() => navigate('/vantagens')} 
+              onClick={handleVIPClick} 
               className="flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all bg-gradient-to-r from-[#bf953f] via-[#fcf6ba] to-[#b38728] text-[#0f172a] shadow-lg hover:scale-105 border-b-2 border-[#8a6d29]"
             >
               <Crown size={16} strokeWidth={3} /> VIP
