@@ -23,14 +23,15 @@ import {
   ArrowRight,
   RotateCcw,
   LifeBuoy,
-  Crown
+  Crown,
+  Users
 } from 'lucide-react';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout, setCurrentUser } = useStore();
   const navigate = useNavigate();
   
-  const [view, setView] = useState<'terminal' | 'history' | 'profile'>('terminal');
+  const [view, setView] = useState<'terminal' | 'history' | 'profile' | 'customers'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
 
   const [cardNumber, setCardNumber] = useState('');
@@ -40,6 +41,7 @@ const MerchantDashboard: React.FC = () => {
   const [message, setMessage] = useState({ type: '', text: '' });
   
   const [foundClient, setFoundClient] = useState<any>(null);
+  const [merchantCustomers, setMerchantCustomers] = useState<any[]>([]);
 
   const [filterNif, setFilterNif] = useState('');
   const [filterType, setFilterType] = useState('all');
@@ -59,7 +61,10 @@ const MerchantDashboard: React.FC = () => {
 
   const formatNIF = (value: string) => {
     const digits = value.replace(/\D/g, '');
-    return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
+    if (digits.length <= 9) {
+      return digits.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3').trim();
+    }
+    return digits;
   };
 
   const formatPhone = (value: string) => {
@@ -83,7 +88,6 @@ const MerchantDashboard: React.FC = () => {
     return /^[0-9]{9}$/.test(cleanNif);
   }, [cardNumber]);
 
-  // Carregar configurações de suporte
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -97,6 +101,33 @@ const MerchantDashboard: React.FC = () => {
     };
     fetchSettings();
   }, []);
+
+  useEffect(() => {
+    const fetchCustomers = async () => {
+      if (!currentUser?.id || view !== 'customers') return;
+      
+      try {
+        setIsLoading(true);
+        const q = query(
+          collection(db, 'users'), 
+          where('role', '==', 'client'),
+          where(`storeWallets.${currentUser.id}.available`, '>', 0)
+        );
+        
+        const snap = await getDocs(q);
+        const customersData = snap.docs.map(doc => ({
+          id: doc.id,
+          ...doc.data()
+        }));
+        setMerchantCustomers(customersData);
+      } catch (err) {
+        console.error("Erro ao carregar clientes:", err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    fetchCustomers();
+  }, [currentUser?.id, view]);
 
   useEffect(() => {
     const searchClient = async () => {
@@ -133,7 +164,8 @@ const MerchantDashboard: React.FC = () => {
       const scanner = new Html5QrcodeScanner("reader", { fps: 10, qrbox: 250 }, false);
       scanner.render(
         (text) => {
-          setCardNumber(formatNIF(text));
+          const cleanText = text.replace(/\D/g, '').slice(0, 9);
+          setCardNumber(formatNIF(cleanText));
           setShowScanner(false);
           scanner.clear();
         },
@@ -236,7 +268,7 @@ const MerchantDashboard: React.FC = () => {
         clientNif: cleanNif,
         merchantId: currentUser.id,
         merchantName: currentUser.name || 'Loja Vizinho+',
-        amount: type === 'earn' || type === 'cancel' ? val : 0,
+        amount: val,
         cashbackAmount: type === 'earn' || type === 'cancel' 
           ? (val * ((currentUser.cashbackPercent || 0) / 100)) 
           : val,
@@ -309,6 +341,7 @@ const MerchantDashboard: React.FC = () => {
             {[
               { id: 'terminal', icon: LayoutDashboard, label: 'Terminal' },
               { id: 'history', icon: History, label: 'Vendas' },
+              { id: 'customers', icon: Users, label: 'Clientes' },
               { id: 'profile', icon: UserCircle, label: 'Config' }
             ].map((item) => (
               <button 
@@ -320,7 +353,6 @@ const MerchantDashboard: React.FC = () => {
               </button>
             ))}
             
-            {/* BOTÃO VANTAGENS DOURADO NO MENU */}
             <button 
               onClick={() => navigate('/vantagens')} 
               className="flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all bg-gradient-to-r from-[#bf953f] via-[#fcf6ba] to-[#b38728] text-[#0f172a] shadow-lg hover:scale-105 border-b-2 border-[#8a6d29]"
@@ -493,7 +525,6 @@ const MerchantDashboard: React.FC = () => {
                 </button>
               </div>
             </div>
-
             <div className="overflow-x-auto">
               <table className="w-full text-left">
                 <thead>
@@ -536,6 +567,47 @@ const MerchantDashboard: React.FC = () => {
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+        ) : view === 'customers' ? (
+          <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 animate-in slide-in-from-bottom-4">
+            <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
+              <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter">Clientes Fidelizados</h3>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Total: {merchantCustomers.length}</p>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {merchantCustomers.length > 0 ? merchantCustomers.map((customer) => (
+                <div key={customer.id} className="p-6 bg-slate-50 rounded-[32px] border-2 border-slate-100 hover:border-[#00d66f] transition-all group">
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="p-3 bg-white rounded-2xl shadow-sm group-hover:bg-[#00d66f] group-hover:text-white transition-colors">
+                      <User size={20} />
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[9px] font-black text-slate-400 uppercase">Saldo Acumulado</p>
+                      <p className="text-lg font-black text-[#00d66f]">{formatCurrency(customer.storeWallets?.[currentUser?.id || '']?.available || 0)}</p>
+                    </div>
+                  </div>
+                  <h4 className="font-black text-[#0f172a] uppercase text-sm truncate">{customer.name}</h4>
+                  <div className="flex items-center gap-2 mt-1">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">NIF: {formatNIF(customer.nif)}</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setCardNumber(formatNIF(customer.nif));
+                      setView('terminal');
+                    }}
+                    className="w-full mt-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#0f172a] hover:text-white transition-all"
+                  >
+                    Selecionar para Venda
+                  </button>
+                </div>
+              )) : (
+                <div className="col-span-full py-20 text-center">
+                  <Users size={48} className="mx-auto text-slate-200 mb-4" />
+                  <p className="text-slate-300 font-black uppercase text-xs">Ainda não tem clientes fidelizados nesta loja</p>
+                </div>
+              )}
             </div>
           </div>
         ) : (
@@ -586,7 +658,6 @@ const MerchantDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* BOTÃO FLUTUANTE DE SUPORTE */}
       <button 
         onClick={handleHelp}
         className="fixed bottom-6 right-6 bg-[#00d66f] text-[#0f172a] p-4 rounded-full shadow-2xl hover:scale-110 transition-all z-40 border-4 border-[#0f172a]"

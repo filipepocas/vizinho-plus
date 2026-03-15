@@ -37,7 +37,7 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     minRedeemAmount: 5.00,
     platformStatus: 'active',
     supportEmail: 'ajuda@vizinho-plus.pt',
-    vantagensUrl: '' // NOVO: URL para o botão dourado
+    vantagensUrl: '' 
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -67,7 +67,7 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     fetchConfig();
   }, []);
 
-  // Lógica de Atualização de Admin
+  // Lógica de Atualização de Admin (Segurança)
   const handleUpdateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword && newPassword !== confirmPassword) {
@@ -100,14 +100,19 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  // Lógica de Atualização de Sistema
+  // Lógica de Atualização de Sistema (Campos de Suporte e Vantagens incluídos aqui)
   const handleUpdateSystem = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
     setMessage({ type: '', text: '' });
     try {
-      await setDoc(doc(db, 'system', 'config'), sysConfig, { merge: true });
-      setMessage({ type: 'success', text: 'Configurações de sistema aplicadas!' });
+      // Grava na coleção centralizada que a app e o dashboard consultam
+      await setDoc(doc(db, 'system', 'config'), {
+        ...sysConfig,
+        updatedAt: serverTimestamp()
+      }, { merge: true });
+      
+      setMessage({ type: 'success', text: 'Configurações Master aplicadas!' });
     } catch (e) {
       setMessage({ type: 'error', text: 'Erro ao salvar configurações.' });
     } finally {
@@ -228,20 +233,37 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           <div className="bg-white rounded-[40px] border-2 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540] p-8 md:p-12 animate-in fade-in slide-in-from-bottom-4">
             <form onSubmit={handleUpdateSystem} className="space-y-10">
               
-              {/* E-MAIL DE SUPORTE - PONTO 8 */}
-              <div className="space-y-4">
-                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
-                  <Mail size={14} className="text-[#00d66f]" /> E-mail de Suporte Público
-                </label>
-                <input 
-                  type="email" 
-                  value={sysConfig.supportEmail}
-                  onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})}
-                  className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
-                />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                {/* E-MAIL DE SUPORTE */}
+                <div className="space-y-4">
+                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
+                    <Mail size={14} className="text-[#00d66f]" /> E-mail de Suporte Público
+                  </label>
+                  <input 
+                    type="email" 
+                    value={sysConfig.supportEmail}
+                    onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})}
+                    className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
+                  />
+                </div>
+
+                {/* STATUS DA PLATAFORMA */}
+                <div className="space-y-4">
+                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
+                    <Activity size={14} className="text-amber-500" /> Status da Plataforma
+                  </label>
+                  <select 
+                    value={sysConfig.platformStatus}
+                    onChange={e => setSysConfig({...sysConfig, platformStatus: e.target.value})}
+                    className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-amber-500 focus:bg-white font-black text-[10px] uppercase tracking-widest text-[#0a2540] appearance-none cursor-pointer transition-all"
+                  >
+                    <option value="active">🟢 Operacional (LIVE)</option>
+                    <option value="maintenance">🟠 Em Manutenção (RESTRICTED)</option>
+                  </select>
+                </div>
               </div>
 
-              {/* URL VANTAGENS+ (BOTÃO DOURADO) */}
+              {/* URL VANTAGENS+ */}
               <div className="space-y-4 bg-amber-50 p-6 rounded-[32px] border-2 border-amber-200">
                 <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-amber-700 ml-1">
                   <Star size={14} className="text-amber-500 fill-amber-500" /> Link "Vantagens+" (Botão Dourado)
@@ -257,68 +279,57 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <ExternalLink className="absolute right-6 top-1/2 -translate-y-1/2 text-amber-400" size={20} />
                 </div>
                 <p className="text-[9px] font-bold text-amber-600 uppercase mt-2 px-2 italic">
-                  * Este link será aberto quando os utilizadores clicarem no botão dourado.
+                  * Este link será aberto quando os clientes clicarem no botão dourado na App.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* TAXA SERVIÇO */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
-                    <Percent size={14} className="text-[#00d66f]" /> Taxa de Serviço Global
+                    <Percent size={14} className="text-[#00d66f]" /> Taxa Serviço
                   </label>
-                  <div className="relative group">
+                  <div className="relative">
                     <input 
                       type="number" step="0.1" 
                       value={sysConfig.globalServiceFee}
                       onChange={e => setSysConfig({...sysConfig, globalServiceFee: Number(e.target.value)})}
-                      className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-2xl text-[#0a2540] transition-all"
+                      className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xl text-[#0a2540]"
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-[#0a2540] opacity-30 group-focus-within:opacity-100">%</span>
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-[#0a2540] opacity-30">%</span>
                   </div>
                 </div>
 
+                {/* MATURAÇÃO */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
-                    <Clock size={14} className="text-[#00d66f]" /> Maturação do Cashback
+                    <Clock size={14} className="text-[#00d66f]" /> Maturação
                   </label>
-                  <div className="relative group">
+                  <div className="relative">
                     <input 
                       type="number" 
                       value={sysConfig.maturationHours}
                       onChange={e => setSysConfig({...sysConfig, maturationHours: Number(e.target.value)})}
-                      className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-2xl text-[#0a2540] transition-all"
+                      className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xl text-[#0a2540]"
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-xs uppercase text-slate-400">Horas</span>
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 font-black text-[8px] uppercase text-slate-400">Horas</span>
                   </div>
                 </div>
 
+                {/* LEVANTAMENTO MÍNIMO */}
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
-                    <Wallet size={14} className="text-[#00d66f]" /> Levantamento Mínimo
+                    <Wallet size={14} className="text-[#00d66f]" /> Mínimo
                   </label>
-                  <div className="relative group">
+                  <div className="relative">
                     <input 
                       type="number" step="1"
                       value={sysConfig.minRedeemAmount}
                       onChange={e => setSysConfig({...sysConfig, minRedeemAmount: Number(e.target.value)})}
-                      className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-2xl text-[#0a2540] transition-all"
+                      className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-[#00d66f] font-black text-xl text-[#0a2540]"
                     />
-                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-[#0a2540] opacity-30 group-focus-within:opacity-100">€</span>
+                    <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-[#0a2540] opacity-30">€</span>
                   </div>
-                </div>
-
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-[0.15em] text-slate-500 ml-1">
-                    <Activity size={14} className="text-amber-500" /> Status da Plataforma
-                  </label>
-                  <select 
-                    value={sysConfig.platformStatus}
-                    onChange={e => setSysConfig({...sysConfig, platformStatus: e.target.value})}
-                    className="w-full p-6 bg-slate-50 border-2 border-slate-200 rounded-3xl outline-none focus:border-amber-500 focus:bg-white font-black text-[10px] uppercase tracking-widest text-[#0a2540] appearance-none cursor-pointer transition-all"
-                  >
-                    <option value="active">🟢 Operacional (LIVE)</option>
-                    <option value="maintenance">🟠 Em Manutenção (RESTRICTED)</option>
-                  </select>
                 </div>
               </div>
 

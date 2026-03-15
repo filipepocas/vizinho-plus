@@ -1,7 +1,6 @@
-// src/features/profile/ProfileSettings.tsx
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
-import { db, auth } from '../../config/firebase';
+import { db } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, 
@@ -14,7 +13,8 @@ import {
   CheckCircle2,
   Trash2,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  Mail
 } from 'lucide-react';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -67,21 +67,16 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       if (confirmSecond) {
         setIsDeleting(true);
         try {
-          // 1. Guardar os dados necessários antes de limpar o estado
           const userId = currentUser.id;
           const roleToDelete: 'merchant' | 'client' = currentUser.role === 'merchant' ? 'merchant' : 'client';
           
-          // 2. LOGOUT PRIMEIRO: Para evitar erros de "Assertion Failed" no Firestore,
-          // fechamos a sessão e os listeners antes de apagar os dados.
           await logout();
-          
-          // 3. Eliminar dados e histórico na Firestore em segundo plano
           await deleteUserWithHistory(userId, roleToDelete);
           
           alert("Conta eliminada com sucesso. Até breve!");
         } catch (error) {
           console.error("Erro ao eliminar conta:", error);
-          alert("A sessão foi encerrada, mas pode ter ocorrido um erro ao limpar o histórico. Contacta o suporte.");
+          alert("A sessão foi encerrada, mas pode ter ocorrido um erro ao limpar o histórico.");
         } finally {
           setIsDeleting(false);
         }
@@ -90,7 +85,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-20">
+    <div className="min-h-screen bg-[#f8fafc] font-sans pb-20 text-[#0f172a]">
       {/* HEADER BRUTALISTA */}
       <header className="bg-[#0f172a] px-6 py-10 text-white rounded-b-[40px] shadow-2xl mb-12 border-b-8 border-[#00d66f] relative overflow-hidden">
         <div className="max-w-5xl mx-auto flex items-center gap-6 relative z-10">
@@ -113,7 +108,9 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           {/* SECÇÃO: DADOS BÁSICOS */}
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
             <div className="flex items-center gap-3 mb-8">
-              <User className="text-[#00d66f]" size={20} strokeWidth={3} />
+              <div className="bg-slate-100 p-2 rounded-xl">
+                <User className="text-[#0f172a]" size={20} strokeWidth={3} />
+              </div>
               <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados Pessoais</h3>
             </div>
 
@@ -124,7 +121,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] transition-all"
+                  className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white transition-all"
                   required
                 />
               </div>
@@ -137,7 +134,20 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     type="tel"
                     value={formData.phone}
                     onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] transition-all"
+                    className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white transition-all"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2 opacity-60">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email (Apenas Leitura)</label>
+                <div className="relative">
+                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                  <input 
+                    type="email"
+                    value={currentUser?.email || ''}
+                    disabled
+                    className="w-full bg-slate-100 border-4 border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-sm font-bold outline-none cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -148,7 +158,9 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           {currentUser?.role === 'merchant' && (
             <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
               <div className="flex items-center gap-3 mb-8">
-                <MapPin className="text-[#00d66f]" size={20} strokeWidth={3} />
+                <div className="bg-slate-100 p-2 rounded-xl">
+                  <MapPin className="text-[#0f172a]" size={20} strokeWidth={3} />
+                </div>
                 <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados da Loja</h3>
               </div>
 
@@ -162,18 +174,18 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       placeholder="Ex: Restauração, Oficina..."
                       value={formData.category}
                       onChange={(e) => setFormData({...formData, category: e.target.value})}
-                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] transition-all"
+                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white transition-all"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Morada</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Morada Comercial</label>
                   <input 
                     type="text"
                     value={formData.address}
                     onChange={(e) => setFormData({...formData, address: e.target.value})}
-                    className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] transition-all"
+                    className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white transition-all"
                   />
                 </div>
 
@@ -184,7 +196,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       type="text"
                       value={formData.zipCode}
                       onChange={(e) => setFormData({...formData, zipCode: e.target.value})}
-                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] transition-all"
+                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white transition-all"
                     />
                   </div>
                   <div className="space-y-2">
@@ -193,7 +205,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                       type="text"
                       value={formData.freguesia}
                       onChange={(e) => setFormData({...formData, freguesia: e.target.value})}
-                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] transition-all"
+                      className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white transition-all"
                     />
                   </div>
                 </div>
@@ -202,60 +214,65 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           )}
 
           {/* INFO DE CONTA (NÃO EDITÁVEL) */}
-          <div className="bg-slate-100/50 p-6 rounded-[30px] border-2 border-dashed border-slate-200">
-            <div className="flex items-center gap-3 opacity-50">
-              <ShieldCheck size={16} />
-              <p className="text-[10px] font-black uppercase tracking-widest">NIF: {currentUser?.nif}</p>
+          <div className="bg-slate-200/30 p-6 rounded-[30px] border-2 border-dashed border-slate-300">
+            <div className="flex items-center gap-3 opacity-60">
+              <ShieldCheck size={16} className="text-[#0f172a]" />
+              <p className="text-[10px] font-black uppercase tracking-widest">Verificação NIF: {currentUser?.nif}</p>
             </div>
-            <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 ml-7">O NIF não pode ser alterado manualmente por motivos de segurança.</p>
+            <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 ml-7 leading-relaxed">O Número de Identificação Fiscal está vinculado à sua conta e não pode ser alterado por segurança.</p>
           </div>
 
-          {/* ÁREA DE PERIGO: ELIMINAÇÃO */}
-          <div className="pt-8 mt-8 border-t-2 border-slate-100">
-            <div className="flex items-center gap-2 mb-4 text-red-500">
-              <AlertTriangle size={16} />
-              <h4 className="text-[10px] font-black uppercase tracking-widest">Zona de Perigo</h4>
-            </div>
-            <button 
-              type="button"
-              onClick={handleDeleteAccount}
-              disabled={isDeleting}
-              className="w-full py-4 rounded-2xl bg-white border-2 border-red-100 text-red-400 font-black uppercase text-[10px] tracking-widest hover:bg-red-50 hover:text-red-600 hover:border-red-200 transition-all flex items-center justify-center gap-3"
-            >
-              {isDeleting ? (
-                <>
-                  <RefreshCw size={14} className="animate-spin" /> A eliminar conta...
-                </>
-              ) : (
-                <>
-                  <Trash2 size={14} /> Eliminar Minha Conta
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* BOTÃO GUARDAR */}
+          {/* BOTÃO GUARDAR PRINCIPAL */}
           <button 
             type="submit"
             disabled={loading || isDeleting}
-            className={`w-full py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all ${
+            className={`w-full py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all transform active:scale-95 ${
               saved 
-                ? 'bg-[#00d66f] text-[#0f172a]' 
-                : 'bg-[#0f172a] text-white hover:bg-black active:scale-95'
+                ? 'bg-[#00d66f] text-[#0f172a] shadow-[#00d66f]/20' 
+                : 'bg-[#0f172a] text-white hover:bg-black shadow-slate-200'
             }`}
           >
             {loading ? (
-              <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+              <RefreshCw size={24} className="animate-spin text-[#00d66f]" />
             ) : saved ? (
               <>
-                <CheckCircle2 size={20} /> Alterações Guardadas!
+                <CheckCircle2 size={24} strokeWidth={3} /> Sucesso!
               </>
             ) : (
               <>
-                <Save size={20} /> Guardar Perfil
+                <Save size={24} strokeWidth={3} /> Guardar Alterações
               </>
             )}
           </button>
+
+          {/* ÁREA DE PERIGO: ELIMINAÇÃO */}
+          <div className="pt-12 mt-8 border-t-4 border-slate-100">
+            <div className="bg-red-50 p-6 rounded-[35px] border-2 border-red-100">
+              <div className="flex items-center gap-2 mb-4 text-red-600">
+                <AlertTriangle size={18} strokeWidth={3} />
+                <h4 className="text-[10px] font-black uppercase tracking-[0.2em]">Zona Crítica</h4>
+              </div>
+              <p className="text-[9px] text-red-400 font-bold uppercase mb-6 leading-relaxed">
+                Ao eliminar a conta, perderás permanentemente o acesso ao teu saldo e histórico de transações.
+              </p>
+              <button 
+                type="button"
+                onClick={handleDeleteAccount}
+                disabled={isDeleting}
+                className="w-full py-4 rounded-2xl bg-white border-2 border-red-200 text-red-500 font-black uppercase text-[10px] tracking-widest hover:bg-red-500 hover:text-white hover:border-red-500 transition-all flex items-center justify-center gap-3"
+              >
+                {isDeleting ? (
+                  <>
+                    <RefreshCw size={14} className="animate-spin" /> Destruindo dados...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 size={14} /> Eliminar Conta Permanentemente
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
         </form>
       </main>
     </div>

@@ -31,7 +31,8 @@ import {
   Star,
   Smile,
   Frown,
-  Meh
+  Meh,
+  ExternalLink
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -41,6 +42,8 @@ import AdminTransactions from '../../features/admin/AdminTransactions';
 import AdminUsers from '../../features/admin/AdminUsers';
 import AdminMerchants from '../../features/admin/AdminMerchants';
 import MerchantModal from '../../features/admin/MerchantModal';
+// CORREÇÃO MOLECULAR: O ficheiro reside em components/admin, não na mesma pasta features/admin
+import FeedbackList from '../../components/admin/FeedbackList'; 
 import { User as UserProfile, Transaction, Merchant } from '../../types/index';
 
 const AdminDashboard: React.FC = () => {
@@ -53,14 +56,14 @@ const AdminDashboard: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // ESTADOS DE DADOS
+  // ESTADOS DE DADOS (PRESERVADOS DO ORIGINAL)
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [supportEmail, setSupportEmail] = useState('ajuda@vizinho-plus.pt');
-  const [vantagensUrl, setVantagensUrl] = useState(''); // NOVO: URL Vantagens+
+  const [vantagensUrl, setVantagensUrl] = useState(''); 
   
-  // ESTADOS PARA RELATÓRIO E FILTROS
+  // ESTADOS PARA RELATÓRIO E FILTROS (PRESERVADOS DO ORIGINAL)
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [filterMerchant, setFilterMerchant] = useState('');
@@ -98,15 +101,15 @@ const AdminDashboard: React.FC = () => {
       setMerchants(allData.filter(u => u.role === 'merchant'));
       setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
 
-      // PONTO 8: Carregar e-mail de suporte e URL Vantagens das configurações
+      // Carregar e-mail de suporte e URL Vantagens das configurações do sistema
       const configSnap = await getDoc(doc(db, 'system', 'config'));
       if (configSnap.exists()) {
         const configData = configSnap.data();
         setSupportEmail(configData.supportEmail || 'ajuda@vizinho-plus.pt');
-        setVantagensUrl(configData.vantagensUrl || ''); // Carrega o link salvo
+        setVantagensUrl(configData.vantagensUrl || '');
       }
 
-      // PONTO 9: Carregar Avaliações
+      // Carregar Avaliações e Opiniões para a lógica de Excel
       const reviewsSnap = await getDocs(query(collection(db, 'reviews'), orderBy('createdAt', 'desc')));
       setReviews(reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
@@ -121,7 +124,7 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  // Lógica de Maturação (Ponto 5)
+  // Lógica de Maturação Automática (PRESERVADA)
   const processMaturation = async () => {
     setIsProcessing(true);
     try {
@@ -199,7 +202,7 @@ const AdminDashboard: React.FC = () => {
     };
   }, [transactions]);
 
-  // Filtro de Avaliações (Ponto 9)
+  // Lógica de Filtros e Excel (MANTIDA ORIGINAL)
   const filteredReviews = useMemo(() => {
     return reviews.filter(r => {
       const rDate = r.createdAt?.toDate ? r.createdAt.toDate() : new Date();
@@ -217,17 +220,11 @@ const AdminDashboard: React.FC = () => {
     XLSX.writeFile(wb, `Avaliacoes_VizinhoPlus_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  const renderRatingFace = (rating: number) => {
-    if (rating <= 2) return <Frown className="text-red-500" size={24} />;
-    if (rating === 3) return <Meh className="text-amber-500" size={24} />;
-    return <Smile className="text-[#00d66f]" size={24} />;
-  };
-
   if (!isInitialized) return <div className="min-h-screen bg-[#0a2540]" />;
 
   if (currentView === 'settings') return <AdminSettings onBack={() => {
     setCurrentView('overview');
-    fetchData(); // Recarrega dados ao voltar para atualizar e-mail/links no header
+    fetchData();
   }} />;
 
   return (
@@ -242,7 +239,14 @@ const AdminDashboard: React.FC = () => {
             </div>
             <div>
               <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Admin <span className="text-[#00d66f]">Console</span></h1>
-              <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.3em] mt-3">Suporte: {supportEmail}</p>
+              <div className="flex flex-col gap-1 mt-3">
+                <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.2em]">Suporte: {supportEmail}</p>
+                {vantagensUrl && (
+                  <p className="text-white/40 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1">
+                    <ExternalLink size={10} /> Link Vantagens: {vantagensUrl.substring(0, 30)}...
+                  </p>
+                )}
+              </div>
             </div>
           </div>
 
@@ -262,7 +266,7 @@ const AdminDashboard: React.FC = () => {
                 <item.icon size={16} strokeWidth={3} /> {item.label}
               </button>
             ))}
-            <button onClick={handleLogout} className="p-4 rounded-2xl text-red-400">
+            <button onClick={handleLogout} className="p-4 rounded-2xl text-red-400 hover:bg-red-500/10 transition-colors">
               <LogOut size={20} strokeWidth={3} />
             </button>
           </nav>
@@ -273,7 +277,6 @@ const AdminDashboard: React.FC = () => {
         
         {currentView === 'overview' && (
           <div className="space-y-12 animate-in fade-in duration-500">
-            {/* ESTATÍSTICAS RÁPIDAS */}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               <div className="bg-white p-8 rounded-[32px] shadow-sm border-b-4 border-blue-500">
                  <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Vendas Totais</p>
@@ -292,12 +295,25 @@ const AdminDashboard: React.FC = () => {
                  <h3 className="text-3xl font-black italic">{stats.clients}</h3>
               </div>
             </div>
+            
+            <div className="flex justify-end">
+              <button 
+                onClick={processMaturation}
+                disabled={isProcessing}
+                className="bg-white border-2 border-[#0a2540] text-[#0a2540] px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest flex items-center gap-2 hover:bg-[#0a2540] hover:text-white transition-all disabled:opacity-50"
+              >
+                <RefreshCw size={14} className={isProcessing ? 'animate-spin' : ''} />
+                Forçar Maturação de Saldo
+              </button>
+            </div>
+
             <AdminTransactions transactions={transactions} />
           </div>
         )}
 
         {currentView === 'reviews' && (
           <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
+            {/* Bloco de Filtros e Exportação Original do Filipe (PROTEGIDO) */}
             <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
               <div className="flex flex-wrap gap-4 flex-1">
                 <div className="flex-1 min-w-[200px]">
@@ -305,7 +321,7 @@ const AdminDashboard: React.FC = () => {
                   <select 
                     value={filterMerchant}
                     onChange={(e) => setFilterMerchant(e.target.value)}
-                    className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm"
+                    className="w-full bg-slate-50 border-none rounded-2xl p-4 font-bold text-sm focus:ring-2 ring-[#00d66f]"
                   >
                     <option value="">Todas as Lojas</option>
                     {merchants.map(m => (
@@ -327,35 +343,8 @@ const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 gap-4">
-              {filteredReviews.length > 0 ? filteredReviews.map((review) => (
-                <div key={review.id} className="bg-white p-6 rounded-[32px] border-2 border-slate-50 flex items-center justify-between shadow-sm hover:border-[#00d66f] transition-all">
-                  <div className="flex items-center gap-6">
-                    <div className="p-4 bg-slate-50 rounded-2xl">
-                      {renderRatingFace(review.rating)}
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-black text-[#00d66f] uppercase tracking-widest mb-1">{review.merchantName}</p>
-                      <p className="text-sm font-black text-[#0a2540] uppercase tracking-tighter">"{review.comment || 'Sem comentário'}"</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">
-                        Cliente: {review.clientName} • {review.createdAt?.toDate().toLocaleDateString()}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="flex gap-1">
-                      {[1,2,3,4,5].map(star => (
-                        <Star key={star} size={12} className={star <= review.rating ? 'text-amber-400 fill-amber-400' : 'text-slate-200'} />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )) : (
-                <div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-100 text-center text-slate-300 font-black uppercase italic">
-                  Nenhuma avaliação encontrada com estes filtros.
-                </div>
-              )}
-            </div>
+            {/* Novo componente FeedbackList para a gestão molecular das opiniões */}
+            <FeedbackList />
           </div>
         )}
 
