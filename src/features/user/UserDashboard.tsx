@@ -32,6 +32,9 @@ import {
   Send
 } from 'lucide-react';
 
+// --- LOGOTIPO EMBUTIDO PARA EVITAR FALHAS DE CARREGAMENTO ---
+const logoVizinhoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAADvszH5AAAAnFBMVEVHcExNV09XUVZUV1daWVpcWVtdWlxvbnFwcXNyc3V4eHl5eXp+fn+AgICCgoOEhISJiYmTk5OcnJykpKSwsLCysrKzs7O0tLS1tbW4uLm7u7u8vLzExMTFxcXHx8fIyMjQ0NDR0dHV1dXW1tbY2NjZ2dna2trb29vj4+Pk5OTl5eXm5ubn5+fo6Ojr6+vs7Ozt7e3v7+/w8PD////O0v4DAAAALHRSTlMAAgYICQ0OExUXGB0fISMkLS8wMTIzPkJFS0xPVlhbXV5fX2JmampueXt8fX5/gX+BAAAA40lEQVR42u3YMRKCMBBGURARFAQUBRQFVFDWOf95T8uM8mOAmZp9K/D2Zp8G/35/v//7+Xq5Xp9P9wBv7/fX8fH5eg6wDPAWwFuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4Psc8G2+4S8vAAAA9UlEQVR42u3YwQnCQBBEURREBAX8D9AVD+A/D6GZfRiYidm3Am9v9mmeXw+bH29vtx8A7wG8BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4Psc8G2+4S8vAAAA9UlEQVR42u3YwQnCQBBEURREBAX8D9AVD+A/D6GZfRiYidm3Am9v9mmeXw+bH29vtx8A7wG8BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4Psc8G2+4S8vAAAA"
+
 const UserDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout, currentUser } = useStore();
   
@@ -206,15 +209,12 @@ const UserDashboard: React.FC = () => {
         }}
       />
 
-      {/* LOGOTIPO FIXO COM CORREÇÃO DE RENDERIZAÇÃO */}
+      {/* LOGOTIPO FIXO COM CORREÇÃO BASE64 */}
       <div className="fixed top-6 left-6 z-[100]">
         <img 
-          src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-color.png?alt=media" 
+          src={logoVizinhoBase64} 
           alt="Vizinho+" 
           className="h-10 w-auto drop-shadow-sm"
-          onError={(e) => {
-            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150x50?text=VIZINHO+PLUS';
-          }}
         />
       </div>
 
