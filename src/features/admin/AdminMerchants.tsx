@@ -1,3 +1,5 @@
+// src/features/admin/AdminMerchants.tsx
+
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
@@ -34,11 +36,11 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const { deleteUserWithHistory, isLoading: isDeleting } = useStore();
 
-  const filteredMerchants = merchants.filter(m => {
-    const merchant = m as any; // Cast para evitar erros de tipo até atualizarmos a interface global
+  const filteredMerchants = merchants.filter(merchant => {
     const q = searchQuery.toLowerCase();
     return (
       (merchant.name?.toLowerCase() || '').includes(q) || 
+      (merchant.shopName?.toLowerCase() || '').includes(q) || 
       (merchant.nif?.toLowerCase() || '').includes(q) || 
       (merchant.email?.toLowerCase() || '').includes(q) ||
       (merchant.zipCode?.toLowerCase() || '').includes(q) ||
@@ -99,8 +101,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
       {/* GRELHA DE LOJISTAS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredMerchants.length > 0 ? (
-          filteredMerchants.map((m) => {
-            const merchant = m as any;
+          filteredMerchants.map((merchant) => {
             return (
               <div key={merchant.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-all">
                 
@@ -110,7 +111,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
-                      onClick={() => handleDeleteMerchant(merchant.id, merchant.name || merchant.email)}
+                      onClick={() => handleDeleteMerchant(merchant.id, merchant.shopName || merchant.name || merchant.email)}
                       disabled={isDeleting}
                       className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
                       title="Eliminar parceiro e histórico"
@@ -128,7 +129,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                 </div>
 
                 <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 leading-none">
-                  {merchant.name || 'Loja sem nome'}
+                  {merchant.shopName || merchant.name || 'Loja sem nome'}
                 </h3>
 
                 <div className="space-y-2 mb-8">

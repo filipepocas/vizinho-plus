@@ -1,3 +1,5 @@
+// src/features/user/UserDashboard.tsx
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
@@ -23,7 +25,11 @@ import {
   AlertCircle,
   Star,
   CreditCard,
-  Cpu
+  Cpu,
+  MessageSquareMore,
+  HelpCircle,
+  X,
+  Send
 } from 'lucide-react';
 
 const UserDashboard: React.FC = () => {
@@ -33,10 +39,15 @@ const UserDashboard: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('all'); 
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<any | null>(null);
   
-  // Estado para armazenar TODAS as lojas parceiras (Correção Ponto 1)
+  // Estados para o Modal de Suporte Interno
+  const [isSupportOpen, setIsSupportOpen] = useState(false);
+  const [supportMessage, setSupportMessage] = useState('');
+  const [isSendingHelp, setIsSendingHelp] = useState(false);
+
+  // Estado para armazenar TODAS as lojas parceiras
   const [allMerchants, setAllMerchants] = useState<any[]>([]);
 
-  // Estados de Configuração do Sistema (Sincronizados com Admin - Pontos 2 e 3)
+  // Estados de Configuração do Sistema (Sincronizados com Admin)
   const [sysConfig, setSysConfig] = useState({
     supportEmail: 'ajuda@vizinho-plus.pt',
     vantagensUrl: '',
@@ -50,7 +61,7 @@ const UserDashboard: React.FC = () => {
     }
   }, [currentUser?.nif, subscribeToTransactions]);
 
-  // Carregamento Robusto das Configurações do Admin e de todas as Lojas
+  // Carregamento das Configurações do Admin e de todas as Lojas
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -66,7 +77,7 @@ const UserDashboard: React.FC = () => {
           });
         }
 
-        // 2. Carregar Todas as Lojas (Correção Ponto 1: Mostrar lojas mesmo sem saldo)
+        // 2. Carregar Todas as Lojas
         const merchantsQuery = query(collection(db, 'users'), where('role', '==', 'merchant'));
         const merchantsSnap = await getDocs(merchantsQuery);
         const merchantsList = merchantsSnap.docs.map(doc => ({
@@ -87,7 +98,6 @@ const UserDashboard: React.FC = () => {
     const maturationMs = sysConfig.maturationHours * 60 * 60 * 1000;
     const maturityThreshold = Date.now() - maturationMs;
     
-    // Primeiro, mapeamos as transações por loja
     const txBalances: { [key: string]: { available: number, pending: number, total: number } } = {};
 
     transactions.forEach(t => {
@@ -113,7 +123,6 @@ const UserDashboard: React.FC = () => {
       }
     });
 
-    // Agora, cruzamos com todas as lojas existentes para garantir que aparecem (Correção Ponto 1)
     return allMerchants.map(merchant => {
       const balance = txBalances[merchant.uid || merchant.id] || { available: 0, pending: 0, total: 0 };
       return {
@@ -141,14 +150,30 @@ const UserDashboard: React.FC = () => {
     });
   }, [transactions, dateFilter]);
 
-  // CORREÇÃO Ponto 2: Função de Suporte (Email dinâmico do Admin)
-  const handleHelp = () => {
-    const subject = encodeURIComponent(`Suporte Vizinho+: ${currentUser?.name}`);
-    const body = encodeURIComponent(`Olá,\n\nPreciso de ajuda com a minha conta:\n\nNome: ${currentUser?.name}\nNIF: ${currentUser?.nif}\n\n[Descreva aqui o seu problema]`);
+  // Função para processar o envio da mensagem do suporte através do Modal
+  const handleSendSupport = () => {
+    if (!supportMessage.trim()) return;
+    setIsSendingHelp(true);
+    
+    const subject = encodeURIComponent(`SUPORTE VIZINHO+: ${currentUser?.name}`);
+    const body = encodeURIComponent(
+      `MENSAGEM DO CLIENTE:\n${supportMessage}\n\n` +
+      `--------------------------\n` +
+      `DADOS DO TITULAR:\n` +
+      `Nome: ${currentUser?.name}\n` +
+      `NIF: ${currentUser?.nif}\n` +
+      `Email: ${currentUser?.email}`
+    );
+    
     window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
+    
+    setTimeout(() => {
+      setSupportMessage('');
+      setIsSupportOpen(false);
+      setIsSendingHelp(false);
+    }, 500);
   };
 
-  // CORREÇÃO Ponto 3: Função Vantagens (Link dinâmico do Admin)
   const handleVantagens = () => {
     if (sysConfig.vantagensUrl && sysConfig.vantagensUrl.trim() !== "") {
       window.open(sysConfig.vantagensUrl, '_blank');
@@ -171,6 +196,7 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative">
+      {/* MARCA DE ÁGUA DE FUNDO */}
       <div 
         className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
         style={{
@@ -179,6 +205,18 @@ const UserDashboard: React.FC = () => {
           backgroundRepeat: 'repeat'
         }}
       />
+
+      {/* LOGOTIPO FIXO COM CORREÇÃO DE RENDERIZAÇÃO */}
+      <div className="fixed top-6 left-6 z-[100]">
+        <img 
+          src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-color.png?alt=media" 
+          alt="Vizinho+" 
+          className="h-10 w-auto drop-shadow-sm"
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150x50?text=VIZINHO+PLUS';
+          }}
+        />
+      </div>
 
       {selectedTxForFeedback && (
         <FeedbackForm
@@ -191,33 +229,73 @@ const UserDashboard: React.FC = () => {
         />
       )}
 
-      <header className="bg-[#0f172a] px-6 pt-12 pb-32 text-white rounded-b-[60px] shadow-2xl relative overflow-hidden border-b-8 border-[#00d66f]">
+      {/* MODAL DE SUPORTE INTERNO (CAIXA DE MENSAGEM) */}
+      {isSupportOpen && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-[#0f172a]/90 backdrop-blur-md">
+          <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#0f172a] shadow-[12px_12px_0px_#00d66f] p-8 relative">
+            <button 
+              onClick={() => setIsSupportOpen(false)}
+              className="absolute -top-4 -right-4 bg-red-500 text-white p-2 rounded-full border-4 border-[#0f172a] hover:rotate-90 transition-transform"
+            >
+              <X size={24} strokeWidth={3} />
+            </button>
+            
+            <div className="flex items-center gap-3 mb-6">
+              <div className="bg-[#00d66f] p-3 rounded-2xl">
+                <MessageSquareMore size={24} className="text-[#0f172a]" />
+              </div>
+              <div>
+                <h3 className="text-xl font-black uppercase italic leading-none">Pedir Ajuda</h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Suporte Direto</p>
+              </div>
+            </div>
+
+            <textarea 
+              value={supportMessage}
+              onChange={(e) => setSupportMessage(e.target.value)}
+              placeholder="Como podemos ajudar hoje? Escreve aqui a tua mensagem..."
+              className="w-full h-40 bg-slate-50 border-4 border-[#0f172a] rounded-[25px] p-5 font-bold text-[#0f172a] placeholder:text-slate-300 focus:ring-0 outline-none resize-none mb-6"
+            />
+
+            <button 
+              onClick={handleSendSupport}
+              disabled={isSendingHelp || !supportMessage.trim()}
+              className="w-full bg-[#0f172a] text-white py-5 rounded-[25px] flex items-center justify-center gap-3 hover:bg-black transition-all disabled:opacity-50"
+            >
+              <Send size={20} strokeWidth={3} />
+              <span className="font-black uppercase tracking-tighter">Enviar para Suporte</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      <header className="bg-[#0f172a] px-6 pt-16 pb-32 text-white rounded-b-[60px] shadow-2xl relative overflow-hidden border-b-8 border-[#00d66f]">
         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
           <CreditCard size={150} className="rotate-12 text-white" />
         </div>
 
-        <div className="max-w-5xl mx-auto flex justify-between items-center relative z-10">
-          <div className="flex items-center gap-4">
-            <div className="bg-[#00d66f] p-3 rounded-2xl rotate-[-8deg] shadow-[4px_4px_0px_#ffffff]">
-              <img 
-                src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
-                alt="V+" 
-                className="h-6 w-auto"
-              />
-            </div>
-            <div>
-              <h1 className="font-black italic text-2xl tracking-tighter uppercase leading-none">Minha Área</h1>
-              <p className="text-[#00d66f] text-[9px] font-black uppercase tracking-[0.2em] mt-1 italic">Vizinho+ Oficial</p>
-            </div>
-          </div>
-          <div className="flex gap-2">
-            <button onClick={handleHelp} className="bg-white/5 hover:bg-[#00d66f]/20 text-[#00d66f] p-4 rounded-2xl transition-all border-2 border-[#00d66f]/20">
-              <LifeBuoy size={20} strokeWidth={3} />
+        <div className="max-w-5xl mx-auto flex justify-end items-center relative z-10">
+          <div className="flex gap-3">
+            <button 
+              onClick={() => setIsSupportOpen(true)} 
+              title="Pedir Ajuda"
+              className="bg-white/5 hover:bg-[#00d66f] hover:text-[#0f172a] text-[#00d66f] p-4 rounded-2xl transition-all border-2 border-[#00d66f]/20 shadow-lg group"
+            >
+              <HelpCircle size={24} strokeWidth={3} className="group-hover:rotate-12 transition-transform" />
             </button>
-            <button onClick={() => logout()} className="bg-white/5 hover:bg-red-500 text-white p-4 rounded-2xl transition-all border-2 border-white/10">
-              <LogOut size={20} strokeWidth={3} />
+            <button 
+              onClick={() => logout()} 
+              title="Sair"
+              className="bg-white/5 hover:bg-red-500 text-white p-4 rounded-2xl transition-all border-2 border-white/10 shadow-lg"
+            >
+              <LogOut size={24} strokeWidth={3} />
             </button>
           </div>
+        </div>
+        
+        <div className="max-w-5xl mx-auto mt-8 text-center relative z-10">
+          <h1 className="font-black italic text-4xl tracking-tighter uppercase leading-none">Minha Área</h1>
+          <p className="text-[#00d66f] text-xs font-black uppercase tracking-[0.4em] mt-2 italic">Cliente Oficial</p>
         </div>
       </header>
 
@@ -227,14 +305,13 @@ const UserDashboard: React.FC = () => {
         <div className="relative -mt-24 mb-12 perspective-1000">
           <div className="bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-black rounded-[30px] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.5)] border border-white/20 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between group transition-all duration-500 hover:scale-[1.02] border-t-white/30 border-l-white/20">
             <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
-            <div className="absolute top-[-20%] right-[-10%] w-[70%] h-[120%] bg-[#00d66f] opacity-[0.07] rounded-full blur-[100px]"></div>
             
             <div className="flex justify-between items-start relative z-10">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-8 bg-gradient-to-br from-[#bf953f] to-[#fcf6ba] rounded-md shadow-inner flex items-center justify-center border border-white/20">
                     <Cpu size={20} className="text-black/60" />
                 </div>
-                <span className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Vizinho+</span>
+                <span className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Premium</span>
               </div>
               <img 
                 src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
@@ -244,7 +321,7 @@ const UserDashboard: React.FC = () => {
             </div>
 
             <div className="mt-8 relative z-10">
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-2">Saldo Acumulado</p>
+              <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-2">Saldo Disponível</p>
               <div className="flex items-baseline gap-2">
                 <span className="text-5xl font-black text-white tracking-tighter italic drop-shadow-lg">
                   {totalAvailable.toFixed(2)}
@@ -261,7 +338,7 @@ const UserDashboard: React.FC = () => {
                 </h2>
               </div>
               <div className="text-right">
-                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">NIF / Tax ID</p>
+                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">NIF Associado</p>
                 <p className="text-lg font-mono font-black text-white tracking-[0.2em]">{currentUser?.nif}</p>
               </div>
             </div>
@@ -269,7 +346,7 @@ const UserDashboard: React.FC = () => {
         </div>
 
         {/* QR CODE */}
-        <div className="bg-white rounded-[40px] p-8 shadow-xl border-4 border-[#0f172a] mb-12 flex flex-col items-center gap-6 group hover:border-[#00d66f] transition-colors">
+        <div className="bg-white rounded-[40px] p-8 shadow-xl border-4 border-[#0f172a] mb-12 flex flex-col items-center gap-6 group hover:border-[#00d66f] transition-colors relative">
           <div className="bg-white p-5 rounded-[30px] border-4 border-[#0f172a] group-hover:border-[#00d66f] shadow-[8px_8px_0px_#0f172a] transition-all">
             <QRCodeSVG 
               value={currentUser?.nif || ""} 
@@ -280,8 +357,8 @@ const UserDashboard: React.FC = () => {
             />
           </div>
           <div className="text-center">
-            <p className="text-[11px] font-black text-[#0f172a] uppercase tracking-widest mb-1">O TEU CÓDIGO NIF</p>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight px-8">Apresenta ao lojista para acumular ou usar saldo</p>
+            <p className="text-[11px] font-black text-[#0f172a] uppercase tracking-widest mb-1">IDENTIFICAÇÃO RÁPIDA</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight px-8">Usa este código no lojista para movimentos imediatos</p>
           </div>
         </div>
 
@@ -302,7 +379,7 @@ const UserDashboard: React.FC = () => {
             <div className="bg-[#00d66f] p-3 rounded-2xl group-hover:rotate-12 transition-transform">
               <Store size={28} className="text-[#0f172a]" strokeWidth={3} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Explorar Lojas</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Lojas Parceiras</span>
           </button>
           
           <button 
@@ -312,15 +389,15 @@ const UserDashboard: React.FC = () => {
             <div className="bg-slate-100 p-3 rounded-2xl group-hover:rotate-[-12deg] transition-transform">
               <Settings size={28} strokeWidth={3} />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Definições</span>
+            <span className="text-[10px] font-black uppercase tracking-widest">Minha Conta</span>
           </button>
         </div>
 
-        {/* LISTA DE SALDOS (CORREÇÃO PONTO 1: Mostra todas as lojas da base de dados) */}
+        {/* LISTA DE SALDOS */}
         <div className="mb-12">
           <div className="flex items-center gap-3 mb-6 ml-2">
             <Zap size={20} className="text-[#00d66f]" fill="#00d66f" />
-            <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">As Nossas Lojas Parceiras</h4>
+            <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">Saldos por Estabelecimento</h4>
           </div>
           <div className="flex gap-4 overflow-x-auto pb-6 no-scrollbar -mx-6 px-6">
             {merchantBalances.length > 0 ? merchantBalances.map((m, idx) => (
@@ -333,12 +410,12 @@ const UserDashboard: React.FC = () => {
                 <p className="text-4xl font-black text-[#0f172a] mb-6 italic tracking-tighter relative z-10">{m.total.toFixed(2)}€</p>
                 <div className="flex justify-between items-end pt-4 border-t-4 border-slate-50 relative z-10">
                   <div>
-                    <p className="text-[9px] font-black text-[#00d66f] uppercase tracking-tighter mb-1">Disponível</p>
+                    <p className="text-[9px] font-black text-[#00d66f] uppercase tracking-tighter mb-1">Livre para Uso</p>
                     <p className="text-2xl font-black text-[#0f172a]">{m.available.toFixed(2)}€</p>
                   </div>
                   {m.pending > 0 && (
                     <div className="text-right">
-                      <p className="text-[9px] font-black text-orange-400 uppercase tracking-tighter">Em maturação</p>
+                      <p className="text-[9px] font-black text-orange-400 uppercase tracking-tighter">Aguardando</p>
                       <p className="text-sm font-black text-orange-500 italic">+{m.pending.toFixed(2)}€</p>
                     </div>
                   )}
@@ -346,7 +423,7 @@ const UserDashboard: React.FC = () => {
               </div>
             )) : (
                 <div className="w-full bg-slate-100/50 p-12 rounded-[35px] border-4 border-dashed border-slate-200 text-center">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">A carregar lojas parceiras...</p>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">A atualizar parceiros...</p>
                 </div>
             )}
           </div>
@@ -357,14 +434,14 @@ const UserDashboard: React.FC = () => {
           <div className="flex justify-between items-center px-2">
             <div className="flex items-center gap-3">
                 <History size={20} className="text-[#0f172a]" />
-                <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">Movimentos</h4>
+                <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">Últimos Movimentos</h4>
             </div>
             <select 
                 value={dateFilter}
                 onChange={(e) => setDateFilter(e.target.value)}
                 className="bg-white border-4 border-[#0f172a] rounded-xl px-4 py-2 text-[10px] font-black uppercase outline-none focus:bg-[#00d66f] transition-all cursor-pointer shadow-[4px_4px_0px_#0f172a]"
             >
-                <option value="all">Sempre</option>
+                <option value="all">Todo o Tempo</option>
                 <option value="7d">7 Dias</option>
                 <option value="30d">30 Dias</option>
             </select>
@@ -413,12 +490,18 @@ const UserDashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* BOTÃO FLUTUANTE DE SUPORTE (PONTO 2: Email dinâmico) */}
+      {/* BOTÃO FLUTUANTE QUE ABRE O MODAL DE SUPORTE */}
       <button 
-        onClick={handleHelp}
-        className="fixed bottom-6 right-6 bg-[#00d66f] text-[#0f172a] p-4 rounded-full shadow-2xl hover:scale-110 transition-all z-40 border-4 border-[#0f172a] active:scale-95"
+        onClick={() => setIsSupportOpen(true)}
+        className="fixed bottom-8 right-8 bg-[#00d66f] text-[#0f172a] p-5 rounded-[25px] shadow-[8px_8px_0px_#0f172a] hover:scale-110 hover:-translate-y-1 transition-all z-[100] border-4 border-[#0f172a] active:scale-95 group"
       >
-        <LifeBuoy size={28} strokeWidth={3} />
+        <div className="flex items-center gap-3">
+          <MessageSquareMore size={32} strokeWidth={3} className="group-hover:rotate-12 transition-transform" />
+          <div className="flex flex-col items-start leading-none">
+            <span className="font-black uppercase text-[10px] tracking-widest">Suporte</span>
+            <span className="font-bold uppercase text-[7px] opacity-70">Vizinho+</span>
+          </div>
+        </div>
       </button>
     </div>
   );
