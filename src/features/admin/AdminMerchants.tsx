@@ -35,13 +35,14 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   const { deleteUserWithHistory, isLoading: isDeleting } = useStore();
 
   const filteredMerchants = merchants.filter(m => {
+    const merchant = m as any; // Cast para evitar erros de tipo até atualizarmos a interface global
     const q = searchQuery.toLowerCase();
     return (
-      (m.name?.toLowerCase() || '').includes(q) || 
-      (m.nif?.toLowerCase() || '').includes(q) || 
-      (m.email?.toLowerCase() || '').includes(q) ||
-      (m.zipCode?.toLowerCase() || '').includes(q) ||
-      (m.freguesia?.toLowerCase() || '').includes(q)
+      (merchant.name?.toLowerCase() || '').includes(q) || 
+      (merchant.nif?.toLowerCase() || '').includes(q) || 
+      (merchant.email?.toLowerCase() || '').includes(q) ||
+      (merchant.zipCode?.toLowerCase() || '').includes(q) ||
+      (merchant.freguesia?.toLowerCase() || '').includes(q)
     );
   });
 
@@ -98,89 +99,92 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
       {/* GRELHA DE LOJISTAS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredMerchants.length > 0 ? (
-          filteredMerchants.map((m) => (
-            <div key={m.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-all">
-              
-              <div className="flex justify-between items-start mb-6">
-                <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
-                  <Store size={24} strokeWidth={2.5} />
-                </div>
-                <div className="flex items-center gap-2">
-                  <button 
-                    onClick={() => handleDeleteMerchant(m.id, m.name || m.email)}
-                    disabled={isDeleting}
-                    className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
-                    title="Eliminar parceiro e histórico"
-                  >
-                    {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
-                  </button>
-                  <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-[0.15em] border-2 ${
-                    m.status === 'active' 
-                      ? 'bg-green-50 text-green-600 border-green-200' 
-                      : 'bg-amber-50 text-amber-600 border-amber-200'
-                  }`}>
-                    {m.status || 'Pendente'}
-                  </span>
-                </div>
-              </div>
-
-              <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 leading-none">
-                {m.name || 'Loja sem nome'}
-              </h3>
-
-              <div className="space-y-2 mb-8">
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Mail size={12} className="text-[#00d66f]" />
-                  <span className="text-[10px] font-bold lowercase tracking-tight truncate">{m.email}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Hash size={12} className="text-[#00d66f]" />
-                  <span className="text-[10px] font-bold uppercase tracking-tight">NIF: {m.nif || '---'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-400">
-                  <Locate size={12} className="text-[#00d66f]" />
-                  <span className="text-[10px] font-bold uppercase tracking-tight">CP: {m.zipCode || '0000-000'}</span>
-                </div>
-                <div className="flex items-center gap-2 text-slate-400">
-                  <MapPin size={12} />
-                  <span className="text-[10px] font-bold uppercase tracking-tight truncate">{m.freguesia || 'Localização não definida'}</span>
-                </div>
-              </div>
-
-              {/* DASH DE CASHBACK */}
-              <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between border-b-4 border-[#00d66f]">
-                <div className="flex items-center gap-3">
-                  <div className="bg-[#00d66f]/20 p-2 rounded-lg">
-                    <Percent size={14} className="text-[#00d66f]" />
+          filteredMerchants.map((m) => {
+            const merchant = m as any;
+            return (
+              <div key={merchant.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-all">
+                
+                <div className="flex justify-between items-start mb-6">
+                  <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
+                    <Store size={24} strokeWidth={2.5} />
                   </div>
-                  <span className="text-[10px] font-black text-white uppercase tracking-widest">Configuração</span>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => handleDeleteMerchant(merchant.id, merchant.name || merchant.email)}
+                      disabled={isDeleting}
+                      className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      title="Eliminar parceiro e histórico"
+                    >
+                      {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                    </button>
+                    <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-[0.15em] border-2 ${
+                      merchant.status === 'active' 
+                        ? 'bg-green-50 text-green-600 border-green-200' 
+                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                    }`}>
+                      {merchant.status || 'Pendente'}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-xl font-black text-[#00d66f] italic">{m.cashbackPercent || 0}%</span>
-              </div>
 
-              {/* BOTÕES DE ACÇÃO */}
-              <div className="mt-auto flex gap-3">
-                {m.status !== 'active' ? (
-                  <button 
-                    onClick={() => onUpdateStatus(m.id, 'active')}
-                    className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
-                  >
-                    <CheckCircle2 size={14} strokeWidth={3} /> Ativar
+                <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 leading-none">
+                  {merchant.name || 'Loja sem nome'}
+                </h3>
+
+                <div className="space-y-2 mb-8">
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Mail size={12} className="text-[#00d66f]" />
+                    <span className="text-[10px] font-bold lowercase tracking-tight truncate">{merchant.email}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Hash size={12} className="text-[#00d66f]" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">NIF: {merchant.nif || '---'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <Locate size={12} className="text-[#00d66f]" />
+                    <span className="text-[10px] font-bold uppercase tracking-tight">CP: {merchant.zipCode || '0000-000'}</span>
+                  </div>
+                  <div className="flex items-center gap-2 text-slate-400">
+                    <MapPin size={12} />
+                    <span className="text-[10px] font-bold uppercase tracking-tight truncate">{merchant.freguesia || 'Localização não definida'}</span>
+                  </div>
+                </div>
+
+                {/* DASH DE CASHBACK */}
+                <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between border-b-4 border-[#00d66f]">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-[#00d66f]/20 p-2 rounded-lg">
+                      <Percent size={14} className="text-[#00d66f]" />
+                    </div>
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Configuração</span>
+                  </div>
+                  <span className="text-xl font-black text-[#00d66f] italic">{merchant.cashbackPercent || 0}%</span>
+                </div>
+
+                {/* BOTÕES DE ACÇÃO */}
+                <div className="mt-auto flex gap-3">
+                  {merchant.status !== 'active' ? (
+                    <button 
+                      onClick={() => onUpdateStatus(merchant.id, 'active')}
+                      className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
+                    >
+                      <CheckCircle2 size={14} strokeWidth={3} /> Ativar
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => onUpdateStatus(merchant.id, 'disabled')}
+                      className="flex-1 bg-white text-slate-300 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:text-red-500 hover:border-red-500 border-2 border-slate-100 transition-all flex items-center justify-center gap-2"
+                    >
+                      <XCircle size={14} strokeWidth={3} /> Suspender
+                    </button>
+                  )}
+                  <button className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:bg-[#0a2540] hover:text-white transition-all border-2 border-transparent">
+                    <Settings size={16} />
                   </button>
-                ) : (
-                  <button 
-                    onClick={() => onUpdateStatus(m.id, 'disabled')}
-                    className="flex-1 bg-white text-slate-300 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:text-red-500 hover:border-red-500 border-2 border-slate-100 transition-all flex items-center justify-center gap-2"
-                  >
-                    <XCircle size={14} strokeWidth={3} /> Suspender
-                  </button>
-                )}
-                <button className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:bg-[#0a2540] hover:text-white transition-all border-2 border-transparent">
-                  <Settings size={16} />
-                </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="col-span-full p-20 bg-white border-2 border-dashed border-slate-200 rounded-[40px] flex flex-col items-center gap-4 opacity-40">
             <AlertCircle size={48} />

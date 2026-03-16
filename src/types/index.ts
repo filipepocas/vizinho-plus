@@ -30,8 +30,8 @@ export interface Operator {
 
 /**
  * Interface Principal de Utilizador (User)
- * Unifica Client e Merchant para evitar redundância (Pontos 1 e 11).
- * Resolve o conflito de zipCode vs postalCode (Ponto 12).
+ * Unifica Client e Merchant para evitar redundância.
+ * Resolve definitivamente o conflito de zipCode vs postalCode.
  */
 export interface User {
   id: string;
@@ -45,6 +45,12 @@ export interface User {
   
   // Campos específicos de Cliente
   customerNumber?: string;
+  // Carteira global (usada no AdminUsers e Dashboards)
+  wallet?: {
+    available: number;
+    pending: number;
+  };
+  // Carteiras por loja
   storeWallets?: { 
     [merchantId: string]: WalletData 
   };
@@ -56,9 +62,9 @@ export interface User {
   category?: string;
   operators?: Operator[];
 
-  // Endereço Uniformizado (Apenas postalCode - Ponto 12)
+  // Endereço Uniformizado (zipCode para manter compatibilidade com Firebase/UI)
   address?: string;
-  postalCode?: string; 
+  zipCode?: string; 
   freguesia?: string;
   
   createdAt: FirestoreTimestamp;

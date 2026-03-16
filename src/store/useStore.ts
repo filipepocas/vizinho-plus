@@ -17,14 +17,24 @@ import {
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-import { Transaction, User as UserProfile } from '../types';
+import { Transaction, User as UserProfile, WalletData } from '../types';
 
 /**
- * Função auxiliar para garantir precisão matemática (Ponto 4 e 15)
+ * Função auxiliar para garantir precisão matemática
  * Arredonda para 2 casas decimais para evitar erros de floating point.
  */
 const roundToTwo = (num: number): number => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
+};
+
+/**
+ * Calcula o saldo global (wallet) com base nas carteiras individuais de cada loja
+ */
+const calculateGlobalWallet = (storeWallets: { [key: string]: WalletData }) => {
+  return Object.values(storeWallets).reduce((acc, curr) => ({
+    available: roundToTwo(acc.available + (curr.available || 0)),
+    pending: roundToTwo(acc.pending + (curr.pending || 0))
+  }), { available: 0, pending: 0 });
 };
 
 interface StoreState {
@@ -98,10 +108,6 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  /**
-   * Ponto 2: Processamento Atómico de Cashback Pendente
-   * Verifica transações e atualiza saldos dentro de uma transação Firestore.
-   */
   processPendingCashback: async (userId: string) => {
     try {
       const now = new Date();
@@ -126,15 +132,13 @@ export const useStore = create<StoreState>((set, get) => ({
         const storeWallets = { ...(userData.storeWallets || {}) };
         let hasChanges = false;
 
-        // Processar cada transação detetada no snapshot
         for (const transDoc of snapshot.docs) {
           const transRef = transDoc.ref;
-          // Re-verificar dentro da transação para garantir atomicidade
           const currentTransSnapshot = await transaction.get(transRef);
           const transData = currentTransSnapshot.data() as Transaction;
 
           if (transData.status === 'pending') {
-            const createdAt = (transData.createdAt as Timestamp).toDate();
+            const createdAt = (transData.createdAt as any as Timestamp).toDate();
 
             if (createdAt <= fortyEightHoursAgo) {
               const mId = transData.merchantId;
@@ -157,7 +161,9 @@ export const useStore = create<StoreState>((set, get) => ({
         }
 
         if (hasChanges) {
-          transaction.update(clientRef, { storeWallets });
+          // Recalcular saldo global antes de guardar
+          const wallet = calculateGlobalWallet(storeWallets);
+          transaction.update(clientRef, { storeWallets, wallet });
         }
       });
     } catch (error) {
@@ -165,9 +171,6 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  /**
-   * Ponto 4, 14 e 15: Adição de Transação com Precisão Matemática
-   */
   addTransaction: async (transactionData) => {
     const clientRef = doc(db, 'users', transactionData.clientId);
     const mId = transactionData.merchantId;
@@ -220,15 +223,18 @@ export const useStore = create<StoreState>((set, get) => ({
           storeWallets[mId].lastUpdate = serverTimestamp() as any;
         }
 
+        // Recalcular saldo global
+        const wallet = calculateGlobalWallet(storeWallets);
+
         const newTransRef = doc(collection(db, 'transactions'));
         transaction.set(newTransRef, {
           ...transactionData,
-          cashbackAmount: amount, // Garante valor arredondado
+          cashbackAmount: amount,
           status: transactionData.type === 'earn' ? 'pending' : 'available',
           createdAt: serverTimestamp(),
         });
 
-        transaction.update(clientRef, { storeWallets });
+        transaction.update(clientRef, { storeWallets, wallet });
       });
     } catch (error) {
       console.error("Erro na transação atómica:", error);
@@ -236,9 +242,6 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  /**
-   * Ponto 3: Vulnerabilidade em cancelTransaction corrigida
-   */
   cancelTransaction: async (transactionId) => {
     try {
       await runTransaction(db, async (transaction) => {
@@ -267,22 +270,22 @@ export const useStore = create<StoreState>((set, get) => ({
 
         if (transData.type === 'earn') {
           if (transData.status === 'available') {
-            // Se já estava disponível, remove do disponível
             storeWallets[mId].available = roundToTwo(Math.max(0, currentAvailable - amountToCancel));
           } else {
-            // Se ainda estava pendente, remove do pendente
             storeWallets[mId].pending = roundToTwo(Math.max(0, currentPending - amountToCancel));
           }
         } 
         else if (transData.type === 'redeem') {
-          // Devolve o valor ao saldo disponível
           storeWallets[mId].available = roundToTwo(currentAvailable + amountToCancel);
         }
 
         storeWallets[mId].lastUpdate = serverTimestamp() as any;
 
+        // Recalcular saldo global
+        const wallet = calculateGlobalWallet(storeWallets);
+
         transaction.update(transRef, { status: 'cancelled' });
-        transaction.update(clientRef, { storeWallets });
+        transaction.update(clientRef, { storeWallets, wallet });
       });
     } catch (error) {
       console.error("Erro ao anular transação:", error);
@@ -313,21 +316,16 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
-  /**
-   * Ponto 5: Gestão de Listeners no initializeAuth blindada
-   */
   initializeAuth: () => {
     let userUnsubscribe: (() => void) | null = null;
 
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
-      // Limpeza rigorosa de subscrição anterior
       if (userUnsubscribe) {
         userUnsubscribe();
         userUnsubscribe = null;
       }
 
       if (user) {
-        // Processar cashbacks pendentes ao entrar
         get().processPendingCashback(user.uid);
 
         userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {

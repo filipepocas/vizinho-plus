@@ -18,12 +18,14 @@ import {
 } from 'lucide-react';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { currentUser, deleteUserWithHistory, logout } = useStore();
+  const { currentUser: rawUser, deleteUserWithHistory, logout } = useStore();
+  const currentUser = rawUser as any; // Cast para evitar erros de tipo TS2339
+  
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Estados do formulário
+  // Estados do formulário baseados no currentUser com fallback para string vazia
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
     phone: currentUser?.phone || '',
