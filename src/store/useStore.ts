@@ -1,3 +1,5 @@
+// src/store/useStore.ts
+
 import { create } from 'zustand';
 import { 
   collection, 
@@ -8,17 +10,22 @@ import {
   serverTimestamp,
   setDoc,
   doc,
-  getDoc,
   getDocs,
-  updateDoc,
   runTransaction,
   writeBatch,
-  deleteDoc,
   Timestamp
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, User as UserProfile } from '../types';
+
+/**
+ * Função auxiliar para garantir precisão matemática (Ponto 4 e 15)
+ * Arredonda para 2 casas decimais para evitar erros de floating point.
+ */
+const roundToTwo = (num: number): number => {
+  return Math.round((num + Number.EPSILON) * 100) / 100;
+};
 
 interface StoreState {
   transactions: Transaction[];
@@ -91,13 +98,15 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  // NOVO: Função para processar cashback pendente após 48h
+  /**
+   * Ponto 2: Processamento Atómico de Cashback Pendente
+   * Verifica transações e atualiza saldos dentro de uma transação Firestore.
+   */
   processPendingCashback: async (userId: string) => {
     try {
       const now = new Date();
       const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
       
-      // Procurar transações pendentes antigas
       const q = query(
         collection(db, 'transactions'),
         where('clientId', '==', userId),
@@ -117,27 +126,35 @@ export const useStore = create<StoreState>((set, get) => ({
         const storeWallets = { ...(userData.storeWallets || {}) };
         let hasChanges = false;
 
-        snapshot.docs.forEach((transDoc) => {
-          const transData = transDoc.data() as Transaction;
-          const createdAt = (transData.createdAt as Timestamp).toDate();
+        // Processar cada transação detetada no snapshot
+        for (const transDoc of snapshot.docs) {
+          const transRef = transDoc.ref;
+          // Re-verificar dentro da transação para garantir atomicidade
+          const currentTransSnapshot = await transaction.get(transRef);
+          const transData = currentTransSnapshot.data() as Transaction;
 
-          if (createdAt <= fortyEightHoursAgo) {
-            const mId = transData.merchantId;
-            const amount = transData.cashbackAmount;
+          if (transData.status === 'pending') {
+            const createdAt = (transData.createdAt as Timestamp).toDate();
 
-            // Atualizar carteira da loja
-            if (!storeWallets[mId]) {
-              storeWallets[mId] = { available: 0, pending: 0, merchantName: transData.merchantName };
+            if (createdAt <= fortyEightHoursAgo) {
+              const mId = transData.merchantId;
+              const amount = roundToTwo(transData.cashbackAmount);
+
+              if (!storeWallets[mId]) {
+                storeWallets[mId] = { available: 0, pending: 0, merchantName: transData.merchantName };
+              }
+
+              storeWallets[mId].pending = roundToTwo(Math.max(0, (storeWallets[mId].pending || 0) - amount));
+              storeWallets[mId].available = roundToTwo((storeWallets[mId].available || 0) + amount);
+              
+              transaction.update(transRef, { 
+                status: 'available',
+                maturedAt: serverTimestamp() 
+              });
+              hasChanges = true;
             }
-
-            storeWallets[mId].pending = Math.max(0, (storeWallets[mId].pending || 0) - amount);
-            storeWallets[mId].available = (storeWallets[mId].available || 0) + amount;
-            
-            // Marcar transação como disponível
-            transaction.update(transDoc.ref, { status: 'available' });
-            hasChanges = true;
           }
-        });
+        }
 
         if (hasChanges) {
           transaction.update(clientRef, { storeWallets });
@@ -148,6 +165,9 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  /**
+   * Ponto 4, 14 e 15: Adição de Transação com Precisão Matemática
+   */
   addTransaction: async (transactionData) => {
     const clientRef = doc(db, 'users', transactionData.clientId);
     const mId = transactionData.merchantId;
@@ -158,63 +178,57 @@ export const useStore = create<StoreState>((set, get) => ({
         if (!clientDoc.exists()) throw new Error("Cliente não encontrado.");
 
         const userData = clientDoc.data() as UserProfile;
+        const storeWallets = { ...(userData.storeWallets || {}) };
         
-        const storeWallets = userData.storeWallets || {};
-        const currentStoreWallet = storeWallets[mId] || { 
-          available: 0, 
-          pending: 0, 
-          merchantName: transactionData.merchantName 
-        };
-
-        const currentAvailable = currentStoreWallet.available || 0;
-        const currentPending = currentStoreWallet.pending || 0;
-
-        let walletUpdate = {};
-
-        if (transactionData.type === 'earn') {
-          walletUpdate = {
-            [`storeWallets.${mId}.pending`]: currentPending + transactionData.cashbackAmount,
-            [`storeWallets.${mId}.merchantName`]: transactionData.merchantName,
-            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
-          };
-        } 
-        else if (transactionData.type === 'redeem') {
-          if (currentAvailable < transactionData.cashbackAmount) {
-            throw new Error("Saldo disponível insuficiente nesta loja.");
-          }
-          walletUpdate = {
-            [`storeWallets.${mId}.available`]: currentAvailable - transactionData.cashbackAmount,
-            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
+        if (!storeWallets[mId]) {
+          storeWallets[mId] = { 
+            available: 0, 
+            pending: 0, 
+            merchantName: transactionData.merchantName 
           };
         }
+
+        const currentAvailable = roundToTwo(storeWallets[mId].available || 0);
+        const currentPending = roundToTwo(storeWallets[mId].pending || 0);
+        const amount = roundToTwo(transactionData.cashbackAmount);
+
+        if (transactionData.type === 'earn') {
+          storeWallets[mId].pending = roundToTwo(currentPending + amount);
+          storeWallets[mId].lastUpdate = serverTimestamp() as any;
+        } 
+        else if (transactionData.type === 'redeem') {
+          if (currentAvailable < amount) {
+            throw new Error("Saldo disponível insuficiente nesta loja.");
+          }
+          storeWallets[mId].available = roundToTwo(currentAvailable - amount);
+          storeWallets[mId].lastUpdate = serverTimestamp() as any;
+        }
         else if (transactionData.type === 'cancel' || transactionData.type === 'subtract') {
-          const totalToSubtract = transactionData.cashbackAmount;
           let newAvailable = currentAvailable;
           let newPending = currentPending;
 
-          if (currentAvailable >= totalToSubtract) {
-            newAvailable = currentAvailable - totalToSubtract;
+          if (currentAvailable >= amount) {
+            newAvailable = roundToTwo(currentAvailable - amount);
           } else {
             newAvailable = 0;
-            const remaining = totalToSubtract - currentAvailable;
-            newPending = Math.max(0, currentPending - remaining);
+            const remaining = roundToTwo(amount - currentAvailable);
+            newPending = roundToTwo(Math.max(0, currentPending - remaining));
           }
 
-          walletUpdate = {
-            [`storeWallets.${mId}.available`]: newAvailable,
-            [`storeWallets.${mId}.pending`]: newPending,
-            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
-          };
+          storeWallets[mId].available = newAvailable;
+          storeWallets[mId].pending = newPending;
+          storeWallets[mId].lastUpdate = serverTimestamp() as any;
         }
 
         const newTransRef = doc(collection(db, 'transactions'));
         transaction.set(newTransRef, {
           ...transactionData,
+          cashbackAmount: amount, // Garante valor arredondado
           status: transactionData.type === 'earn' ? 'pending' : 'available',
           createdAt: serverTimestamp(),
         });
 
-        transaction.update(clientRef, walletUpdate);
+        transaction.update(clientRef, { storeWallets });
       });
     } catch (error) {
       console.error("Erro na transação atómica:", error);
@@ -222,6 +236,9 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  /**
+   * Ponto 3: Vulnerabilidade em cancelTransaction corrigida
+   */
   cancelTransaction: async (transactionId) => {
     try {
       await runTransaction(db, async (transaction) => {
@@ -240,41 +257,32 @@ export const useStore = create<StoreState>((set, get) => ({
         if (!clientDoc.exists()) throw new Error("Cliente não encontrado.");
         
         const userData = clientDoc.data() as UserProfile;
-        const storeWallets = userData.storeWallets || {};
-        const currentStoreWallet = storeWallets[mId] || { available: 0, pending: 0, merchantName: transData.merchantName };
+        const storeWallets = { ...(userData.storeWallets || {}) };
+        
+        if (!storeWallets[mId]) throw new Error("Carteira da loja não encontrada.");
 
-        const currentAvailable = currentStoreWallet.available || 0;
-        const currentPending = currentStoreWallet.pending || 0;
-        const amountToCancel = transData.cashbackAmount;
-
-        let walletUpdate = {};
+        const currentAvailable = roundToTwo(storeWallets[mId].available || 0);
+        const currentPending = roundToTwo(storeWallets[mId].pending || 0);
+        const amountToCancel = roundToTwo(transData.cashbackAmount);
 
         if (transData.type === 'earn') {
-          let newAvailable = currentAvailable;
-          let newPending = currentPending;
-
-          // Se a transação já estava disponível, retira do disponível. Se estava pendente, retira do pendente.
           if (transData.status === 'available') {
-            newAvailable = Math.max(0, currentAvailable - amountToCancel);
+            // Se já estava disponível, remove do disponível
+            storeWallets[mId].available = roundToTwo(Math.max(0, currentAvailable - amountToCancel));
           } else {
-            newPending = Math.max(0, currentPending - amountToCancel);
+            // Se ainda estava pendente, remove do pendente
+            storeWallets[mId].pending = roundToTwo(Math.max(0, currentPending - amountToCancel));
           }
-
-          walletUpdate = {
-            [`storeWallets.${mId}.available`]: newAvailable,
-            [`storeWallets.${mId}.pending`]: newPending,
-            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
-          };
         } 
         else if (transData.type === 'redeem') {
-          walletUpdate = {
-            [`storeWallets.${mId}.available`]: currentAvailable + amountToCancel,
-            [`storeWallets.${mId}.lastUpdate`]: serverTimestamp()
-          };
+          // Devolve o valor ao saldo disponível
+          storeWallets[mId].available = roundToTwo(currentAvailable + amountToCancel);
         }
 
+        storeWallets[mId].lastUpdate = serverTimestamp() as any;
+
         transaction.update(transRef, { status: 'cancelled' });
-        transaction.update(clientRef, walletUpdate);
+        transaction.update(clientRef, { storeWallets });
       });
     } catch (error) {
       console.error("Erro ao anular transação:", error);
@@ -305,17 +313,21 @@ export const useStore = create<StoreState>((set, get) => ({
     });
   },
 
+  /**
+   * Ponto 5: Gestão de Listeners no initializeAuth blindada
+   */
   initializeAuth: () => {
     let userUnsubscribe: (() => void) | null = null;
 
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+      // Limpeza rigorosa de subscrição anterior
       if (userUnsubscribe) {
         userUnsubscribe();
         userUnsubscribe = null;
       }
 
       if (user) {
-        // Ao detetar o utilizador, corremos a verificação de 48h
+        // Processar cashbacks pendentes ao entrar
         get().processPendingCashback(user.uid);
 
         userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {

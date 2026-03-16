@@ -24,7 +24,8 @@ import {
   RotateCcw,
   LifeBuoy,
   Crown,
-  Users
+  Users,
+  Loader2
 } from 'lucide-react';
 
 const MerchantDashboard: React.FC = () => {
@@ -38,6 +39,7 @@ const MerchantDashboard: React.FC = () => {
   const [amount, setAmount] = useState('');
   const [documentNumber, setDocumentNumber] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
   
   const [foundClient, setFoundClient] = useState<any>(null);
@@ -51,7 +53,6 @@ const MerchantDashboard: React.FC = () => {
   const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
   
-  // Configurações do Sistema
   const [supportEmail, setSupportEmail] = useState('suporte@vizinhoplus.pt');
   const [vipUrl, setVipUrl] = useState('');
 
@@ -91,7 +92,6 @@ const MerchantDashboard: React.FC = () => {
     return /^[0-9]{9}$/.test(cleanNif);
   }, [cardNumber]);
 
-  // Carregar Configurações Globais (Suporte e VIP)
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -111,7 +111,6 @@ const MerchantDashboard: React.FC = () => {
   useEffect(() => {
     const fetchCustomers = async () => {
       if (!currentUser?.id || view !== 'customers') return;
-      
       try {
         setIsLoading(true);
         const q = query(
@@ -119,7 +118,6 @@ const MerchantDashboard: React.FC = () => {
           where('role', '==', 'client'),
           where(`storeWallets.${currentUser.id}.available`, '>', 0)
         );
-        
         const snap = await getDocs(q);
         const customersData = snap.docs.map(doc => ({
           id: doc.id,
@@ -139,6 +137,7 @@ const MerchantDashboard: React.FC = () => {
     const searchClient = async () => {
       const cleanNif = cardNumber.trim().replace(/\s/g, '');
       if (cleanNif.length === 9) {
+        setIsSearching(true);
         try {
           const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
           const snap = await getDocs(q);
@@ -150,12 +149,15 @@ const MerchantDashboard: React.FC = () => {
         } catch (err) {
           console.error("Erro na busca:", err);
           setFoundClient(null);
+        } finally {
+          setIsSearching(false);
         }
       } else {
         setFoundClient(null);
       }
     };
-    searchClient();
+    const timer = setTimeout(searchClient, 500);
+    return () => clearTimeout(timer);
   }, [cardNumber]);
 
   useEffect(() => {
@@ -178,7 +180,7 @@ const MerchantDashboard: React.FC = () => {
         () => {}
       );
       return () => {
-        try { scanner.clear(); } catch (e) { console.error(e); }
+        try { scanner.clear(); } catch (e) { console.error("Scanner Cleanup:", e); }
       };
     }
   }, [showScanner]);
@@ -205,7 +207,7 @@ const MerchantDashboard: React.FC = () => {
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!currentUser) return;
+    if (!currentUser || isLoading) return;
     setIsLoading(true);
     try {
       const updates = {
@@ -256,6 +258,7 @@ const MerchantDashboard: React.FC = () => {
   };
 
   const processAction = async (type: 'earn' | 'redeem' | 'cancel') => {
+    if (isLoading) return;
     const val = parseFloat(amount);
     const cleanNif = cardNumber.trim().replace(/\s/g, '');
 
@@ -276,7 +279,6 @@ const MerchantDashboard: React.FC = () => {
 
     try {
       setIsLoading(true);
-
       const transactionData = {
         clientId: foundClient.id,
         clientNif: cleanNif,
@@ -295,7 +297,6 @@ const MerchantDashboard: React.FC = () => {
       };
 
       await addTransaction(transactionData as any);
-
       setMessage({ type: 'success', text: "Operação Concluída!" });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
@@ -399,8 +400,8 @@ const MerchantDashboard: React.FC = () => {
                     </label>
                     {cardNumber.length > 0 && (
                       <span className={`text-[10px] font-black uppercase flex items-center gap-1 ${isNifValid ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                        {isNifValid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
-                        {isNifValid ? 'NIF Válido' : 'Precisa de 9 dígitos'}
+                        {isSearching ? <Loader2 size={12} className="animate-spin" /> : isNifValid ? <CheckCircle2 size={12} /> : <AlertCircle size={12} />}
+                        {isSearching ? 'A pesquisar...' : isNifValid ? 'NIF Válido' : 'Precisa de 9 dígitos'}
                       </span>
                     )}
                   </div>
@@ -409,6 +410,7 @@ const MerchantDashboard: React.FC = () => {
                       type="text"
                       inputMode="numeric"
                       maxLength={11}
+                      disabled={isLoading}
                       value={cardNumber} 
                       onChange={e => setCardNumber(formatNIF(e.target.value))} 
                       placeholder="000 000 000" 
@@ -418,11 +420,12 @@ const MerchantDashboard: React.FC = () => {
                           : isNifValid 
                             ? 'border-[#00d66f]' 
                             : 'border-red-100 focus:border-red-500'
-                      }`} 
+                      } disabled:opacity-50`} 
                     />
                     <button 
                       onClick={() => setShowScanner(true)} 
-                      className="bg-[#0f172a] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-lg"
+                      disabled={isLoading}
+                      className="bg-[#0f172a] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-lg disabled:opacity-50"
                     >
                       <Camera size={32} strokeWidth={3} />
                     </button>
@@ -437,9 +440,10 @@ const MerchantDashboard: React.FC = () => {
                     <input 
                       type="number" 
                       value={amount} 
+                      disabled={isLoading}
                       onChange={e => setAmount(e.target.value)} 
                       placeholder="0.00" 
-                      className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0f172a] outline-none focus:border-[#00d66f]" 
+                      className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0f172a] outline-none focus:border-[#00d66f] disabled:opacity-50" 
                     />
                     {parseFloat(amount) > 0 && (
                       <div className="flex items-center gap-3 bg-[#00d66f]/10 p-4 rounded-2xl border-2 border-[#00d66f]/20 animate-in zoom-in">
@@ -456,9 +460,10 @@ const MerchantDashboard: React.FC = () => {
                     </label>
                     <input 
                       value={documentNumber} 
+                      disabled={isLoading}
                       onChange={e => setDocumentNumber(e.target.value)} 
                       placeholder="Ex: FT/123" 
-                      className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black uppercase text-[#0f172a] outline-none focus:border-[#00d66f]" 
+                      className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black uppercase text-[#0f172a] outline-none focus:border-[#00d66f] disabled:opacity-50" 
                     />
                   </div>
                 </div>
@@ -491,7 +496,7 @@ const MerchantDashboard: React.FC = () => {
                 disabled={isLoading || !isNifValid || !foundClient}
                 className="flex-1 bg-[#00d66f] p-6 rounded-[32px] text-[#0f172a] transition-all hover:scale-[1.02] shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
-                <Coins size={32} strokeWidth={3} />
+                {isLoading ? <Loader2 className="animate-spin" size={32} /> : <Coins size={32} strokeWidth={3} />}
                 <span className="font-black text-lg uppercase italic tracking-tighter">Atribuir Cashback</span>
               </button>
 
@@ -500,7 +505,7 @@ const MerchantDashboard: React.FC = () => {
                 disabled={isLoading || !isNifValid || !foundClient || clientStoreBalance <= 0}
                 className="flex-1 bg-[#0f172a] p-6 rounded-[32px] text-white transition-all hover:bg-black shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
-                <Gift size={32} className="text-[#00d66f]" strokeWidth={3} />
+                {isLoading ? <Loader2 className="animate-spin" size={32} /> : <Gift size={32} className="text-[#00d66f]" strokeWidth={3} />}
                 <span className="font-black text-lg uppercase italic tracking-tighter text-[#00d66f]">Utilizar Saldo Loja</span>
               </button>
 
@@ -509,7 +514,7 @@ const MerchantDashboard: React.FC = () => {
                 disabled={isLoading || !isNifValid || !foundClient}
                 className="flex-1 bg-white p-6 rounded-[32px] text-red-500 border-4 border-red-500 transition-all hover:bg-red-50 shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale"
               >
-                <RotateCcw size={32} strokeWidth={3} />
+                {isLoading ? <Loader2 className="animate-spin" size={32} /> : <RotateCcw size={32} strokeWidth={3} />}
                 <span className="font-black text-lg uppercase italic tracking-tighter">Anular Compra</span>
               </button>
 

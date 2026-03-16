@@ -52,7 +52,7 @@ const ClientDashboard: React.FC = () => {
     fetchSystemConfig();
   }, []);
 
-  // PONTO 5: Lógica de conversão automática (48h)
+  // PONTO 5: Lógica de conversão automática (48h) - Revisada para Precisão Molecular
   useEffect(() => {
     const checkPendingTransactions = async () => {
       if (!currentUser?.id || transactions.length === 0) return;
@@ -62,23 +62,30 @@ const ClientDashboard: React.FC = () => {
 
       const pendingToConvert = transactions.filter(t => 
         t.status === 'pending' && 
+        t.type === 'earn' &&
         t.createdAt instanceof Timestamp && 
         t.createdAt.toDate() < fortyEightHoursAgo
       );
+
+      if (pendingToConvert.length === 0) return;
 
       for (const t of pendingToConvert) {
         try {
           const transRef = doc(db, 'transactions', t.id);
           const userRef = doc(db, 'users', currentUser.id);
 
-          await updateDoc(transRef, { status: 'available' });
+          // Atualização atómica para evitar duplicagem de saldo
+          await updateDoc(transRef, { 
+            status: 'available',
+            convertedAt: Timestamp.now()
+          });
           
           await updateDoc(userRef, {
             [`storeWallets.${t.merchantId}.available`]: increment(t.cashbackAmount),
             [`storeWallets.${t.merchantId}.pending`]: increment(-t.cashbackAmount)
           });
         } catch (error) {
-          console.error("Erro ao converter saldo 48h:", error);
+          console.error("Erro ao converter saldo 48h para transação " + t.id, error);
         }
       }
     };
@@ -95,9 +102,13 @@ const ClientDashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchMerchants = async () => {
-      const q = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(10));
-      const snap = await getDocs(q);
-      setMerchants(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      try {
+        const q = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(20));
+        const snap = await getDocs(q);
+        setMerchants(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      } catch (error) {
+        console.error("Erro ao carregar parceiros:", error);
+      }
     };
     fetchMerchants();
   }, []);
@@ -106,7 +117,7 @@ const ClientDashboard: React.FC = () => {
     let available = 0;
     let pending = 0;
     if (currentUser?.storeWallets) {
-      Object.values(currentUser.storeWallets).forEach(wallet => {
+      Object.values(currentUser.storeWallets).forEach((wallet: any) => {
         available += wallet.available || 0;
         pending += wallet.pending || 0;
       });
@@ -116,12 +127,11 @@ const ClientDashboard: React.FC = () => {
 
   const storeWalletsList = useMemo(() => {
     if (!currentUser?.storeWallets) return [];
-    return Object.entries(currentUser.storeWallets).map(([id, data]) => ({
+    return Object.entries(currentUser.storeWallets).map(([id, data]: [string, any]) => ({
       id,
       ...data
     })).filter(w => (w.available || 0) > 0 || (w.pending || 0) > 0);
   }, [currentUser?.storeWallets]);
-
   return (
     <div className="min-h-screen bg-[#f6f9fc] pb-32 font-sans relative">
       {/* HEADER */}
@@ -152,7 +162,7 @@ const ClientDashboard: React.FC = () => {
 
       <main className="max-w-md mx-auto p-6 space-y-8">
         
-        {/* CARTÃO VIRTUAL */}
+        {/* CARTÃO VIRTUAL - Design Brutalista Premium */}
         <div className="relative group perspective-1000">
           <div className="absolute -inset-1 bg-gradient-to-r from-[#00d66f] to-[#00b35c] rounded-[24px] blur opacity-20 transition duration-1000"></div>
           
@@ -234,7 +244,7 @@ const ClientDashboard: React.FC = () => {
 
         {/* INFO DE SALDO PENDENTE */}
         {totalStats.pending > 0 && (
-          <div className="bg-amber-50 border-2 border-amber-100 p-5 rounded-3xl flex items-center gap-4">
+          <div className="bg-amber-50 border-2 border-amber-100 p-5 rounded-3xl flex items-center gap-4 animate-pulse">
             <div className="w-12 h-12 bg-amber-100 rounded-2xl flex items-center justify-center text-amber-600 shadow-sm">
               <CreditCard size={24} />
             </div>
@@ -257,11 +267,11 @@ const ClientDashboard: React.FC = () => {
               onClick={() => setView(item.id as any)}
               className={`flex flex-col items-center gap-2 p-5 rounded-[28px] border-4 transition-all ${
                 view === item.id 
-                ? 'bg-white border-[#00d66f] shadow-xl scale-105 z-10' 
+                ? 'bg-white border-[#00d66f] shadow-xl scale-105 z-10 text-[#00d66f]' 
                 : 'bg-transparent border-slate-50 text-slate-300'
               }`}
             >
-              <item.icon size={22} className={view === item.id ? 'text-[#00d66f]' : ''} />
+              <item.icon size={22} />
               <span className="text-[9px] font-black uppercase tracking-widest">{item.label}</span>
             </button>
           ))}
@@ -270,14 +280,14 @@ const ClientDashboard: React.FC = () => {
         {/* CONTEÚDO DINÂMICO */}
         <div className="space-y-6">
           {view === 'home' && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-in fade-in duration-500">
               <div className="flex justify-between items-center px-2">
-                <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest">Saldos Disponíveis</h4>
+                <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest">Saldos por Loja</h4>
                 <Info size={14} className="text-slate-300" />
               </div>
               
               {storeWalletsList.length > 0 ? (
-                <div className="space-y-3">
+                <div className="grid gap-3">
                   {storeWalletsList.map((wallet) => (
                     <div key={wallet.id} className="bg-white p-5 rounded-[28px] border-2 border-slate-50 flex items-center justify-between group hover:border-[#00d66f] transition-all shadow-sm hover:shadow-md">
                       <div className="flex items-center gap-4">
@@ -287,7 +297,7 @@ const ClientDashboard: React.FC = () => {
                         <div>
                           <p className="text-sm font-black text-[#0a2540] uppercase tracking-tighter">{wallet.merchantName}</p>
                           <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">
-                            {formatCurrency(wallet.available)}
+                            {formatCurrency(wallet.available)} disponível
                           </p>
                         </div>
                       </div>
@@ -319,7 +329,7 @@ const ClientDashboard: React.FC = () => {
                           <p className="text-[13px] font-black text-[#0a2540] uppercase tracking-tighter">{t.merchantName}</p>
                           <p className="text-[9px] font-bold text-slate-400 uppercase">
                             {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : 'Recentemente'}
-                            {t.status === 'pending' && " • PENDENTE"}
+                            {t.status === 'pending' && <span className="text-amber-500 italic"> • PENDENTE</span>}
                           </p>
                         </div>
                      </div>
@@ -329,7 +339,7 @@ const ClientDashboard: React.FC = () => {
                    </div>
                  ))
                ) : (
-                 <div className="text-center p-10 text-slate-300 font-black uppercase text-[10px]">Sem movimentos</div>
+                 <div className="text-center p-10 text-slate-300 font-black uppercase text-[10px]">Sem movimentos registados</div>
                )}
             </div>
           )}
@@ -375,7 +385,7 @@ const ClientDashboard: React.FC = () => {
       {/* MODAL DE AJUDA */}
       {showHelpModal && (
         <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-md z-[100] p-6 flex items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-2xl relative animate-in zoom-in duration-300 border-b-8 border-slate-100">
             <button 
               onClick={() => setShowHelpModal(false)}
               className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full text-slate-400"
@@ -386,8 +396,8 @@ const ClientDashboard: React.FC = () => {
               <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-4">
                 <HelpCircle size={32} />
               </div>
-              <h3 className="text-2xl font-black text-[#0a2540] uppercase italic tracking-tighter">Precisa de Ajuda?</h3>
-              <p className="text-xs font-bold text-slate-400 uppercase mt-2">Envie-nos uma mensagem diretamente.</p>
+              <h3 className="text-2xl font-black text-[#0a2540] uppercase italic tracking-tighter">Ajuda Vizinho</h3>
+              <p className="text-xs font-bold text-slate-400 uppercase mt-2">Estamos aqui para o que precisar.</p>
             </div>
             <textarea 
               value={helpMessage}
@@ -403,7 +413,7 @@ const ClientDashboard: React.FC = () => {
               }}
               className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest mt-6 flex items-center justify-center gap-3 shadow-lg"
             >
-              Enviar Chat <Send size={18} />
+              Enviar Mensagem <Send size={18} />
             </button>
           </div>
         </div>

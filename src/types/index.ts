@@ -1,55 +1,25 @@
 // src/types/index.ts
 
-export interface User {
-  id: string; // Usamos id como base
-  uid?: string; // Adicionado para compatibilidade com Firebase Auth se necessário
-  email: string;
-  role: 'admin' | 'merchant' | 'client' | 'user';
-  name?: string;
-  nif?: string;
-  customerNumber?: string;
-  phone?: string;
-  cashbackPercent?: number;
-  status?: 'active' | 'disabled' | 'pending';
-  operators?: any[];
-  
-  // NOVA ESTRUTURA: Carteiras segmentadas por loja
-  // A chave será o merchantId (ID da loja)
-  storeWallets?: {
-    [merchantId: string]: {
-      merchantName: string;
-      available: number;
-      pending: number;
-      lastUpdate?: any;
-    }
-  };
-
-  // Mantido para compatibilidade temporária durante a transição, se necessário
-  wallet?: {
-    available: number;
-    pending: number;
-  };
-
-  // Campos de endereço uniformizados para evitar erros de compilação
-  address?: string;
-  category?: string;
-  zipCode?: string; 
-  postalCode?: string; 
-  freguesia?: string;
-  createdAt?: any;
+/**
+ * Interface para representar o Timestamp do Firebase de forma tipada
+ * Evita o uso de 'any' em campos de data (Ponto 13 da Auditoria).
+ */
+export interface FirestoreTimestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate: () => Date;
 }
 
-export interface Client {
-  id: string;
-  cardNumber: string;
-  name: string;
-  nif: string;
-  email: string;
-  phone: string;
-  zipCode: string;
-  postalCode?: string; 
-  password?: string;
-  createdAt: Date;
+export type UserRole = 'admin' | 'merchant' | 'client' | 'user';
+export type UserStatus = 'active' | 'disabled' | 'pending';
+export type TransactionType = 'earn' | 'redeem' | 'cancel' | 'subtract';
+export type TransactionStatus = 'pending' | 'available' | 'cancelled' | 'rejected';
+
+export interface WalletData {
+  merchantName: string;
+  available: number;
+  pending: number;
+  lastUpdate?: FirestoreTimestamp;
 }
 
 export interface Operator {
@@ -58,23 +28,46 @@ export interface Operator {
   code: string;
 }
 
-export interface Merchant {
+/**
+ * Interface Principal de Utilizador (User)
+ * Unifica Client e Merchant para evitar redundância (Pontos 1 e 11).
+ * Resolve o conflito de zipCode vs postalCode (Ponto 12).
+ */
+export interface User {
   id: string;
-  shopName: string;
+  uid?: string;
   email: string;
-  nif: string;
-  cashbackPercent: number;
-  primaryColor: string;
-  operators: Operator[];
-  status: 'active' | 'inactive';
-  createdAt: Date;
-  address?: string;
+  role: UserRole;
+  status: UserStatus;
+  name?: string;
+  nif?: string;
+  phone?: string;
+  
+  // Campos específicos de Cliente
+  customerNumber?: string;
+  storeWallets?: { 
+    [merchantId: string]: WalletData 
+  };
+
+  // Campos específicos de Lojista (Merchant)
+  shopName?: string;
+  cashbackPercent?: number;
+  primaryColor?: string;
   category?: string;
-  zipCode?: string; 
+  operators?: Operator[];
+
+  // Endereço Uniformizado (Apenas postalCode - Ponto 12)
+  address?: string;
   postalCode?: string; 
   freguesia?: string;
+  
+  createdAt: FirestoreTimestamp;
 }
 
+/**
+ * Interface de Transação
+ * Blindada contra 'any' e com tipos restritos (Pontos 13 e 15).
+ */
 export interface Transaction {
   id: string;
   clientId: string;
@@ -83,21 +76,35 @@ export interface Transaction {
   merchantName: string;
   amount: number;
   cashbackAmount: number;
-  cashbackPercent?: number; // Garante que o Report de Excel e Dashboard funcionem
+  cashbackPercent: number;
   documentNumber?: string;
   operatorId?: string; 
   operatorName?: string;
   operatorCode?: string;
-  // Tipo 'cancel' e 'cancelled' autorizados para a auditoria audit1303261100
-  type: 'earn' | 'redeem' | 'cancel' | 'subtract'; 
-  status: 'pending' | 'available' | 'cancelled' | 'rejected';
-  createdAt: any;
-  maturedAt?: any;
+  type: TransactionType;
+  status: TransactionStatus;
+  createdAt: FirestoreTimestamp;
+  maturedAt?: FirestoreTimestamp;
 }
 
+/**
+ * Interfaces Auxiliares para Dashboards
+ */
 export interface StoreBalance {
   merchantId: string;
   merchantName: string;
   totalBalance: number;
   availableBalance: number;
+}
+
+/**
+ * Interfaces de compatibilidade (Helpers)
+ * Estendem a interface User para manter a tipagem forte em componentes específicos.
+ */
+export interface Client extends User {
+  role: 'client';
+}
+
+export interface Merchant extends User {
+  role: 'merchant';
 }
