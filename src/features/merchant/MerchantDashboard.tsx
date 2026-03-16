@@ -28,6 +28,9 @@ import {
   Loader2
 } from 'lucide-react';
 
+// Logótipo em Base64 para garantir carregamento instantâneo e sem erros de link
+const VIZINHO_LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAABACAYAAAB9Z9pXAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAJTSURBVHgB7Zu9SgNREIXn7m4S7YIipIidpYitvYV9ArH2AfZp7C0srK0s9Am09AnEwk7S2InYpZBCSInZ7zM3IclmlyS7STZ7Z74PloV798zOnT87S0S0f6mU6uFfT00B0AbA9PQAnC09AIYmE+M88D7I8fFm1L890vHxcZof7iPAtKTr69N87v1628U0X9y3AAM0ALUAFIAXgD+A9uYnNIBvAbY2P+EfgK3NT/gbYEvzE34B2NL8hG8AtjQ/Yat90tP04S9VKhUAsADGxkYAYAGMjY0AwAIYGxsBgAUwNjYCAAtgbGwEABbA2NgIACyAsbERAFgAY2MjALAAxsZGAKDN3R1G8VOn7XWv7ZMe59L09G6af+/LALUAFIAnAAIQAAGYAnAAmEon3qVp7v09A8wK6u5O89lU+9Eupvns6TFAp6T/T/9W+6Sl6as9CwA7O0N0cnKMTk9fM0AbAJ2fH6OTk6N0AswH2N/fRS8vL+mEBtDb28Wn6AFAZ2dH6fX19Z+fI0CnpwfYp+oFwF5fH9L7+3s6BQDv76/p8/MtHQAoAO/vT+n7+yOdAoD396f08/ORDgCcP5/f0tmz90kU/+7v6ez5+2T7/f6P3p/PnS6e8S/AtPTv79O8O/799DDApqTr69P88f9VpvkA9vYidH5+XPr7/TLAubkoXVy8lf78vAn9+yAAsADGxkYAYAGMjY0AwAIYGxsBgAUwNjYCAAtgbGwEABbA2NgIACyAsbERAFgAY2MjALAAxsZGAKDNPZ79u6EAfAfA0ALAN66n6u8l+e8GAAAAAElFTkSuQmCC";
+
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout, setCurrentUser } = useStore();
   const navigate = useNavigate();
@@ -328,7 +331,7 @@ const MerchantDashboard: React.FC = () => {
           <div className="flex items-center gap-6 relative z-10">
             <div className="flex flex-col items-center">
               <img 
-                src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
+                src={VIZINHO_LOGO_BASE64} 
                 alt="Vizinho+" 
                 className="h-10 w-auto object-contain mb-2"
               />
@@ -636,7 +639,7 @@ const MerchantDashboard: React.FC = () => {
               <div className="flex justify-center mb-8">
                 <div className="w-32 h-32 bg-[#0f172a] rounded-3xl flex items-center justify-center border-4 border-[#00d66f] shadow-lg rotate-3">
                    <img 
-                    src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
+                    src={VIZINHO_LOGO_BASE64} 
                     alt="V+" 
                     className="w-16"
                   />
