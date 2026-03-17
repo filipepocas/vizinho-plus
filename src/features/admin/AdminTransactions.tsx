@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Transaction } from '../../types';
+import { Transaction, User as UserProfile } from '../../types';
 import { 
   Search, 
   Download, 
@@ -15,9 +15,10 @@ import * as XLSX from 'xlsx';
 
 interface AdminTransactionsProps {
   transactions: Transaction[];
+  users: UserProfile[];
 }
 
-const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) => {
+const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, users }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const formatCurrency = (value: number) => {
@@ -28,12 +29,17 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
   };
 
   const exportToExcel = () => {
+    const userById = new Map(users.map(u => [u.id, u]));
     // Preparação de dados detalhada para o Admin (Filipe)
     const data = transactions.map(t => ({
       'DATA REGISTO': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString('pt-PT') : '---',
       'HORA': t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleTimeString('pt-PT') : '---',
       'LOJA / PARCEIRO': t.merchantName || '---',
+      'EMAIL LOJA': userById.get(t.merchantId)?.email || '---',
+      'CP LOJA': (userById.get(t.merchantId) as any)?.zipCode || '---',
       'VIZINHO (NIF)': t.clientNif || '---',
+      'EMAIL VIZINHO': userById.get(t.clientId)?.email || '---',
+      'CP VIZINHO': (userById.get(t.clientId) as any)?.zipCode || '---',
       'DOCUMENTO': t.documentNumber || 'S/ Doc',
       'VALOR DA VENDA': t.amount || 0,
       'VALOR CASHBACK': t.cashbackAmount || 0,

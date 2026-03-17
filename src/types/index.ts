@@ -58,6 +58,8 @@ export interface User {
   // Campos específicos de Lojista (Merchant)
   shopName?: string;
   cashbackPercent?: number;
+  pendingCashbackPercent?: number;
+  pendingCashbackEffectiveAt?: FirestoreTimestamp;
   primaryColor?: string;
   category?: string;
   operators?: Operator[];

@@ -57,12 +57,7 @@ const UserDashboard: React.FC = () => {
     maturationHours: 48
   });
 
-  useEffect(() => {
-    if (currentUser?.nif) {
-      const unsubscribe = subscribeToTransactions('client', currentUser.nif);
-      return () => { if (unsubscribe) unsubscribe(); };
-    }
-  }, [currentUser?.nif, subscribeToTransactions]);
+  // Subscrição de transações é feita globalmente em App.tsx com base em currentUser.id e role.
 
   // Carregamento das Configurações do Admin e de todas as Lojas
   useEffect(() => {

@@ -292,17 +292,24 @@ const MerchantDashboard: React.FC = () => {
 
     setIsLoading(true);
     try {
+      // Cashback: alterações só entram em vigor a partir das 00:00 do dia seguinte
+      const effectiveAt = new Date();
+      effectiveAt.setDate(effectiveAt.getDate() + 1);
+      effectiveAt.setHours(0, 0, 0, 0);
+
       const updates = {
         name: editName,
         email: editEmail.toLowerCase().trim(),
         phone: editPhone.trim().replace(/\s/g, ''),
-        cashbackPercent: editCashback
+        pendingCashbackPercent: editCashback,
+        pendingCashbackEffectiveAt: Timestamp.fromDate(effectiveAt)
       };
 
       await updateDoc(doc(db, 'users', currentUser.id), updates);
+      // Mantém cashbackPercent atual até a data efetiva; a store aplica automaticamente quando chegar a hora.
       setCurrentUser({ ...currentUser, ...updates } as UserProfile);
       
-      setMessage({ type: 'success', text: "Perfil atualizado com sucesso!" });
+      setMessage({ type: 'success', text: "Perfil atualizado! A nova percentagem entra em vigor amanhã às 00:00." });
       setTimeout(() => {
         setMessage({ type: '', text: '' });
         setView('terminal');

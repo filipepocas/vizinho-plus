@@ -13,7 +13,8 @@ import {
   getDocs,
   runTransaction,
   writeBatch,
-  Timestamp
+  Timestamp,
+  updateDoc
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -348,10 +349,37 @@ export const useStore = create<StoreState>((set, get) => ({
       if (user) {
         get().processPendingCashback(user.uid);
 
-        userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
+        userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
           if (userDoc.exists()) {
-            set({ 
-              currentUser: { ...userDoc.data(), id: user.uid } as UserProfile,
+            const nextUser = { ...userDoc.data(), id: user.uid } as UserProfile;
+
+            // Promoção automática de cashback pendente (entra em vigor após a hora efetiva)
+            if (
+              nextUser.role === 'merchant' &&
+              typeof (nextUser as any).pendingCashbackPercent === 'number' &&
+              (nextUser as any).pendingCashbackEffectiveAt?.toDate
+            ) {
+              const effectiveAt = (nextUser as any).pendingCashbackEffectiveAt.toDate();
+              const pending = (nextUser as any).pendingCashbackPercent as number;
+              const current = (nextUser as any).cashbackPercent as number | undefined;
+
+              if (effectiveAt <= new Date() && pending !== current) {
+                try {
+                  await updateDoc(doc(db, 'users', user.uid), {
+                    cashbackPercent: pending,
+                    pendingCashbackPercent: null,
+                    pendingCashbackEffectiveAt: null,
+                    updatedAt: serverTimestamp(),
+                  } as any);
+                } catch (e) {
+                  // Se falhar por permissões/rede, mantém o estado; será re-tentado no próximo snapshot.
+                  console.error("Erro ao aplicar cashback pendente:", e);
+                }
+              }
+            }
+
+            set({
+              currentUser: nextUser,
               isLoading: false,
               isInitialized: true
             });

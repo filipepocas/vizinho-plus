@@ -56,6 +56,7 @@ const AdminDashboard: React.FC = () => {
   // ESTADOS DE DADOS
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
+  const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
   const [reviews, setReviews] = useState<any[]>([]);
   const [supportEmail, setSupportEmail] = useState('ajuda@vizinho-plus.pt');
   const [vantagensUrl, setVantagensUrl] = useState(''); 
@@ -95,6 +96,7 @@ const AdminDashboard: React.FC = () => {
       // Carregar utilizadores e lojistas
       const usersSnap = await getDocs(collection(db, 'users'));
       const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
+      setAllUsers(allData);
       setMerchants(allData.filter(u => u.role === 'merchant'));
       setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
 
@@ -106,8 +108,8 @@ const AdminDashboard: React.FC = () => {
         setVantagensUrl(configData.vantagensUrl || '');
       }
 
-      // Carregar Avaliações
-      const reviewsSnap = await getDocs(query(collection(db, 'reviews'), orderBy('createdAt', 'desc')));
+      // Carregar Avaliações (coleção canónica: feedbacks)
+      const reviewsSnap = await getDocs(query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc')));
       setReviews(reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
     } catch (e) {
@@ -325,7 +327,7 @@ const AdminDashboard: React.FC = () => {
               </button>
             </div>
 
-            <AdminTransactions transactions={transactions} />
+            <AdminTransactions transactions={transactions} users={allUsers} />
           </div>
         )}
 

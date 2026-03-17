@@ -1,9 +1,9 @@
-import { initializeApp } from 'firebase/app';
+import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getAnalytics } from 'firebase/analytics';
 
-const firebaseConfig = {
+export const firebaseConfig = {
   apiKey: "AIzaSyAZc0WqXxax4PongdY25SIveqyTX0SgFoM",
   authDomain: "vizinho-plus.firebaseapp.com",
   projectId: "vizinho-plus",
@@ -20,5 +20,12 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+
+// Auth secundário para provisionamento (criar contas sem trocar sessão do admin)
+export const provisionAuth = (() => {
+  const name = 'provision';
+  const provisionApp = getApps().some(a => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
+  return getAuth(provisionApp);
+})();
 
 export default app;

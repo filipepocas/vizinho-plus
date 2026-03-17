@@ -31,9 +31,10 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
-    // Validação básica de Código Postal (Formato simplificado ou 8 caracteres)
-    if (zipCode.trim().length < 4) {
-      setError('Por favor, insira um Código Postal válido.');
+    // Validação de Código Postal (xxxx-xxx)
+    const zipCodeRegex = /^\d{4}-\d{3}$/;
+    if (!zipCodeRegex.test(zipCode.trim())) {
+      setError('Código Postal inválido. Use o formato 0000-000.');
       setIsLoading(false);
       return;
     }
@@ -147,7 +148,11 @@ const RegisterPage: React.FC = () => {
                 type="text" 
                 maxLength={8}
                 value={zipCode}
-                onChange={(e) => setZipCode(e.target.value)}
+                onChange={(e) => {
+                  let value = e.target.value.replace(/\D/g, '');
+                  if (value.length > 4) value = value.substring(0, 4) + '-' + value.substring(4, 7);
+                  setZipCode(value);
+                }}
                 className="w-full p-3 border-2 border-gray-200 focus:border-[#1C305C] outline-none font-bold text-sm"
                 placeholder="0000-000"
               />

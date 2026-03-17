@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import { provisionAuth } from '../../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { 
   ArrowLeft, 
   ShieldCheck, 
@@ -30,6 +32,10 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [newEmail, setNewEmail] = useState(currentUser?.email || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+
+  // CRIAÇÃO DE NOVOS ADMINS (provisionamento sem trocar sessão)
+  const [newAdminEmail, setNewAdminEmail] = useState('');
+  const [newAdminPassword, setNewAdminPassword] = useState('');
   
   // ESTADOS DE CONFIGURAÇÃO MASTER (Ponto 11 e 12)
   const [sysConfig, setSysConfig] = useState({
@@ -43,6 +49,8 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
+
+  const isSuperAdmin = (currentUser?.email || '').toLowerCase().trim() === 'rochap.filipe@gmail.com';
 
   // CARREGAMENTO ATÓMICO DAS CONFIGURAÇÕES
   useEffect(() => {
@@ -124,6 +132,46 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     } catch (e) {
       console.error("Erro ao salvar sistema:", e);
       setMessage({ type: 'error', text: 'Falha ao gravar configurações master.' });
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCreateAdmin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isSuperAdmin) {
+      setMessage({ type: 'error', text: 'Apenas o Super Admin pode criar novos administradores.' });
+      return;
+    }
+
+    setIsSaving(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const email = newAdminEmail.toLowerCase().trim();
+      const password = newAdminPassword;
+      const userCredential = await createUserWithEmailAndPassword(provisionAuth, email, password);
+
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        id: userCredential.user.uid,
+        email,
+        role: 'admin',
+        status: 'active',
+        createdAt: serverTimestamp(),
+        createdBy: currentUser?.id || 'superadmin',
+      }, { merge: true });
+
+      setMessage({ type: 'success', text: 'Novo administrador criado com sucesso!' });
+      setNewAdminEmail('');
+      setNewAdminPassword('');
+    } catch (error: any) {
+      console.error("Erro ao criar admin:", error);
+      if (error?.code === 'auth/email-already-in-use') {
+        setMessage({ type: 'error', text: 'Este e-mail já está em utilização.' });
+      } else if (error?.code === 'auth/weak-password') {
+        setMessage({ type: 'error', text: 'A palavra-passe deve ter pelo menos 6 caracteres.' });
+      } else {
+        setMessage({ type: 'error', text: 'Erro ao criar administrador. Verifica os dados.' });
+      }
     } finally {
       setIsSaving(false);
     }
@@ -239,6 +287,51 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 {isSaving ? "A PROCESSAR..." : <><Save size={20} /> Atualizar Credenciais</>}
               </button>
             </form>
+
+            {/* CRIAR NOVO ADMIN */}
+            <div className="relative z-10 mt-10 pt-10 border-t-2 border-slate-100">
+              <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-6">
+                Criar Novo Administrador
+              </h3>
+              {!isSuperAdmin ? (
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-300 italic">
+                  Apenas o Super Admin (`rochap.filipe@gmail.com`) pode criar novos administradores.
+                </p>
+              ) : (
+                <form onSubmit={handleCreateAdmin} className="space-y-6">
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">E-mail do Novo Admin</label>
+                    <input
+                      type="email"
+                      required
+                      value={newAdminEmail}
+                      onChange={(e) => setNewAdminEmail(e.target.value)}
+                      className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
+                      placeholder="admin@exemplo.pt"
+                    />
+                  </div>
+                  <div className="space-y-3">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 ml-2">Password Inicial</label>
+                    <input
+                      type="password"
+                      required
+                      value={newAdminPassword}
+                      onChange={(e) => setNewAdminPassword(e.target.value)}
+                      className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white font-black text-[#0a2540] transition-all"
+                      placeholder="••••••••"
+                      minLength={6}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={isSaving}
+                    className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-3xl font-black uppercase tracking-[0.2em] hover:bg-[#00c265] transition-all disabled:opacity-50 border-b-8 border-black/10"
+                  >
+                    Criar Admin
+                  </button>
+                </form>
+              )}
+            </div>
           </div>
         )}
 

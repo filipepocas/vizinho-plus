@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag } from 'lucide-react';
-import { auth, db } from '../../config/firebase';
+import { provisionAuth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -83,7 +83,7 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
     try {
       // 1. Criar conta no Auth
       const userCredential = await createUserWithEmailAndPassword(
-        auth, 
+        provisionAuth, 
         formData.email.trim(), 
         formData.password
       );
