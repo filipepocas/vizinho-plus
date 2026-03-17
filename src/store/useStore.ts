@@ -19,10 +19,6 @@ import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/au
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile, WalletData } from '../types';
 
-/**
- * Função auxiliar para garantir precisão matemática
- * Arredonda para 2 casas decimais para evitar erros de floating point.
- */
 const roundToTwo = (num: number): number => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
 };
@@ -42,9 +38,6 @@ const pickAllowedTransactionFields = (input: TransactionCreate) => {
   } as const;
 };
 
-/**
- * Calcula o saldo global (wallet) com base nas carteiras individuais de cada loja
- */
 const calculateGlobalWallet = (storeWallets: { [key: string]: WalletData }) => {
   return Object.values(storeWallets).reduce((acc, curr) => ({
     available: roundToTwo(acc.available + (curr.available || 0)),
@@ -176,7 +169,6 @@ export const useStore = create<StoreState>((set, get) => ({
         }
 
         if (hasChanges) {
-          // Recalcular saldo global antes de guardar
           const wallet = calculateGlobalWallet(storeWallets);
           transaction.update(clientRef, { storeWallets, wallet });
         }
@@ -238,7 +230,6 @@ export const useStore = create<StoreState>((set, get) => ({
           storeWallets[mId].lastUpdate = serverTimestamp() as any;
         }
 
-        // Recalcular saldo global
         const wallet = calculateGlobalWallet(storeWallets);
 
         const newTransRef = doc(collection(db, 'transactions'));
@@ -303,8 +294,6 @@ export const useStore = create<StoreState>((set, get) => ({
         }
 
         storeWallets[mId].lastUpdate = serverTimestamp() as any;
-
-        // Recalcular saldo global
         const wallet = calculateGlobalWallet(storeWallets);
 
         transaction.update(transRef, { status: 'cancelled' });
@@ -317,14 +306,22 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   subscribeToTransactions: (role, identifier) => {
+    // Proteção: se não houver identificador e não for admin, não subscreve nada
+    if (!identifier && role !== 'admin') {
+      return () => {};
+    }
+
     const transRef = collection(db, 'transactions');
     let q;
 
     if ((role === 'merchant' || role === 'client' || role === 'user') && identifier) {
       const field = (role === 'merchant') ? 'merchantId' : 'clientId';
       q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'));
-    } else {
+    } else if (role === 'admin') {
       q = query(transRef, orderBy('createdAt', 'desc'));
+    } else {
+      set({ transactions: [] });
+      return () => {};
     }
 
     return onSnapshot(q, (snapshot) => {
@@ -371,7 +368,7 @@ export const useStore = create<StoreState>((set, get) => ({
           set({ isLoading: false, isInitialized: true });
         });
       } else {
-        set({ currentUser: null, isLoading: false, isInitialized: true });
+        set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
       }
     });
 
