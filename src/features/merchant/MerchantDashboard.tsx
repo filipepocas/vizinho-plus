@@ -4,7 +4,7 @@ import { collection, query, where, getDocs, updateDoc, doc, Timestamp, getDoc } 
 import { db } from '../../config/firebase';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { useNavigate } from 'react-router-dom';
-import { Transaction, User as UserProfile } from '../../types';
+import { TransactionCreate, User as UserProfile } from '../../types';
 import { 
   LayoutDashboard, 
   History, 
@@ -240,22 +240,22 @@ const MerchantDashboard: React.FC = () => {
     try {
       setIsLoading(true);
       
-      const transactionData = {
+      // IMPORTANT: o payload enviado para o Firestore deve respeitar as Security Rules.
+      // Não enviamos campos tipicamente bloqueados (ex.: createdAt/status/operator*, clientNif),
+      // porque são definidos/derivados no backend/store com serverTimestamp e lógica interna.
+      const cashbackPercent: number = currentUser.cashbackPercent ?? 0;
+      const transactionData: TransactionCreate = {
         clientId: foundClient.id,
-        clientNif: cleanNif,
         merchantId: currentUser.id,
         merchantName: currentUser.name || 'Loja Vizinho+',
         amount: val,
-        cashbackAmount: type === 'earn' || type === 'cancel' ? (val * ((currentUser.cashbackPercent || 0) / 100)) : val,
-        cashbackPercent: currentUser.cashbackPercent,
+        cashbackAmount: type === 'earn' || type === 'cancel' ? (val * (cashbackPercent / 100)) : val,
+        cashbackPercent,
         type: type,
-        documentNumber: documentNumber,
-        operatorCode: 'LOJA', 
-        status: type === 'earn' ? 'pending' : (type === 'cancel' ? 'cancelled' : 'available'),
-        createdAt: Timestamp.now()
+        documentNumber: documentNumber
       };
 
-      await addTransaction(transactionData as any);
+      await addTransaction(transactionData);
       
       setMessage({ 
         type: 'success', 

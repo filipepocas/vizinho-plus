@@ -17,7 +17,7 @@ import {
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-import { Transaction, User as UserProfile, WalletData } from '../types';
+import { Transaction, TransactionCreate, User as UserProfile, WalletData } from '../types';
 
 /**
  * Função auxiliar para garantir precisão matemática
@@ -25,6 +25,21 @@ import { Transaction, User as UserProfile, WalletData } from '../types';
  */
 const roundToTwo = (num: number): number => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
+};
+
+const pickAllowedTransactionFields = (input: TransactionCreate) => {
+  // Whitelist only fields that the app/rules should allow a merchant/client to write.
+  // Prevents accidental writes of forbidden/derived fields that trigger "missing or insufficient permissions".
+  return {
+    clientId: input.clientId,
+    merchantId: input.merchantId,
+    merchantName: input.merchantName,
+    amount: input.amount,
+    cashbackAmount: input.cashbackAmount,
+    cashbackPercent: input.cashbackPercent,
+    documentNumber: input.documentNumber,
+    type: input.type,
+  } as const;
 };
 
 /**
@@ -46,7 +61,7 @@ interface StoreState {
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  addTransaction: (transaction: Omit<Transaction, 'id' | 'createdAt'>) => Promise<void>;
+  addTransaction: (transaction: TransactionCreate) => Promise<void>;
   cancelTransaction: (transactionId: string) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
   registerClientProfile: (profile: UserProfile) => Promise<void>;
@@ -227,10 +242,18 @@ export const useStore = create<StoreState>((set, get) => ({
         const wallet = calculateGlobalWallet(storeWallets);
 
         const newTransRef = doc(collection(db, 'transactions'));
+        const allowed = pickAllowedTransactionFields(transactionData);
         transaction.set(newTransRef, {
-          ...transactionData,
+          ...allowed,
           cashbackAmount: amount,
-          status: transactionData.type === 'earn' ? 'pending' : 'available',
+          // Status deve ser definido pelo store/backend para respeitar rules.
+          // earn -> pending (matura depois), redeem -> available, cancel/subtract -> cancelled
+          status:
+            transactionData.type === 'earn'
+              ? 'pending'
+              : (transactionData.type === 'cancel' || transactionData.type === 'subtract')
+                ? 'cancelled'
+                : 'available',
           createdAt: serverTimestamp(),
         });
 

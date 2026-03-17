@@ -74,23 +74,39 @@ export interface User {
  * Interface de Transação
  * Blindada contra 'any' e com tipos restritos (Pontos 13 e 15).
  */
-export interface Transaction {
-  id: string;
+export interface TransactionCore {
   clientId: string;
-  clientNif?: string;
   merchantId: string;
   merchantName: string;
   amount: number;
   cashbackAmount: number;
   cashbackPercent: number;
   documentNumber?: string;
-  operatorId?: string; 
-  operatorName?: string;
-  operatorCode?: string;
   type: TransactionType;
+}
+
+/**
+ * Payload permitido para criação de transações pelo cliente/lojista.
+ * Campos derivados/geridos pelo servidor (ex.: status, createdAt) NÃO entram aqui.
+ * Isto ajuda a evitar writes que violam as Security Rules.
+ */
+export type TransactionCreate = TransactionCore;
+
+/**
+ * Documento de transação como é lido do Firestore.
+ * Pode conter campos adicionais (ex.: operator*, clientNif) dependendo das regras/versões do schema.
+ */
+export interface Transaction extends TransactionCore {
+  id: string;
   status: TransactionStatus;
   createdAt: FirestoreTimestamp;
   maturedAt?: FirestoreTimestamp;
+
+  // Campos opcionais (podem existir em dados legados ou flows específicos).
+  clientNif?: string;
+  operatorId?: string;
+  operatorName?: string;
+  operatorCode?: string;
 }
 
 /**
