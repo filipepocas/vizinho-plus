@@ -23,7 +23,8 @@ import {
   Star,
   CreditCard,
   Cpu,
-  Mail
+  Mail,
+  MessageSquareHeart
 } from 'lucide-react';
 
 // --- LOGOTIPO EMBUTIDO PARA EVITAR FALHAS DE CARREGAMENTO ---
@@ -36,21 +37,17 @@ const UserDashboard: React.FC = () => {
   const [dateFilter, setDateFilter] = useState('all'); 
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<any | null>(null);
 
-  // Estado para armazenar TODAS as lojas parceiras
   const [allMerchants, setAllMerchants] = useState<any[]>([]);
 
-  // Estados de Configuração do Sistema (Sincronizados com Admin)
   const [sysConfig, setSysConfig] = useState({
     supportEmail: 'ajuda@vizinho-plus.pt',
     vantagensUrl: '',
     maturationHours: 48
   });
 
-  // Carregamento das Configurações do Admin e de todas as Lojas
   useEffect(() => {
     const fetchData = async () => {
       try {
-        // 1. Carregar Configurações (Email e URL VIP)
         const docRef = doc(db, 'system', 'config');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -62,7 +59,6 @@ const UserDashboard: React.FC = () => {
           });
         }
 
-        // 2. Carregar Todas as Lojas
         const merchantsQuery = query(collection(db, 'users'), where('role', '==', 'merchant'));
         const merchantsSnap = await getDocs(merchantsQuery);
         const merchantsList = merchantsSnap.docs.map(doc => ({
@@ -78,7 +74,6 @@ const UserDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  // Lógica de Saldos Cruzada com a Lista de Lojas
   const merchantBalances = useMemo(() => {
     const maturationMs = sysConfig.maturationHours * 60 * 60 * 1000;
     const maturityThreshold = Date.now() - maturationMs;
@@ -135,7 +130,6 @@ const UserDashboard: React.FC = () => {
     });
   }, [transactions, dateFilter]);
 
-  // Efeito para abrir o modal de avaliação automaticamente
   useEffect(() => {
     if (transactions.length > 0 && currentUser?.uid) {
       const checkFeedbacks = async () => {
@@ -182,7 +176,6 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative flex flex-col">
-      {/* MARCA DE ÁGUA DE FUNDO */}
       <div 
         className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
         style={{
@@ -192,7 +185,6 @@ const UserDashboard: React.FC = () => {
         }}
       />
 
-      {/* LOGOTIPO FIXO */}
       <div className="fixed top-6 left-6 z-[100]">
         <img 
           src={logoVizinhoBase64} 
@@ -237,17 +229,17 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 relative z-10 flex-grow">
         
-        {/* CARTÃO PREMIUM */}
+        {/* CARTÃO PREMIUM REALISTA (Cor Anthracite e Relevo) */}
         <div className="relative -mt-24 mb-12 perspective-1000">
-          <div className="bg-gradient-to-br from-[#1e293b] via-[#0f172a] to-black rounded-[30px] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.5)] border border-white/20 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between group transition-all duration-500 hover:scale-[1.02] border-t-white/30 border-l-white/20">
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-10"></div>
+          <div className="bg-gradient-to-br from-[#2a3447] via-[#1a2233] to-[#0a0f1a] rounded-[30px] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.6)] border border-white/10 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between group transition-all duration-500 hover:scale-[1.02] border-t-white/20 border-l-white/10">
+            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
             
             <div className="flex justify-between items-start relative z-10">
               <div className="flex items-center gap-2">
                 <div className="w-10 h-8 bg-gradient-to-br from-[#bf953f] to-[#fcf6ba] rounded-md shadow-inner flex items-center justify-center border border-white/20">
                     <Cpu size={20} className="text-black/60" />
                 </div>
-                <span className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em]">Membro Premium</span>
+                <span className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em] drop-shadow-md">Membro Premium</span>
               </div>
               <img 
                 src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" 
@@ -259,7 +251,7 @@ const UserDashboard: React.FC = () => {
             <div className="mt-8 relative z-10">
               <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-2">Saldo Disponível</p>
               <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-black text-white tracking-tighter italic drop-shadow-lg">
+                <span className="text-5xl font-black text-white tracking-tighter italic drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">
                   {totalAvailable.toFixed(2)}
                 </span>
                 <span className="text-2xl font-black text-[#00d66f] drop-shadow-md">€</span>
@@ -269,13 +261,21 @@ const UserDashboard: React.FC = () => {
             <div className="flex items-end justify-between relative z-10 pt-4">
               <div className="flex flex-col">
                 <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">Titular</p>
-                <h2 className="text-xl font-black text-white tracking-tight uppercase italic drop-shadow-md truncate max-w-[200px]">
+                <h2 
+                  style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.1), -1px -1px 0px rgba(0,0,0,0.5)' }} 
+                  className="text-xl font-black text-white/90 tracking-tight uppercase italic truncate max-w-[200px]"
+                >
                   {currentUser?.name}
                 </h2>
               </div>
               <div className="text-right">
                 <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">NIF Associado</p>
-                <p className="text-lg font-mono font-black text-white tracking-[0.2em]">{currentUser?.nif}</p>
+                <p 
+                  style={{ textShadow: '1px 1px 0px rgba(255,255,255,0.1), -1px -1px 0px rgba(0,0,0,0.5)' }}
+                  className="text-lg font-mono font-black text-white/90 tracking-[0.2em]"
+                >
+                  {currentUser?.nif}
+                </p>
               </div>
             </div>
           </div>
@@ -362,6 +362,19 @@ const UserDashboard: React.FC = () => {
                     <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">A atualizar parceiros...</p>
                 </div>
             )}
+          </div>
+        </div>
+
+        {/* SECÇÃO DE AVALIAÇÃO (Solicitada pelo Utilizador) */}
+        <div className="mb-8 bg-[#00d66f]/10 border-4 border-dashed border-[#00d66f]/30 rounded-[40px] p-8 flex flex-col md:flex-row items-center gap-6 animate-in fade-in slide-in-from-bottom-2">
+          <div className="bg-[#00d66f] p-4 rounded-3xl shadow-lg rotate-3">
+            <MessageSquareHeart size={32} className="text-[#0f172a]" strokeWidth={2.5} />
+          </div>
+          <div className="text-center md:text-left">
+            <h4 className="font-black text-[#0f172a] uppercase italic text-sm mb-1 tracking-tight">Sua opinião é o nosso motor!</h4>
+            <p className="text-[10px] font-bold text-slate-600 uppercase leading-relaxed">
+              Avalie a sua última experiência de compra. O seu feedback é fundamental para ajudarmos os nossos parceiros a melhorar o serviço que lhe prestam.
+            </p>
           </div>
         </div>
 
