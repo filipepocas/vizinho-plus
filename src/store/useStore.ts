@@ -250,7 +250,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  subscribeToTransactions: (role, identifier) => {
+  subscribeToTransactions: (role, identifier, limitCount = 50) => {
     // Proteção: se não houver identificador e não for admin, não subscreve nada
     if (!identifier && role !== 'admin') {
       return () => {};
@@ -261,9 +261,15 @@ export const useStore = create<StoreState>((set, get) => ({
 
     if ((role === 'merchant' || role === 'client' || role === 'user') && identifier) {
       const field = (role === 'merchant') ? 'merchantId' : 'clientId';
-      q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'));
+      // Limitar subscrição às transações mais recentes por defeito para performance
+      q = query(
+        transRef, 
+        where(field, '==', identifier), 
+        orderBy('createdAt', 'desc'),
+        limit(limitCount)
+      );
     } else if (role === 'admin') {
-      q = query(transRef, orderBy('createdAt', 'desc'));
+      q = query(transRef, orderBy('createdAt', 'desc'), limit(limitCount));
     } else {
       set({ transactions: [] });
       return () => {};
