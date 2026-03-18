@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import { DateTime } from "luxon";
 
 admin.initializeApp();
 
@@ -52,68 +53,143 @@ export const createMerchant = functions.https.onCall(async (data, context) => {
 });
 
 /**
- * Função agendada para rodar a cada hora e amadurecer transações pendentes de cashback.
+ * Função para amadurecer transações pendentes de cashback.
  * Transforma transações 'pending' em 'available' se tiverem mais de 48h.
+ * Agora disparada por chamada manual (onCall) para evitar necessidade de plano Blaze (agendamento).
+ * Utiliza o fuso horário de Portugal Continental para cálculos.
  */
-export const matureCashback = functions.pubsub.schedule("every 60 minutes").onRun(async (context) => {
-  const now = admin.firestore.Timestamp.now();
-  const threshold = new Date(now.toDate().getTime() - (48 * 60 * 60 * 1000));
-  const thresholdTimestamp = admin.firestore.Timestamp.fromDate(threshold);
-
-  const pendingTransactionsQuery = db.collection("transactions")
-      .where("status", "==", "pending")
-      .where("type", "==", "earn")
-      .where("createdAt", "<=", thresholdTimestamp);
-
-  const snapshot = await pendingTransactionsQuery.get();
-
-  if (snapshot.empty) {
-    console.log("Nenhuma transação para amadurecer.");
-    return null;
+export const matureCashback = functions.https.onCall(async (_data, context) => {
+  // Apenas o Admin principal pode disparar a maturação
+  if (context.auth?.token.email !== "rochap.filipe@gmail.com") {
+    throw new functions.https.HttpsError("permission-denied", "Apenas o Administrador pode realizar esta ação.");
   }
 
-  console.log(`A amadurecer ${snapshot.size} transações...`);
+  try {
+    // Obter hora atual no fuso horário de Portugal
+    const nowPortugal = DateTime.now().setZone("Europe/Lisbon");
+    
+    // Subtrair 48 horas
+    const threshold = nowPortugal.minus({ hours: 48 });
+    const thresholdTimestamp = admin.firestore.Timestamp.fromDate(threshold.toJSDate());
 
-  const batchSize = 400; // Limite de 500 para lotes do Firestore
-  let count = 0;
+    const pendingTransactionsQuery = db.collection("transactions")
+        .where("status", "==", "pending")
+        .where("type", "==", "earn")
+        .where("createdAt", "<=", thresholdTimestamp);
 
-  for (let i = 0; i < snapshot.size; i += batchSize) {
-    const batch = db.batch();
-    const chunk = snapshot.docs.slice(i, i + batchSize);
+    const snapshot = await pendingTransactionsQuery.get();
 
-    for (const doc of chunk) {
-      const data = doc.data();
-      const clientId = data.clientId;
-      const merchantId = data.merchantId;
-      const amount = data.cashbackAmount;
-
-      // Atualizar a transação
-      batch.update(doc.ref, {
-        status: "available",
-        maturedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
-
-      // Atualizar a carteira do cliente (operação delicada em lote)
-      // Nota: Em escala real, seria melhor usar uma transação ou incrementar campos.
-      const clientRef = db.collection("users").doc(clientId);
-      
-      // Como estamos num batch, não podemos ler o estado atual facilmente aqui.
-      // Solução recomendada: Cloud Function disparada por onCreate/onUpdate de transação 
-      // ou usar increment() para os saldos.
-      
-      batch.update(clientRef, {
-        [`storeWallets.${merchantId}.pending`]: admin.firestore.FieldValue.increment(-amount),
-        [`storeWallets.${merchantId}.available`]: admin.firestore.FieldValue.increment(amount),
-        "wallet.pending": admin.firestore.FieldValue.increment(-amount),
-        "wallet.available": admin.firestore.FieldValue.increment(amount),
-      });
-
-      count++;
+    if (snapshot.empty) {
+      return { success: true, message: "Nenhuma transação para amadurecer.", count: 0 };
     }
 
-    await batch.commit();
-  }
+    const batchSize = 400;
+    let count = 0;
 
-  console.log(`${count} transações amadurecidas com sucesso.`);
-  return null;
+    for (let i = 0; i < snapshot.size; i += batchSize) {
+      const batch = db.batch();
+      const chunk = snapshot.docs.slice(i, i + batchSize);
+
+      for (const doc of chunk) {
+        const transactionData = doc.data();
+        const clientId = transactionData.clientId;
+        const merchantId = transactionData.merchantId;
+        const amount = transactionData.cashbackAmount;
+
+        // Atualizar a transação
+        batch.update(doc.ref, {
+          status: "available",
+          maturedAt: admin.firestore.FieldValue.serverTimestamp(),
+          maturedAtTZ: nowPortugal.toISO(), // Guardar a hora da maturação no fuso de PT
+        });
+
+        const clientRef = db.collection("users").doc(clientId);
+        
+        batch.update(clientRef, {
+          [`storeWallets.${merchantId}.pending`]: admin.firestore.FieldValue.increment(-amount),
+          [`storeWallets.${merchantId}.available`]: admin.firestore.FieldValue.increment(amount),
+          "wallet.pending": admin.firestore.FieldValue.increment(-amount),
+          "wallet.available": admin.firestore.FieldValue.increment(amount),
+        });
+
+        count++;
+      }
+
+      await batch.commit();
+    }
+
+    return { 
+      success: true, 
+      message: `${count} transações amadurecidas com sucesso.`, 
+      count,
+      processedAt: nowPortugal.toISO() 
+    };
+  } catch (error: any) {
+    console.error("Erro ao amadurecer cashback:", error);
+    throw new functions.https.HttpsError("internal", error.message);
+  }
 });
+
+/**
+ * Notifica o comerciante quando recebe uma nova avaliação.
+ * Disparado sempre que um documento é criado na coleção 'feedbacks'.
+ */
+export const onNewFeedback = functions.firestore
+  .document("feedbacks/{feedbackId}")
+  .onCreate(async (snapshot, _context) => {
+    const feedback = snapshot.data();
+    if (!feedback) return;
+
+    const { merchantId, rating, userName, comment } = feedback;
+
+    try {
+      // 1. Obter os tokens do comerciante
+      const merchantDoc = await db.collection("users").doc(merchantId).get();
+      const merchantData = merchantDoc.data();
+
+      if (!merchantData || !merchantData.fcmTokens || !Array.isArray(merchantData.fcmTokens) || merchantData.fcmTokens.length === 0) {
+        console.log(`Comerciante ${merchantId} não tem tokens de notificação.`);
+        return;
+      }
+
+      const tokens: string[] = merchantData.fcmTokens;
+
+      // 2. Preparar a mensagem
+      const message = {
+        notification: {
+          title: "Nova Avaliação!",
+          body: `${userName} deu-te ${rating} estrelas: "${comment || 'Sem comentário'}"`,
+        },
+        tokens: tokens,
+      };
+
+      // 3. Enviar a notificação
+      const response = await admin.messaging().sendEachForMulticast(message);
+      
+      console.log(`${response.successCount} notificações enviadas com sucesso para o comerciante ${merchantId}.`);
+
+      // Limpar tokens inválidos se necessário
+      if (response.failureCount > 0) {
+        const failedTokens: string[] = [];
+        response.responses.forEach((resp, idx) => {
+          if (!resp.success) {
+            const error = resp.error as any;
+            if (error?.code === "messaging/invalid-registration-token" || 
+                error?.code === "messaging/registration-token-not-registered") {
+              failedTokens.push(tokens[idx]);
+            }
+          }
+        });
+
+        if (failedTokens.length > 0) {
+          await db.collection("users").doc(merchantId).update({
+            fcmTokens: admin.firestore.FieldValue.arrayRemove(...failedTokens)
+          });
+          console.log(`Removidos ${failedTokens.length} tokens inválidos.`);
+        }
+      }
+
+    } catch (error) {
+      console.error("Erro ao enviar notificação de feedback:", error);
+    }
+  });
