@@ -14,11 +14,13 @@ import {
   runTransaction,
   writeBatch,
   Timestamp,
-  updateDoc
+  updateDoc,
+  limit
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile, WalletData } from '../types';
+import { requestNotificationPermission } from '../utils/notifications';
 
 const roundToTwo = (num: number): number => {
   return Math.round((num + Number.EPSILON) * 100) / 100;
@@ -298,6 +300,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
       if (user) {
         get().processPendingCashback(user.uid);
+        requestNotificationPermission(user.uid);
 
         userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
           if (userDoc.exists()) {
