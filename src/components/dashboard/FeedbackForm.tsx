@@ -1,7 +1,5 @@
-// src/components/dashboard/FeedbackForm.tsx
-
 import React, { useState } from 'react';
-import { db } from '../../config/firebase'; // Restaurado para o caminho que tens no teu projeto
+import { db, auth } from '../../config/firebase'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Star, Send, X, MessageSquare, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
 
@@ -29,17 +27,24 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Garantia de segurança: Buscar o UID diretamente da fonte de autenticação
+    const currentUser = auth.currentUser;
+    if (!currentUser) {
+      alert("Erro: Sessão não encontrada. Por favor, faz login novamente.");
+      return;
+    }
+
     if (rating === 0) return;
 
     setIsSubmitting(true);
     try {
-      // REGRA: Enviar apenas dados primitivos para evitar erros de permissão complexos
       await addDoc(collection(db, 'feedbacks'), {
         transactionId: transactionId || "",
         merchantId: merchantId || "",
         merchantName: merchantName || "",
-        userId: userId || "",
-        userName: userName || "",
+        userId: currentUser.uid, // FONTE DA VERDADE: Garante match com as Rules
+        userName: userName || "Cliente",
         rating: Number(rating),
         comment: comment.trim(),
         recommend: recommend,
@@ -49,8 +54,8 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
       
       onClose();
     } catch (error: any) {
-      console.error("Erro ao enviar feedback na linha 50:", error);
-      alert(`Erro ao enviar avaliação: ${error.message}. Verifica se as permissões do Firebase para a coleção 'feedbacks' estão ativas.`);
+      console.error("Erro ao enviar feedback:", error);
+      alert(`Erro de permissão: ${error.message}. Verifica se as regras do Firebase foram publicadas.`);
     } finally {
       setIsSubmitting(false);
     }
@@ -60,7 +65,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
     <div className="fixed inset-0 z-[250] flex items-center justify-center p-6 bg-[#0f172a]/95 backdrop-blur-md">
       <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#0f172a] shadow-[12px_12px_0px_#00d66f] relative overflow-hidden">
         
-        {/* BOTÃO FECHAR BRUTALISTA */}
         <button 
           onClick={onClose} 
           className="absolute top-4 right-4 z-10 bg-red-500 text-white p-2 rounded-xl border-4 border-[#0f172a] hover:rotate-90 transition-transform shadow-[4px_4px_0px_#0f172a]"
@@ -68,7 +72,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           <X size={20} strokeWidth={3} />
         </button>
 
-        {/* HEADER */}
         <div className="bg-[#0f172a] p-8 text-white">
           <div className="flex items-center gap-3 mb-2">
             <div className="bg-[#00d66f] p-2 rounded-lg">
@@ -83,7 +86,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
         <form onSubmit={handleSubmit} className="p-8 space-y-8">
           
-          {/* SISTEMA DE ESTRELAS */}
           <div className="flex flex-col items-center gap-4">
             <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Qual a tua nota?</p>
             <div className="flex gap-2">
@@ -105,11 +107,10 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
             </div>
           </div>
 
-          {/* RECOMENDAÇÃO VIZINHO */}
           <div className="space-y-4">
             <div className="flex items-center gap-2 justify-center">
-               <AlertCircle size={14} className="text-[#00d66f]" />
-               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Recomendarias a um vizinho?</p>
+                <AlertCircle size={14} className="text-[#00d66f]" />
+                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Recomendarias a um vizinho?</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <button
@@ -133,7 +134,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
             </div>
           </div>
 
-          {/* COMENTÁRIO */}
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2 ml-2">
               <MessageSquare size={14} /> Mensagem (Opcional)
@@ -146,7 +146,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
             />
           </div>
 
-          {/* SUBMISSÃO */}
           <button
             type="submit"
             disabled={isSubmitting || rating === 0}
