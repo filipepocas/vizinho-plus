@@ -73,6 +73,9 @@ const RegisterPage: React.FC = () => {
       if (userRole === 'admin') {
         navigate('/admin');
       } else {
+        // Inicia a lógica de maturação em segundo plano, mas não bloqueia o registo
+        // O processo principal será via Cloud Function (Task 2), mas mantemos aqui como fallback
+        // A função do store foi removida (ver useStore.ts)
         navigate('/client');
       }
 

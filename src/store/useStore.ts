@@ -118,65 +118,9 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   processPendingCashback: async (userId: string) => {
-    try {
-      const now = new Date();
-      const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
-      
-      const q = query(
-        collection(db, 'transactions'),
-        where('clientId', '==', userId),
-        where('status', '==', 'pending'),
-        where('type', '==', 'earn')
-      );
-
-      const snapshot = await getDocs(q);
-      if (snapshot.empty) return;
-
-      await runTransaction(db, async (transaction) => {
-        const clientRef = doc(db, 'users', userId);
-        const clientDoc = await transaction.get(clientRef);
-        
-        if (!clientDoc.exists()) return;
-        const userData = clientDoc.data() as UserProfile;
-        const storeWallets = { ...(userData.storeWallets || {}) };
-        let hasChanges = false;
-
-        for (const transDoc of snapshot.docs) {
-          const transRef = transDoc.ref;
-          const currentTransSnapshot = await transaction.get(transRef);
-          const transData = currentTransSnapshot.data() as Transaction;
-
-          if (transData.status === 'pending') {
-            const createdAt = (transData.createdAt as any as Timestamp).toDate();
-
-            if (createdAt <= fortyEightHoursAgo) {
-              const mId = transData.merchantId;
-              const amount = roundToTwo(transData.cashbackAmount);
-
-              if (!storeWallets[mId]) {
-                storeWallets[mId] = { available: 0, pending: 0, merchantName: transData.merchantName };
-              }
-
-              storeWallets[mId].pending = roundToTwo(Math.max(0, (storeWallets[mId].pending || 0) - amount));
-              storeWallets[mId].available = roundToTwo((storeWallets[mId].available || 0) + amount);
-              
-              transaction.update(transRef, { 
-                status: 'available',
-                maturedAt: serverTimestamp() 
-              });
-              hasChanges = true;
-            }
-          }
-        }
-
-        if (hasChanges) {
-          const wallet = calculateGlobalWallet(storeWallets);
-          transaction.update(clientRef, { storeWallets, wallet });
-        }
-      });
-    } catch (error) {
-      console.error("Erro ao processar cashback automático:", error);
-    }
+    // A lógica de maturação foi movida para as Firebase Cloud Functions para garantir escalabilidade.
+    // O cliente já não precisa de processar as suas próprias transações no login.
+    console.log("Maturação de cashback gerida pelo servidor.");
   },
 
   addTransaction: async (transactionData) => {

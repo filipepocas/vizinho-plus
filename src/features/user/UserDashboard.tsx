@@ -148,6 +148,28 @@ const UserDashboard: React.FC = () => {
     });
   }, [transactions, dateFilter]);
 
+  // Efeito para abrir o modal de avaliação automaticamente se houver uma transação pendente de feedback
+  useEffect(() => {
+    if (transactions.length > 0 && currentUser) {
+      // Procurar a transação mais recente do tipo 'earn' que não tenha feedback associado
+      // Nota: Em escala, isto deve ser verificado contra a coleção de feedbacks
+      const checkFeedbacks = async () => {
+        const latestEarn = transactions.find(t => t.type === 'earn');
+        if (latestEarn) {
+          const feedbackQuery = query(
+            collection(db, 'feedbacks'),
+            where('transactionId', '==', latestEarn.id)
+          );
+          const feedbackSnap = await getDocs(feedbackQuery);
+          if (feedbackSnap.empty) {
+            setSelectedTxForFeedback(latestEarn);
+          }
+        }
+      };
+      checkFeedbacks();
+    }
+  }, [transactions, currentUser]);
+
   // Função para processar o envio da mensagem do suporte através do Modal
   const handleSendSupport = () => {
     if (!supportMessage.trim()) return;
