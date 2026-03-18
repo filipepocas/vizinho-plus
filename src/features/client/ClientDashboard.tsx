@@ -24,6 +24,12 @@ import {
   Loader2
 } from 'lucide-react';
 
+// URLs Estáveis do Firebase Storage
+const LOGO_DARK_URL = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus.png?alt=media"; // Versão para fundos escuros
+const LOGO_WHITE_URL = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-white.png?alt=media";
+const LOGO_NAV_URL = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-dark.png?alt=media"; // Versão escura para fundos claros
+const WATERMARK_URL = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media";
+
 interface TransactionExtended {
   id: string;
   merchantId: string;
@@ -51,7 +57,6 @@ const ClientDashboard: React.FC = () => {
     }).format(value || 0);
   };
 
-  // 1. Carregar Configurações do Sistema
   useEffect(() => {
     const fetchSystemConfig = async () => {
       try {
@@ -67,10 +72,8 @@ const ClientDashboard: React.FC = () => {
     fetchSystemConfig();
   }, []);
 
-  // 2. Lógica de conversão automática (48h) - PROTEÇÃO TRIPLA
   useEffect(() => {
     const checkPendingTransactions = async () => {
-      // SÓ AVANÇA SE TIVER USER ID E TRANSAÇÕES
       if (!currentUser?.id || !transactions || transactions.length === 0) return;
 
       const now = new Date();
@@ -110,18 +113,14 @@ const ClientDashboard: React.FC = () => {
     checkPendingTransactions();
   }, [transactions, currentUser?.id]);
 
-  // 3. Subscrição de transações - CORREÇÃO PARA EVITAR 'UNDEFINED'
   useEffect(() => {
-    // PROTEÇÃO CRÍTICA: Se não houver ID no objeto currentUser, aborta a chamada
     if (!currentUser?.id) return;
-
     const unsubscribe = subscribeToTransactions('client', currentUser.id);
     return () => { 
       if (unsubscribe) unsubscribe(); 
     };
   }, [currentUser?.id, subscribeToTransactions]);
 
-  // 4. Carregar Parceiros
   useEffect(() => {
     const fetchMerchants = async () => {
       try {
@@ -159,7 +158,6 @@ const ClientDashboard: React.FC = () => {
     })).filter(w => (w.available || 0) > 0 || (w.pending || 0) > 0);
   }, [currentUser?.storeWallets]);
 
-  // Ecrã de carregamento - Verificamos o .id especificamente
   if (!currentUser?.id) {
     return (
       <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 text-center">
@@ -171,11 +169,18 @@ const ClientDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f6f9fc] pb-32 font-sans relative text-slate-900">
+      {/* Marca de Água Estrutural */}
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0" style={{ 
+        backgroundImage: `url('${WATERMARK_URL}')`,
+        backgroundSize: '200px',
+        backgroundRepeat: 'repeat'
+      }} />
+
       {/* HEADER */}
       <header className="bg-white p-6 border-b-2 border-slate-100 flex justify-between items-center sticky top-0 z-30">
         <div className="flex items-center gap-3">
           <img 
-            src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-dark.png?alt=media" 
+            src={LOGO_NAV_URL} 
             alt="V+" 
             className="w-10 h-10 object-contain"
           />
@@ -197,7 +202,7 @@ const ClientDashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-md mx-auto p-6 space-y-8">
+      <main className="max-w-md mx-auto p-6 space-y-8 relative z-10">
         
         {/* CARTÃO VIRTUAL */}
         <div className="relative group perspective-1000">
@@ -209,7 +214,7 @@ const ClientDashboard: React.FC = () => {
             <div className="flex justify-between items-start z-10">
               <div className="flex items-center gap-2">
                 <img 
-                  src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-white.png?alt=media" 
+                  src={LOGO_WHITE_URL} 
                   alt="Vizinho+" 
                   className="w-8 h-8 object-contain"
                 />
@@ -418,7 +423,7 @@ const ClientDashboard: React.FC = () => {
       </main>
 
       {/* FOOTER FIXO */}
-      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#f6f9fc] via-[#f6f9fc] to-transparent pointer-events-none">
+      <div className="fixed bottom-0 left-0 right-0 p-6 bg-gradient-to-t from-[#f6f9fc] via-[#f6f9fc] to-transparent pointer-events-none z-40">
         <div className="max-w-md mx-auto pointer-events-auto">
           <button 
             onClick={() => setView('partners')}
