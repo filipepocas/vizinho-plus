@@ -1,5 +1,3 @@
-// src/features/user/UserDashboard.tsx
-
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
@@ -21,15 +19,11 @@ import {
   Zap,
   ChevronRight,
   Crown,
-  LifeBuoy,
   AlertCircle,
   Star,
   CreditCard,
   Cpu,
-  MessageSquareMore,
-  HelpCircle,
-  X,
-  Send
+  Mail
 } from 'lucide-react';
 
 // --- LOGOTIPO EMBUTIDO PARA EVITAR FALHAS DE CARREGAMENTO ---
@@ -41,11 +35,6 @@ const UserDashboard: React.FC = () => {
   const [view, setView] = useState<'home' | 'merchants' | 'profile'>('home');
   const [dateFilter, setDateFilter] = useState('all'); 
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<any | null>(null);
-  
-  // Estados para o Modal de Suporte Interno
-  const [isSupportOpen, setIsSupportOpen] = useState(false);
-  const [supportMessage, setSupportMessage] = useState('');
-  const [isSendingHelp, setIsSendingHelp] = useState(false);
 
   // Estado para armazenar TODAS as lojas parceiras
   const [allMerchants, setAllMerchants] = useState<any[]>([]);
@@ -148,7 +137,6 @@ const UserDashboard: React.FC = () => {
 
   // Efeito para abrir o modal de avaliação automaticamente
   useEffect(() => {
-    // CORREÇÃO: Verificamos se o currentUser existe e tem UID antes de fazer a query
     if (transactions.length > 0 && currentUser?.uid) {
       const checkFeedbacks = async () => {
         try {
@@ -172,30 +160,6 @@ const UserDashboard: React.FC = () => {
     }
   }, [transactions, currentUser?.uid]);
 
-  // Função para processar o envio da mensagem do suporte
-  const handleSendSupport = () => {
-    if (!supportMessage.trim() || !currentUser) return;
-    setIsSendingHelp(true);
-    
-    const subject = encodeURIComponent(`SUPORTE VIZINHO+: ${currentUser.name}`);
-    const body = encodeURIComponent(
-      `MENSAGEM DO CLIENTE:\n${supportMessage}\n\n` +
-      `--------------------------\n` +
-      `DADOS DO TITULAR:\n` +
-      `Nome: ${currentUser.name}\n` +
-      `NIF: ${currentUser.nif}\n` +
-      `Email: ${currentUser.email}`
-    );
-    
-    window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
-    
-    setTimeout(() => {
-      setSupportMessage('');
-      setIsSupportOpen(false);
-      setIsSendingHelp(false);
-    }, 500);
-  };
-
   const handleVantagens = () => {
     if (sysConfig.vantagensUrl && sysConfig.vantagensUrl.trim() !== "") {
       window.open(sysConfig.vantagensUrl, '_blank');
@@ -217,7 +181,7 @@ const UserDashboard: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative">
+    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative flex flex-col">
       {/* MARCA DE ÁGUA DE FUNDO */}
       <div 
         className="fixed inset-0 pointer-events-none opacity-[0.03] z-0"
@@ -248,46 +212,6 @@ const UserDashboard: React.FC = () => {
         />
       )}
 
-      {/* MODAL DE SUPORTE INTERNO */}
-      {isSupportOpen && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-[#0f172a]/90 backdrop-blur-md">
-          <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#0f172a] shadow-[12px_12px_0px_#00d66f] p-8 relative">
-            <button 
-              onClick={() => setIsSupportOpen(false)}
-              className="absolute -top-4 -right-4 bg-red-500 text-white p-2 rounded-full border-4 border-[#0f172a] hover:rotate-90 transition-transform"
-            >
-              <X size={24} strokeWidth={3} />
-            </button>
-            
-            <div className="flex items-center gap-3 mb-6">
-              <div className="bg-[#00d66f] p-3 rounded-2xl">
-                <MessageSquareMore size={24} className="text-[#0f172a]" />
-              </div>
-              <div>
-                <h3 className="text-xl font-black uppercase italic leading-none">Pedir Ajuda</h3>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Suporte Direto</p>
-              </div>
-            </div>
-
-            <textarea 
-              value={supportMessage}
-              onChange={(e) => setSupportMessage(e.target.value)}
-              placeholder="Como podemos ajudar hoje? Escreve aqui a tua mensagem..."
-              className="w-full h-40 bg-slate-50 border-4 border-[#0f172a] rounded-[25px] p-5 font-bold text-[#0f172a] placeholder:text-slate-300 focus:ring-0 outline-none resize-none mb-6"
-            />
-
-            <button 
-              onClick={handleSendSupport}
-              disabled={isSendingHelp || !supportMessage.trim()}
-              className="w-full bg-[#0f172a] text-white py-5 rounded-[25px] flex items-center justify-center gap-3 hover:bg-black transition-all disabled:opacity-50"
-            >
-              <Send size={20} strokeWidth={3} />
-              <span className="font-black uppercase tracking-tighter">Enviar para Suporte</span>
-            </button>
-          </div>
-        </div>
-      )}
-
       <header className="bg-[#0f172a] px-6 pt-16 pb-32 text-white rounded-b-[60px] shadow-2xl relative overflow-hidden border-b-8 border-[#00d66f]">
         <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none">
           <CreditCard size={150} className="rotate-12 text-white" />
@@ -295,13 +219,6 @@ const UserDashboard: React.FC = () => {
 
         <div className="max-w-5xl mx-auto flex justify-end items-center relative z-10">
           <div className="flex gap-3">
-            <button 
-              onClick={() => setIsSupportOpen(true)} 
-              title="Pedir Ajuda"
-              className="bg-white/5 hover:bg-[#00d66f] hover:text-[#0f172a] text-[#00d66f] p-4 rounded-2xl transition-all border-2 border-[#00d66f]/20 shadow-lg group"
-            >
-              <HelpCircle size={24} strokeWidth={3} className="group-hover:rotate-12 transition-transform" />
-            </button>
             <button 
               onClick={() => logout()} 
               title="Sair"
@@ -318,7 +235,7 @@ const UserDashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 relative z-10">
+      <main className="max-w-2xl mx-auto px-6 relative z-10 flex-grow">
         
         {/* CARTÃO PREMIUM */}
         <div className="relative -mt-24 mb-12 perspective-1000">
@@ -449,7 +366,7 @@ const UserDashboard: React.FC = () => {
         </div>
 
         {/* HISTÓRICO */}
-        <div className="space-y-6 pb-12">
+        <div className="space-y-6 pb-20">
           <div className="flex justify-between items-center px-2">
             <div className="flex items-center gap-3">
                 <History size={20} className="text-[#0f172a]" />
@@ -509,19 +426,19 @@ const UserDashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* BOTÃO FLUTUANTE DE SUPORTE */}
-      <button 
-        onClick={() => setIsSupportOpen(true)}
-        className="fixed bottom-8 right-8 bg-[#00d66f] text-[#0f172a] p-5 rounded-[25px] shadow-[8px_8px_0px_#0f172a] hover:scale-110 hover:-translate-y-1 transition-all z-[100] border-4 border-[#0f172a] active:scale-95 group"
-      >
-        <div className="flex items-center gap-3">
-          <MessageSquareMore size={32} strokeWidth={3} className="group-hover:rotate-12 transition-transform" />
-          <div className="flex flex-col items-start leading-none">
-            <span className="font-black uppercase text-[10px] tracking-widest">Suporte</span>
-            <span className="font-bold uppercase text-[7px] opacity-70">Vizinho+</span>
-          </div>
+      {/* RODAPÉ INFORMATIVO DE SUPORTE */}
+      <footer className="w-full py-12 px-6 flex flex-col items-center justify-center gap-2 border-t-4 border-slate-100 bg-white relative z-10">
+        <div className="flex items-center gap-2 text-slate-400">
+          <Mail size={14} strokeWidth={3} />
+          <p className="text-[10px] font-black uppercase tracking-widest">Contato para pedido de ajuda</p>
         </div>
-      </button>
+        <a 
+          href={`mailto:${sysConfig.supportEmail}`}
+          className="text-sm font-black text-[#0f172a] hover:text-[#00d66f] transition-colors border-b-2 border-[#0f172a]/10"
+        >
+          {sysConfig.supportEmail}
+        </a>
+      </footer>
     </div>
   );
 };

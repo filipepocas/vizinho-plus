@@ -23,9 +23,9 @@ import {
   ArrowRight,
   RotateCcw,
   LifeBuoy,
-  Crown,
   Users,
-  Loader2
+  Loader2,
+  Mail
 } from 'lucide-react';
 
 const VIZINHO_LOGO_BASE64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAABACAYAAAB9Z9pXAAAACXBIWXMAAAsTAAALEwEAmpwYAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAJTSURBVHgB7Zu9SgNREIXn7m4S7YIipIidpYitvYV9ArH2AfZp7C0srK0s9Am09AnEwk7S2InYpZBCSInZ7zM3IclmlyS7STZ7Z74PloV798zOnT87S0S0f6mU6uFfT00B0AbA9PQAnC09AIYmE+M88D7I8fFm1L890vHxcZof7iPAtKTr69N87v1628U0X9y3AAM0ALUAFIAXgD+A9uYnNIBvAbY2P+EfgK3NT/gbYEvzE34B2NL8hG8AtjQ/Yat90tP04S9VKhUAsADGxkYAYAGMjY0AwAIYGxsBgAUwNjYCAAtgbGwEABbA2NgIACyAsbERAFgAY2MjALAAxsZGAKDN3R1G8VOn7XWv7ZMe59L09G6af+/LALUAFIAnAAIQAAGYAnAAmEon3qVp7v09A8wK6u5O89lU+9Eupvns6TFAp6T/T/9W+6Sl6as9CwA7O0N0cnKMTk9fM0AbAJ2fH6OTk6N0AswH2N/fRS8vL+mEBtDb28Wn6AFAZ2dH6fX19Z+fI0CnpwfYp+oFwF5fH9L7+3s6BQDv76/p8/MtHQAoAO/vT+n7+yOdAoD396f08/ORDgCcP5/f0tmz90kU/+7v6ez5+2T7/f6P3p/PnS6e8S/AtPTv79O8O/799DDApqTr69P88f9VpvkA9vYidH5+XPr7/TLAubkoXVy8lf78vAn9+yAAsADGxkYAYAGMjY0AwAIYGxsBgAUwNjYCAAtgbGwEABbA2NgIACyAsbERAFgAY2MjALAAxsZGAKDNPZ79u6EAfAfA0ALAN66n6u8l+e8GAAAAAElFTkSuQmCC";
@@ -47,13 +47,11 @@ const MerchantDashboard: React.FC = () => {
   const [filterNif, setFilterNif] = useState('');
   const [filterType, setFilterType] = useState('all');
   
-  // Profile edit states
   const [editName, setEditName] = useState(currentUser?.name || '');
   const [editEmail, setEditEmail] = useState(currentUser?.email || '');
   const [editPhone, setEditPhone] = useState(currentUser?.phone || '');
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
   const [supportEmail, setSupportEmail] = useState('suporte@vizinhoplus.pt');
-  const [vipUrl, setVipUrl] = useState('');
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   
@@ -86,7 +84,6 @@ const MerchantDashboard: React.FC = () => {
     return /^[0-9]{9}$/.test(cleanNif);
   }, [cardNumber]);
 
-  // Carregar configurações do sistema
   useEffect(() => {
     const fetchSettings = async () => {
       try {
@@ -94,7 +91,6 @@ const MerchantDashboard: React.FC = () => {
         if (settingsDoc.exists()) {
           const data = settingsDoc.data();
           if (data.supportEmail) setSupportEmail(data.supportEmail);
-          if (data.vipUrl) setVipUrl(data.vipUrl);
         }
       } catch (err) {
         console.error("Erro ao carregar configurações:", err);
@@ -103,7 +99,6 @@ const MerchantDashboard: React.FC = () => {
     fetchSettings();
   }, []);
 
-  // Carregar lista de clientes que têm saldo nesta loja
   useEffect(() => {
     const fetchCustomers = async () => {
       if (!currentUser?.id || view !== 'customers') return;
@@ -129,7 +124,6 @@ const MerchantDashboard: React.FC = () => {
     fetchCustomers();
   }, [currentUser?.id, view]);
 
-  // Pesquisa de cliente por NIF
   useEffect(() => {
     const searchClient = async () => {
       const cleanNif = cardNumber.trim().replace(/\s/g, '');
@@ -162,7 +156,6 @@ const MerchantDashboard: React.FC = () => {
     return () => clearTimeout(timer);
   }, [cardNumber]);
 
-  // Subscrição de transações
   useEffect(() => {
     let unsubscribe: () => void;
     if (currentUser?.id) {
@@ -173,13 +166,12 @@ const MerchantDashboard: React.FC = () => {
     };
   }, [currentUser?.id, subscribeToTransactions]);
 
-  // Scanner de QR Code
   useEffect(() => {
     if (showScanner) {
       const scanner = new Html5QrcodeScanner(
         "reader",
         { fps: 10, qrbox: 250 },
-        /* verbose= */ false
+        false
       );
 
       scanner.render((text) => {
@@ -187,16 +179,12 @@ const MerchantDashboard: React.FC = () => {
         setCardNumber(formatNIF(cleanText));
         setShowScanner(false);
         scanner.clear();
-      }, (error) => {
-        // Silencioso
-      });
+      }, (error) => {});
 
       return () => {
         try {
           scanner.clear();
-        } catch (e) {
-          // Já limpo
-        }
+        } catch (e) {}
       };
     }
   }, [showScanner]);
@@ -218,10 +206,8 @@ const MerchantDashboard: React.FC = () => {
 
   const processAction = async (type: 'earn' | 'redeem' | 'cancel') => {
     if (isLoading) return;
-
     const val = parseFloat(amount);
-    const cleanNif = cardNumber.trim().replace(/\s/g, '');
-
+    
     if (!isNifValid || !foundClient) {
       setMessage({ type: 'error', text: "Identifique um cliente válido primeiro." });
       return;
@@ -239,10 +225,6 @@ const MerchantDashboard: React.FC = () => {
 
     try {
       setIsLoading(true);
-      
-      // IMPORTANT: o payload enviado para o Firestore deve respeitar as Security Rules.
-      // Não enviamos campos tipicamente bloqueados (ex.: createdAt/status/operator*, clientNif),
-      // porque são definidos/derivados no backend/store com serverTimestamp e lógica interna.
       const cashbackPercent: number = currentUser.cashbackPercent ?? 0;
       const transactionData: TransactionCreate = {
         clientId: foundClient.id,
@@ -254,20 +236,16 @@ const MerchantDashboard: React.FC = () => {
         type: type,
         documentNumber: documentNumber
       };
-
       await addTransaction(transactionData);
       
       setMessage({ 
         type: 'success', 
         text: type === 'earn' ? "Cashback atribuído com sucesso!" : (type === 'cancel' ? "Venda anulada com sucesso!" : "Saldo utilizado com sucesso!") 
       });
-
-      // Limpar campos
       setAmount('');
       setDocumentNumber('');
       setCardNumber('');
       setFoundClient(null);
-
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     } catch (error: any) {
       console.error("Erro ao processar:", error);
@@ -292,7 +270,6 @@ const MerchantDashboard: React.FC = () => {
 
     setIsLoading(true);
     try {
-      // Cashback: alterações só entram em vigor a partir das 00:00 do dia seguinte
       const effectiveAt = new Date();
       effectiveAt.setDate(effectiveAt.getDate() + 1);
       effectiveAt.setHours(0, 0, 0, 0);
@@ -304,11 +281,8 @@ const MerchantDashboard: React.FC = () => {
         pendingCashbackPercent: editCashback,
         pendingCashbackEffectiveAt: Timestamp.fromDate(effectiveAt)
       };
-
       await updateDoc(doc(db, 'users', currentUser.id), updates);
-      // Mantém cashbackPercent atual até a data efetiva; a store aplica automaticamente quando chegar a hora.
       setCurrentUser({ ...currentUser, ...updates } as UserProfile);
-      
       setMessage({ type: 'success', text: "Perfil atualizado! A nova percentagem entra em vigor amanhã às 00:00." });
       setTimeout(() => {
         setMessage({ type: '', text: '' });
@@ -323,17 +297,14 @@ const MerchantDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-12 font-sans relative">
-      {/* Watermark de fundo */}
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans relative">
       <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0" style={{ 
         backgroundImage: `url('https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media')`,
         backgroundSize: '200px',
         backgroundRepeat: 'repeat'
       }} />
 
-      <div className="max-w-7xl mx-auto p-4 lg:p-8 relative z-10">
-        
-        {/* Header Profissional */}
+      <div className="max-w-7xl mx-auto p-4 lg:p-8 relative z-10 w-full flex-grow">
         <header className="bg-[#0f172a] p-8 rounded-[32px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f] relative overflow-hidden">
           <div className="flex items-center gap-6 relative z-10">
             <div className="flex flex-col items-center">
@@ -376,26 +347,16 @@ const MerchantDashboard: React.FC = () => {
               <UserCircle size={16} strokeWidth={3} /> Configurações
             </button>
             
-            <button 
-              onClick={vipUrl ? () => window.open(vipUrl, '_blank') : handleHelp}
-              className="flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase tracking-widest transition-all bg-gradient-to-r from-[#bf953f] via-[#fcf6ba] to-[#b38728] text-[#0f172a] shadow-lg hover:scale-105 border-b-2 border-[#8a6d29]"
-            >
-              <Crown size={16} strokeWidth={3} /> Clube VIP
-            </button>
-
             <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
               <LogOut size={20} />
             </button>
           </nav>
         </header>
 
-        {/* View Terminal */}
         {view === 'terminal' ? (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
-            {/* Bloco de Entrada */}
             <div className="lg:col-span-2 bg-white p-8 md:p-12 rounded-[40px] shadow-xl border-2 border-slate-100">
               <div className="space-y-10">
-                {/* Identificação de Cliente */}
                 <div className="space-y-4">
                   <div className="flex justify-between items-center px-2">
                     <label className="flex items-center gap-3 text-xs font-black uppercase text-slate-400 tracking-widest">
@@ -418,8 +379,7 @@ const MerchantDashboard: React.FC = () => {
                       onChange={e => setCardNumber(formatNIF(e.target.value))}
                       placeholder="000 000 000"
                       className={`flex-grow p-6 bg-slate-50 border-4 rounded-3xl text-3xl font-black text-[#0f172a] outline-none transition-all ${
-                        cardNumber.length === 0 ? 'border-slate-100' : 
-                        isNifValid ? 'border-[#00d66f]' : 'border-red-100 focus:border-red-500'
+                        cardNumber.length === 0 ? 'border-slate-100' : isNifValid ? 'border-[#00d66f]' : 'border-red-100 focus:border-red-500'
                       }`}
                     />
                     <button 
@@ -432,7 +392,6 @@ const MerchantDashboard: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Valor e Fatura */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                   <div className="space-y-4">
                     <label className="text-xs font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Fatura (€)</label>
@@ -467,9 +426,7 @@ const MerchantDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* Painel de Ações */}
             <div className="flex flex-col gap-4">
-              {/* Info Cliente Encontrado */}
               {isNifValid && (
                 <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${
                   foundClient ? 'bg-white border-[#00d66f] shadow-lg' : 'bg-slate-100 border-slate-200 opacity-60'
@@ -491,7 +448,6 @@ const MerchantDashboard: React.FC = () => {
                 </div>
               )}
 
-              {/* Botões de Operação */}
               <button 
                 onClick={() => processAction('earn')}
                 disabled={isLoading || !isNifValid || !foundClient}
@@ -519,7 +475,6 @@ const MerchantDashboard: React.FC = () => {
                 <span className="font-black text-lg uppercase italic tracking-tighter">Anular Compra</span>
               </button>
 
-              {/* Mensagem de Feedback */}
               {message.text && (
                 <div className={`p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${
                   message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'
@@ -631,7 +586,6 @@ const MerchantDashboard: React.FC = () => {
             </div>
           </div>
         ) : (
-          /* View Profile */
           <div className="max-w-2xl mx-auto bg-white p-10 rounded-[40px] border-2 border-slate-100 shadow-2xl animate-in slide-in-from-bottom-4">
             <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-8 text-center">Definições da Conta</h3>
             <form onSubmit={handleUpdateProfile} className="space-y-6">
@@ -704,7 +658,19 @@ const MerchantDashboard: React.FC = () => {
         )}
       </div>
 
-      {/* Modal do Scanner */}
+      <footer className="mt-auto py-8 border-t border-slate-200 bg-white relative z-10">
+        <div className="flex flex-col items-center justify-center gap-2">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Contato para pedido de ajuda</span>
+          <a 
+            href={`mailto:${supportEmail}`}
+            className="flex items-center gap-2 text-[#0f172a] font-black hover:text-[#00d66f] transition-colors"
+          >
+            <Mail size={16} className="text-[#00d66f]" />
+            {supportEmail}
+          </a>
+        </div>
+      </footer>
+
       {showScanner && (
         <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center">
           <div className="bg-white p-6 rounded-[40px] w-full max-w-lg relative border-4 border-[#00d66f]">
