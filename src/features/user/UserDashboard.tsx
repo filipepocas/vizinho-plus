@@ -158,7 +158,8 @@ const UserDashboard: React.FC = () => {
         if (latestEarn) {
           const feedbackQuery = query(
             collection(db, 'feedbacks'),
-            where('transactionId', '==', latestEarn.id)
+            where('transactionId', '==', latestEarn.id),
+            where('userId', '==', currentUser.uid)
           );
           const feedbackSnap = await getDocs(feedbackQuery);
           if (feedbackSnap.empty) {

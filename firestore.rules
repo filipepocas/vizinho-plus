@@ -129,8 +129,7 @@ service cloud.firestore {
         && request.resource.data.merchantId is string
         && request.resource.data.rating is int
         && request.resource.data.rating >= 1
-        && request.resource.data.rating <= 5
-        && request.resource.data.createdAt == request.time;
+        && request.resource.data.rating <= 5;
 
       // Atualizar status: apenas admin
       allow update: if isAdmin();
