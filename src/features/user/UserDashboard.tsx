@@ -36,7 +36,7 @@ import {
 const logoVizinhoBase64 = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAIAAAACACAMAAADvszH5AAAAnFBMVEVHcExNV09XUVZUV1daWVpcWVtdWlxvbnFwcXNyc3V4eHl5eXp+fn+AgICCgoOEhISJiYmTk5OcnJykpKSwsLCysrKzs7O0tLS1tbW4uLm7u7u8vLzExMTFxcXHx8fIyMjQ0NDR0dHV1dXW1tbY2NjZ2dna2trb29vj4+Pk5OTl5eXm5ubn5+fo6Ojr6+vs7Ozt7e3v7+/w8PD////O0v4DAAAALHRSTlMAAgYICQ0OExUXGB0fISMkLS8wMTIzPkJFS0xPVlhbXV5fX2JmampueXt8fX5/gX+BAAAA40lEQVR42u3YMRKCMBBGURARFAQUBRQFVFDWOf95T8uM8mOAmZp9K/D2Zp8G/35/v//7+Xq5Xp9P9wBv7/fX8fH5eg6wDPAWwFuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4Psc8G2+4S8vAAAA9UlEQVR42u3YwQnCQBBEURREBAX8D9AVD+A/D6GZfRiYidm3Am9v9mmeXw+bH29vtx8A7wG8BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4Psc8G2+4S8vAAAA9UlEQVR42u3YwQnCQBBEURREBAX8D9AVD+A/D6GZfRiYidm3Am9v9mmeXw+bH29vtx8A7wG8BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4FuAbwG+BfAW4Psc8G2+4S8vAAAA"
 
 const UserDashboard: React.FC = () => {
-  const { transactions, subscribeToTransactions, logout, currentUser } = useStore();
+  const { transactions, logout, currentUser } = useStore();
   
   const [view, setView] = useState<'home' | 'merchants' | 'profile'>('home');
   const [dateFilter, setDateFilter] = useState('all'); 
@@ -56,8 +56,6 @@ const UserDashboard: React.FC = () => {
     vantagensUrl: '',
     maturationHours: 48
   });
-
-  // Subscrição de transações é feita globalmente em App.tsx com base em currentUser.id e role.
 
   // Carregamento das Configurações do Admin e de todas as Lojas
   useEffect(() => {
@@ -148,42 +146,45 @@ const UserDashboard: React.FC = () => {
     });
   }, [transactions, dateFilter]);
 
-  // Efeito para abrir o modal de avaliação automaticamente se houver uma transação pendente de feedback
+  // Efeito para abrir o modal de avaliação automaticamente
   useEffect(() => {
-    if (transactions.length > 0 && currentUser) {
-      // Procurar a transação mais recente do tipo 'earn' que não tenha feedback associado
-      // Nota: Em escala, isto deve ser verificado contra a coleção de feedbacks
+    // CORREÇÃO: Verificamos se o currentUser existe e tem UID antes de fazer a query
+    if (transactions.length > 0 && currentUser?.uid) {
       const checkFeedbacks = async () => {
-        const latestEarn = transactions.find(t => t.type === 'earn');
-        if (latestEarn) {
-          const feedbackQuery = query(
-            collection(db, 'feedbacks'),
-            where('transactionId', '==', latestEarn.id),
-            where('userId', '==', currentUser.uid)
-          );
-          const feedbackSnap = await getDocs(feedbackQuery);
-          if (feedbackSnap.empty) {
-            setSelectedTxForFeedback(latestEarn);
+        try {
+          const latestEarn = transactions.find(t => t.type === 'earn');
+          if (latestEarn) {
+            const feedbackQuery = query(
+              collection(db, 'feedbacks'),
+              where('transactionId', '==', latestEarn.id),
+              where('userId', '==', currentUser.uid)
+            );
+            const feedbackSnap = await getDocs(feedbackQuery);
+            if (feedbackSnap.empty) {
+              setSelectedTxForFeedback(latestEarn);
+            }
           }
+        } catch (error) {
+          console.error("Erro ao verificar feedbacks:", error);
         }
       };
       checkFeedbacks();
     }
-  }, [transactions, currentUser]);
+  }, [transactions, currentUser?.uid]);
 
-  // Função para processar o envio da mensagem do suporte através do Modal
+  // Função para processar o envio da mensagem do suporte
   const handleSendSupport = () => {
-    if (!supportMessage.trim()) return;
+    if (!supportMessage.trim() || !currentUser) return;
     setIsSendingHelp(true);
     
-    const subject = encodeURIComponent(`SUPORTE VIZINHO+: ${currentUser?.name}`);
+    const subject = encodeURIComponent(`SUPORTE VIZINHO+: ${currentUser.name}`);
     const body = encodeURIComponent(
       `MENSAGEM DO CLIENTE:\n${supportMessage}\n\n` +
       `--------------------------\n` +
       `DADOS DO TITULAR:\n` +
-      `Nome: ${currentUser?.name}\n` +
-      `NIF: ${currentUser?.nif}\n` +
-      `Email: ${currentUser?.email}`
+      `Nome: ${currentUser.name}\n` +
+      `NIF: ${currentUser.nif}\n` +
+      `Email: ${currentUser.email}`
     );
     
     window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
@@ -227,7 +228,7 @@ const UserDashboard: React.FC = () => {
         }}
       />
 
-      {/* LOGOTIPO FIXO COM CORREÇÃO BASE64 */}
+      {/* LOGOTIPO FIXO */}
       <div className="fixed top-6 left-6 z-[100]">
         <img 
           src={logoVizinhoBase64} 
@@ -247,7 +248,7 @@ const UserDashboard: React.FC = () => {
         />
       )}
 
-      {/* MODAL DE SUPORTE INTERNO (CAIXA DE MENSAGEM) */}
+      {/* MODAL DE SUPORTE INTERNO */}
       {isSupportOpen && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-[#0f172a]/90 backdrop-blur-md">
           <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#0f172a] shadow-[12px_12px_0px_#00d66f] p-8 relative">
@@ -508,7 +509,7 @@ const UserDashboard: React.FC = () => {
         </div>
       </main>
 
-      {/* BOTÃO FLUTUANTE QUE ABRE O MODAL DE SUPORTE */}
+      {/* BOTÃO FLUTUANTE DE SUPORTE */}
       <button 
         onClick={() => setIsSupportOpen(true)}
         className="fixed bottom-8 right-8 bg-[#00d66f] text-[#0f172a] p-5 rounded-[25px] shadow-[8px_8px_0px_#0f172a] hover:scale-110 hover:-translate-y-1 transition-all z-[100] border-4 border-[#0f172a] active:scale-95 group"

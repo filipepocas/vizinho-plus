@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { collection, query, where, getDocs, limit, doc, updateDoc, increment, Timestamp, getDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
+import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import { 
   Wallet, 
   QrCode, 
@@ -10,7 +11,7 @@ import {
   ArrowUpRight, 
   ArrowDownLeft,
   LogOut,
-  MapPin,
+  MapPin, 
   ChevronRight,
   Info,
   HelpCircle,
@@ -18,16 +19,30 @@ import {
   X,
   Send,
   Star,
-  ExternalLink
+  ExternalLink,
+  MessageSquare,
+  Loader2
 } from 'lucide-react';
 
+interface TransactionExtended {
+  id: string;
+  merchantId: string;
+  merchantName: string;
+  cashbackAmount: number;
+  type: 'earn' | 'redeem';
+  status: 'pending' | 'available' | 'used';
+  createdAt: any;
+  feedbackDone?: boolean;
+}
+
 const ClientDashboard: React.FC = () => {
-  const { currentUser, transactions, subscribeToTransactions, logout, setCurrentUser } = useStore();
+  const { currentUser, transactions, subscribeToTransactions, logout } = useStore();
   const [view, setView] = useState<'home' | 'history' | 'partners'>('home');
   const [merchants, setMerchants] = useState<any[]>([]);
   const [showHelpModal, setShowHelpModal] = useState(false);
   const [helpMessage, setHelpMessage] = useState('');
   const [vantagensUrl, setVantagensUrl] = useState<string | null>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<TransactionExtended | null>(null);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat('pt-PT', {
@@ -36,7 +51,7 @@ const ClientDashboard: React.FC = () => {
     }).format(value || 0);
   };
 
-  // Carregar URL das Vantagens do Admin
+  // 1. Carregar Configurações do Sistema
   useEffect(() => {
     const fetchSystemConfig = async () => {
       try {
@@ -52,17 +67,20 @@ const ClientDashboard: React.FC = () => {
     fetchSystemConfig();
   }, []);
 
-  // PONTO 5: Lógica de conversão automática (48h) - Revisada para Precisão Molecular
+  // 2. Lógica de conversão automática (48h) - PROTEÇÃO TRIPLA
   useEffect(() => {
     const checkPendingTransactions = async () => {
-      if (!currentUser?.id || transactions.length === 0) return;
+      // SÓ AVANÇA SE TIVER USER ID E TRANSAÇÕES
+      if (!currentUser?.id || !transactions || transactions.length === 0) return;
 
       const now = new Date();
       const fortyEightHoursAgo = new Date(now.getTime() - (48 * 60 * 60 * 1000));
 
       const pendingToConvert = transactions.filter(t => 
+        t?.id && 
         t.status === 'pending' && 
         t.type === 'earn' &&
+        t.merchantId && 
         t.createdAt instanceof Timestamp && 
         t.createdAt.toDate() < fortyEightHoursAgo
       );
@@ -74,7 +92,6 @@ const ClientDashboard: React.FC = () => {
           const transRef = doc(db, 'transactions', t.id);
           const userRef = doc(db, 'users', currentUser.id);
 
-          // Atualização atómica para evitar duplicagem de saldo
           await updateDoc(transRef, { 
             status: 'available',
             convertedAt: Timestamp.now()
@@ -85,7 +102,7 @@ const ClientDashboard: React.FC = () => {
             [`storeWallets.${t.merchantId}.pending`]: increment(-t.cashbackAmount)
           });
         } catch (error) {
-          console.error("Erro ao converter saldo 48h para transação " + t.id, error);
+          console.error("Erro na conversão 48h:", error);
         }
       }
     };
@@ -93,17 +110,26 @@ const ClientDashboard: React.FC = () => {
     checkPendingTransactions();
   }, [transactions, currentUser?.id]);
 
+  // 3. Subscrição de transações - CORREÇÃO PARA EVITAR 'UNDEFINED'
   useEffect(() => {
-    if (currentUser?.id) {
-      const unsubscribe = subscribeToTransactions('client', currentUser.id);
-      return () => { if (unsubscribe) unsubscribe(); };
-    }
+    // PROTEÇÃO CRÍTICA: Se não houver ID no objeto currentUser, aborta a chamada
+    if (!currentUser?.id) return;
+
+    const unsubscribe = subscribeToTransactions('client', currentUser.id);
+    return () => { 
+      if (unsubscribe) unsubscribe(); 
+    };
   }, [currentUser?.id, subscribeToTransactions]);
 
+  // 4. Carregar Parceiros
   useEffect(() => {
     const fetchMerchants = async () => {
       try {
-        const q = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(20));
+        const q = query(
+          collection(db, 'users'), 
+          where('role', '==', 'merchant'), 
+          limit(20)
+        );
         const snap = await getDocs(q);
         setMerchants(snap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
       } catch (error) {
@@ -132,8 +158,19 @@ const ClientDashboard: React.FC = () => {
       ...data
     })).filter(w => (w.available || 0) > 0 || (w.pending || 0) > 0);
   }, [currentUser?.storeWallets]);
+
+  // Ecrã de carregamento - Verificamos o .id especificamente
+  if (!currentUser?.id) {
+    return (
+      <div className="min-h-screen bg-[#f6f9fc] flex flex-col items-center justify-center p-6 text-center">
+        <Loader2 className="w-12 h-12 text-[#00d66f] animate-spin mb-4" />
+        <p className="text-sm font-black text-[#0a2540] uppercase tracking-widest">A sintonizar os seus dados...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#f6f9fc] pb-32 font-sans relative">
+    <div className="min-h-screen bg-[#f6f9fc] pb-32 font-sans relative text-slate-900">
       {/* HEADER */}
       <header className="bg-white p-6 border-b-2 border-slate-100 flex justify-between items-center sticky top-0 z-30">
         <div className="flex items-center gap-3">
@@ -144,7 +181,7 @@ const ClientDashboard: React.FC = () => {
           />
           <div>
             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Olá, Vizinho!</p>
-            <h2 className="text-sm font-black text-[#0a2540] uppercase truncate max-w-[150px]">{currentUser?.name}</h2>
+            <h2 className="text-sm font-black text-[#0a2540] uppercase truncate max-w-[150px]">{currentUser.name || 'Vizinho'}</h2>
           </div>
         </div>
         <div className="flex gap-2">
@@ -162,7 +199,7 @@ const ClientDashboard: React.FC = () => {
 
       <main className="max-w-md mx-auto p-6 space-y-8">
         
-        {/* CARTÃO VIRTUAL - Design Brutalista Premium */}
+        {/* CARTÃO VIRTUAL */}
         <div className="relative group perspective-1000">
           <div className="absolute -inset-1 bg-gradient-to-r from-[#00d66f] to-[#00b35c] rounded-[24px] blur opacity-20 transition duration-1000"></div>
           
@@ -198,7 +235,7 @@ const ClientDashboard: React.FC = () => {
               <div>
                 <p className="text-[8px] font-black text-white/40 uppercase tracking-widest mb-1">CLIENTE VIZINHO+</p>
                 <p className="text-lg font-mono font-bold tracking-[0.2em] text-white/95">
-                  {currentUser?.nif ? currentUser.nif.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') : '--- --- ---'}
+                  {currentUser.nif ? currentUser.nif.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') : '--- --- ---'}
                 </p>
               </div>
               <div className="text-right">
@@ -214,7 +251,7 @@ const ClientDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* BOTÃO VANTAGENS+ (DINÂMICO) */}
+        {/* BOTÃO VANTAGENS+ */}
         {vantagensUrl && (
           <a 
             href={vantagensUrl}
@@ -283,7 +320,7 @@ const ClientDashboard: React.FC = () => {
             <div className="space-y-4 animate-in fade-in duration-500">
               <div className="flex justify-between items-center px-2">
                 <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest">Saldos por Loja</h4>
-                <Info size={14} className="text-slate-300" />
+                <div className="bg-slate-100 p-1 rounded-full"><Info size={12} className="text-slate-400" /></div>
               </div>
               
               {storeWalletsList.length > 0 ? (
@@ -317,8 +354,8 @@ const ClientDashboard: React.FC = () => {
             <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
                <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest px-2">Últimos Movimentos</h4>
                {transactions.length > 0 ? (
-                 transactions.map((t, idx) => (
-                   <div key={idx} className="bg-white p-5 rounded-[28px] border-2 border-slate-50 flex items-center justify-between shadow-sm">
+                 transactions.map((t: any, idx) => (
+                   <div key={t.id || idx} className="bg-white p-5 rounded-[28px] border-2 border-slate-50 flex items-center justify-between shadow-sm">
                      <div className="flex items-center gap-4">
                         <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
                           t.type === 'earn' ? 'bg-green-50 text-[#00d66f]' : 'bg-red-50 text-red-500'
@@ -333,9 +370,19 @@ const ClientDashboard: React.FC = () => {
                           </p>
                         </div>
                      </div>
-                     <p className={`text-sm font-black italic ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                       {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}
-                     </p>
+                     <div className="flex flex-col items-end gap-1">
+                       <p className={`text-sm font-black italic ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                         {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}
+                       </p>
+                       {t.type === 'earn' && t.status === 'available' && !(t as TransactionExtended).feedbackDone && (
+                         <button 
+                          onClick={() => setSelectedTransaction(t as TransactionExtended)}
+                          className="flex items-center gap-1 text-[8px] font-black bg-slate-100 px-2 py-1 rounded-full uppercase text-slate-500 hover:bg-[#00d66f] hover:text-white transition-all"
+                         >
+                           <MessageSquare size={10} /> Avaliar
+                         </button>
+                       )}
+                     </div>
                    </div>
                  ))
                ) : (
@@ -349,7 +396,7 @@ const ClientDashboard: React.FC = () => {
               <h4 className="text-xs font-black text-[#0a2540] uppercase tracking-widest px-2">Lojas Parceiras</h4>
               <div className="grid grid-cols-1 gap-4">
                 {merchants.map((m, idx) => (
-                  <div key={idx} className="bg-white p-6 rounded-[32px] border-2 border-slate-100 flex items-center justify-between group hover:shadow-xl transition-all">
+                  <div key={m.id || idx} className="bg-white p-6 rounded-[32px] border-2 border-slate-100 flex items-center justify-between group hover:shadow-xl transition-all">
                     <div className="flex items-center gap-4">
                       <div className="w-14 h-14 bg-slate-50 rounded-2xl flex items-center justify-center text-[#0a2540] group-hover:bg-[#00d66f] group-hover:text-white transition-colors shadow-sm">
                         <Store size={24} />
@@ -417,6 +464,18 @@ const ClientDashboard: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+
+      {/* MODAL DE FEEDBACK */}
+      {selectedTransaction && (
+        <FeedbackForm 
+          transactionId={selectedTransaction.id}
+          merchantId={selectedTransaction.merchantId}
+          merchantName={selectedTransaction.merchantName}
+          userId={currentUser.id}
+          userName={currentUser.name || "Vizinho"}
+          onClose={() => setSelectedTransaction(null)}
+        />
       )}
     </div>
   );

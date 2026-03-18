@@ -1,7 +1,7 @@
 // src/components/dashboard/FeedbackForm.tsx
 
 import React, { useState } from 'react';
-import { db } from '../../config/firebase';
+import { db } from '../../config/firebase'; // Restaurado para o caminho que tens no teu projeto
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { Star, Send, X, MessageSquare, ThumbsUp, ThumbsDown, AlertCircle } from 'lucide-react';
 
@@ -33,22 +33,24 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
 
     setIsSubmitting(true);
     try {
+      // REGRA: Enviar apenas dados primitivos para evitar erros de permissão complexos
       await addDoc(collection(db, 'feedbacks'), {
-        transactionId,
-        merchantId,
-        merchantName,
-        userId,
-        userName,
-        rating,
-        comment,
-        recommend,
+        transactionId: transactionId || "",
+        merchantId: merchantId || "",
+        merchantName: merchantName || "",
+        userId: userId || "",
+        userName: userName || "",
+        rating: Number(rating),
+        comment: comment.trim(),
+        recommend: recommend,
         status: 'new',
         createdAt: serverTimestamp()
       });
+      
       onClose();
-    } catch (error) {
-      console.error("Erro ao enviar feedback:", error);
-      alert("Erro ao enviar avaliação. Tenta novamente.");
+    } catch (error: any) {
+      console.error("Erro ao enviar feedback na linha 50:", error);
+      alert(`Erro ao enviar avaliação: ${error.message}. Verifica se as permissões do Firebase para a coleção 'feedbacks' estão ativas.`);
     } finally {
       setIsSubmitting(false);
     }
