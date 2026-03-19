@@ -55,7 +55,7 @@ const MerchantDashboard: React.FC = () => {
   const [editCashback, setEditCashback] = useState<number>(currentUser?.cashbackPercent || 0);
   const [supportEmail, setSupportEmail] = useState('suporte@vizinhoplus.pt');
 
-  // ESTADOS ADICIONADOS PARA DUPLA CONFIRMAÇÃO
+  // ESTADOS PARA DUPLA CONFIRMAÇÃO
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{
     type: 'earn' | 'redeem' | 'cancel',
@@ -64,6 +64,7 @@ const MerchantDashboard: React.FC = () => {
   } | null>(null);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
+  
   const formatNIF = (value: string) => {
     const digits = value.replace(/\D/g, '');
     if (digits.length <= 9) {
@@ -191,9 +192,7 @@ const MerchantDashboard: React.FC = () => {
       }, (error) => {});
 
       return () => {
-        try {
-          scanner.clear();
-        } catch (e) {}
+        try { scanner.clear(); } catch (e) {}
       };
     }
   }, [showScanner]);
@@ -207,7 +206,6 @@ const MerchantDashboard: React.FC = () => {
     }
   };
 
-  // FUNÇÃO MODIFICADA: Agora apenas prepara a ação e abre o modal
   const processAction = async (type: 'earn' | 'redeem' | 'cancel') => {
     if (isLoading) return;
     const val = parseFloat(amount);
@@ -230,37 +228,35 @@ const MerchantDashboard: React.FC = () => {
     const cashbackPercent: number = currentUser.cashbackPercent ?? 0;
     const calcCashback = type === 'earn' || type === 'cancel' ? (val * (cashbackPercent / 100)) : val;
 
-    // Guarda os dados e pede confirmação
     setPendingAction({ type, val, cashback: calcCashback });
     setShowConfirmModal(true);
   };
 
-  // NOVA FUNÇÃO: Executa a operação após o OK no modal
   const handleConfirmAction = async () => {
     if (!pendingAction || !currentUser || !foundClient) return;
-    
     setShowConfirmModal(false);
     setIsLoading(true);
 
     try {
-      const transactionData: TransactionCreate = {
+      const transactionData: any = {
         clientId: foundClient.id,
+        clientName: foundClient.name,
+        clientNif: foundClient.nif,
         merchantId: currentUser.id,
         merchantName: currentUser.name || 'Loja Vizinho+',
         amount: pendingAction.val,
         cashbackAmount: pendingAction.cashback,
         cashbackPercent: currentUser.cashbackPercent ?? 0,
         type: pendingAction.type,
-        documentNumber: documentNumber
+        documentNumber: documentNumber,
+        createdAt: Timestamp.now()
       };
-
       await addTransaction(transactionData);
       
       setMessage({ 
         type: 'success', 
         text: pendingAction.type === 'earn' ? "Cashback atribuído com sucesso!" : (pendingAction.type === 'cancel' ? "Venda anulada com sucesso!" : "Saldo utilizado com sucesso!") 
       });
-      
       setAmount('');
       setDocumentNumber('');
       setCardNumber('');
@@ -278,7 +274,8 @@ const MerchantDashboard: React.FC = () => {
   const filteredHistory = useMemo(() => {
     return transactions.filter(t => {
       const cleanFilter = filterNif.replace(/\s/g, '');
-      const matchNif = cleanFilter ? (t.clientNif || "").includes(cleanFilter) : true;
+      const clientNif = (t as any).clientNif || "";
+      const matchNif = cleanFilter ? clientNif.includes(cleanFilter) : true;
       const matchType = filterType === 'all' ? true : t.type === filterType;
       return matchNif && matchType;
     });
@@ -292,6 +289,7 @@ const MerchantDashboard: React.FC = () => {
       const effectiveAt = new Date();
       effectiveAt.setDate(effectiveAt.getDate() + 1);
       effectiveAt.setHours(0, 0, 0, 0);
+
       const updates = {
         name: editName,
         email: editEmail.toLowerCase().trim(),
@@ -299,6 +297,7 @@ const MerchantDashboard: React.FC = () => {
         pendingCashbackPercent: editCashback,
         pendingCashbackEffectiveAt: Timestamp.fromDate(effectiveAt)
       };
+
       await updateDoc(doc(db, 'users', currentUser.id), updates);
       setCurrentUser({ ...currentUser, ...updates } as UserProfile);
       setMessage({ type: 'success', text: "Perfil atualizado! A nova percentagem entra em vigor amanhã às 00:00." });
@@ -312,12 +311,6 @@ const MerchantDashboard: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleHelp = () => {
-    const subject = encodeURIComponent(`Suporte Loja Vizinho+: ${currentUser?.name}`);
-    const body = encodeURIComponent(`Olá Equipa de Suporte,\n\nPreciso de ajuda com a minha conta de lojista.\n\nDetalhes:\nLoja: ${currentUser?.name}\nNIF: ${currentUser?.nif}\n\nAssunto: `);
-    window.location.href = `mailto:${supportEmail}?subject=${subject}&body=${body}`;
   };
 
   return (
@@ -395,17 +388,16 @@ const MerchantDashboard: React.FC = () => {
 
             <div className="flex flex-col gap-4">
               {isNifValid && (
-                <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClient ? 'bg-white border-[#00d66f] shadow-lg' : 'bg-slate-100 border-slate-200 opacity-60'}`}>
-                  <User size={24} className={foundClient ? 'text-[#00d66f]' : 'text-slate-400'} />
-                  <div className="text-center">
-                    <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Cliente:</p>
-                    <h4 className={`text-lg font-black uppercase italic ${foundClient ? 'text-[#0f172a]' : 'text-slate-400'}`}>{foundClient?.name || 'Não registado'}</h4>
-                    {foundClient && (
-                      <div className="mt-2 py-1 px-4 bg-[#0a2540] rounded-full">
-                        <p className="text-[10px] font-black text-white uppercase">Saldo na Loja: <span className="text-[#00d66f]">{formatCurrency(clientStoreBalance)}</span></p>
-                      </div>
-                    )}
-                  </div>
+                <div className={`p-6 rounded-[32px] border-4 transition-all animate-in zoom-in duration-300 flex flex-col items-center gap-2 ${foundClient ? 'bg-[#0f172a] border-[#00d66f] text-white' : 'bg-white border-slate-100 text-slate-400'}`}>
+                  {foundClient ? (
+                    <>
+                      <div className="p-3 bg-[#00d66f] rounded-2xl mb-2"><User size={24} className="text-[#0f172a]" strokeWidth={3} /></div>
+                      <h4 className="font-black uppercase text-center text-sm">{foundClient.name}</h4>
+                      <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">Saldo na Loja: {formatCurrency(clientStoreBalance)}</p>
+                    </>
+                  ) : (
+                    <p className="text-[10px] font-black uppercase text-center">Aguardando NIF registado...</p>
+                  )}
                 </div>
               )}
 
@@ -414,22 +406,15 @@ const MerchantDashboard: React.FC = () => {
                 <span className="font-black text-lg uppercase italic tracking-tighter">Atribuir Cashback</span>
               </button>
 
-              <button onClick={() => processAction('redeem')} disabled={isLoading || !isNifValid || !foundClient || clientStoreBalance <= 0} className="flex-1 bg-[#0f172a] p-6 rounded-[32px] text-white transition-all hover:bg-black shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale">
-                {isLoading ? <Loader2 className="animate-spin" size={32} /> : <Gift size={32} className="text-[#00d66f]" strokeWidth={3} />}
-                <span className="font-black text-lg uppercase italic tracking-tighter text-[#00d66f]">Utilizar Saldo Loja</span>
+              <button onClick={() => processAction('redeem')} disabled={isLoading || !isNifValid || !foundClient || clientStoreBalance <= 0} className="flex-1 bg-[#0f172a] p-6 rounded-[32px] text-[#00d66f] transition-all hover:scale-[1.02] shadow-lg border-b-8 border-[#00d66f] flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale">
+                {isLoading ? <Loader2 className="animate-spin" size={32} /> : <Gift size={32} strokeWidth={3} />}
+                <span className="font-black text-lg uppercase italic tracking-tighter">Utilizar Saldo Loja</span>
               </button>
 
               <button onClick={() => processAction('cancel')} disabled={isLoading || !isNifValid || !foundClient} className="flex-1 bg-white p-6 rounded-[32px] text-red-500 border-4 border-red-500 transition-all hover:bg-red-50 shadow-lg flex flex-col items-center justify-center gap-2 disabled:opacity-30 disabled:grayscale">
                 {isLoading ? <Loader2 className="animate-spin" size={32} /> : <RotateCcw size={32} strokeWidth={3} />}
                 <span className="font-black text-lg uppercase italic tracking-tighter">Anular Compra</span>
               </button>
-
-              {message.text && (
-                <div className={`p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
-                  {message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-                  {message.text}
-                </div>
-              )}
             </div>
           </div>
         ) : view === 'history' ? (
@@ -437,8 +422,8 @@ const MerchantDashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row justify-between items-center mb-8 gap-4">
               <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter">Histórico de Vendas</h3>
               <div className="flex flex-wrap gap-2">
-                <input placeholder="FILTRAR NIF..." value={filterNif} onChange={e => setFilterNif(formatNIF(e.target.value))} className="bg-slate-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 ring-[#00d66f]" />
-                <select value={filterType} onChange={e => setFilterType(e.target.value)} className="bg-slate-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase outline-none focus:ring-2 ring-[#00d66f]">
+                <input placeholder="FILTRAR NIF..." value={filterNif} onChange={e => setFilterNif(formatNIF(e.target.value))} className="bg-slate-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase outline-none" />
+                <select value={filterType} onChange={e => setFilterType(e.target.value)} className="bg-slate-100 px-4 py-2 rounded-xl text-[10px] font-black uppercase outline-none">
                   <option value="all">TODOS</option>
                   <option value="earn">ATRIBUIÇÕES</option>
                   <option value="redeem">UTILIZAÇÕES</option>
@@ -459,23 +444,31 @@ const MerchantDashboard: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredHistory.length > 0 ? filteredHistory.map((t, idx) => (
-                    <tr key={idx} className="text-xs font-bold text-[#0f172a] hover:bg-slate-50 transition-colors">
-                      <td className="py-4 text-slate-400 font-medium">{t.createdAt instanceof Timestamp ? t.createdAt.toDate().toLocaleDateString() : '---'}</td>
-                      <td className="py-4 font-black">{formatNIF(t.clientNif || '')}</td>
-                      <td className="py-4 uppercase text-slate-400">{t.documentNumber}</td>
-                      <td className="py-4 uppercase"><span className={`px-2 py-1 rounded-md text-[9px] font-black ${t.type === 'earn' ? 'bg-green-100 text-green-600' : t.type === 'redeem' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'}`}>{t.type === 'earn' ? 'Atribuição' : t.type === 'redeem' ? 'Utilização' : 'Anulação'}</span></td>
-                      <td className="py-4 text-right">{t.amount > 0 ? formatCurrency(t.amount) : '---'}</td>
-                      <td className={`py-4 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>{t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount || 0)}</td>
+                  {filteredHistory.length > 0 ? filteredHistory.map((t: any, idx) => (
+                    <tr key={idx} className="text-xs font-bold text-[#0f172a]">
+                      <td className="py-4 text-slate-400 font-medium">
+                        {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : (t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : '---')}
+                      </td>
+                      <td className="py-4 uppercase">{t.clientName || 'Cliente'} <span className="block text-[9px] text-slate-400">NIF: {formatNIF(t.clientNif || '')}</span></td>
+                      <td className="py-4 font-black uppercase">{t.documentNumber}</td>
+                      <td className="py-4">
+                        <span className={`px-3 py-1 rounded-full text-[9px] font-black uppercase ${t.type === 'earn' ? 'bg-green-100 text-green-600' : (t.type === 'cancel' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600')}`}>
+                          {t.type === 'earn' ? 'Atribuição' : (t.type === 'cancel' ? 'Anulação' : 'Utilização')}
+                        </span>
+                      </td>
+                      <td className="py-4 text-right font-black">{formatCurrency(t.amount)}</td>
+                      <td className="py-4 text-right font-black text-[#00d66f]">{t.type === 'redeem' ? '-' : '+'}{formatCurrency(t.cashbackAmount)}</td>
                     </tr>
-                  )) : (<tr><td colSpan={6} className="py-10 text-center text-slate-300 font-black uppercase text-xs">Sem movimentos registados</td></tr>)}
+                  )) : (
+                    <tr><td colSpan={6} className="py-20 text-center text-slate-300 font-black uppercase text-xs">Sem movimentos encontrados</td></tr>
+                  )}
                 </tbody>
               </table>
             </div>
           </div>
         ) : view === 'customers' ? (
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-2 border-slate-100 animate-in slide-in-from-bottom-4">
-            <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-8">Clientes com Saldo</h3>
+            <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-8">Os Seus Clientes Fidelizados</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
               {merchantCustomers.length > 0 ? merchantCustomers.map((customer) => (
                 <div key={customer.id} className="p-6 bg-slate-50 rounded-[32px] border-2 border-slate-100 hover:border-[#00d66f] transition-all group">
@@ -490,7 +483,9 @@ const MerchantDashboard: React.FC = () => {
                   <p className="text-[10px] font-bold text-slate-400 uppercase">NIF: {formatNIF(customer.nif)}</p>
                   <button onClick={() => { setCardNumber(formatNIF(customer.nif)); setView('terminal'); }} className="w-full mt-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-[#0f172a] hover:text-white transition-all">Selecionar para Venda</button>
                 </div>
-              )) : (<div className="col-span-full py-20 text-center text-slate-300 font-black uppercase text-xs">Ainda não tem clientes fidelizados nesta loja</div>)}
+              )) : (
+                <div className="col-span-full py-20 text-center text-slate-300 font-black uppercase text-xs">Ainda não tem clientes fidelizados nesta loja</div>
+              )}
             </div>
           </div>
         ) : (
@@ -503,102 +498,81 @@ const MerchantDashboard: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Nome Comercial</label>
-                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-[#00d66f] outline-none" />
+                  <input value={editName} onChange={e => setEditName(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#00d66f]" />
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Percentagem Cashback (%)</label>
-                  <input type="number" step="0.1" value={editCashback} onChange={e => setEditCashback(parseFloat(e.target.value))} className="w-full p-5 bg-[#00d66f]/5 rounded-2xl text-3xl font-black text-[#00d66f] border-2 border-[#00d66f]/20 outline-none" />
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Email de Negócio</label>
+                  <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#00d66f]" />
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Email de Contacto</label>
-                <input type="email" value={editEmail} onChange={e => setEditEmail(e.target.value)} className="w-full p-5 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-[#00d66f] outline-none" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Contacto Telefónico</label>
+                  <input value={editPhone} onChange={e => setEditPhone(formatPhone(e.target.value))} className="w-full p-5 bg-slate-50 rounded-2xl font-bold outline-none border-2 border-transparent focus:border-[#00d66f]" />
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase ml-2">% Cashback Atual</label>
+                  <div className="relative">
+                    <input type="number" step="0.5" value={editCashback} onChange={e => setEditCashback(parseFloat(e.target.value))} className="w-full p-5 bg-slate-50 rounded-2xl font-black text-2xl outline-none border-2 border-transparent focus:border-[#00d66f]" />
+                    <span className="absolute right-5 top-1/2 -translate-y-1/2 font-black text-slate-300 text-xl">%</span>
+                  </div>
+                </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-slate-400 uppercase ml-2">Telemóvel</label>
-                <input value={editPhone} onChange={e => setEditPhone(formatPhone(e.target.value))} className="w-full p-5 bg-slate-50 rounded-2xl font-black border-2 border-transparent focus:border-[#00d66f] outline-none" />
-              </div>
-              <button type="submit" disabled={isLoading} className="w-full bg-[#0f172a] text-white p-6 rounded-3xl font-black uppercase tracking-widest shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3">{isLoading ? <Loader2 className="animate-spin" /> : <Download size={20} />}{isLoading ? 'A Guardar...' : 'Atualizar Dados da Loja'}</button>
+              <button disabled={isLoading} className="w-full bg-[#0f172a] text-[#00d66f] py-6 rounded-3xl font-black uppercase tracking-[0.2em] shadow-xl hover:bg-black transition-all flex items-center justify-center gap-3">
+                {isLoading ? <Loader2 className="animate-spin" /> : <Download size={20} />} Guardar Alterações
+              </button>
             </form>
-            <div className="mt-12 pt-8 border-t-2 border-slate-50">
-              <h4 className="text-center text-[10px] font-black text-slate-300 uppercase tracking-[0.2em] mb-4">Suporte à Conta</h4>
-              <button onClick={handleHelp} className="w-full bg-slate-100 text-slate-500 p-5 rounded-3xl font-black uppercase text-[10px] flex items-center justify-center gap-3 hover:bg-slate-200 transition-all"><LifeBuoy size={16} /> Contactar Gestor de Conta</button>
-            </div>
           </div>
         )}
 
-        <footer className="mt-8 py-8 border-t border-slate-200 bg-white relative z-10">
-          <div className="flex flex-col items-center justify-center gap-2">
-            <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Contato para pedido de ajuda</span>
-            <a href={`mailto:${supportEmail}`} className="flex items-center gap-2 text-[#0f172a] font-black hover:text-[#00d66f] transition-colors"><Mail size={16} className="text-[#00d66f]" />{supportEmail}</a>
-          </div>
-        </footer>
-
-        {/* Modal do Scanner */}
-        {showScanner && (
-          <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center">
-            <div className="bg-white p-6 rounded-[40px] w-full max-w-lg relative border-4 border-[#00d66f]">
-              <div id="reader" className="w-full overflow-hidden rounded-3xl"></div>
-              <button onClick={() => setShowScanner(false)} className="w-full bg-red-500 text-white p-5 font-black uppercase mt-6 rounded-2xl hover:bg-red-600 transition-all">Cancelar Leitura</button>
-            </div>
-            <p className="mt-6 text-white/50 font-black uppercase text-[10px] tracking-widest">Aponte para o QR Code do Cartão Vizinho+</p>
+        {message.text && view === 'terminal' && (
+          <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-in slide-in-from-top-4 shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
+            {message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+            {message.text}
           </div>
         )}
+      </div>
 
-        {/* NOVO: Modal de Dupla Confirmação (Estilo Brutalista) */}
-        {showConfirmModal && pendingAction && (
-          <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-md z-[100] flex items-center justify-center p-4">
-            <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-              <div className="p-8 text-center">
-                <div className="w-20 h-20 bg-[#00d66f]/10 rounded-full flex items-center justify-center mx-auto mb-6">
-                  <AlertTriangle size={40} className="text-[#00d66f]" />
-                </div>
-                
-                <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-2">Confirmar Operação?</h3>
-                <p className="text-slate-500 text-sm font-bold uppercase mb-8 tracking-tight">Verifique os dados antes de validar</p>
-                
-                <div className="bg-slate-50 rounded-3xl p-6 space-y-4 mb-8 border-2 border-slate-100">
-                  <div className="flex justify-between items-center">
-                    <span className="text-[10px] font-black text-slate-400 uppercase">Operação</span>
-                    <span className={`text-[10px] font-black uppercase px-3 py-1 rounded-full ${
-                      pendingAction.type === 'earn' ? 'bg-green-100 text-green-600' : 
-                      pendingAction.type === 'redeem' ? 'bg-blue-100 text-blue-600' : 'bg-red-100 text-red-600'
-                    }`}>
-                      {pendingAction.type === 'earn' ? 'Atribuir Cashback' : pendingAction.type === 'redeem' ? 'Utilizar Saldo' : 'Anular Compra'}
-                    </span>
-                  </div>
-                  
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                    <span className="text-[10px] font-black text-slate-400 uppercase">Cliente</span>
-                    <span className="text-sm font-black text-[#0f172a] uppercase italic">{foundClient?.name}</span>
-                  </div>
+      <footer className="mt-auto py-8 border-t border-slate-200 bg-white relative z-10">
+        <div className="flex flex-col items-center justify-center gap-2">
+          <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em]">Contato para pedido de ajuda</span>
+          <a href={`mailto:${supportEmail}`} className="flex items-center gap-2 text-[#0f172a] font-black hover:text-[#00d66f] transition-colors">
+            <Mail size={16} className="text-[#00d66f]" />
+            {supportEmail}
+          </a>
+        </div>
+      </footer>
 
-                  <div className="flex justify-between items-center pt-2 border-t border-slate-200">
-                    <span className="text-[10px] font-black text-slate-400 uppercase">Valor Cashback</span>
-                    <span className="text-xl font-black text-[#00d66f]">{formatCurrency(pendingAction.cashback)}</span>
-                  </div>
-                </div>
+      {showScanner && (
+        <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-50 p-6 flex flex-col items-center justify-center">
+          <div className="bg-white p-6 rounded-[40px] w-full max-w-lg relative border-4 border-[#00d66f]">
+            <div id="reader" className="w-full overflow-hidden rounded-3xl"></div>
+            <button onClick={() => setShowScanner(false)} className="w-full bg-red-500 text-white p-5 font-black uppercase mt-6 rounded-2xl hover:bg-red-600 transition-all">Cancelar Leitura</button>
+          </div>
+          <p className="mt-6 text-white/50 font-black uppercase text-[10px] tracking-widest">Aponte para o QR Code do Cartão Vizinho+</p>
+        </div>
+      )}
 
-                <div className="grid grid-cols-2 gap-4">
-                  <button 
-                    onClick={() => { setShowConfirmModal(false); setPendingAction(null); }}
-                    className="py-5 bg-slate-100 rounded-2xl text-[11px] font-black uppercase text-slate-400 hover:bg-slate-200 transition-all"
-                  >
-                    Cancelar
-                  </button>
-                  <button 
-                    onClick={handleConfirmAction}
-                    className="py-5 bg-[#00d66f] rounded-2xl text-[11px] font-black uppercase text-[#0f172a] hover:scale-[1.05] transition-all shadow-lg"
-                  >
-                    Sim, Confirmar
-                  </button>
-                </div>
+      {showConfirmModal && pendingAction && (
+        <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6 animate-in fade-in">
+          <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl border-4 border-[#0f172a] animate-in zoom-in">
+            <div className={`p-8 text-center ${pendingAction.type === 'earn' ? 'bg-[#00d66f]' : (pendingAction.type === 'cancel' ? 'bg-orange-500' : 'bg-red-500')} text-[#0f172a]`}>
+              <div className="bg-white/20 w-16 h-16 rounded-3xl flex items-center justify-center mx-auto mb-4 border-2 border-white/30"><AlertTriangle size={32} /></div>
+              <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar Operação</h3>
+            </div>
+            <div className="p-8 space-y-6">
+              <div className="space-y-3 bg-slate-50 p-4 rounded-3xl border-2 border-slate-100">
+                <div className="flex justify-between items-center"><span className="text-[10px] font-black text-slate-400 uppercase">Cliente</span><span className="text-sm font-black text-[#0f172a] uppercase italic">{foundClient?.name}</span></div>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-200"><span className="text-[10px] font-black text-slate-400 uppercase">Valor Cashback</span><span className="text-xl font-black text-[#00d66f]">{formatCurrency(pendingAction.cashback)}</span></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <button onClick={() => { setShowConfirmModal(false); setPendingAction(null); }} className="py-5 bg-slate-100 rounded-2xl text-[11px] font-black uppercase text-slate-400 hover:bg-slate-200 transition-all">Cancelar</button>
+                <button onClick={handleConfirmAction} className="py-5 bg-[#00d66f] rounded-2xl text-[11px] font-black uppercase text-[#0f172a] hover:scale-[1.05] transition-all shadow-lg">Sim, Confirmar</button>
               </div>
             </div>
           </div>
-        )}
-
-      </div>
+        </div>
+      )}
     </div>
   );
 };
