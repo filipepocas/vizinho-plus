@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
+import { QRCodeSVG } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile } from '../../types';
@@ -9,14 +10,13 @@ import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
-import { LogOut, HelpCircle, Star, ExternalLink, Wallet, MessageSquare } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser } = useStore();
   
-  // 'home' = Resumo, 'wallets' = Lojas com Saldo, 'history' = Movimentos, 'explore' = Lojas Aderentes
   const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
@@ -44,7 +44,6 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser?.id]);
 
-  // Transações que podem ser avaliadas (Ganhou cashback e ainda não avaliou)
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
   }, [transactions, evaluatedIds]);
@@ -60,116 +59,140 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
       
-      {/* HEADER: SAUDAÇÃO E LOGO */}
-      <header className="bg-white px-8 pt-12 pb-8 flex justify-between items-center border-b border-slate-100">
+      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center">
         <div>
-          <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Olá,</p>
-          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter">
-            {currentUser.name?.split(' ')[0]}
+          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
+          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none">
+            {currentUser.name}
           </h1>
         </div>
-        <img src={logoPath} alt="V+" className="h-10 w-auto" />
+        <img src={logoPath} alt="V+" className="h-8 w-auto" />
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 pt-8 space-y-8">
+      <main className="max-w-2xl mx-auto px-6 space-y-6">
         
+        {/* CARTÃO DIGITAL VIZINHO+ */}
+        <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
+            <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
+                Cartão Digital
+            </div>
+            
+            <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
+                <QRCodeSVG value={currentUser.nif || ""} size={120} />
+            </div>
+
+            <div className="text-center">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este código na loja</p>
+                <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
+                    {currentUser.nif?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
+                </h3>
+            </div>
+            
+            <div className="bg-amber-50 px-6 py-2 rounded-full border border-amber-100 flex items-center gap-2">
+                <QrCode size={14} className="text-amber-600" />
+                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-tight italic">
+                    Apresente sempre o seu cartão ao fazer compras
+                </p>
+            </div>
+        </div>
+
         {/* BLOCO DE SALDOS */}
         <div className="bg-[#0a2540] rounded-[40px] p-8 text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10 space-y-6">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00d66f] mb-1">Saldo Disponível</p>
-              <h2 className="text-5xl font-black italic tracking-tighter">
+              <h2 className="text-5xl font-black italic tracking-tighter text-[#00d66f]">
                 {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}
               </h2>
             </div>
             <div className="pt-4 border-t border-white/10 flex justify-between">
               <div>
-                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Saldo em Maturação</p>
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Em Processamento</p>
                 <p className="text-sm font-bold text-white/80">+{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.pending)}</p>
               </div>
               <div className="text-right">
-                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Acumulado Total</p>
-                <p className="text-sm font-bold text-[#00d66f]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.total)}</p>
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Total Ganho</p>
+                <p className="text-sm font-bold text-white">
+                    {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.total)}
+                </p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* BOTÕES DE AÇÃO RÁPIDA (ÍCONES) */}
+        {/* AÇÕES RÁPIDAS */}
         <div className="grid grid-cols-2 gap-4">
           <button 
             onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')}
-            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-100 text-slate-400'}`}
+            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] -rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}
           >
-            <Wallet size={32} strokeWidth={2.5} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Onde tenho Saldo?</span>
+            <Wallet size={32} />
+            <span className="text-[9px] font-black uppercase tracking-widest">O meu Saldo</span>
           </button>
           <button 
             onClick={() => setView(view === 'history' ? 'home' : 'history')}
-            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-100 text-slate-400'}`}
+            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}
           >
             {pendingEvaluations.length > 0 && (
-              <span className="absolute top-4 right-4 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-4 border-[#f8fafc] animate-bounce">
                 {pendingEvaluations.length}
               </span>
             )}
-            <MessageSquare size={32} strokeWidth={2.5} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Avaliar Visitas</span>
+            <MessageSquare size={32} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Avaliar Lojas</span>
           </button>
         </div>
 
-        {/* CONTEÚDO DINÂMICO BASEADO NOS ÍCONES ACIMA */}
-        {view === 'wallets' && (
-          <div className="animate-in slide-in-from-top-4 duration-300">
-            <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" hideHeader />
-          </div>
-        )}
-
-        {view === 'history' && (
-          <div className="animate-in slide-in-from-top-4 duration-300">
-            <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />
-          </div>
-        )}
-
-        {/* BOTÃO LOJAS ADERENTES (EXPLORAR) */}
+        {/* VIEWS DINÂMICAS */}
+        {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
+        {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
+        
+        {/* BOTÃO EXPLORAR */}
         <button 
           onClick={() => setView(view === 'explore' ? 'home' : 'explore')}
-          className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[8px_8px_0px_#0a2540]'}`}
+          className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[6px_6px_0px_#0a2540] active:translate-y-1 active:shadow-none'}`}
         >
-          {view === 'explore' ? 'Fechar Mapa' : 'Explorar Lojas Parceiras'}
+          {view === 'explore' ? 'Fechar Pesquisa' : 'Ver Lojas Parceiras'}
         </button>
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
-        {/* BOTÃO DOURADO: VANTAGENS EXCLUSIVAS */}
+        {/* BOTÃO DOURADO REALISTA */}
         {sysConfig.vantagensUrl && (
           <button 
             onClick={() => window.open(sysConfig.vantagensUrl, '_blank')}
-            className="w-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 p-8 rounded-[35px] shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between group"
+            className="w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all group"
+            style={{
+                background: 'linear-gradient(135deg, #bf953f 0%, #fcf6ba 45%, #b38728 50%, #fcf6ba 55%, #aa771c 100%)',
+                border: '4px solid #aa771c'
+            }}
           >
-            <div className="flex items-center gap-4 text-amber-900">
-              <div className="bg-white/40 p-3 rounded-2xl">
-                <Star size={32} fill="currentColor" />
+            {/* Brilho animado */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+            
+            <div className="flex items-center justify-between relative z-10">
+              <div className="flex items-center gap-4">
+                <div className="bg-black/20 p-3 rounded-2xl">
+                  <Star size={32} className="text-white fill-white" />
+                </div>
+                <div className="text-left">
+                  <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter text-[#5c4414]">Vantagens Exclusivas</h4>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-[#5c4414] opacity-80">Acesso VIP Vizinho+</p>
+                </div>
               </div>
-              <div className="text-left">
-                <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter">Vantagens Exclusivas</h4>
-                <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Acesso VIP Vizinho+</p>
-              </div>
+              <ExternalLink size={24} className="text-[#5c4414]" />
             </div>
-            <ExternalLink size={24} className="text-amber-900/50 group-hover:text-amber-900 transition-colors" />
           </button>
         )}
 
       </main>
 
-      {/* FOOTER: SUPORTE */}
       <footer className="py-12 text-center">
         <button onClick={() => logout()} className="text-red-500 font-black uppercase text-[10px] tracking-[0.3em] mb-4">Sair da Conta</button>
-        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
-          Suporte: {sysConfig.supportEmail}
-        </p>
+        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026</p>
       </footer>
 
+      {/* MODAL DE FEEDBACK - LIGADO À BASE DE DADOS FEEDBACKS */}
       {selectedTxForFeedback && (
         <FeedbackForm 
           transactionId={selectedTxForFeedback.id} 
