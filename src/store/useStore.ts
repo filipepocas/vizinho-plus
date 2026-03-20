@@ -20,17 +20,16 @@ import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
 import { requestNotificationPermission } from '../utils/notifications';
 
+// BLINDAGEM DE SEGURANÇA: Remove ativamente cálculos vindos do browser
 const pickAllowedTransactionFields = (input: TransactionCreate) => {
   return {
     clientId: input.clientId,
     merchantId: input.merchantId,
     merchantName: input.merchantName,
-    amount: input.amount,
-    cashbackAmount: input.cashbackAmount,
-    cashbackPercent: input.cashbackPercent,
-    documentNumber: input.documentNumber,
+    amount: input.amount,          // O backend fará o cálculo do cashback baseado nisto
+    documentNumber: input.documentNumber || '',
     type: input.type,
-  } as const;
+  };
 };
 
 interface StoreState {
@@ -74,7 +73,6 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       await sendPasswordResetEmail(auth, email);
     } catch (error) {
-      console.error("Erro ao enviar email de recuperação:", error);
       throw error;
     }
   },
@@ -85,7 +83,6 @@ export const useStore = create<StoreState>((set, get) => ({
       const querySnapshot = await getDocs(q);
       return !querySnapshot.empty;
     } catch (error) {
-      console.error("Erro ao verificar NIF:", error);
       return false;
     }
   },
@@ -99,40 +96,33 @@ export const useStore = create<StoreState>((set, get) => ({
         createdAt: serverTimestamp(),
       }, { merge: true });
     } catch (error) {
-      console.error("Erro ao registar perfil:", error);
       throw error;
     }
   },
 
   processPendingCashback: async (userId: string) => {
-    // A lógica de maturação é agora assegurada pelas Firebase Cloud Functions
-    console.log("Maturação de cashback delegada para o Backend Seguro.");
+    console.log("Maturação agora é feita com segurança em lote via Admin.");
   },
 
-  // CORREÇÃO DE SEGURANÇA (ERRO CRÍTICO 2)
-  // O Frontend apenas regista o "pedido" de transação. 
-  // Os cálculos matemáticos do saldo serão feitos na Cloud Function.
+  // REGISTO SEGURO DA TRANSAÇÃO (O BACKEND FARÁ AS CONTAS)
   addTransaction: async (transactionData) => {
     try {
-      const allowed = pickAllowedTransactionFields(transactionData);
+      const securePayload = pickAllowedTransactionFields(transactionData);
       const newTransRef = doc(collection(db, 'transactions'));
       
       await setDoc(newTransRef, {
-        ...allowed,
+        ...securePayload,
         status: transactionData.type === 'earn' ? 'pending' : 
                (transactionData.type === 'cancel' || transactionData.type === 'subtract') ? 'cancelled' : 'available',
         createdAt: serverTimestamp(),
       });
-      
-      // Sucesso! A Cloud Function detectará este novo documento e atualizará a carteira.
+      // Cloud Function atuará após este registo.
     } catch (error) {
       console.error("Erro ao pedir transação:", error);
       throw error;
     }
   },
 
-  // O Frontend apenas atualiza o status para 'cancelled'
-  // A Cloud Function detetará a alteração e reverterá os saldos no perfil do cliente.
   cancelTransaction: async (transactionId) => {
     try {
       const transRef = doc(db, 'transactions', transactionId);
@@ -140,28 +130,21 @@ export const useStore = create<StoreState>((set, get) => ({
         status: 'cancelled',
         cancelledAt: serverTimestamp()
       });
+      // Cloud Function irá reverter os saldos automaticamente.
     } catch (error) {
-      console.error("Erro ao anular transação:", error);
       throw error;
     }
   },
 
   subscribeToTransactions: (role, identifier, limitCount = 50) => {
-    if (!identifier && role !== 'admin') {
-      return () => {};
-    }
+    if (!identifier && role !== 'admin') return () => {};
 
     const transRef = collection(db, 'transactions');
     let q;
 
     if ((role === 'merchant' || role === 'client' || role === 'user') && identifier) {
       const field = (role === 'merchant') ? 'merchantId' : 'clientId';
-      q = query(
-        transRef, 
-        where(field, '==', identifier), 
-        orderBy('createdAt', 'desc'),
-        limit(limitCount)
-      );
+      q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'), limit(limitCount));
     } else if (role === 'admin') {
       q = query(transRef, orderBy('createdAt', 'desc'), limit(limitCount));
     } else {
@@ -170,14 +153,8 @@ export const useStore = create<StoreState>((set, get) => ({
     }
 
     return onSnapshot(q, (snapshot) => {
-      const transData = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Transaction[];
-      
+      const transData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Transaction[];
       set({ transactions: transData });
-    }, (error) => {
-      console.error("Erro na escuta de transações:", error.message);
     });
   },
 
@@ -191,52 +168,30 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       if (user) {
-        get().processPendingCashback(user.uid);
         requestNotificationPermission(user.uid);
 
         userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
           if (userDoc.exists()) {
             const nextUser = { ...userDoc.data(), id: user.uid } as UserProfile;
 
-            if (
-              nextUser.role === 'merchant' &&
-              typeof (nextUser as any).pendingCashbackPercent === 'number' &&
-              (nextUser as any).pendingCashbackEffectiveAt?.toDate
-            ) {
+            // Transição agendada de Percentagem do Lojista
+            if (nextUser.role === 'merchant' && typeof (nextUser as any).pendingCashbackPercent === 'number' && (nextUser as any).pendingCashbackEffectiveAt?.toDate) {
               const effectiveAt = (nextUser as any).pendingCashbackEffectiveAt.toDate();
-              const pending = (nextUser as any).pendingCashbackPercent as number;
-              const current = (nextUser as any).cashbackPercent as number | undefined;
-
-              if (effectiveAt <= new Date() && pending !== current) {
-                try {
-                  await updateDoc(doc(db, 'users', user.uid), {
-                    cashbackPercent: pending,
-                    pendingCashbackPercent: null,
-                    pendingCashbackEffectiveAt: null,
-                    updatedAt: serverTimestamp(),
-                  } as any);
-                } catch (e) {
-                  console.error("Erro ao aplicar cashback pendente:", e);
-                }
+              if (effectiveAt <= new Date()) {
+                updateDoc(doc(db, 'users', user.uid), {
+                  cashbackPercent: (nextUser as any).pendingCashbackPercent,
+                  pendingCashbackPercent: null,
+                  pendingCashbackEffectiveAt: null,
+                  updatedAt: serverTimestamp(),
+                } as any).catch(e => console.error(e));
               }
             }
 
-            set({
-              currentUser: nextUser,
-              isLoading: false,
-              isInitialized: true
-            });
+            set({ currentUser: nextUser, isLoading: false, isInitialized: true });
           } else {
             const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
-            set({ 
-              currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile,
-              isLoading: false,
-              isInitialized: true
-            });
+            set({ currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile, isLoading: false, isInitialized: true });
           }
-        }, (error) => {
-          console.error("Erro na escuta do perfil:", error);
-          set({ isLoading: false, isInitialized: true });
         });
       } else {
         set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
@@ -256,15 +211,9 @@ export const useStore = create<StoreState>((set, get) => ({
       const fieldToMatch = role === 'merchant' ? 'merchantId' : 'clientId';
       const q = query(collection(db, 'transactions'), where(fieldToMatch, '==', userId));
       const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((transactionDoc) => {
-        batch.delete(transactionDoc.ref);
-      });
-      const userRef = doc(db, 'users', userId);
-      batch.delete(userRef);
+      querySnapshot.forEach((transactionDoc) => batch.delete(transactionDoc.ref));
+      batch.delete(doc(db, 'users', userId));
       await batch.commit();
-    } catch (error) {
-      console.error("Erro ao eliminar dados históricos:", error);
-      throw error;
     } finally {
       set({ isLoading: false });
     }

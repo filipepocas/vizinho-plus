@@ -61,6 +61,7 @@ const AdminDashboard: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [filterMerchant, setFilterMerchant] = useState('');
 
+  // 1. Proteção de Rota
   useEffect(() => {
     if (isInitialized && (!currentUser || currentUser.role !== 'admin')) {
       navigate('/login');
@@ -80,6 +81,7 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
+  // 2. Carregar Dados de Admin
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -110,7 +112,10 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  // Lógica de Maturação Automática Segura (O MOTOR)
+  // =========================================================================
+  // CORREÇÃO CRÍTICA B: Maturação em Lotes Seguros (Chunks de 200)
+  // Evita o Crash do Firebase Firestore (> 500 writes num só batch)
+  // =========================================================================
   const processMaturation = async () => {
     if (!window.confirm("Deseja forçar a maturação de todas as transações com mais de 48h?")) return;
     
@@ -138,31 +143,43 @@ const AdminDashboard: React.FC = () => {
         return;
       }
 
-      const batch = writeBatch(db);
+      const docsArray = querySnapshot.docs;
       
-      querySnapshot.docs.forEach((txDoc) => {
-        const txData = txDoc.data();
-        const amount = Number(txData.cashbackAmount) || 0;
-        
-        // 1. Marca a transação como disponível
-        batch.update(doc(db, 'transactions', txDoc.id), {
-          status: 'available',
-          maturedAt: serverTimestamp(),
-          auditRef: "audit150326_manual"
+      // Limite de segurança do Firestore é 500 operações.
+      // Como alteramos 2 documentos por transação (A transação e o User),
+      // 200 itens = 400 operações, o que é totalmente seguro e não crasha.
+      const CHUNK_SIZE = 200; 
+
+      for (let i = 0; i < docsArray.length; i += CHUNK_SIZE) {
+        const chunk = docsArray.slice(i, i + CHUNK_SIZE);
+        const batch = writeBatch(db);
+
+        chunk.forEach((txDoc) => {
+          const txData = txDoc.data();
+          const amount = Number(txData.cashbackAmount) || 0;
+          
+          // A. Atualiza o Status da Transação
+          batch.update(doc(db, 'transactions', txDoc.id), {
+            status: 'available',
+            maturedAt: serverTimestamp(),
+            auditRef: "audit150326_manual"
+          });
+
+          // B. Atualiza as Carteiras do Vizinho (Loja E Global)
+          const userRef = doc(db, 'users', txData.clientId);
+          batch.update(userRef, {
+            [`storeWallets.${txData.merchantId}.available`]: increment(amount),
+            [`storeWallets.${txData.merchantId}.pending`]: increment(-amount),
+            [`wallet.available`]: increment(amount),
+            [`wallet.pending`]: increment(-amount)
+          });
         });
 
-        // 2. Incrementa de forma segura a carteira do utilizador
-        const userRef = doc(db, 'users', txData.clientId);
-        batch.update(userRef, {
-          [`storeWallets.${txData.merchantId}.available`]: increment(amount),
-          [`storeWallets.${txData.merchantId}.pending`]: increment(-amount),
-          [`wallet.available`]: increment(amount),
-          [`wallet.pending`]: increment(-amount)
-        });
-      });
+        // Executa o batch deste chunk e avança para o próximo
+        await batch.commit();
+      }
 
-      await batch.commit();
-      alert(`${querySnapshot.size} transações maturadas com sucesso!`);
+      alert(`${docsArray.length} transações maturadas com sucesso!`);
       fetchData();
     } catch (error) {
       console.error("Erro na maturação manual:", error);
@@ -171,6 +188,7 @@ const AdminDashboard: React.FC = () => {
       setIsProcessing(false);
     }
   };
+  // =========================================================================
 
   useEffect(() => {
     if (currentUser?.role === 'admin') {
@@ -305,7 +323,6 @@ const AdminDashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[32px] border-2 border-slate-50">
               <div className="flex items-center gap-3 text-slate-400">
                 <AlertCircle size={18} />
-                {/* AQUI ESTAVA O ERRO DO MAIOR QUE (>) - AGORA SUBSTITUÍDO POR &gt; */}
                 <p className="text-[10px] font-bold uppercase">A maturação transfere o saldo pendente (&gt;48h) para o saldo disponível.</p>
               </div>
               <button 
