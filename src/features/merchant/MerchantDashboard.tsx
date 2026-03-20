@@ -29,9 +29,9 @@ import {
   AlertTriangle
 } from 'lucide-react';
 
-// URL Estável do Logótipo no Firebase Storage
-const LOGO_URL = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus.png?alt=media";
-const WATERMARK_URL = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media";
+// URL do Logótipo e Marca de Água apontando para a pasta public local
+const LOGO_URL = `${process.env.PUBLIC_URL}/assets/logo-v-plus.png`;
+const WATERMARK_URL = `${process.env.PUBLIC_URL}/assets/logo-v-plus-watermark.png`;
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout, setCurrentUser } = useStore();
@@ -64,7 +64,7 @@ const MerchantDashboard: React.FC = () => {
   } | null>(null);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
-  
+
   const formatNIF = (value: string) => {
     const digits = value.replace(/\D/g, '');
     if (digits.length <= 9) {
@@ -236,7 +236,6 @@ const MerchantDashboard: React.FC = () => {
     if (!pendingAction || !currentUser || !foundClient) return;
     setShowConfirmModal(false);
     setIsLoading(true);
-
     try {
       const transactionData: any = {
         clientId: foundClient.id,
@@ -289,7 +288,6 @@ const MerchantDashboard: React.FC = () => {
       const effectiveAt = new Date();
       effectiveAt.setDate(effectiveAt.getDate() + 1);
       effectiveAt.setHours(0, 0, 0, 0);
-
       const updates = {
         name: editName,
         email: editEmail.toLowerCase().trim(),
@@ -297,7 +295,6 @@ const MerchantDashboard: React.FC = () => {
         pendingCashbackPercent: editCashback,
         pendingCashbackEffectiveAt: Timestamp.fromDate(effectiveAt)
       };
-
       await updateDoc(doc(db, 'users', currentUser.id), updates);
       setCurrentUser({ ...currentUser, ...updates } as UserProfile);
       setMessage({ type: 'success', text: "Perfil atualizado! A nova percentagem entra em vigor amanhã às 00:00." });
