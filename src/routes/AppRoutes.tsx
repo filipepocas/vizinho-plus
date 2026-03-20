@@ -1,7 +1,7 @@
-// src/routes/AppRoutes.tsx
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import ClientDashboard from '../features/client/ClientDashboard';
+// Alterado para apontar para o dashboard que acabámos de configurar
+import UserDashboard from '../features/user/UserDashboard'; 
 import MerchantDashboard from '../features/merchant/MerchantDashboard';
 import AdminDashboard from '../features/admin/AdminDashboard';
 import LoginPage from '../features/auth/LoginPage';
@@ -15,7 +15,10 @@ const AppRoutes = () => {
         {/* Rotas Públicas */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
-        <Route path="/cliente" element={<ClientDashboard />} />
+        
+        {/* Rota do Cliente atualizada para o UserDashboard */}
+        <Route path="/cliente" element={<UserDashboard />} />
+        
         <Route path="/comerciante" element={<MerchantDashboard />} />
 
         {/* Rota Protegida - Só entra quem fez Login */}
