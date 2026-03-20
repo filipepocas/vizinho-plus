@@ -28,7 +28,8 @@ import {
   FileSpreadsheet,
   MessageSquare,
   ExternalLink,
-  AlertCircle
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -39,7 +40,7 @@ import AdminUsers from '../../features/admin/AdminUsers';
 import AdminMerchants from '../../features/admin/AdminMerchants';
 import MerchantModal from '../../features/admin/MerchantModal';
 import FeedbackList from '../../components/admin/FeedbackList'; 
-import { User as UserProfile } from '../../types/index';
+import { User as UserProfile, Feedback } from '../../types/index';
 
 const AdminDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout, currentUser, isInitialized } = useStore();
@@ -53,7 +54,7 @@ const AdminDashboard: React.FC = () => {
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
-  const [reviews, setReviews] = useState<any[]>([]);
+  const [reviews, setReviews] = useState<Feedback[]>([]);
   const [supportEmail, setSupportEmail] = useState('ajuda@vizinho-plus.pt');
   const [vantagensUrl, setVantagensUrl] = useState(''); 
   
@@ -61,7 +62,7 @@ const AdminDashboard: React.FC = () => {
   const [endDate, setEndDate] = useState('');
   const [filterMerchant, setFilterMerchant] = useState('');
 
-  // 1. Proteção de Rota
+  // 1. Proteção de Rota Master
   useEffect(() => {
     if (isInitialized && (!currentUser || currentUser.role !== 'admin')) {
       navigate('/login');
@@ -81,7 +82,7 @@ const AdminDashboard: React.FC = () => {
     }
   };
 
-  // 2. Carregar Dados de Admin
+  // 2. Carregamento de Dados
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
@@ -99,7 +100,7 @@ const AdminDashboard: React.FC = () => {
       }
 
       const reviewsSnap = await getDocs(query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc')));
-      setReviews(reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      setReviews(reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() } as Feedback)));
 
     } catch (e) {
       console.error("Erro ao carregar dados do Admin:", e);
@@ -113,41 +114,36 @@ const AdminDashboard: React.FC = () => {
   }, [fetchData]);
 
   // =========================================================================
-  // CORREÇÃO CRÍTICA B: Maturação em Lotes Seguros (Chunks de 200)
-  // Evita o Crash do Firebase Firestore (> 500 writes num só batch)
+  // MATURAÇÃO MENSAL MANUAL (SEGURANÇA FINANCEIRA)
+  // Regra: Apenas transações de meses ANTERIORES ao atual podem ser maturadas.
   // =========================================================================
   const processMaturation = async () => {
-    if (!window.confirm("Deseja forçar a maturação de todas as transações com mais de 48h?")) return;
+    const now = new Date();
+    const currentMonthName = now.toLocaleString('pt-PT', { month: 'long' });
+    
+    if (!window.confirm(`Deseja maturar todas as transações pendentes de meses ANTERIORES a ${currentMonthName}?`)) return;
     
     setIsProcessing(true);
     try {
-      const configRef = doc(db, 'system', 'config');
-      const configSnap = await getDoc(configRef);
-      const hours = configSnap.exists() ? configSnap.data().maturationHours : 48;
-      
-      const limitDate = new Date();
-      limitDate.setHours(limitDate.getHours() - hours);
+      // Calcular o primeiro segundo do mês atual (Ex: 1 de Abril, 00:00:00)
+      const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
 
       const q = query(
         collection(db, 'transactions'), 
         where('status', '==', 'pending'),
         where('type', '==', 'earn'),
-        where('createdAt', '<=', Timestamp.fromDate(limitDate))
+        where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth)) // Menor que o início do mês atual
       );
 
       const querySnapshot = await getDocs(q);
       
       if (querySnapshot.empty) {
-        alert(`Nenhuma transação pendente (+${hours}h) para processar neste momento.`);
+        alert(`Não existem transações de meses anteriores prontas para maturar.`);
         setIsProcessing(false);
         return;
       }
 
       const docsArray = querySnapshot.docs;
-      
-      // Limite de segurança do Firestore é 500 operações.
-      // Como alteramos 2 documentos por transação (A transação e o User),
-      // 200 itens = 400 operações, o que é totalmente seguro e não crasha.
       const CHUNK_SIZE = 200; 
 
       for (let i = 0; i < docsArray.length; i += CHUNK_SIZE) {
@@ -162,7 +158,7 @@ const AdminDashboard: React.FC = () => {
           batch.update(doc(db, 'transactions', txDoc.id), {
             status: 'available',
             maturedAt: serverTimestamp(),
-            auditRef: "audit150326_manual"
+            auditRef: "maturacao_mensal_manual"
           });
 
           // B. Atualiza as Carteiras do Vizinho (Loja E Global)
@@ -175,20 +171,18 @@ const AdminDashboard: React.FC = () => {
           });
         });
 
-        // Executa o batch deste chunk e avança para o próximo
         await batch.commit();
       }
 
-      alert(`${docsArray.length} transações maturadas com sucesso!`);
+      alert(`${docsArray.length} transações foram maturadas com sucesso!`);
       fetchData();
     } catch (error) {
-      console.error("Erro na maturação manual:", error);
-      alert("Erro crítico ao processar maturação. Verifique a consola.");
+      console.error("Erro na maturação:", error);
+      alert("Erro crítico ao processar maturação.");
     } finally {
       setIsProcessing(false);
     }
   };
-  // =========================================================================
 
   useEffect(() => {
     if (currentUser?.role === 'admin') {
@@ -232,10 +226,18 @@ const AdminDashboard: React.FC = () => {
   }, [reviews, startDate, endDate, filterMerchant]);
 
   const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredReviews);
+    const dataToExport = filteredReviews.map(r => ({
+      'DATA': r.createdAt?.toDate ? r.createdAt.toDate().toLocaleDateString() : '---',
+      'LOJA': r.merchantName,
+      'VIZINHO': r.userName,
+      'ESTRELAS': r.rating,
+      'COMENTÁRIO': r.comment,
+      'RECOMENDA': r.recommend ? 'Sim' : 'Não'
+    }));
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Avaliacoes");
-    XLSX.writeFile(wb, `Relatorio_VPlus_${new Date().toISOString().split('T')[0]}.xlsx`);
+    XLSX.writeFile(wb, `Feedback_VizinhoPlus_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   if (!isInitialized) return <div className="min-h-screen bg-[#0a2540]" />;
@@ -323,7 +325,9 @@ const AdminDashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[32px] border-2 border-slate-50">
               <div className="flex items-center gap-3 text-slate-400">
                 <AlertCircle size={18} />
-                <p className="text-[10px] font-bold uppercase">A maturação transfere o saldo pendente (&gt;48h) para o saldo disponível.</p>
+                <p className="text-[10px] font-bold uppercase tracking-tight">
+                  A maturação liberta o saldo de meses anteriores para o saldo disponível (Regra: Mês Seguinte).
+                </p>
               </div>
               <button 
                 onClick={processMaturation}
@@ -352,16 +356,16 @@ const AdminDashboard: React.FC = () => {
                   >
                     <option value="">Todas as Lojas</option>
                     {merchants.map(m => (
-                      <option key={m.id} value={m.id}>{(m as any).shopName || m.name}</option>
+                      <option key={m.id} value={m.id}>{m.shopName || m.name}</option>
                     ))}
                   </select>
                 </div>
                 <div className="flex-1 min-w-[150px]">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Data Início</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Início</label>
                   <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} className="w-full bg-slate-50 border-4 border-slate-50 rounded-2xl p-4 font-black text-sm focus:border-[#00d66f] outline-none" />
                 </div>
                 <div className="flex-1 min-w-[150px]">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Data Fim</label>
+                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2 mb-2 block tracking-widest">Fim</label>
                   <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} className="w-full bg-slate-50 border-4 border-slate-50 rounded-2xl p-4 font-black text-sm focus:border-[#00d66f] outline-none" />
                 </div>
               </div>
