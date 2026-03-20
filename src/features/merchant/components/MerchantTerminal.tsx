@@ -1,5 +1,13 @@
 import React from 'react';
-import { Search, Camera, ArrowRight, User, Coins, Gift, RotateCcw, Loader2, CheckCircle2, AlertCircle } from 'lucide-react';
+import { 
+  Search, 
+  Camera, 
+  ArrowRight, 
+  User as UserIcon, // Corrigido aqui: Importado como UserIcon
+  Coins, 
+  Gift, 
+  RotateCcw 
+} from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
 interface MerchantTerminalProps {
@@ -10,7 +18,7 @@ interface MerchantTerminalProps {
   foundClient: UserProfile | null;
   amount: string;
   setAmount: (val: string) => void;
-  liveCashback: number;
+  previewCashback: number;
   documentNumber: string;
   setDocumentNumber: (val: string) => void;
   onOpenScanner: () => void;
@@ -21,9 +29,9 @@ interface MerchantTerminalProps {
 }
 
 const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
-  cardNumber, setCardNumber, isNifValid, isSearching, foundClient,
-  amount, setAmount, liveCashback, documentNumber, setDocumentNumber,
-  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency
+  cardNumber, setCardNumber, isNifValid, foundClient,
+  amount, setAmount, previewCashback, documentNumber, setDocumentNumber,
+  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching
 }) => {
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
@@ -52,7 +60,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
               {Number(amount) > 0 && (
                 <div className="flex items-center gap-3 bg-[#00d66f]/10 p-4 rounded-2xl border-2 border-[#00d66f]/20 animate-in zoom-in">
                   <ArrowRight size={16} className="text-[#00d66f]" />
-                  <span className="text-[11px] font-black uppercase text-[#0f172a]">Retorno de <span className="text-[#00d66f] text-sm">{formatCurrency(liveCashback)}</span></span>
+                  <span className="text-[11px] font-black uppercase text-[#0f172a]">Retorno Estimado: <span className="text-[#00d66f] text-sm">{formatCurrency(previewCashback)}</span></span>
                 </div>
               )}
             </div>
@@ -68,7 +76,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
         <div className={`p-6 rounded-[32px] border-4 transition-all flex flex-col items-center gap-2 ${foundClient ? 'bg-[#0f172a] border-[#00d66f] text-white' : 'bg-white border-slate-100 text-slate-400'}`}>
           {foundClient ? (
             <>
-              <div className="p-3 bg-[#00d66f] rounded-2xl mb-2"><User size={24} className="text-[#0f172a]" /></div>
+              <div className="p-3 bg-[#00d66f] rounded-2xl mb-2">
+                <UserIcon size={24} className="text-[#0f172a]" />
+              </div>
               <h4 className="font-black uppercase text-center text-sm">{foundClient.name}</h4>
               <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">Saldo na Loja: {formatCurrency(clientStoreBalance)}</p>
             </>

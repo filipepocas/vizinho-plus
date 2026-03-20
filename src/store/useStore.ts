@@ -1,5 +1,4 @@
 // src/store/useStore.ts
-
 import { create } from 'zustand';
 import { 
   collection, 
@@ -20,13 +19,19 @@ import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
 import { requestNotificationPermission } from '../utils/notifications';
 
-// BLINDAGEM DE SEGURANÇA: Remove ativamente cálculos vindos do browser
-const pickAllowedTransactionFields = (input: TransactionCreate) => {
+// Filtro de segurança: Prepara os dados conforme as Rules exigem
+const pickAllowedTransactionFields = (input: TransactionCreate, merchantPercent: number) => {
+  const amount = Number(input.amount);
+  // O valor do cashback enviado tem de ser matematicamente exato para as Rules aceitarem
+  const calculatedCashback = Number((amount * (merchantPercent / 100)).toFixed(2));
+
   return {
     clientId: input.clientId,
     merchantId: input.merchantId,
     merchantName: input.merchantName,
-    amount: input.amount,          // O backend fará o cálculo do cashback baseado nisto
+    amount: amount,
+    cashbackAmount: calculatedCashback, 
+    cashbackPercent: merchantPercent,
     documentNumber: input.documentNumber || '',
     type: input.type,
   };
@@ -44,11 +49,9 @@ interface StoreState {
   addTransaction: (transaction: TransactionCreate) => Promise<void>;
   cancelTransaction: (transactionId: string) => Promise<void>;
   subscribeToTransactions: (role?: string, identifier?: string) => () => void;
-  registerClientProfile: (profile: UserProfile) => Promise<void>;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
-  processPendingCashback: (userId: string) => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -64,81 +67,53 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       await signOut(auth);
       set({ currentUser: null, transactions: [], isLoading: false });
-    } catch (error) {
-      console.error("Erro ao sair:", error);
-    }
+    } catch (error) { console.error("Erro ao sair:", error); }
   },
 
   resetPassword: async (email: string) => {
-    try {
-      await sendPasswordResetEmail(auth, email);
-    } catch (error) {
-      throw error;
-    }
+    await sendPasswordResetEmail(auth, email);
   },
 
   checkNifExists: async (nif: string) => {
-    try {
-      const q = query(collection(db, 'users'), where('nif', '==', nif));
-      const querySnapshot = await getDocs(q);
-      return !querySnapshot.empty;
-    } catch (error) {
-      return false;
-    }
+    const q = query(collection(db, 'users'), where('nif', '==', nif));
+    const querySnapshot = await getDocs(q);
+    return !querySnapshot.empty;
   },
 
-  registerClientProfile: async (profile) => {
-    try {
-      const docId = profile.id;
-      const { id, ...dataToSave } = profile;
-      await setDoc(doc(db, 'users', docId), {
-        ...dataToSave,
-        createdAt: serverTimestamp(),
-      }, { merge: true });
-    } catch (error) {
-      throw error;
-    }
-  },
-
-  processPendingCashback: async (userId: string) => {
-    console.log("Maturação agora é feita com segurança em lote via Admin.");
-  },
-
-  // REGISTO SEGURO DA TRANSAÇÃO (O BACKEND FARÁ AS CONTAS)
   addTransaction: async (transactionData) => {
+    const { currentUser } = get();
+    if (!currentUser || currentUser.role !== 'merchant') {
+      throw new Error("Apenas lojistas podem registar transações.");
+    }
+
     try {
-      const securePayload = pickAllowedTransactionFields(transactionData);
+      // Usamos a percentagem oficial do lojista para o cálculo
+      const merchantPercent = currentUser.cashbackPercent || 0;
+      const securePayload = pickAllowedTransactionFields(transactionData, merchantPercent);
+      
       const newTransRef = doc(collection(db, 'transactions'));
       
       await setDoc(newTransRef, {
         ...securePayload,
-        status: transactionData.type === 'earn' ? 'pending' : 
-               (transactionData.type === 'cancel' || transactionData.type === 'subtract') ? 'cancelled' : 'available',
+        status: transactionData.type === 'earn' ? 'pending' : 'available',
         createdAt: serverTimestamp(),
       });
-      // Cloud Function atuará após este registo.
     } catch (error) {
-      console.error("Erro ao pedir transação:", error);
+      console.error("Erro na transação:", error);
       throw error;
     }
   },
 
   cancelTransaction: async (transactionId) => {
-    try {
-      const transRef = doc(db, 'transactions', transactionId);
-      await updateDoc(transRef, { 
-        status: 'cancelled',
-        cancelledAt: serverTimestamp()
-      });
-      // Cloud Function irá reverter os saldos automaticamente.
-    } catch (error) {
-      throw error;
-    }
+    const transRef = doc(db, 'transactions', transactionId);
+    await updateDoc(transRef, { 
+      status: 'cancelled',
+      cancelledAt: serverTimestamp()
+    });
   },
 
   subscribeToTransactions: (role, identifier, limitCount = 50) => {
     if (!identifier && role !== 'admin') return () => {};
-
     const transRef = collection(db, 'transactions');
     let q;
 
@@ -148,60 +123,32 @@ export const useStore = create<StoreState>((set, get) => ({
     } else if (role === 'admin') {
       q = query(transRef, orderBy('createdAt', 'desc'), limit(limitCount));
     } else {
-      set({ transactions: [] });
       return () => {};
     }
 
     return onSnapshot(q, (snapshot) => {
-      const transData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })) as Transaction[];
+      const transData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Transaction));
       set({ transactions: transData });
     });
   },
 
   initializeAuth: () => {
-    let userUnsubscribe: (() => void) | null = null;
-
     const authUnsubscribe = onAuthStateChanged(auth, (user) => {
-      if (userUnsubscribe) {
-        userUnsubscribe();
-        userUnsubscribe = null;
-      }
-
       if (user) {
         requestNotificationPermission(user.uid);
-
-        userUnsubscribe = onSnapshot(doc(db, 'users', user.uid), async (userDoc) => {
+        onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
           if (userDoc.exists()) {
-            const nextUser = { ...userDoc.data(), id: user.uid } as UserProfile;
-
-            // Transição agendada de Percentagem do Lojista
-            if (nextUser.role === 'merchant' && typeof (nextUser as any).pendingCashbackPercent === 'number' && (nextUser as any).pendingCashbackEffectiveAt?.toDate) {
-              const effectiveAt = (nextUser as any).pendingCashbackEffectiveAt.toDate();
-              if (effectiveAt <= new Date()) {
-                updateDoc(doc(db, 'users', user.uid), {
-                  cashbackPercent: (nextUser as any).pendingCashbackPercent,
-                  pendingCashbackPercent: null,
-                  pendingCashbackEffectiveAt: null,
-                  updatedAt: serverTimestamp(),
-                } as any).catch(e => console.error(e));
-              }
-            }
-
-            set({ currentUser: nextUser, isLoading: false, isInitialized: true });
+            set({ currentUser: { ...userDoc.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
           } else {
             const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
-            set({ currentUser: { id: user.uid, email: user.email!, role: role } as UserProfile, isLoading: false, isInitialized: true });
+            set({ currentUser: { id: user.uid, email: user.email!, role } as UserProfile, isLoading: false, isInitialized: true });
           }
         });
       } else {
         set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
       }
     });
-
-    return () => {
-      authUnsubscribe();
-      if (userUnsubscribe) userUnsubscribe();
-    };
+    return authUnsubscribe;
   },
 
   deleteUserWithHistory: async (userId, role) => {
@@ -211,11 +158,9 @@ export const useStore = create<StoreState>((set, get) => ({
       const fieldToMatch = role === 'merchant' ? 'merchantId' : 'clientId';
       const q = query(collection(db, 'transactions'), where(fieldToMatch, '==', userId));
       const querySnapshot = await getDocs(q);
-      querySnapshot.forEach((transactionDoc) => batch.delete(transactionDoc.ref));
+      querySnapshot.forEach((tx) => batch.delete(tx.ref));
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
-    } finally {
-      set({ isLoading: false });
-    }
+    } finally { set({ isLoading: false }); }
   }
 }));

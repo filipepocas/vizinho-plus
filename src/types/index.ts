@@ -11,6 +11,32 @@ export type UserStatus = 'active' | 'disabled' | 'pending';
 export type TransactionType = 'earn' | 'redeem' | 'cancel' | 'subtract';
 export type TransactionStatus = 'pending' | 'available' | 'cancelled' | 'rejected';
 
+export interface Feedback {
+  id: string;
+  transactionId: string;
+  merchantId: string;
+  merchantName: string;
+  userId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  recommend: boolean | null;
+  status: 'new' | 'reviewed';
+  createdAt: FirestoreTimestamp;
+}
+
+export interface SystemConfig {
+  globalServiceFee: number;
+  maturationHours: number;
+  minRedeemAmount: number;
+  platformStatus: 'active' | 'maintenance';
+  supportEmail: string;
+  vantagensUrl: string;
+  updatedAt?: FirestoreTimestamp;
+  lastChangeBy?: string;
+  auditRef?: string;
+}
+
 export interface WalletData {
   merchantName: string;
   available: number;
@@ -63,13 +89,11 @@ export interface TransactionCore {
   documentNumber?: string;
 }
 
-// O Frontend envia isto. Note-se que cashbackAmount não é obrigatório agora.
 export interface TransactionCreate extends TransactionCore {
   cashbackAmount?: number;
   cashbackPercent?: number;
 }
 
-// O Firebase devolve isto (já com as contas feitas pelo Backend)
 export interface Transaction extends TransactionCore {
   id: string;
   cashbackAmount: number;

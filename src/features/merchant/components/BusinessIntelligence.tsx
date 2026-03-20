@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
-import { Transaction } from '../../../types';
+import { Transaction, Feedback } from '../../../types';
 import { BarChart3, TrendingUp, Wallet, Star, Clock } from 'lucide-react';
 
 interface BIProps {
@@ -9,7 +9,6 @@ interface BIProps {
   transactions: Transaction[];
 }
 
-// 1. DEFINIR O MOLDE PARA OS DADOS MENSAIS (Resolve os erros de 'any')
 interface MonthStat {
   label: string;
   m: number;
@@ -18,7 +17,7 @@ interface MonthStat {
 }
 
 const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) => {
-  const [feedbacks, setFeedbacks] = useState<any[]>([]);
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
 
   useEffect(() => {
     const q = query(
@@ -27,13 +26,12 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       orderBy('createdAt', 'desc')
     );
     return onSnapshot(q, (snap) => {
-      setFeedbacks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setFeedbacks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Feedback)));
     });
   }, [merchantId]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // COLUNA 1: Transações por Dia da Semana (12 meses)
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const counts = days.map(d => ({ day: d, count: 0, hours: Array(24).fill(0) }));
@@ -56,9 +54,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     }));
   }, [transactions]);
 
-  // COLUNA 2: Volume de Vendas (6 meses) - CORRIGIDO COM TIPAGEM FORTE
   const monthStats = useMemo(() => {
-    const months: MonthStat[] = []; // Definido como array de MonthStat
+    const months: MonthStat[] = [];
     
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
@@ -83,7 +80,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return months;
   }, [transactions]);
 
-  // COLUNA 3: Cashback
   const cashbackStats = useMemo(() => {
     let emitted = 0, used = 0, pending = 0, available = 0;
     transactions.forEach(t => {
@@ -100,7 +96,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return { emitted, used, pending, available: Math.max(0, available) };
   }, [transactions]);
 
-  // COLUNA 4: Avaliações
   const feedbackStats = useMemo(() => {
     if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
     const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
@@ -114,8 +109,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
-      
-      {/* C1: DIAS DA SEMANA */}
       <div className="bg-white p-6 rounded-[35px] border-2 border-slate-100 shadow-sm flex flex-col">
         <h3 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest text-slate-400 mb-6">
           <BarChart3 size={16} /> Fluxo Semanal
@@ -138,7 +131,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
       </div>
 
-      {/* C2: VENDAS 6 MESES */}
       <div className="bg-white p-6 rounded-[35px] border-2 border-slate-100 shadow-sm">
         <h3 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest text-slate-400 mb-6">
           <TrendingUp size={16} /> Volume Mensal
@@ -158,7 +150,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
       </div>
 
-      {/* C3: CASHBACK */}
       <div className="bg-[#0a2540] p-6 rounded-[35px] text-white shadow-xl flex flex-col">
         <h3 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8">
           <Wallet size={16} /> Gestão de Saldo
@@ -184,7 +175,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
       </div>
 
-      {/* C4: REPUTAÇÃO */}
       <div className="bg-white p-6 rounded-[35px] border-2 border-slate-100 shadow-sm flex flex-col">
         <h3 className="flex items-center gap-2 font-black uppercase text-[10px] tracking-widest text-slate-400 mb-6">
           <Star size={16} className="text-amber-400" /> Satisfação

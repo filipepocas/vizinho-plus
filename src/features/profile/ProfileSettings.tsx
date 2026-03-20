@@ -4,7 +4,7 @@ import { db } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, 
-  User, 
+  User as UserIcon, 
   Phone, 
   MapPin, 
   Tag, 
@@ -16,16 +16,15 @@ import {
   RefreshCw,
   Mail
 } from 'lucide-react';
+import { User } from '../../types';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { currentUser: rawUser, deleteUserWithHistory, logout } = useStore();
-  const currentUser = rawUser as any; // Cast para evitar erros de tipo TS2339
+  const { currentUser, deleteUserWithHistory, logout } = useStore();
   
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Estados do formulário baseados no currentUser com fallback para string vazia
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
     phone: currentUser?.phone || '',
@@ -88,7 +87,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-20 text-[#0f172a]">
-      {/* HEADER BRUTALISTA */}
       <header className="bg-[#0f172a] px-6 py-10 text-white rounded-b-[40px] shadow-2xl mb-12 border-b-8 border-[#00d66f] relative overflow-hidden">
         <div className="max-w-5xl mx-auto flex items-center gap-6 relative z-10">
           <button 
@@ -106,12 +104,10 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       <main className="max-w-xl mx-auto px-6">
         <form onSubmit={handleSave} className="space-y-6">
-          
-          {/* SECÇÃO: DADOS BÁSICOS */}
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
             <div className="flex items-center gap-3 mb-8">
               <div className="bg-slate-100 p-2 rounded-xl">
-                <User className="text-[#0f172a]" size={20} strokeWidth={3} />
+                <UserIcon className="text-[#0f172a]" size={20} strokeWidth={3} />
               </div>
               <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados Pessoais</h3>
             </div>
@@ -156,7 +152,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* SECÇÃO EXTRA: APENAS PARA LOJISTAS */}
           {currentUser?.role === 'merchant' && (
             <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
               <div className="flex items-center gap-3 mb-8">
@@ -215,7 +210,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           )}
 
-          {/* INFO DE CONTA (NÃO EDITÁVEL) */}
           <div className="bg-slate-200/30 p-6 rounded-[30px] border-2 border-dashed border-slate-300">
             <div className="flex items-center gap-3 opacity-60">
               <ShieldCheck size={16} className="text-[#0f172a]" />
@@ -224,7 +218,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 ml-7 leading-relaxed">O Número de Identificação Fiscal está vinculado à sua conta e não pode ser alterado por segurança.</p>
           </div>
 
-          {/* BOTÃO GUARDAR PRINCIPAL */}
           <button 
             type="submit"
             disabled={loading || isDeleting}
@@ -247,7 +240,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             )}
           </button>
 
-          {/* ÁREA DE PERIGO: ELIMINAÇÃO */}
           <div className="pt-12 mt-8 border-t-4 border-slate-100">
             <div className="bg-red-50 p-6 rounded-[35px] border-2 border-red-100">
               <div className="flex items-center gap-2 mb-4 text-red-600">
