@@ -9,33 +9,26 @@ import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
-import { LogOut, Store, Wallet, History, HelpCircle } from 'lucide-react';
+import { LogOut, HelpCircle, Star, ExternalLink, Wallet, MessageSquare } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
-const watermarkUrl = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media";
 
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser } = useStore();
   
-  const [view, setView] = useState<'home' | 'history' | 'explore'>('home');
-  const [showHelpModal, setShowHelpModal] = useState(false);
+  // 'home' = Resumo, 'wallets' = Lojas com Saldo, 'history' = Movimentos, 'explore' = Lojas Aderentes
+  const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
-  
-  const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
-  const [helpMessage, setHelpMessage] = useState('');
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
+  const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
-        if (configSnap.exists()) {
-          setSysConfig({
-            supportEmail: configSnap.data().supportEmail || 'ajuda@vizinho-plus.pt',
-            vantagensUrl: configSnap.data().vantagensUrl || ''
-          });
-        }
+        if (configSnap.exists()) setSysConfig(configSnap.data() as any);
+        
         const merchantsSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active')));
         setAllMerchants(merchantsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as UserProfile[]);
       } catch (err) { console.error(err); }
@@ -51,76 +44,131 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser?.id]);
 
-  const merchantBalances = useMemo(() => {
-    if (!currentUser?.storeWallets) return [];
-    return Object.entries(currentUser.storeWallets)
-      .map(([id, data]) => ({
-        merchantId: id,
-        name: data.merchantName || 'Loja Vizinho+',
-        available: data.available || 0,
-        pending: data.pending || 0,
-        total: (data.available || 0) + (data.pending || 0)
-      }))
-      .filter(b => b.total > 0);
-  }, [currentUser?.storeWallets]);
+  // Transações que podem ser avaliadas (Ganhou cashback e ainda não avaliou)
+  const pendingEvaluations = useMemo(() => {
+    return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+  }, [transactions, evaluatedIds]);
 
   const stats = useMemo(() => ({
     available: currentUser?.wallet?.available || 0,
-    pending: currentUser?.wallet?.pending || 0
+    pending: currentUser?.wallet?.pending || 0,
+    total: (currentUser?.wallet?.available || 0) + (currentUser?.wallet?.pending || 0)
   }), [currentUser?.wallet]);
 
   if (!currentUser) return null;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative flex flex-col">
-      <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0" style={{ backgroundImage: `url('${watermarkUrl}')`, backgroundSize: '200px' }} />
+    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
       
-      <header className="bg-[#0f172a] px-6 pt-12 pb-24 text-white rounded-b-[50px] shadow-2xl relative overflow-hidden border-b-8 border-[#00d66f]">
-        <img src={logoPath} alt="V+" className="absolute top-6 left-6 h-8 opacity-90" />
-        <div className="max-w-5xl mx-auto flex justify-end gap-3 relative z-10">
-          <button onClick={() => setShowHelpModal(true)} className="bg-white/5 p-4 rounded-2xl border-2 border-white/10 hover:bg-blue-500 transition-all"><HelpCircle size={22} /></button>
-          <button onClick={() => logout()} className="bg-white/5 p-4 rounded-2xl border-2 border-white/10 hover:bg-red-500 transition-all"><LogOut size={22} /></button>
+      {/* HEADER: SAUDAÇÃO E LOGO */}
+      <header className="bg-white px-8 pt-12 pb-8 flex justify-between items-center border-b border-slate-100">
+        <div>
+          <p className="text-slate-400 text-xs font-black uppercase tracking-widest">Olá,</p>
+          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter">
+            {currentUser.name?.split(' ')[0]}
+          </h1>
         </div>
-        <div className="text-center mt-6">
-          <h1 className="text-3xl font-black uppercase italic tracking-tighter">Olá, {currentUser.name?.split(' ')[0]}</h1>
-          <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.3em]">Vizinho Premium</p>
-        </div>
+        <img src={logoPath} alt="V+" className="h-10 w-auto" />
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 -mt-16 relative z-10 flex-grow w-full">
-        <div className="grid grid-cols-3 gap-2 mb-8">
-          {[
-            { id: 'home', icon: Wallet, label: 'Carteira' },
-            { id: 'history', icon: History, label: 'Movimentos' },
-            { id: 'explore', icon: Store, label: 'Lojas' }
-          ].map(btn => (
-            <button key={btn.id} onClick={() => setView(btn.id as any)} className={`p-4 rounded-[25px] border-4 flex flex-col items-center gap-2 transition-all ${view === btn.id ? 'bg-[#00d66f] border-[#0f172a] text-[#0f172a] shadow-[4px_4px_0px_#0f172a]' : 'bg-white border-slate-100 text-slate-300'}`}>
-              <btn.icon size={20} strokeWidth={3} />
-              <span className="text-[8px] font-black uppercase tracking-widest">{btn.label}</span>
-            </button>
-          ))}
-        </div>
-
-        {view === 'home' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={merchantBalances} vantagensUrl={sysConfig.vantagensUrl} />}
-        {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
-        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-      </main>
-
-      <footer className="py-10 text-center border-t-4 border-slate-50 bg-white relative z-20">
-        <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.4em] mb-2">Suporte Vizinho+</p>
-        <a href={`mailto:${sysConfig.supportEmail}`} className="text-xs font-black text-[#0f172a] hover:text-[#00d66f] transition-colors">{sysConfig.supportEmail}</a>
-      </footer>
-
-      {showHelpModal && (
-        <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-md z-[100] flex items-center justify-center p-6">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 border-4 border-[#0f172a] shadow-[10px_10px_0px_#00d66f] animate-in zoom-in">
-            <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-4">Ajuda Vizinho</h3>
-            <textarea value={helpMessage} onChange={e => setHelpMessage(e.target.value)} placeholder="Como podemos ajudar?" className="w-full h-32 bg-slate-50 border-4 border-slate-100 rounded-3xl p-5 text-sm font-bold outline-none focus:border-[#00d66f]" />
-            <button onClick={() => { alert("Enviado!"); setShowHelpModal(false); }} className="w-full bg-[#00d66f] text-[#0f172a] p-5 rounded-2xl font-black uppercase mt-6 shadow-[4px_4px_0px_#0f172a] border-2 border-[#0f172a]">Enviar Mensagem</button>
-            <button onClick={() => setShowHelpModal(false)} className="w-full mt-4 text-[10px] font-black text-slate-300 uppercase">Fechar</button>
+      <main className="max-w-2xl mx-auto px-6 pt-8 space-y-8">
+        
+        {/* BLOCO DE SALDOS */}
+        <div className="bg-[#0a2540] rounded-[40px] p-8 text-white shadow-2xl relative overflow-hidden">
+          <div className="relative z-10 space-y-6">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00d66f] mb-1">Saldo Disponível</p>
+              <h2 className="text-5xl font-black italic tracking-tighter">
+                {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}
+              </h2>
+            </div>
+            <div className="pt-4 border-t border-white/10 flex justify-between">
+              <div>
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Saldo em Maturação</p>
+                <p className="text-sm font-bold text-white/80">+{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.pending)}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Acumulado Total</p>
+                <p className="text-sm font-bold text-[#00d66f]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.total)}</p>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+
+        {/* BOTÕES DE AÇÃO RÁPIDA (ÍCONES) */}
+        <div className="grid grid-cols-2 gap-4">
+          <button 
+            onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')}
+            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-100 text-slate-400'}`}
+          >
+            <Wallet size={32} strokeWidth={2.5} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Onde tenho Saldo?</span>
+          </button>
+          <button 
+            onClick={() => setView(view === 'history' ? 'home' : 'history')}
+            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-100 text-slate-400'}`}
+          >
+            {pendingEvaluations.length > 0 && (
+              <span className="absolute top-4 right-4 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
+                {pendingEvaluations.length}
+              </span>
+            )}
+            <MessageSquare size={32} strokeWidth={2.5} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Avaliar Visitas</span>
+          </button>
+        </div>
+
+        {/* CONTEÚDO DINÂMICO BASEADO NOS ÍCONES ACIMA */}
+        {view === 'wallets' && (
+          <div className="animate-in slide-in-from-top-4 duration-300">
+            <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" hideHeader />
+          </div>
+        )}
+
+        {view === 'history' && (
+          <div className="animate-in slide-in-from-top-4 duration-300">
+            <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />
+          </div>
+        )}
+
+        {/* BOTÃO LOJAS ADERENTES (EXPLORAR) */}
+        <button 
+          onClick={() => setView(view === 'explore' ? 'home' : 'explore')}
+          className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[8px_8px_0px_#0a2540]'}`}
+        >
+          {view === 'explore' ? 'Fechar Mapa' : 'Explorar Lojas Parceiras'}
+        </button>
+
+        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
+
+        {/* BOTÃO DOURADO: VANTAGENS EXCLUSIVAS */}
+        {sysConfig.vantagensUrl && (
+          <button 
+            onClick={() => window.open(sysConfig.vantagensUrl, '_blank')}
+            className="w-full bg-gradient-to-r from-amber-400 via-yellow-300 to-amber-500 p-8 rounded-[35px] shadow-xl hover:scale-[1.02] transition-all flex items-center justify-between group"
+          >
+            <div className="flex items-center gap-4 text-amber-900">
+              <div className="bg-white/40 p-3 rounded-2xl">
+                <Star size={32} fill="currentColor" />
+              </div>
+              <div className="text-left">
+                <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter">Vantagens Exclusivas</h4>
+                <p className="text-[10px] font-bold uppercase tracking-widest opacity-70">Acesso VIP Vizinho+</p>
+              </div>
+            </div>
+            <ExternalLink size={24} className="text-amber-900/50 group-hover:text-amber-900 transition-colors" />
+          </button>
+        )}
+
+      </main>
+
+      {/* FOOTER: SUPORTE */}
+      <footer className="py-12 text-center">
+        <button onClick={() => logout()} className="text-red-500 font-black uppercase text-[10px] tracking-[0.3em] mb-4">Sair da Conta</button>
+        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest flex items-center justify-center gap-2">
+          Suporte: {sysConfig.supportEmail}
+        </p>
+      </footer>
 
       {selectedTxForFeedback && (
         <FeedbackForm 
