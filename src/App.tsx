@@ -7,14 +7,14 @@ import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
+import TermsPage from './features/public/TermsPage'; // Nova página legal
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
 
 /**
  * PROTECTED ROUTE (UNIFICADA)
- * Este componente substitui o PrivateRoute e o AdminRoute.
- * Ele gere o acesso com base na autenticação e no cargo (role).
+ * Este componente gere o acesso com base na autenticação e no cargo (role).
  */
 const ProtectedRoute: React.FC<{ 
   children: React.ReactNode; 
@@ -41,7 +41,7 @@ const ProtectedRoute: React.FC<{
 
   // 3. Verificação de Role (Cargo)
   if (requiredRole) {
-    // Caso especial: Segurança extra para o Admin (Email específico)
+    // Segurança extra para o Admin (Email específico e Role)
     if (requiredRole === 'admin') {
       const isSuperAdmin = currentUser.email === 'rochap.filipe@gmail.com' && currentUser.role === 'admin';
       if (!isSuperAdmin) return <Navigate to="/login" replace />;
@@ -78,16 +78,16 @@ function App() {
       <div className="min-h-screen bg-[#f8fafc]">
         <Routes>
           
-          {/* --- ROTA PÚBLICA / LANDING PAGE (Marketing) --- */}
+          {/* --- ROTAS PÚBLICAS (Marketing e Legal) --- */}
           <Route path="/" element={<LandingPage />} />
+          <Route path="/terms" element={<TermsPage />} />
 
-          {/* --- ROTAS PÚBLICAS (Auth) --- */}
+          {/* --- ROTAS PÚBLICAS (Autenticação) --- */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
-          {/* --- REDIRECIONAMENTO PÓS-LOGIN --- */}
-          {/* O LoginPage aponta para aqui ou para a raiz. Quando cai aqui, o Router decide o caminho. */}
+          {/* --- REDIRECIONAMENTO INTELIGENTE PÓS-LOGIN --- */}
           <Route 
             path="/dashboard" 
             element={
@@ -101,7 +101,7 @@ function App() {
             } 
           />
 
-          {/* --- ROTA DE ADMIN (Filipe) --- */}
+          {/* --- ROTA DE ADMIN (Filipe / Super Admin) --- */}
           <Route 
             path="/admin" 
             element={
@@ -111,7 +111,7 @@ function App() {
             } 
           />
 
-          {/* --- ROTA DE COMERCIANTE (Lojas) --- */}
+          {/* --- ROTA DE COMERCIANTE (Lojas Parceiras) --- */}
           <Route 
             path="/merchant" 
             element={
@@ -131,7 +131,7 @@ function App() {
             } 
           />
 
-          {/* Rota 404 - Fallback redireciona para a Landing Page em vez do Dashboard/Login */}
+          {/* FALLBACK: Qualquer rota desconhecida volta para a Landing Page */}
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
