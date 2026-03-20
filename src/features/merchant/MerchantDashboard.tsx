@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, updateDoc, doc, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile, Transaction } from '../../types';
-import { LayoutDashboard, BarChart3, UserCircle, LogOut, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
 // Sub-componentes
 import MerchantTerminal from './components/MerchantTerminal';
@@ -15,8 +15,7 @@ const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
-  // Alterado: 'bi' em vez de 'history'
-  const [view, setView] = useState<'terminal' | 'bi' | 'customers' | 'profile'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -33,7 +32,7 @@ const MerchantDashboard: React.FC = () => {
 
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
 
-  // Pesquisa de Cliente
+  // Pesquisa de Cliente por NIF
   useEffect(() => {
     const search = async () => {
       const cleanNif = cardNumber.replace(/\s/g, '');
@@ -41,10 +40,15 @@ const MerchantDashboard: React.FC = () => {
         setIsSearching(true);
         const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
         const snap = await getDocs(q);
-        if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-        else setFoundClient(null);
+        if (!snap.empty) {
+          setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+        } else {
+          setFoundClient(null);
+        }
         setIsSearching(false);
-      } else { setFoundClient(null); }
+      } else {
+        setFoundClient(null);
+      }
     };
     const timer = setTimeout(search, 500);
     return () => clearTimeout(timer);
@@ -58,7 +62,7 @@ const MerchantDashboard: React.FC = () => {
   const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
     const val = parseFloat(amount);
     if (!foundClient || isNaN(val) || val <= 0 || !documentNumber) {
-      alert("Preencha o valor e a fatura corretamente.");
+      alert("Preencha o valor e o número da fatura corretamente.");
       return;
     }
     setPendingAction({ type, val });
@@ -78,14 +82,19 @@ const MerchantDashboard: React.FC = () => {
         type: pendingAction.type,
         documentNumber: documentNumber
       });
-      setMessage({ type: 'success', text: "Operação enviada com sucesso!" });
+      setMessage({ type: 'success', text: "Operação registada com sucesso!" });
       setAmount(''); setDocumentNumber(''); setCardNumber('');
     } catch (e) {
-      setMessage({ type: 'error', text: "Erro na operação." });
+      setMessage({ type: 'error', text: "Erro ao registar: Verifique as regras de segurança." });
     } finally {
       setIsLoading(false);
-      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     }
+  };
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
   };
 
   if (!currentUser) return null;
@@ -107,7 +116,7 @@ const MerchantDashboard: React.FC = () => {
             <BarChart3 size={16} /> Business Intelligence
           </button>
 
-          <button onClick={logout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
+          <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
             <LogOut size={20} />
           </button>
         </nav>
@@ -119,7 +128,8 @@ const MerchantDashboard: React.FC = () => {
             cardNumber={cardNumber} setCardNumber={setCardNumber}
             isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
             amount={amount} setAmount={setAmount}
-            liveCashback={parseFloat(amount) * ((currentUser.cashbackPercent || 0) / 100)}
+            // CORREÇÃO: Propriedade renomeada para previewCashback
+            previewCashback={parseFloat(amount || '0') * ((currentUser.cashbackPercent || 0) / 100)}
             documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
