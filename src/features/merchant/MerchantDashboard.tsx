@@ -4,17 +4,19 @@ import { collection, query, where, getDocs, updateDoc, doc, Timestamp, getDoc } 
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile, Transaction } from '../../types';
-import { LayoutDashboard, History, UserCircle, LogOut, Users, Loader2, Mail, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { LayoutDashboard, BarChart3, UserCircle, LogOut, Loader2, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 
 // Sub-componentes
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
+import BusinessIntelligence from './components/BusinessIntelligence';
 
 const MerchantDashboard: React.FC = () => {
-  const { currentUser, transactions, addTransaction, subscribeToTransactions, logout, setCurrentUser } = useStore();
+  const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
-  const [view, setView] = useState<'terminal' | 'history' | 'customers' | 'profile'>('terminal');
+  // Alterado: 'bi' em vez de 'history'
+  const [view, setView] = useState<'terminal' | 'bi' | 'customers' | 'profile'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -31,7 +33,7 @@ const MerchantDashboard: React.FC = () => {
 
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
 
-  // Pesquisa Automática de Cliente por NIF
+  // Pesquisa de Cliente
   useEffect(() => {
     const search = async () => {
       const cleanNif = cardNumber.replace(/\s/g, '');
@@ -48,6 +50,7 @@ const MerchantDashboard: React.FC = () => {
     return () => clearTimeout(timer);
   }, [cardNumber]);
 
+  // Subscrever Transações
   useEffect(() => {
     if (currentUser?.id) return subscribeToTransactions('merchant', currentUser.id);
   }, [currentUser?.id, subscribeToTransactions]);
@@ -55,7 +58,7 @@ const MerchantDashboard: React.FC = () => {
   const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
     const val = parseFloat(amount);
     if (!foundClient || isNaN(val) || val <= 0 || !documentNumber) {
-      alert("Preencha todos os campos corretamente.");
+      alert("Preencha o valor e a fatura corretamente.");
       return;
     }
     setPendingAction({ type, val });
@@ -75,10 +78,10 @@ const MerchantDashboard: React.FC = () => {
         type: pendingAction.type,
         documentNumber: documentNumber
       });
-      setMessage({ type: 'success', text: "Operação concluída com sucesso!" });
+      setMessage({ type: 'success', text: "Operação enviada com sucesso!" });
       setAmount(''); setDocumentNumber(''); setCardNumber('');
     } catch (e) {
-      setMessage({ type: 'error', text: "Erro ao processar operação." });
+      setMessage({ type: 'error', text: "Erro na operação." });
     } finally {
       setIsLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 3000);
@@ -92,13 +95,21 @@ const MerchantDashboard: React.FC = () => {
       <header className="bg-[#0f172a] p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
         <div className="flex items-center gap-4 text-white">
           <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.name}</h2>
-          <span className="text-[10px] font-black text-[#00d66f] bg-[#00d66f]/10 py-1 px-3 rounded-full border border-[#00d66f]/20">LOJA PARCEIRA</span>
+          <span className="text-[10px] font-black text-[#00d66f] bg-[#00d66f]/10 py-1 px-3 rounded-full border border-[#00d66f]/20 uppercase">Loja Parceira</span>
         </div>
         
         <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-md">
-          <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><LayoutDashboard size={16} /> Terminal</button>
-          <button onClick={() => setView('history')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'history' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><History size={16} /> Movimentos</button>
-          <button onClick={logout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all"><LogOut size={20} /></button>
+          <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
+            <LayoutDashboard size={16} /> Terminal
+          </button>
+          
+          <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
+            <BarChart3 size={16} /> Business Intelligence
+          </button>
+
+          <button onClick={logout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
+            <LogOut size={20} />
+          </button>
         </nav>
       </header>
 
@@ -118,8 +129,14 @@ const MerchantDashboard: React.FC = () => {
           />
         )}
 
-        {/* Mensagens de Feedback */}
-        {message.text && (
+        {view === 'bi' && (
+          <BusinessIntelligence 
+            merchantId={currentUser.id}
+            transactions={transactions}
+          />
+        )}
+
+        {message.text && view === 'terminal' && (
           <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-bounce shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
             {message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
             {message.text}
@@ -129,18 +146,17 @@ const MerchantDashboard: React.FC = () => {
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
 
-      {/* Modal de Confirmação */}
       {showConfirmModal && pendingAction && (
         <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl border-4 border-[#0f172a] animate-in zoom-in">
             <div className={`p-8 text-center ${pendingAction.type === 'earn' ? 'bg-[#00d66f]' : 'bg-red-500'} text-[#0f172a]`}>
               <AlertTriangle size={48} className="mx-auto mb-4" />
-              <h3 className="text-xl font-black uppercase italic">Confirmar Operação?</h3>
-              <p className="font-bold text-xs uppercase opacity-70">{foundClient?.name}</p>
+              <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar Operação?</h3>
+              <p className="font-bold text-[10px] uppercase opacity-70 mt-2">{foundClient?.name}</p>
             </div>
             <div className="p-8 grid grid-cols-2 gap-4">
-              <button onClick={() => setShowConfirmModal(false)} className="py-4 bg-slate-100 rounded-2xl font-black uppercase text-[10px]">Cancelar</button>
-              <button onClick={handleConfirm} className="py-4 bg-[#00d66f] rounded-2xl font-black uppercase text-[10px] shadow-lg">Confirmar</button>
+              <button onClick={() => setShowConfirmModal(false)} className="py-4 bg-slate-100 rounded-2xl font-black uppercase text-[10px] text-slate-400">Cancelar</button>
+              <button onClick={handleConfirm} className="py-4 bg-[#00d66f] rounded-2xl font-black uppercase text-[10px] text-[#0a2540] shadow-lg">Confirmar</button>
             </div>
           </div>
         </div>
