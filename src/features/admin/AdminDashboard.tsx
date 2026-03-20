@@ -26,9 +26,7 @@ import {
   Clock,
   RefreshCw,
   FileSpreadsheet,
-  Calendar,
   MessageSquare,
-  Star,
   ExternalLink,
   AlertCircle
 } from 'lucide-react';
@@ -41,19 +39,17 @@ import AdminUsers from '../../features/admin/AdminUsers';
 import AdminMerchants from '../../features/admin/AdminMerchants';
 import MerchantModal from '../../features/admin/MerchantModal';
 import FeedbackList from '../../components/admin/FeedbackList'; 
-import { User as UserProfile, Transaction, Merchant } from '../../types/index';
+import { User as UserProfile } from '../../types/index';
 
 const AdminDashboard: React.FC = () => {
   const { transactions, subscribeToTransactions, logout, currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
   
-  // ESTADOS DE NAVEGAÇÃO
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'settings' | 'reviews'>('overview');
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // ESTADOS DE DADOS
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [registeredUsers, setRegisteredUsers] = useState<UserProfile[]>([]);
   const [allUsers, setAllUsers] = useState<UserProfile[]>([]);
@@ -61,12 +57,10 @@ const AdminDashboard: React.FC = () => {
   const [supportEmail, setSupportEmail] = useState('ajuda@vizinho-plus.pt');
   const [vantagensUrl, setVantagensUrl] = useState(''); 
   
-  // ESTADOS PARA RELATÓRIO E FILTROS
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [filterMerchant, setFilterMerchant] = useState('');
 
-  // 1. PROTEÇÃO DE ACESSO (Ponto 15: Segurança Molecular)
   useEffect(() => {
     if (isInitialized && (!currentUser || currentUser.role !== 'admin')) {
       navigate('/login');
@@ -74,10 +68,7 @@ const AdminDashboard: React.FC = () => {
   }, [currentUser, isInitialized, navigate]);
 
   const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-PT', {
-      style: 'currency',
-      currency: 'EUR',
-    }).format(value || 0);
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
   };
 
   const handleLogout = async () => {
@@ -85,7 +76,6 @@ const AdminDashboard: React.FC = () => {
       await logout();
       navigate('/login');
     } catch (error) {
-      console.error("Erro ao sair:", error);
       navigate('/login');
     }
   };
@@ -93,14 +83,12 @@ const AdminDashboard: React.FC = () => {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      // Carregar utilizadores e lojistas
       const usersSnap = await getDocs(collection(db, 'users'));
       const allData = usersSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })) as UserProfile[];
       setAllUsers(allData);
       setMerchants(allData.filter(u => u.role === 'merchant'));
       setRegisteredUsers(allData.filter(u => u.role === 'client' || u.role === 'user'));
 
-      // Carregar e-mail de suporte e URL Vantagens (Ponto 11)
       const configSnap = await getDoc(doc(db, 'system', 'config'));
       if (configSnap.exists()) {
         const configData = configSnap.data();
@@ -108,7 +96,6 @@ const AdminDashboard: React.FC = () => {
         setVantagensUrl(configData.vantagensUrl || '');
       }
 
-      // Carregar Avaliações (coleção canónica: feedbacks)
       const reviewsSnap = await getDocs(query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc')));
       setReviews(reviewsSnap.docs.map(doc => ({ id: doc.id, ...doc.data() })));
 
@@ -123,7 +110,7 @@ const AdminDashboard: React.FC = () => {
     fetchData();
   }, [fetchData]);
 
-  // Lógica de Maturação Automática (Ponto 5 - Audit150326)
+  // Lógica de Maturação Automática Segura (O MOTOR)
   const processMaturation = async () => {
     if (!window.confirm("Deseja forçar a maturação de todas as transações com mais de 48h?")) return;
     
@@ -153,24 +140,29 @@ const AdminDashboard: React.FC = () => {
 
       const batch = writeBatch(db);
       
-      // LOG DE AUDITORIA: Regista a execução manual da auditoria audit150326
       querySnapshot.docs.forEach((txDoc) => {
         const txData = txDoc.data();
+        const amount = Number(txData.cashbackAmount) || 0;
+        
+        // 1. Marca a transação como disponível
         batch.update(doc(db, 'transactions', txDoc.id), {
           status: 'available',
           maturedAt: serverTimestamp(),
           auditRef: "audit150326_manual"
         });
 
+        // 2. Incrementa de forma segura a carteira do utilizador
         const userRef = doc(db, 'users', txData.clientId);
         batch.update(userRef, {
-          [`storeWallets.${txData.merchantId}.available`]: increment(txData.cashbackAmount || 0),
-          [`storeWallets.${txData.merchantId}.pending`]: increment(-(txData.cashbackAmount || 0))
+          [`storeWallets.${txData.merchantId}.available`]: increment(amount),
+          [`storeWallets.${txData.merchantId}.pending`]: increment(-amount),
+          [`wallet.available`]: increment(amount),
+          [`wallet.pending`]: increment(-amount)
         });
       });
 
       await batch.commit();
-      alert(`${querySnapshot.size} transações maturadas com sucesso! Referência: audit150326.`);
+      alert(`${querySnapshot.size} transações maturadas com sucesso!`);
       fetchData();
     } catch (error) {
       console.error("Erro na maturação manual:", error);
@@ -210,7 +202,7 @@ const AdminDashboard: React.FC = () => {
       merchants: merchants.length
     };
   }, [transactions, registeredUsers, merchants]);
-  // Lógica de Filtros e Excel (Preservada e Otimizada)
+
   const filteredReviews = useMemo(() => {
     return reviews.filter(r => {
       const rDate = r.createdAt?.toDate ? r.createdAt.toDate() : new Date();
@@ -238,7 +230,6 @@ const AdminDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-20 text-[#0a2540]">
       
-      {/* HEADER BRUTALISTA (Ponto 11 e 15) */}
       <header className="bg-[#0a2540] text-white p-8 rounded-b-[64px] shadow-2xl mb-12 border-b-8 border-[#00d66f] relative overflow-hidden">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 relative z-10">
           <div className="flex items-center gap-6">
@@ -287,7 +278,6 @@ const AdminDashboard: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-6">
         
-        {/* VIEW: OVERVIEW (Ponto 8 e 12) */}
         {currentView === 'overview' && (
           <div className="space-y-12 animate-in fade-in duration-500">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -297,7 +287,7 @@ const AdminDashboard: React.FC = () => {
               </div>
               <div className="bg-white p-8 rounded-[32px] shadow-sm border-b-8 border-amber-500">
                  <div className="flex justify-between items-start">
-                   <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Pendente (48h)</p>
+                   <p className="text-[10px] font-black text-slate-400 uppercase mb-2">Pendente Global</p>
                    <Clock size={14} className="text-amber-500" />
                  </div>
                  <h3 className="text-3xl font-black italic text-amber-600 tracking-tighter">{formatCurrency(stats.pending)}</h3>
@@ -315,7 +305,8 @@ const AdminDashboard: React.FC = () => {
             <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[32px] border-2 border-slate-50">
               <div className="flex items-center gap-3 text-slate-400">
                 <AlertCircle size={18} />
-                <p className="text-[10px] font-bold uppercase">Gestão Ativa de Maturação: audit150326</p>
+                {/* AQUI ESTAVA O ERRO DO MAIOR QUE (>) - AGORA SUBSTITUÍDO POR &gt; */}
+                <p className="text-[10px] font-bold uppercase">A maturação transfere o saldo pendente (&gt;48h) para o saldo disponível.</p>
               </div>
               <button 
                 onClick={processMaturation}
@@ -323,7 +314,7 @@ const AdminDashboard: React.FC = () => {
                 className="w-full md:w-auto bg-[#0a2540] text-white px-8 py-4 rounded-2xl font-black uppercase text-[11px] tracking-widest flex items-center justify-center gap-3 hover:bg-[#00d66f] hover:text-[#0a2540] transition-all disabled:opacity-50 shadow-xl"
               >
                 <RefreshCw size={18} className={isProcessing ? 'animate-spin' : ''} strokeWidth={3} />
-                {isProcessing ? 'A Processar...' : 'Forçar Maturação Manual'}
+                {isProcessing ? 'A Processar...' : 'Forçar Maturação'}
               </button>
             </div>
 
@@ -331,7 +322,6 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* VIEW: REVIEWS (Filtros Preservados) */}
         {currentView === 'reviews' && (
           <div className="space-y-8 animate-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col md:flex-row justify-between items-end gap-6 bg-white p-8 rounded-[40px] shadow-sm border border-slate-100">
@@ -367,7 +357,6 @@ const AdminDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* VIEW: MERCHANTS (Ponto 6) */}
         {currentView === 'merchants' && (
           <AdminMerchants 
             merchants={merchants}
@@ -377,7 +366,6 @@ const AdminDashboard: React.FC = () => {
           />
         )}
 
-        {/* VIEW: USERS (Ponto 15) */}
         {currentView === 'users' && (
           <AdminUsers 
             users={registeredUsers} 

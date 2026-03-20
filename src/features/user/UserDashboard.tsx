@@ -1,384 +1,305 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
-import MerchantExplore from './MerchantExplore';
-import ProfileSettings from '../profile/ProfileSettings';
-import FeedbackForm from '../../components/dashboard/FeedbackForm';
-import UserHistory from './UserHistory'; 
-import { Timestamp, getDoc, doc, collection, getDocs, query, where, onSnapshot } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  doc, 
+  getDoc, 
+  onSnapshot
+} from 'firebase/firestore';
 import { db } from '../../config/firebase';
+
+// Componentes e Ícones
+import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import { 
   LogOut, 
   Store, 
-  Settings, 
   Wallet, 
-  Clock, 
   ArrowUpRight, 
   ArrowDownLeft,
   History,
-  CheckCircle2,
-  Zap,
-  ChevronRight,
   Crown,
-  AlertCircle,
-  Star,
-  CreditCard,
   Cpu,
-  Mail,
-  MessageSquareHeart,
   HelpCircle,
-  Send,
-  X,
-  MessageSquare
+  Search,
+  MapPin,
+  ExternalLink
 } from 'lucide-react';
 
+// Assets
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
+const watermarkUrl = "https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media";
 
 const UserDashboard: React.FC = () => {
-  const { transactions = [], logout, currentUser } = useStore();
-  const [view, setView] = useState<'home' | 'merchants' | 'profile'>('home');
-  const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<any | null>(null);
-  const [allMerchants, setAllMerchants] = useState<any[]>([]);
-  const [pendingEvaluations, setPendingEvaluations] = useState<any[]>([]);
+  const { transactions, logout, currentUser } = useStore();
+  
+  // Estados de Navegação e Modais
+  const [view, setView] = useState<'home' | 'history' | 'explore' | 'settings'>('home');
   const [showHelpModal, setShowHelpModal] = useState(false);
+  const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<any | null>(null);
+  
+  // Estados de Dados
+  const [allMerchants, setAllMerchants] = useState<any[]>([]);
+  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
   const [helpMessage, setHelpMessage] = useState('');
-  const [loadingMerchants, setLoadingMerchants] = useState(true);
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
 
-  const [sysConfig, setSysConfig] = useState({
-    supportEmail: 'ajuda@vizinho-plus.pt',
-    vantagensUrl: '',
-    maturationHours: 48
-  });
+  // Filtros para Exploração de Lojas
+  const [searchName, setSearchName] = useState('');
+  const [searchZip, setSearchZip] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
 
-  // 1. Carregar Configurações e Mercadores (Executa uma vez)
+  // 1. CARREGAR CONFIGURAÇÕES E PARCEIROS
   useEffect(() => {
     const fetchData = async () => {
       try {
-        setLoadingMerchants(true);
-        const docRef = doc(db, 'system', 'config');
-        const docSnap = await getDoc(docRef);
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+        const configSnap = await getDoc(doc(db, 'system', 'config'));
+        if (configSnap.exists()) {
           setSysConfig({
-            supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt',
-            vantagensUrl: data.vipUrl || data.vantagensUrl || '', 
-            maturationHours: data.maturationHours || 48
+            supportEmail: configSnap.data().supportEmail || 'ajuda@vizinho-plus.pt',
+            vantagensUrl: configSnap.data().vantagensUrl || ''
           });
         }
 
-        const merchantsQuery = query(collection(db, 'users'), where('role', '==', 'merchant'));
-        const merchantsSnap = await getDocs(merchantsQuery);
-        const merchantsList = merchantsSnap.docs.map(doc => ({
-          id: doc.id,
-          uid: doc.id,
-          ...doc.data()
-        }));
-        setAllMerchants(merchantsList);
-      } catch (err) {
-        console.error("Erro ao carregar dados do sistema:", err);
-      } finally {
-        setLoadingMerchants(false);
-      }
+        const merchantsSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active')));
+        setAllMerchants(merchantsSnap.docs.map(d => ({ id: d.id, ...d.data() })));
+      } catch (err) { console.error("Erro ao carregar sistema:", err); }
     };
     fetchData();
   }, []);
 
-  // 2. Escuta em tempo real dos feedbacks do utilizador (Correção da Audit)
+  // 2. ESCUTAR FEEDBACKS JÁ REALIZADOS (Para não repetir pedidos)
   useEffect(() => {
-    if (!currentUser?.uid) return;
-
-    const feedbackQuery = query(
-      collection(db, 'feedbacks'),
-      where('userId', '==', currentUser.uid)
-    );
-
-    const unsubscribe = onSnapshot(feedbackQuery, (snapshot) => {
-      const ids = snapshot.docs.map(doc => doc.data().transactionId);
-      setEvaluatedIds(ids);
-    }, (error) => {
-      console.error("Erro ao escutar feedbacks:", error);
+    if (!currentUser?.id) return;
+    const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
+    return onSnapshot(q, (snapshot) => {
+      setEvaluatedIds(snapshot.docs.map(doc => doc.data().transactionId));
     });
+  }, [currentUser?.id]);
 
-    return () => unsubscribe();
-  }, [currentUser?.uid]);
-
-  // 3. Cálculo de Saldos
+  // 3. LEITURA DE SALDOS (Direto do Perfil Seguro)
+  // Removemos a lógica de adivinhar a maturação. Agora a verdade vem do Backend.
   const merchantBalances = useMemo(() => {
-    const maturationMs = (sysConfig.maturationHours || 48) * 60 * 60 * 1000;
-    const maturityThreshold = Date.now() - maturationMs;
-    const txBalances: { [key: string]: { available: number, pending: number, total: number } } = {};
+    if (!currentUser?.storeWallets) return [];
+    
+    return Object.entries(currentUser.storeWallets)
+      .map(([id, data]: [string, any]) => ({
+        merchantId: id,
+        name: data.merchantName || 'Loja Vizinho+',
+        available: data.available || 0,
+        pending: data.pending || 0,
+        total: (data.available || 0) + (data.pending || 0)
+      }))
+      .filter(b => b.total > 0);
+  }, [currentUser?.storeWallets]);
 
-    const safeTransactions = Array.isArray(transactions) ? transactions : [];
+  const stats = useMemo(() => ({
+    available: currentUser?.wallet?.available || 0,
+    pending: currentUser?.wallet?.pending || 0
+  }), [currentUser?.wallet]);
 
-    safeTransactions.forEach(t => {
-      if (!t || t.status === 'cancelled') return;
-      const mId = t.merchantId;
-      if (!mId) return;
-      if (!txBalances[mId]) txBalances[mId] = { available: 0, pending: 0, total: 0 };
-
-      const txTime = t.createdAt instanceof Timestamp ? t.createdAt.toMillis() : Date.now();
-      const isAvailable = t.status === 'available' || (t.status === 'pending' && txTime <= maturityThreshold);
-      const amount = Number(t.cashbackAmount) || 0;
-
-      if (t.type === 'earn') {
-        txBalances[mId].total += amount;
-        if (isAvailable) txBalances[mId].available += amount;
-        else txBalances[mId].pending += amount;
-      } else if (t.type === 'redeem') {
-        txBalances[mId].available -= amount;
-        txBalances[mId].total -= amount;
-      }
+  // 4. FILTRAGEM DE LOJAS (Explorar)
+  const filteredMerchants = useMemo(() => {
+    return allMerchants.filter(m => {
+      const matchName = (m.shopName || m.name || '').toLowerCase().includes(searchName.toLowerCase());
+      const matchZip = (m.zipCode || '').startsWith(searchZip);
+      const matchCat = selectedCategory === 'all' || m.category === selectedCategory;
+      return matchName && matchZip && matchCat;
     });
+  }, [allMerchants, searchName, searchZip, selectedCategory]);
 
-    return (allMerchants || [])
-      .filter(m => m !== undefined && m !== null)
-      .map(merchant => {
-        const mId = merchant.uid || merchant.id;
-        const balance = txBalances[mId] || { available: 0, pending: 0, total: 0 };
-        return {
-          id: mId,
-          name: merchant.storeName || merchant.name || 'Loja Parceira',
-          ...balance
-        };
-      });
-  }, [transactions, allMerchants, sysConfig.maturationHours]);
+  const categories = useMemo(() => ['all', ...Array.from(new Set(allMerchants.map(m => m.category).filter(Boolean)))], [allMerchants]);
 
-  const totalAvailable = useMemo(() => 
-    merchantBalances.reduce((acc, curr) => acc + curr.available, 0), 
-  [merchantBalances]);
-
-  const totalPending = useMemo(() => 
-    merchantBalances.reduce((acc, curr) => acc + curr.pending, 0), 
-  [merchantBalances]);
-
-  // 4. Filtragem de Avaliações Pendentes Reativa
-  useEffect(() => {
-    if (Array.isArray(transactions) && transactions.length > 0) {
-      const earnTransactions = transactions.filter(t => t.type === 'earn');
-      
-      const pending = earnTransactions.filter(t => {
-        return t.id && !evaluatedIds.includes(t.id);
-      });
-
-      const enrichedPending = pending.map(tx => {
-        if (!tx.merchantName) {
-          const merchant = allMerchants.find(m => (m.uid || m.id) === tx.merchantId);
-          return { ...tx, merchantName: merchant?.storeName || merchant?.name || 'Loja Parceira' };
-        }
-        return tx;
-      });
-      
-      setPendingEvaluations(enrichedPending.slice(0, 5));
-    } else {
-      setPendingEvaluations([]);
-    }
-  }, [transactions, evaluatedIds, allMerchants]);
-
-  const handleVantagens = () => {
-    if (sysConfig.vantagensUrl?.trim()) window.open(sysConfig.vantagensUrl, '_blank');
-    else alert("As vantagens exclusivas estão a ser preparadas. Tenta novamente mais tarde!");
-  };
-
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
-  };
-
-  if (view === 'merchants') return <MerchantExplore onBack={() => setView('home')} />;
-  if (view === 'profile') return <ProfileSettings onBack={() => setView('home')} />;
-  if (!currentUser) return (
-    <div className="min-h-screen bg-[#0f172a] flex flex-col items-center justify-center p-6 text-center">
-      <div className="w-16 h-16 border-8 border-[#00d66f] border-t-transparent rounded-2xl animate-spin mb-6"></div>
-      <p className="font-black text-white uppercase tracking-[0.3em] text-[10px]">A sincronizar carteira...</p>
-    </div>
-  );
+  // Helpers
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+  const openInMaps = (addr: string, name: string) => window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${name}, ${addr}`)}`, '_blank');
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32 relative flex flex-col">
-      <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0" style={{ backgroundImage: `url('https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-v-plus-watermark.png?alt=media')`, backgroundSize: '200px', backgroundRepeat: 'repeat' }} />
+      <div className="fixed inset-0 pointer-events-none opacity-[0.03] z-0" style={{ backgroundImage: `url('${watermarkUrl}')`, backgroundSize: '200px' }} />
       
-      {/* LOGÓTIPO CORRIGIDO AQUI */}
-      <div className="fixed top-6 left-6 z-[100]">
-        <img src={logoPath} alt="Vizinho+" className="h-10 w-auto drop-shadow-sm" />
-      </div>
+      <header className="bg-[#0f172a] px-6 pt-12 pb-24 text-white rounded-b-[50px] shadow-2xl relative overflow-hidden border-b-8 border-[#00d66f]">
+        <img src={logoPath} alt="V+" className="absolute top-6 left-6 h-8 opacity-90" />
+        <div className="max-w-5xl mx-auto flex justify-end gap-3 relative z-10">
+          <button onClick={() => setShowHelpModal(true)} className="bg-white/5 p-4 rounded-2xl border-2 border-white/10 hover:bg-blue-500 transition-all"><HelpCircle size={22} /></button>
+          <button onClick={() => logout()} className="bg-white/5 p-4 rounded-2xl border-2 border-white/10 hover:bg-red-500 transition-all"><LogOut size={22} /></button>
+        </div>
+        <div className="text-center mt-6">
+          <h1 className="text-3xl font-black uppercase italic tracking-tighter">Olá, {currentUser?.name?.split(' ')[0]}</h1>
+          <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.3em]">Vizinho Premium</p>
+        </div>
+      </header>
+
+      <main className="max-w-2xl mx-auto px-6 -mt-16 relative z-10 flex-grow w-full">
+        
+        <div className="grid grid-cols-3 gap-2 mb-8">
+          {[
+            { id: 'home', icon: Wallet, label: 'Carteira' },
+            { id: 'history', icon: History, label: 'Movimentos' },
+            { id: 'explore', icon: Store, label: 'Lojas' }
+          ].map(btn => (
+            <button key={btn.id} onClick={() => setView(btn.id as any)} className={`p-4 rounded-[25px] border-4 flex flex-col items-center gap-2 transition-all ${view === btn.id ? 'bg-[#00d66f] border-[#0f172a] text-[#0f172a] shadow-[4px_4px_0px_#0f172a]' : 'bg-white border-slate-100 text-slate-300'}`}>
+              <btn.icon size={20} strokeWidth={3} />
+              <span className="text-[8px] font-black uppercase tracking-widest">{btn.label}</span>
+            </button>
+          ))}
+        </div>
+
+        {view === 'home' && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="bg-gradient-to-br from-[#1e293b] to-[#0f172a] rounded-[35px] p-8 shadow-2xl border border-white/10 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between text-white">
+              <div className="flex justify-between items-start">
+                <div className="bg-[#00d66f] px-3 py-1 rounded-lg text-[#0f172a] text-[8px] font-black uppercase tracking-widest italic">V+ Member</div>
+                <Cpu size={30} className="text-white/20" />
+              </div>
+              <div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.2em] mb-1">Saldo Disponível</p>
+                <h3 className="text-5xl font-black italic tracking-tighter text-[#00d66f]">{formatCurrency(stats.available)}</h3>
+              </div>
+              <div className="flex justify-between items-end border-t border-white/5 pt-4">
+                <span className="text-xs font-mono tracking-widest opacity-80">{currentUser?.nif}</span>
+                <img src={logoPath} className="h-6 grayscale brightness-200 opacity-30" alt="" />
+              </div>
+            </div>
+
+            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0f172a] shadow-[10px_10px_0px_#00d66f] flex flex-col items-center gap-6">
+              <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100">
+                <QRCodeSVG value={currentUser?.nif || ""} size={140} />
+              </div>
+              <div className="text-center">
+                <p className="text-[10px] font-black text-[#0f172a] uppercase tracking-widest mb-1">Identificação Rápida</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase tracking-tight">Mostra este código para ganhar ou usar saldo</p>
+              </div>
+            </div>
+
+            {sysConfig.vantagensUrl && (
+              <button onClick={() => window.open(sysConfig.vantagensUrl)} className="w-full bg-gradient-to-r from-amber-400 to-yellow-600 p-6 rounded-[30px] flex items-center justify-center gap-4 shadow-xl border-b-8 border-amber-800 hover:scale-[1.02] transition-all">
+                <Crown size={28} className="text-amber-900" />
+                <span className="text-lg font-black uppercase italic tracking-tighter text-amber-900">Vantagens VIP+</span>
+              </button>
+            )}
+
+            <div className="space-y-4">
+              <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Saldos por Estabelecimento</h4>
+              {merchantBalances.length > 0 ? merchantBalances.map((m, i) => (
+                <div key={i} className="bg-white p-5 rounded-[30px] border-4 border-slate-100 flex items-center justify-between group hover:border-[#00d66f] transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-slate-50 p-3 rounded-2xl text-slate-400 group-hover:text-[#00d66f] transition-colors"><Store size={20} /></div>
+                    <div>
+                      <p className="text-sm font-black text-[#0f172a] uppercase tracking-tighter">{m.name}</p>
+                      <p className="text-[10px] font-bold text-[#00d66f] uppercase">{formatCurrency(m.available)} disponível</p>
+                    </div>
+                  </div>
+                  {m.pending > 0 && <div className="text-right"><p className="text-[8px] font-black text-amber-500 uppercase">A Processar</p><p className="text-xs font-black text-amber-600">+{formatCurrency(m.pending)}</p></div>}
+                </div>
+              )) : (
+                <div className="bg-white p-12 rounded-[40px] border-4 border-dashed border-slate-100 text-center text-slate-300 uppercase font-black text-[10px]">Sem saldos acumulados.</div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {view === 'history' && (
+          <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
+            <h3 className="text-xl font-black text-[#0f172a] uppercase italic tracking-tighter ml-2">Movimentos</h3>
+            {transactions.length > 0 ? transactions.map((t: any, i) => (
+              <div key={i} className="bg-white p-5 rounded-[30px] border-4 border-slate-50 flex items-center justify-between">
+                <div className="flex items-center gap-4">
+                  <div className={`p-3 rounded-2xl ${t.type === 'earn' ? 'bg-green-50 text-[#00d66f]' : 'bg-red-50 text-red-500'}`}>
+                    {t.type === 'earn' ? <ArrowUpRight size={20} /> : <ArrowDownLeft size={20} />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-black text-[#0f172a] uppercase tracking-tighter">{t.merchantName}</p>
+                    <p className="text-[9px] font-bold text-slate-400 uppercase">
+                      {t.createdAt?.seconds ? new Date(t.createdAt.seconds * 1000).toLocaleDateString() : 'Agora'}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex flex-col items-end gap-2">
+                  <p className={`text-sm font-black italic ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                    {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount)}
+                  </p>
+                  {t.type === 'earn' && !evaluatedIds.includes(t.id) && (
+                    <button onClick={() => setSelectedTxForFeedback(t)} className="bg-slate-100 px-3 py-1 rounded-full text-[8px] font-black uppercase text-slate-500 hover:bg-[#00d66f] hover:text-[#0f172a] transition-all">Avaliar</button>
+                  )}
+                </div>
+              </div>
+            )) : (
+              <div className="p-20 text-center text-slate-300 uppercase font-black text-[10px]">Sem atividade registada.</div>
+            )}
+          </div>
+        )}
+
+        {view === 'explore' && (
+          <div className="space-y-6 animate-in slide-in-from-bottom-4 duration-500">
+            <div className="bg-white p-6 rounded-[35px] border-4 border-[#0f172a] shadow-[6px_6px_0px_#00d66f] space-y-4">
+              <div className="relative">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input placeholder="NOME DA LOJA..." value={searchName} onChange={e => setSearchName(e.target.value)} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 pl-12 text-[10px] font-black uppercase outline-none focus:border-[#00d66f]" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <input placeholder="CP (EX: 4700)" value={searchZip} onChange={e => setSearchZip(e.target.value)} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[10px] font-black uppercase outline-none focus:border-[#00d66f]" />
+                <select value={selectedCategory} onChange={e => setSelectedCategory(e.target.value)} className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[10px] font-black uppercase outline-none appearance-none">
+                  {categories.map(c => <option key={c} value={c}>{c === 'all' ? 'TODOS SETORES' : c?.toUpperCase()}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {filteredMerchants.map((m, i) => (
+              <div key={i} className="bg-white rounded-[40px] border-4 border-slate-100 overflow-hidden group hover:border-[#00d66f] transition-all">
+                <div className="flex">
+                  <div className="bg-[#0f172a] p-6 w-28 flex flex-col items-center justify-center text-center">
+                    <p className="text-[#00d66f] text-2xl font-black italic">{m.cashbackPercent}%</p>
+                    <p className="text-[7px] text-white/50 font-black uppercase leading-tight">Cashback<br/>Direto</p>
+                  </div>
+                  <div className="p-6 flex-grow flex flex-col justify-between">
+                    <div>
+                      <span className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest">{m.category || 'Comércio'}</span>
+                      <h4 className="text-lg font-black text-[#0f172a] uppercase tracking-tighter leading-none">{m.shopName || m.name}</h4>
+                    </div>
+                    <div className="flex justify-between items-end mt-4">
+                      <div className="flex items-center gap-1 text-slate-400">
+                        <MapPin size={12} className="text-[#00d66f]" />
+                        <span className="text-[9px] font-bold uppercase truncate max-w-[120px]">{m.freguesia || m.zipCode}</span>
+                      </div>
+                      <button onClick={() => openInMaps(m.address || '', m.shopName || m.name)} className="p-2 bg-slate-100 rounded-xl text-slate-400 hover:bg-[#0f172a] hover:text-white transition-all"><ExternalLink size={14} /></button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </main>
+
+      <footer className="py-10 text-center border-t-4 border-slate-50 bg-white">
+        <p className="text-[8px] font-black text-slate-300 uppercase tracking-[0.4em] mb-2">Suporte Vizinho+</p>
+        <a href={`mailto:${sysConfig.supportEmail}`} className="text-xs font-black text-[#0f172a] hover:text-[#00d66f] transition-colors">{sysConfig.supportEmail}</a>
+      </footer>
+
+      {showHelpModal && (
+        <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-md z-[100] flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 border-4 border-[#0f172a] shadow-[10px_10px_0px_#00d66f] animate-in zoom-in">
+            <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter mb-4">Ajuda Vizinho</h3>
+            <textarea value={helpMessage} onChange={e => setHelpMessage(e.target.value)} placeholder="Como podemos ajudar?" className="w-full h-32 bg-slate-50 border-4 border-slate-100 rounded-3xl p-5 text-sm font-bold outline-none focus:border-[#00d66f]" />
+            <button onClick={() => { alert("Enviado!"); setShowHelpModal(false); }} className="w-full bg-[#00d66f] text-[#0f172a] p-5 rounded-2xl font-black uppercase mt-6 shadow-[4px_4px_0px_#0f172a] border-2 border-[#0f172a]">Enviar Mensagem</button>
+            <button onClick={() => setShowHelpModal(false)} className="w-full mt-4 text-[10px] font-black text-slate-300 uppercase">Fechar</button>
+          </div>
+        </div>
+      )}
 
       {selectedTxForFeedback && (
         <FeedbackForm 
           transactionId={selectedTxForFeedback.id} 
           merchantId={selectedTxForFeedback.merchantId} 
           merchantName={selectedTxForFeedback.merchantName} 
-          userId={currentUser.uid || ''} 
-          userName={currentUser.name || ''} 
+          userId={currentUser?.id || ''} 
+          userName={currentUser?.name || 'Vizinho'} 
           onClose={() => setSelectedTxForFeedback(null)} 
         />
-      )}
-
-      <header className="bg-[#0f172a] px-6 pt-16 pb-32 text-white rounded-b-[60px] shadow-2xl relative overflow-hidden border-b-8 border-[#00d66f]">
-        <div className="absolute top-0 right-0 p-8 opacity-10 pointer-events-none"><CreditCard size={150} className="rotate-12 text-white" /></div>
-        <div className="max-w-5xl mx-auto flex justify-end items-center relative z-10">
-          <div className="flex gap-3">
-            <button onClick={() => setShowHelpModal(true)} className="bg-blue-500/20 hover:bg-blue-500 text-blue-300 hover:text-white p-4 rounded-2xl transition-all border-2 border-blue-500/30 shadow-lg"><HelpCircle size={24} strokeWidth={3} /></button>
-            <button onClick={() => logout()} className="bg-white/5 hover:bg-red-500 text-white p-4 rounded-2xl transition-all border-2 border-white/10 shadow-lg"><LogOut size={24} strokeWidth={3} /></button>
-          </div>
-        </div>
-        <div className="max-w-5xl mx-auto mt-8 text-center relative z-10">
-          <h1 className="font-black italic text-4xl tracking-tighter uppercase leading-none">Minha Área</h1>
-          <p className="text-[#00d66f] text-xs font-black uppercase tracking-[0.4em] mt-2 italic">Cliente Oficial</p>
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-6 relative z-10 flex-grow">
-        <div className="relative -mt-24 mb-12 perspective-1000">
-          <div className="bg-gradient-to-br from-[#2a3447] via-[#1a2233] to-[#0a0f1a] rounded-[30px] p-8 shadow-[0_25px_60px_rgba(0,0,0,0.6)] border border-white/10 relative overflow-hidden aspect-[1.586/1] flex flex-col justify-between group transition-all duration-500 hover:scale-[1.02] border-t-white/20 border-l-white/10">
-            <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')] opacity-20"></div>
-            <div className="flex justify-between items-start relative z-10">
-              <div className="flex items-center gap-2">
-                <div className="w-10 h-8 bg-gradient-to-br from-[#bf953f] to-[#fcf6ba] rounded-md shadow-inner flex items-center justify-center border border-white/20"><Cpu size={20} className="text-black/60" /></div>
-                <span className="text-[10px] font-black text-[#00d66f] uppercase tracking-[0.3em] drop-shadow-md">Membro Premium</span>
-              </div>
-              <img src="https://firebasestorage.googleapis.com/v0/b/vizinho-plus.appspot.com/o/assets%2Flogo-vizinho-plus-white.png?alt=media" alt="V+" className="h-8 w-auto opacity-80" />
-            </div>
-            <div className="mt-8 relative z-10">
-              <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-2">Saldo Disponível</p>
-              <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-black text-white tracking-tighter italic drop-shadow-[0_4px_4px_rgba(0,0,0,0.5)]">{totalAvailable.toFixed(2)}</span>
-                <span className="text-2xl font-black text-[#00d66f] drop-shadow-md">€</span>
-              </div>
-            </div>
-            <div className="flex items-end justify-between relative z-10 pt-4">
-              <div className="flex flex-col">
-                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">Titular</p>
-                <h2 className="text-xl font-black text-white/90 tracking-tight uppercase italic truncate max-w-[200px]">{currentUser?.name}</h2>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] font-black text-white/30 uppercase tracking-widest leading-none mb-1">NIF Associado</p>
-                <p className="text-lg font-mono font-black text-white/90 tracking-[0.2em]">{currentUser?.nif}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-[40px] p-8 shadow-xl border-4 border-[#0f172a] mb-12 flex flex-col items-center gap-6 group hover:border-[#00d66f] transition-colors relative">
-          <div className="bg-white p-5 rounded-[30px] border-4 border-[#0f172a] group-hover:border-[#00d66f] shadow-[8px_8px_0px_#0f172a] transition-all">
-            <QRCodeSVG value={currentUser?.nif || ""} size={160} level="H" includeMargin={false} className="rounded-lg" />
-          </div>
-          <div className="text-center">
-             <p className="text-[11px] font-black text-[#0f172a] uppercase tracking-widest mb-1">IDENTIFICAÇÃO RÁPIDA</p>
-            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-tight px-8">Usa este código no lojista para movimentos imediatos</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4 mb-12">
-          <button onClick={handleVantagens} className="col-span-2 group bg-gradient-to-r from-[#bf953f] via-[#fcf6ba] to-[#b38728] p-6 rounded-[30px] flex items-center justify-center gap-4 shadow-[0_10px_30px_rgba(184,134,11,0.3)] hover:scale-[1.02] transition-all border-b-4 border-[#8a6d29]">
-            <Crown size={28} className="text-[#0f172a]" strokeWidth={3} />
-            <span className="text-lg font-black uppercase italic tracking-tighter text-[#0f172a]">Vantagens Exclusivas</span>
-          </button>
-
-          {totalPending > 0 && (
-            <div className="col-span-2 bg-amber-50 border-4 border-amber-200 p-6 rounded-[30px] flex items-center gap-5 animate-pulse shadow-sm">
-              <div className="w-14 h-14 bg-amber-200 rounded-2xl flex items-center justify-center text-amber-700 shadow-sm shrink-0"><Clock size={28} strokeWidth={3} /></div>
-              <div>
-                <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1">A Processar (48h)</p>
-                <p className="text-xl font-black text-amber-600 italic">+{formatCurrency(totalPending)} <span className="text-sm">pendente</span></p>
-              </div>
-            </div>
-          )}
-
-          <button onClick={() => setView('merchants')} className="group bg-[#0f172a] text-white p-8 rounded-[40px] flex flex-col items-center gap-4 hover:bg-black transition-all shadow-xl border-b-8 border-black active:translate-y-1">
-            <div className="bg-[#00d66f] p-3 rounded-2xl group-hover:rotate-12 transition-transform"><Store size={28} className="text-[#0f172a]" strokeWidth={3} /></div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Lojas Parceiras</span>
-          </button>
-          
-          <button onClick={() => setView('profile')} className="group bg-white text-[#0f172a] p-8 rounded-[40px] flex flex-col items-center gap-4 border-4 border-[#0f172a] shadow-xl hover:bg-slate-50 transition-all">
-            <div className="bg-slate-100 p-3 rounded-2xl group-hover:rotate-[-12deg] transition-transform"><Settings size={28} strokeWidth={3} /></div>
-            <span className="text-[10px] font-black uppercase tracking-widest">Minha Conta</span>
-          </button>
-        </div>
-
-        <div className="mb-12">
-           <div className="flex items-center gap-3 mb-6 ml-2">
-            <Zap size={20} className="text-[#00d66f]" fill="#00d66f" />
-            <h4 className="text-xs font-black text-[#0f172a] uppercase tracking-[0.2em]">Saldos por Estabelecimento</h4>
-          </div>
-          <div className="flex gap-4 overflow-x-auto pb-6 no-scrollbar -mx-6 px-6">
-            {!loadingMerchants && merchantBalances.length > 0 ? merchantBalances.map((m, idx) => (
-              <div key={idx} className="min-w-[280px] bg-white p-6 rounded-[35px] shadow-lg border-4 border-slate-100 group relative overflow-hidden">
-                <div className="absolute top-0 right-0 w-24 h-24 bg-slate-50 rounded-full -mr-12 -mt-12 group-hover:bg-[#00d66f]/5 transition-colors"></div>
-                <div className="flex justify-between items-start mb-4 relative z-10">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest truncate max-w-[180px]">{m.name}</p>
-                    <ChevronRight size={16} className="text-slate-200 group-hover:text-[#00d66f] transition-colors" />
-                </div>
-                <p className="text-4xl font-black text-[#0f172a] mb-6 italic tracking-tighter relative z-10">{m.total.toFixed(2)}€</p>
-                <div className="flex justify-between items-end pt-4 border-t-4 border-slate-50 relative z-10">
-                   <div>
-                    <p className="text-[9px] font-black text-[#00d66f] uppercase tracking-tighter mb-1">Livre para Uso</p>
-                    <p className="text-2xl font-black text-[#0f172a]">{m.available.toFixed(2)}€</p>
-                  </div>
-                  {m.pending > 0 && (
-                    <div className="text-right">
-                      <p className="text-[9px] font-black text-orange-400 uppercase tracking-tighter">Aguardando</p>
-                      <p className="text-sm font-black text-orange-500 italic">+{m.pending.toFixed(2)}€</p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )) : (
-              <div className="w-full bg-slate-100/50 p-12 rounded-[35px] border-4 border-dashed border-slate-200 text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest italic">
-                  {loadingMerchants ? "A carregar parceiros..." : "Sem saldos registados"}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* SECÇÃO DE AVALIAÇÕES CORRIGIDA */}
-        <div className="mb-8 bg-[#00d66f]/10 border-4 border-dashed border-[#00d66f]/30 rounded-[40px] p-8 flex flex-col md:flex-row items-center gap-6">
-          <div className="bg-[#00d66f] p-4 rounded-3xl shadow-lg rotate-3"><MessageSquareHeart size={32} className="text-[#0f172a]" strokeWidth={2.5} /></div>
-          <div className="text-center md:text-left flex-grow">
-            <h4 className="font-black text-[#0f172a] uppercase italic text-sm mb-1 tracking-tight">A sua opinião é o nosso motor!</h4>
-            <p className="text-[10px] font-bold text-slate-600 uppercase leading-relaxed mb-4">Avalie a sua última experiência de compra. O seu feedback ajuda-nos a melhorar.</p>
-            
-            {pendingEvaluations.length > 0 ? (
-              <div className="flex flex-wrap gap-2 justify-center md:justify-start">
-                {pendingEvaluations.map(tx => (
-                  <button 
-                    key={tx.id}
-                    onClick={() => setSelectedTxForFeedback(tx)}
-                    className="bg-white border-2 border-[#00d66f] px-4 py-2 rounded-xl text-[9px] font-black text-[#0f172a] uppercase hover:bg-[#00d66f] transition-all flex items-center gap-2 shadow-sm animate-in fade-in slide-in-from-bottom-2"
-                  >
-                    <MessageSquare size={12} /> {tx.merchantName}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="text-[9px] font-black text-slate-400 uppercase italic">Nenhuma compra pendente para avaliar.</p>
-            )}
-          </div>
-        </div>
-
-        <UserHistory />
-
-      </main>
-
-      <footer className="w-full py-12 px-6 flex flex-col items-center justify-center gap-2 border-t-4 border-slate-100 bg-white relative z-10">
-        <div className="flex items-center gap-2 text-slate-400"><Mail size={14} strokeWidth={3} /><p className="text-[10px] font-black uppercase tracking-widest">Contato para pedido de ajuda</p></div>
-        <a href={`mailto:${sysConfig.supportEmail}`} className="text-sm font-black text-[#0f172a] hover:text-[#00d66f] transition-colors border-b-2 border-[#0f172a]/10">{sysConfig.supportEmail}</a>
-      </footer>
-
-      {showHelpModal && (
-        <div className="fixed inset-0 bg-[#0a2540]/90 backdrop-blur-md z-[100] p-6 flex items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-[40px] p-8 shadow-[12px_12px_0px_#00d66f] border-4 border-[#0f172a] relative animate-in zoom-in duration-300">
-            <button onClick={() => setShowHelpModal(false)} className="absolute top-6 right-6 p-2 bg-slate-100 rounded-full text-slate-400 hover:bg-red-100 hover:text-red-500 transition-colors"><X size={20} strokeWidth={3} /></button>
-            <div className="mb-6">
-              <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-3xl flex items-center justify-center mb-4 border-2 border-blue-200"><HelpCircle size={32} strokeWidth={3} /></div>
-              <h3 className="text-2xl font-black text-[#0f172a] uppercase italic tracking-tighter">Ajuda Vizinho</h3>
-              <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 tracking-widest">Estamos aqui para o que precisar.</p>
-            </div>
-            <textarea value={helpMessage} onChange={(e) => setHelpMessage(e.target.value)} placeholder="Descreva a sua dúvida..." className="w-full h-32 bg-slate-50 border-4 border-slate-200 rounded-3xl p-5 text-sm font-bold outline-none focus:border-[#00d66f] transition-all resize-none" />
-            <button onClick={() => { alert("Pedido de ajuda enviado com sucesso!"); setShowHelpModal(false); setHelpMessage(''); }} className="w-full bg-[#00d66f] text-[#0f172a] p-5 rounded-2xl font-black uppercase tracking-widest mt-6 flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0f172a] hover:translate-y-1 hover:shadow-none transition-all border-2 border-[#0f172a]">Enviar Mensagem <Send size={18} strokeWidth={3} /></button>
-          </div>
-        </div>
       )}
     </div>
   );

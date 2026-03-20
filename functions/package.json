@@ -1,27 +1,26 @@
 {
   "name": "functions",
-  "version": "0.0.1",
-  "private": true,
+  "description": "Cloud Functions for Firebase",
   "scripts": {
-    "build": "tsc",
-    "serve": "npm run build && firebase emulators:start --only functions:matureCashback",
-    "shell": "npm run build && firebase functions:shell",
+    "lint": "eslint .",
+    "serve": "firebase emulators:start --only functions",
+    "shell": "firebase functions:shell",
     "start": "npm run shell",
-    "deploy": "firebase deploy --only functions"
+    "deploy": "firebase deploy --only functions",
+    "logs": "firebase functions:log"
   },
   "engines": {
-    "node": "18"
+    "node": "24"
   },
-  "main": "lib/index.js",
+  "main": "index.js",
   "dependencies": {
-    "firebase-admin": "^12.7.0",
-    "firebase-functions": "^4.9.0",
-    "luxon": "^3.4.0"
+    "firebase-admin": "^13.6.0",
+    "firebase-functions": "^7.0.0"
   },
   "devDependencies": {
-    "@types/node": "^20.19.37",
-    "@types/luxon": "^3.4.0",
-    "firebase-functions-test": "^3.4.1",
-    "typescript": "^5.9.3"
-  }
+    "eslint": "^8.15.0",
+    "eslint-config-google": "^0.14.0",
+    "firebase-functions-test": "^3.4.1"
+  },
+  "private": true
 }
