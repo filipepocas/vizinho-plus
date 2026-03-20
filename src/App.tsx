@@ -3,14 +3,13 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
 // 1. IMPORTAÇÕES DOS COMPONENTES DE PÁGINA
+import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
-
-// NOTA: A importação do cleanUserProfiles foi removida daqui para evitar execuções acidentais.
 
 /**
  * PROTECTED ROUTE (UNIFICADA)
@@ -65,9 +64,6 @@ function App() {
     return () => unsubscribe();
   }, [initializeAuth]);
 
-  // A função cleanUserProfiles() e o seu useEffect foram removidos para evitar
-  // o esgotamento da quota de leituras/escritas do Firebase e potenciais loops.
-
   // Subscreve às transações em tempo real assim que o utilizador é identificado
   useEffect(() => {
     let unsubscribeTrans: (() => void) | undefined;
@@ -82,10 +78,28 @@ function App() {
       <div className="min-h-screen bg-[#f8fafc]">
         <Routes>
           
-          {/* --- ROTAS PÚBLICAS --- */}
+          {/* --- ROTA PÚBLICA / LANDING PAGE (Marketing) --- */}
+          <Route path="/" element={<LandingPage />} />
+
+          {/* --- ROTAS PÚBLICAS (Auth) --- */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
+
+          {/* --- REDIRECIONAMENTO PÓS-LOGIN --- */}
+          {/* O LoginPage aponta para aqui ou para a raiz. Quando cai aqui, o Router decide o caminho. */}
+          <Route 
+            path="/dashboard" 
+            element={
+              currentUser ? (
+                currentUser.role === 'admin' ? <Navigate to="/admin" replace /> :
+                currentUser.role === 'merchant' ? <Navigate to="/merchant" replace /> :
+                <Navigate to="/client" replace />
+              ) : (
+                <Navigate to="/login" replace />
+              )
+            } 
+          />
 
           {/* --- ROTA DE ADMIN (Filipe) --- */}
           <Route 
@@ -117,23 +131,7 @@ function App() {
             } 
           />
 
-          {/* --- REDIRECIONAMENTOS INTELIGENTES --- */}
-          <Route 
-            path="/" 
-            element={
-              currentUser ? (
-                // Se já estiver logado, manda para o dashboard certo
-                currentUser.role === 'admin' ? <Navigate to="/admin" /> :
-                currentUser.role === 'merchant' ? <Navigate to="/merchant" /> :
-                <Navigate to="/client" />
-              ) : (
-                // Se não, vai para o login
-                <Navigate to="/login" />
-              )
-            } 
-          />
-
-          {/* Rota 404 - Fallback */}
+          {/* Rota 404 - Fallback redireciona para a Landing Page em vez do Dashboard/Login */}
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
