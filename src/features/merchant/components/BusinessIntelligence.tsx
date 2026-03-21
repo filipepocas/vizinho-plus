@@ -164,7 +164,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
           </div>
           <div className="space-y-4 pt-6 border-t border-white/10">
             <div className="flex justify-between items-center">
-              <span className="text-[9px] font-black uppercase text-white/40">Pendente (48h)</span>
+              <span className="text-[9px] font-black uppercase text-white/40">Pendente </span>
               <span className="text-xs font-bold text-amber-400">{formatCurrency(cashbackStats.pending)}</span>
             </div>
             <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
