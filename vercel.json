@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/maturar",
+      "schedule": "0 4 1 * *"
+    }
+  ]
+}
