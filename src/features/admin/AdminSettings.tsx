@@ -24,22 +24,16 @@ import { SystemConfig } from '../../types';
 const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentUser, setCurrentUser } = useStore();
   
-  // ESTADO DE NAVEGAÇÃO
   const [activeTab, setActiveTab] = useState<'security' | 'system'>('security');
-
-  // SEGURANÇA (PERFIL ADMIN)
   const [newEmail, setNewEmail] = useState(currentUser?.email || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-
-  // CRIAÇÃO DE NOVOS ADMINS
   const [newAdminEmail, setNewAdminEmail] = useState('');
   const [newAdminPassword, setNewAdminPassword] = useState('');
   
-  // CONFIGURAÇÃO MASTER
   const [sysConfig, setSysConfig] = useState<SystemConfig>({
     globalServiceFee: 0,
-    maturationHours: 48, // Mantido no DB por compatibilidade, mas ignorado pela nova lógica mensal
+    maturationHours: 48,
     minRedeemAmount: 5.00,
     platformStatus: 'active',
     supportEmail: 'ajuda@vizinho-plus.pt',
@@ -49,9 +43,9 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  const isSuperAdmin = (currentUser?.email || '').toLowerCase().trim() === 'rochap.filipe@gmail.com';
+  // NOVA LÓGICA DE SUPERADMIN: Verifica a propriedade isSuperAdmin no objeto do utilizador
+  const isSuperAdmin = currentUser?.isSuperAdmin === true;
 
-  // CARREGAMENTO DAS CONFIGURAÇÕES
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -71,7 +65,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     fetchConfig();
   }, []);
 
-  // ATUALIZAR CREDENCIAIS
   const handleUpdateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword && newPassword !== confirmPassword) {
@@ -104,7 +97,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  // ATUALIZAR SISTEMA
   const handleUpdateSystem = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
@@ -158,8 +150,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   return (
     <div className="min-h-screen bg-[#f8fafc] p-4 md:p-12 font-sans text-[#0a2540]">
       <div className="max-w-4xl mx-auto">
-        
-        {/* CABEÇALHO */}
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
           <div className="flex items-center gap-6">
             <button 
@@ -207,7 +197,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </div>
         )}
 
-        {/* ABA SEGURANÇA */}
         {activeTab === 'security' && (
           <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] p-8 md:p-12 relative overflow-hidden">
             <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
@@ -272,11 +261,9 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           </div>
         )}
 
-        {/* ABA SISTEMA */}
         {activeTab === 'system' && (
           <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12 animate-in fade-in">
             <form onSubmit={handleUpdateSystem} className="space-y-10">
-              
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
@@ -296,7 +283,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </div>
               </div>
 
-              {/* REGRA DE MATURAÇÃO - VISUAL APENAS */}
               <div className="space-y-4 bg-blue-50 p-8 rounded-[40px] border-4 border-blue-100">
                 <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-blue-700 ml-1">
                   <Clock size={16} className="text-blue-500" /> Regra de Maturação de Cashback

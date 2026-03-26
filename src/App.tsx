@@ -2,19 +2,19 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 
-// 1. IMPORTAÇÕES DOS COMPONENTES DE PÁGINA
+// --- IMPORTAÇÕES DOS COMPONENTES ---
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
-import TermsPage from './features/public/TermsPage'; // Nova página legal
+import TermsPage from './features/public/TermsPage'; 
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
 
 /**
- * PROTECTED ROUTE (UNIFICADA)
- * Este componente gere o acesso com base na autenticação e no cargo (role).
+ * PROTECTED ROUTE
+ * Gere o acesso com base no login e no cargo (role).
  */
 const ProtectedRoute: React.FC<{ 
   children: React.ReactNode; 
@@ -22,7 +22,6 @@ const ProtectedRoute: React.FC<{
 }> = ({ children, requiredRole }) => {
   const { currentUser, isLoading, isInitialized } = useStore();
 
-  // 1. Enquanto o Firebase está a validar a sessão
   if (!isInitialized || isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#0f172a]">
@@ -34,22 +33,12 @@ const ProtectedRoute: React.FC<{
     );
   }
 
-  // 2. Se não houver utilizador logado, vai para o Login
   if (!currentUser) {
     return <Navigate to="/login" replace />;
   }
 
-  // 3. Verificação de Role (Cargo)
-  if (requiredRole) {
-    // Segurança extra para o Admin (Email específico e Role)
-    if (requiredRole === 'admin') {
-      const isSuperAdmin = currentUser.email === 'rochap.filipe@gmail.com' && currentUser.role === 'admin';
-      if (!isSuperAdmin) return <Navigate to="/login" replace />;
-    } 
-    // Outros cargos (Merchant ou Client)
-    else if (currentUser.role !== requiredRole) {
-      return <Navigate to="/login" replace />;
-    }
+  if (requiredRole && currentUser.role !== requiredRole) {
+    return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
@@ -58,13 +47,11 @@ const ProtectedRoute: React.FC<{
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
 
-  // Inicializa o Firebase Auth ao montar a app
   useEffect(() => {
     const unsubscribe = initializeAuth();
     return () => unsubscribe();
   }, [initializeAuth]);
 
-  // Subscreve às transações em tempo real assim que o utilizador é identificado
   useEffect(() => {
     let unsubscribeTrans: (() => void) | undefined;
     if (currentUser) {
@@ -77,17 +64,14 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc]">
         <Routes>
-          
-          {/* --- ROTAS PÚBLICAS (Marketing e Legal) --- */}
+          {/* Rotas Públicas */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsPage />} />
-
-          {/* --- ROTAS PÚBLICAS (Autenticação) --- */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
 
-          {/* --- REDIRECIONAMENTO INTELIGENTE PÓS-LOGIN --- */}
+          {/* Redirecionamento de Dashboard */}
           <Route 
             path="/dashboard" 
             element={
@@ -101,7 +85,7 @@ function App() {
             } 
           />
 
-          {/* --- ROTA DE ADMIN (Filipe / Super Admin) --- */}
+          {/* Rotas Protegidas */}
           <Route 
             path="/admin" 
             element={
@@ -111,7 +95,6 @@ function App() {
             } 
           />
 
-          {/* --- ROTA DE COMERCIANTE (Lojas Parceiras) --- */}
           <Route 
             path="/merchant" 
             element={
@@ -121,7 +104,6 @@ function App() {
             } 
           />
 
-          {/* --- ROTA DE CLIENTE (Vizinhos) --- */}
           <Route 
             path="/client" 
             element={
@@ -131,9 +113,7 @@ function App() {
             } 
           />
 
-          {/* FALLBACK: Qualquer rota desconhecida volta para a Landing Page */}
           <Route path="*" element={<Navigate to="/" replace />} />
-
         </Routes>
       </div>
     </BrowserRouter>

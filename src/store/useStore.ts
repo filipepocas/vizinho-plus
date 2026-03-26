@@ -1,41 +1,14 @@
 // src/store/useStore.ts
 import { create } from 'zustand';
 import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  where,
-  serverTimestamp,
-  setDoc,
-  doc,
-  getDocs,
-  writeBatch,
-  updateDoc,
-  limit
+  collection, onSnapshot, query, orderBy, where, serverTimestamp, 
+  setDoc, doc, getDocs, writeBatch, updateDoc, limit 
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
 import { requestNotificationPermission } from '../utils/notifications';
-
-// Filtro de segurança: Prepara os dados conforme as Rules exigem
-const pickAllowedTransactionFields = (input: TransactionCreate, merchantPercent: number) => {
-  const amount = Number(input.amount);
-  // O valor do cashback enviado tem de ser matematicamente exato para as Rules aceitarem
-  const calculatedCashback = Number((amount * (merchantPercent / 100)).toFixed(2));
-
-  return {
-    clientId: input.clientId,
-    merchantId: input.merchantId,
-    merchantName: input.merchantName,
-    amount: amount,
-    cashbackAmount: calculatedCashback, 
-    cashbackPercent: merchantPercent,
-    documentNumber: input.documentNumber || '',
-    type: input.type,
-  };
-};
+import toast from 'react-hot-toast';
 
 interface StoreState {
   transactions: Transaction[];
@@ -64,10 +37,8 @@ export const useStore = create<StoreState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   logout: async () => {
-    try {
-      await signOut(auth);
-      set({ currentUser: null, transactions: [], isLoading: false });
-    } catch (error) { console.error("Erro ao sair:", error); }
+    await signOut(auth);
+    set({ currentUser: null, transactions: [], isLoading: false });
   },
 
   resetPassword: async (email: string) => {
@@ -82,25 +53,29 @@ export const useStore = create<StoreState>((set, get) => ({
 
   addTransaction: async (transactionData) => {
     const { currentUser } = get();
-    if (!currentUser || currentUser.role !== 'merchant') {
-      throw new Error("Apenas lojistas podem registar transações.");
-    }
+    if (!currentUser || currentUser.role !== 'merchant') throw new Error("Apenas lojistas.");
 
     try {
-      // Usamos a percentagem oficial do lojista para o cálculo
       const merchantPercent = currentUser.cashbackPercent || 0;
-      const securePayload = pickAllowedTransactionFields(transactionData, merchantPercent);
-      
+      const amount = Number(transactionData.amount);
+      const calculatedCashback = Math.round((amount * (merchantPercent / 100)) * 100) / 100;
+
       const newTransRef = doc(collection(db, 'transactions'));
-      
       await setDoc(newTransRef, {
-        ...securePayload,
+        clientId: transactionData.clientId,
+        merchantId: currentUser.id,
+        merchantName: currentUser.shopName || currentUser.name,
+        amount: amount,
+        cashbackAmount: transactionData.type === 'earn' ? calculatedCashback : amount,
+        cashbackPercent: merchantPercent,
+        documentNumber: transactionData.documentNumber || 'S/ Doc',
+        type: transactionData.type,
         status: transactionData.type === 'earn' ? 'pending' : 'available',
         createdAt: serverTimestamp(),
       });
-    } catch (error) {
-      console.error("Erro na transação:", error);
-      throw error;
+      toast.success("MOVIMENTO REGISTADO!");
+    } catch (error: any) {
+      toast.error("ERRO: " + error.message);
     }
   },
 
@@ -110,18 +85,20 @@ export const useStore = create<StoreState>((set, get) => ({
       status: 'cancelled',
       cancelledAt: serverTimestamp()
     });
+    toast.success("ANULADO COM SUCESSO.");
   },
 
-  subscribeToTransactions: (role, identifier, limitCount = 50) => {
+  subscribeToTransactions: (role, identifier) => {
     if (!identifier && role !== 'admin') return () => {};
     const transRef = collection(db, 'transactions');
     let q;
 
     if ((role === 'merchant' || role === 'client' || role === 'user') && identifier) {
       const field = (role === 'merchant') ? 'merchantId' : 'clientId';
-      q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'), limit(limitCount));
+      // LIMITAÇÃO DE 100 PARA PERFORMANCE
+      q = query(transRef, where(field, '==', identifier), orderBy('createdAt', 'desc'), limit(100));
     } else if (role === 'admin') {
-      q = query(transRef, orderBy('createdAt', 'desc'), limit(limitCount));
+      q = query(transRef, orderBy('createdAt', 'desc'), limit(100));
     } else {
       return () => {};
     }
@@ -133,22 +110,20 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   initializeAuth: () => {
-    const authUnsubscribe = onAuthStateChanged(auth, (user) => {
+    return onAuthStateChanged(auth, (user) => {
       if (user) {
         requestNotificationPermission(user.uid);
         onSnapshot(doc(db, 'users', user.uid), (userDoc) => {
           if (userDoc.exists()) {
             set({ currentUser: { ...userDoc.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
           } else {
-            const role = user.email === 'rochap.filipe@gmail.com' ? 'admin' : 'client';
-            set({ currentUser: { id: user.uid, email: user.email!, role } as UserProfile, isLoading: false, isInitialized: true });
+            set({ currentUser: { id: user.uid, email: user.email!, role: 'client' } as UserProfile, isLoading: false, isInitialized: true });
           }
         });
       } else {
         set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
       }
     });
-    return authUnsubscribe;
   },
 
   deleteUserWithHistory: async (userId, role) => {
@@ -161,6 +136,7 @@ export const useStore = create<StoreState>((set, get) => ({
       querySnapshot.forEach((tx) => batch.delete(tx.ref));
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
+      toast.success("DADOS ELIMINADOS.");
     } finally { set({ isLoading: false }); }
   }
 }));

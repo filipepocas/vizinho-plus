@@ -55,6 +55,7 @@ export interface User {
   uid?: string;
   email: string;
   role: UserRole;
+  isSuperAdmin?: boolean; // PROPRIEDADE ADICIONADA AQUI
   status: UserStatus;
   name?: string;
   nif?: string;
