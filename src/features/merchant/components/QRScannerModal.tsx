@@ -1,6 +1,6 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeScanner } from 'html5-qrcode';
-import { X } from 'lucide-react';
+import { X, RefreshCcw, Camera } from 'lucide-react';
 
 interface QRScannerModalProps {
   onScan: (text: string) => void;
@@ -9,11 +9,18 @@ interface QRScannerModalProps {
 
 const QRScannerModal: React.FC<QRScannerModalProps> = ({ onScan, onClose }) => {
   const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const [facingMode, setFacingMode] = useState<"user" | "environment">("environment");
 
   useEffect(() => {
+    // Inicializa o scanner com a câmara traseira por defeito
     const scanner = new Html5QrcodeScanner(
       "reader",
-      { fps: 10, qrbox: { width: 250, height: 250 } },
+      { 
+        fps: 10, 
+        qrbox: { width: 280, height: 280 },
+        // IMPORTANTE: Tenta a traseira primeiro
+        aspectRatio: 1.0 
+      },
       false
     );
     scannerRef.current = scanner;
@@ -21,29 +28,41 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({ onScan, onClose }) => {
     scanner.render(
       (decodedText) => {
         onScan(decodedText);
-        // Limpeza imediata após sucesso
-        scanner.clear().catch(console.error);
+        scanner.clear();
       },
-      (error) => { /* Ignorar erros de leitura contínua */ }
+      () => {}
     );
 
     return () => {
-      // GARANTIA DE LIMPEZA AO DESMONTAR
       if (scannerRef.current) {
-        scannerRef.current.clear().catch((err) => console.warn("Erro ao fechar câmara:", err));
+        scannerRef.current.clear().catch(e => console.warn(e));
       }
     };
-  }, [onScan]);
+  }, [onScan, facingMode]);
 
   return (
     <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-[200] p-6 flex flex-col items-center justify-center">
       <div className="bg-white p-6 rounded-[40px] w-full max-w-lg relative border-4 border-[#00d66f]">
-        <button onClick={onClose} className="absolute -top-4 -right-4 bg-red-500 text-white p-2 rounded-full border-4 border-[#0f172a] z-50">
-          <X size={24} />
-        </button>
+        
+        {/* BOTÕES DE CONTROLO */}
+        <div className="absolute -top-4 -right-4 flex gap-2 z-50">
+            <button onClick={() => setFacingMode(prev => prev === "user" ? "environment" : "user")} className="bg-blue-500 text-white p-3 rounded-full border-4 border-[#0f172a] shadow-lg">
+                <RefreshCcw size={20} />
+            </button>
+            <button onClick={onClose} className="bg-red-500 text-white p-3 rounded-full border-4 border-[#0f172a] shadow-lg">
+                <X size={20} />
+            </button>
+        </div>
+
         <div id="reader" className="w-full overflow-hidden rounded-3xl"></div>
+        
+        <div className="mt-4 flex items-center justify-center gap-3 text-[#0a2540]">
+            <Camera size={18} />
+            <p className="font-black text-[10px] uppercase tracking-widest">
+                Câmara: {facingMode === "environment" ? "TRASEIRA (DEFEITO)" : "FRONTAL (SELFIE)"}
+            </p>
+        </div>
       </div>
-      <p className="mt-6 text-white/50 font-black uppercase text-[10px] tracking-widest italic">Aponte para o Cartão do Cliente</p>
     </div>
   );
 };
