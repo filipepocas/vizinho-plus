@@ -11,6 +11,7 @@ import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
+import BannerCarousel from './components/BannerCarousel'; // Novo Componente
 import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
@@ -66,7 +67,6 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
       
-      {/* HEADER ATUALIZADO COM BOTÃO DE DEFINIÇÕES */}
       <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center shadow-sm">
         <div>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
@@ -88,23 +88,23 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
+        {/* CARROSSEL DE BANNERS AGENDADO */}
+        <BannerCarousel />
+
         {/* CARTÃO DIGITAL VIZINHO+ */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
                 Cartão Digital
             </div>
-            
             <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
                 <QRCodeSVG value={currentUser.nif || ""} size={120} />
             </div>
-
             <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este código na loja</p>
                 <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
                     {currentUser.nif?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>
-            
             <div className="bg-amber-50 px-6 py-2 rounded-full border border-amber-100 flex items-center gap-2">
                 <QrCode size={14} className="text-amber-600" />
                 <p className="text-[9px] font-bold text-amber-700 uppercase tracking-tight italic">
@@ -137,7 +137,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* AÇÕES RÁPIDAS */}
         <div className="grid grid-cols-2 gap-4">
           <button 
             onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')}
@@ -160,11 +159,9 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* VIEWS DINÂMICAS */}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
         
-        {/* BOTÃO EXPLORAR */}
         <button 
           onClick={() => setView(view === 'explore' ? 'home' : 'explore')}
           className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[6px_6px_0px_#0a2540] active:translate-y-1 active:shadow-none'}`}
@@ -174,7 +171,6 @@ const UserDashboard: React.FC = () => {
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
-        {/* BOTÃO DOURADO REALISTA */}
         {sysConfig.vantagensUrl && (
           <button 
             onClick={() => window.open(sysConfig.vantagensUrl, '_blank')}
@@ -184,9 +180,7 @@ const UserDashboard: React.FC = () => {
                 border: '4px solid #aa771c'
             }}
           >
-            {/* Brilho animado */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-4">
                 <div className="bg-black/20 p-3 rounded-2xl">
@@ -205,25 +199,15 @@ const UserDashboard: React.FC = () => {
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-4">
-        {/* LINK PARA TERMOS E PRIVACIDADE */}
-        <button 
-            onClick={() => navigate('/terms')}
-            className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] transition-colors"
-        >
+        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540]">
             <ShieldCheck size={14} /> Termos e Privacidade
         </button>
-
-        <button 
-            onClick={handleLogout} 
-            className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700 transition-colors"
-        >
+        <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700">
             <LogOut size={14} /> Sair da Conta
         </button>
-        
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
       </footer>
 
-      {/* MODAL DE FEEDBACK - LIGADO À BASE DE DADOS FEEDBACKS */}
       {selectedTxForFeedback && (
         <FeedbackForm 
           transactionId={selectedTxForFeedback.id} 

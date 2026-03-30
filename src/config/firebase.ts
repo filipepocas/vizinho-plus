@@ -3,6 +3,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getAnalytics } from 'firebase/analytics';
 import { getMessaging } from 'firebase/messaging';
+import { getStorage } from 'firebase/storage'; // ADICIONADO
 
 export const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -14,16 +15,14 @@ export const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
-// Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inicializa e exporta os serviços
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app); // ADICIONADO
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 
-// Auth secundário para provisionamento (criar contas sem trocar sessão do admin)
 export const provisionAuth = (() => {
   const name = 'provision';
   const provisionApp = getApps().some(a => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);

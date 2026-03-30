@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, doc, writeBatch, serverTimestamp, in
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -13,11 +13,12 @@ import AdminUsers from './AdminUsers';
 import AdminMerchants from './AdminMerchants';
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
+import BannerManager from './BannerManager'; // Novo Componente
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews' | 'banners'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -131,7 +132,6 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
-      {/* CABEÇALHO PRINCIPAL CORRIGIDO */}
       <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[50px] border-b-[10px] border-[#00d66f] shadow-2xl z-20">
         <div className="max-w-7xl mx-auto">
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
@@ -160,6 +160,7 @@ const AdminDashboard: React.FC = () => {
               { id: 'overview', label: 'Painel', icon: TrendingUp },
               { id: 'merchants', label: 'Lojas', icon: Store },
               { id: 'users', label: 'Vizinhos', icon: Users },
+              { id: 'banners', label: 'Banners', icon: ImageIcon },
               { id: 'reviews', label: 'Feedback', icon: MessageSquare },
             ].map(item => (
               <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-xl translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
@@ -173,7 +174,6 @@ const AdminDashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-12 w-full">
         {currentView === 'overview' && (
           <>
-            {/* Secção de Maturação */}
             <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-10 shadow-[12px_12px_0px_#0a2540]">
               <div className="flex items-center gap-4 mb-10">
                 <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
@@ -181,9 +181,8 @@ const AdminDashboard: React.FC = () => {
                 </div>
                 <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540]">Maturações Pendentes</h2>
               </div>
-              
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {pendingStores.length > 0 ? pendingStores.map(store => (
+                {pendingStores.map(store => (
                   <div key={store.id} className="p-8 bg-slate-50 border-4 border-slate-100 rounded-[35px] flex justify-between items-center group hover:border-[#00d66f] transition-all">
                     <div>
                       <p className="font-black uppercase text-base text-[#0a2540] mb-1">{store.name}</p>
@@ -193,16 +192,9 @@ const AdminDashboard: React.FC = () => {
                       {isProcessing === store.id ? <RefreshCw className="animate-spin" size={24} /> : <TrendingUp size={24} strokeWidth={3} />}
                     </button>
                   </div>
-                )) : (
-                  <div className="col-span-full py-20 text-center bg-green-50 border-4 border-dashed border-green-200 rounded-[40px]">
-                    <ShieldCheck size={60} className="mx-auto text-green-400 mb-4" />
-                    <p className="font-black text-green-700 uppercase tracking-[0.3em]">Tudo atualizado.</p>
-                  </div>
-                )}
+                ))}
               </div>
             </div>
-
-            {/* Auditoria de Transações (Secção da Imagem) */}
             <div className="bg-white rounded-[50px] border-4 border-[#0a2540] p-10 shadow-[15px_15px_0px_#0a2540]">
                 <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-10">Auditoria de Transações</h2>
                 <AdminTransactions transactions={globalTransactions} users={[]} />
@@ -212,6 +204,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'users' && <AdminUsers users={globalClients} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'reviews' && <FeedbackList />}
+        {currentView === 'banners' && <BannerManager />}
       </main>
 
       <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />
