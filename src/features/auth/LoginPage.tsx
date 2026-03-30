@@ -13,10 +13,10 @@ const LoginPage: React.FC = () => {
   const { currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
 
-  // Escuta o estado global: Assim que o utilizador estiver carregado no Store, entra.
+  // Redirecionamento Automático via Estado Global
   useEffect(() => {
     if (isInitialized && currentUser) {
-      navigate('/dashboard');
+      navigate('/dashboard', { replace: true });
     }
   }, [currentUser, isInitialized, navigate]);
 
@@ -28,11 +28,11 @@ const LoginPage: React.FC = () => {
     setError('');
     
     try {
-      // Apenas fazemos o login no Auth. O initializeAuth no App.tsx tratará de detetar a mudança.
       await signInWithEmailAndPassword(auth, email.trim(), password);
+      // NÃO navegar aqui. Deixar o useEffect acima tratar disso.
     } catch (err: any) {
       setLocalLoading(false);
-      setError('Credenciais incorretas. Verifica o teu email e password.');
+      setError('Email ou password incorretos.');
     }
   };
 
@@ -43,8 +43,7 @@ const LoginPage: React.FC = () => {
           <div className="bg-[#00d66f] w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#0a2540] rotate-3">
             <LogIn size={32} className="text-[#0a2540]" />
           </div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Bem-vindo!</h2>
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-2">Acede à tua rede Vizinho+</p>
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Vizinho+</h2>
         </div>
 
         {error && (
@@ -68,9 +67,7 @@ const LoginPage: React.FC = () => {
           </div>
 
           <div className="space-y-2">
-            <div className="flex justify-between items-center px-2">
-              <label className="text-[10px] font-black uppercase text-slate-400">Password</label>
-            </div>
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
               <input 
@@ -85,19 +82,11 @@ const LoginPage: React.FC = () => {
           <button 
             type="submit" 
             disabled={localLoading}
-            className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-70"
+            className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 disabled:opacity-70"
           >
-            {localLoading ? (
-              <>Validando... <Loader2 className="animate-spin" size={20} /></>
-            ) : (
-              <>Entrar na Conta <ArrowRight size={20} /></>
-            )}
+            {localLoading ? <Loader2 className="animate-spin" /> : <>Entrar <ArrowRight /></>}
           </button>
         </form>
-
-        <div className="mt-10 text-center">
-          <Link to="/register" className="text-sm font-black text-[#0a2540] uppercase italic hover:text-[#00d66f]">Criar conta grátis</Link>
-        </div>
       </div>
     </div>
   );

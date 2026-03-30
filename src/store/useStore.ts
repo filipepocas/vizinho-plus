@@ -19,7 +19,7 @@ interface StoreState {
   resetPassword: (email: string) => Promise<void>;
   addTransaction: (transaction: TransactionCreate) => Promise<void>;
   cancelTransaction: (transactionId: string) => Promise<void>;
-  subscribeToTransactions: (role?: string, identifier?: string) => () => void;
+  subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
@@ -35,8 +35,13 @@ export const useStore = create<StoreState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   logout: async () => {
-    await signOut(auth);
-    set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
+    set({ isLoading: true });
+    try {
+      await signOut(auth);
+      set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
+    } catch (e) {
+      set({ isLoading: false });
+    }
   },
 
   resetPassword: async (email: string) => {
@@ -53,23 +58,9 @@ export const useStore = create<StoreState>((set, get) => ({
   addTransaction: async (tx) => {
     const { currentUser } = get();
     if (!currentUser) return;
-    
     try {
       const batch = writeBatch(db);
       let currentCbPercent = currentUser.cashbackPercent || 0;
-
-      if (currentUser.pendingCashbackEffectiveAt && currentUser.pendingCashbackPercent !== undefined) {
-        const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as Timestamp).toDate();
-        if (new Date() >= effectiveDateObj) {
-          currentCbPercent = currentUser.pendingCashbackPercent;
-          batch.update(doc(db, 'users', currentUser.id), {
-            cashbackPercent: currentCbPercent,
-            pendingCashbackPercent: null,
-            pendingCashbackEffectiveAt: null
-          });
-        }
-      }
-
       const amount = Number(tx.amount);
       const cashback = tx.type === 'earn' ? Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
       const newTxRef = doc(collection(db, 'transactions'));
@@ -93,18 +84,15 @@ export const useStore = create<StoreState>((set, get) => ({
           [`wallet.pending`]: increment(cashback),
           [`storeWallets.${currentUser.id}.pending`]: increment(cashback),
         });
-      } else if (tx.type === 'redeem') {
+      } else {
         batch.update(userRef, {
           [`wallet.available`]: increment(-amount),
           [`storeWallets.${currentUser.id}.available`]: increment(-amount)
         });
       }
-
       await batch.commit();
       toast.success("MOVIMENTO REGISTADO!");
-    } catch (e) { 
-      toast.error("ERRO NO REGISTO."); 
-    }
+    } catch (e) { toast.error("ERRO NO REGISTO."); }
   },
 
   cancelTransaction: async (id) => {
@@ -123,37 +111,52 @@ export const useStore = create<StoreState>((set, get) => ({
         batch.update(userRef, { [`wallet.available`]: increment(txData.amount), [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) });
       }
       await batch.commit();
-      toast.success("ANULADO COM SUCESSO.");
-    } catch (e) { toast.error("ERRO AO ANULAR."); }
+      toast.success("ANULADO.");
+    } catch (e) { toast.error("ERRO."); }
   },
 
   subscribeToTransactions: (role, id) => {
     if (!id && role !== 'admin') return () => {};
     const q = role === 'admin' 
-      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))
-      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(100));
+      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(100))
+      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(50));
+    
     return onSnapshot(q, (snap) => {
       set({ transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)) });
-    });
+    }, (err) => console.error("Transactions sub error:", err));
   },
 
   initializeAuth: () => {
-    set({ isLoading: true, isInitialized: false });
-    return onAuthStateChanged(auth, (user) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      // Se o utilizador sair, mata o listener do perfil anterior
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (user) {
-        return onSnapshot(doc(db, 'users', user.uid), async (d) => {
+        set({ isLoading: true });
+        unsubProfile = onSnapshot(doc(db, 'users', user.uid), (d) => {
           if (d.exists()) {
-            let userData = { ...d.data(), id: user.uid } as UserProfile;
-            // Verificar cashback pendente aqui se necessário
-            set({ currentUser: userData, isLoading: false, isInitialized: true });
+            set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
           } else {
             set({ currentUser: null, isLoading: false, isInitialized: true });
           }
+        }, (err) => {
+          console.error("Profile sub error:", err);
+          set({ isLoading: false, isInitialized: true });
         });
-      } else { 
-        set({ currentUser: null, isLoading: false, isInitialized: true }); 
+      } else {
+        set({ currentUser: null, isLoading: false, isInitialized: true });
       }
     });
+
+    return () => {
+      unsubAuth();
+      if (unsubProfile) unsubProfile();
+    };
   },
 
   deleteUserWithHistory: async (userId, role) => {
@@ -164,7 +167,7 @@ export const useStore = create<StoreState>((set, get) => ({
       snap.docs.forEach(d => batch.delete(d.ref));
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
-      toast.success("CONTA ELIMINADA.");
-    } catch (e) { toast.error("ERRO AO ELIMINAR."); }
+      toast.success("DADOS APAGADOS.");
+    } catch (e) { toast.error("ERRO."); }
   }
 }));

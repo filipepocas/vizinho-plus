@@ -19,24 +19,16 @@ const ProtectedRoute: React.FC<{
 }> = ({ children, requiredRole }) => {
   const { currentUser, isLoading, isInitialized } = useStore();
 
-  // Enquanto estivermos a carregar o Auth OU os dados do Firestore (isLoading), mantemos o loading screen
   if (!isInitialized || isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
-        <div className="w-16 h-16 border-8 border-[#0a2540] border-t-[#00d66f] rounded-full animate-spin mb-6"></div>
-        <div className="text-[#0a2540] font-black uppercase tracking-[0.3em] text-xs">
-          Vizinho+ ...
-        </div>
+        <div className="w-12 h-12 border-4 border-[#0a2540] border-t-[#00d66f] rounded-full animate-spin"></div>
       </div>
     );
   }
 
-  // Se a inicialização terminou e NÃO temos utilizador, vai para o login
-  if (!currentUser) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!currentUser) return <Navigate to="/login" replace />;
 
-  // Se o utilizador tem o cargo errado
   if (requiredRole && currentUser.role !== requiredRole) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -52,50 +44,31 @@ const SettingsWrapper = () => {
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
 
+  // 1. Inicializa o Auth UMA VEZ
   useEffect(() => {
-    const unsubscribe = initializeAuth();
-    return () => { if (typeof unsubscribe === 'function') unsubscribe(); };
-  }, [initializeAuth]);
+    const unsub = initializeAuth();
+    return () => unsub();
+  }, []); // Sem dependências para não repetir
 
+  // 2. Subscreve transações APENAS quando o user ID está estável
   useEffect(() => {
-    let unsubscribeTrans: (() => void) | undefined;
     if (currentUser?.id) {
-      unsubscribeTrans = subscribeToTransactions(currentUser.role, currentUser.id);
+      const unsub = subscribeToTransactions(currentUser.role, currentUser.id);
+      return () => unsub();
     }
-    return () => { if (unsubscribeTrans) unsubscribeTrans(); };
-  }, [currentUser, subscribeToTransactions]);
+  }, [currentUser?.id, currentUser?.role]);
 
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc]">
-        <Toaster position="top-center" toastOptions={{
-          style: {
-            background: '#0a2540',
-            color: '#fff',
-            borderRadius: '15px',
-            border: '4px solid #00d66f',
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '900',
-            textTransform: 'uppercase',
-            fontSize: '10px'
-          }
-        }} />
-        
+        <Toaster position="top-center" />
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          
-          <Route path="/dashboard" element={
-            currentUser ? (
-              currentUser.role === 'admin' ? <Navigate to="/admin" replace /> : 
-              currentUser.role === 'merchant' ? <Navigate to="/merchant" replace /> : 
-              <Navigate to="/client" replace />
-            ) : <ProtectedRoute><div>Redirecting...</div></ProtectedRoute>
-          } />
-          
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/merchant" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
           <Route path="/client" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
@@ -106,5 +79,13 @@ function App() {
     </BrowserRouter>
   );
 }
+
+const DashboardRedirect = () => {
+  const { currentUser } = useStore();
+  if (!currentUser) return <Navigate to="/login" />;
+  if (currentUser.role === 'admin') return <Navigate to="/admin" />;
+  if (currentUser.role === 'merchant') return <Navigate to="/merchant" />;
+  return <Navigate to="/client" />;
+};
 
 export default App;
