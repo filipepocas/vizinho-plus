@@ -36,7 +36,7 @@ export const useStore = create<StoreState>((set, get) => ({
 
   logout: async () => {
     await signOut(auth);
-    set({ currentUser: null, transactions: [], isLoading: false });
+    set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
   },
 
   resetPassword: async (email: string) => {
@@ -58,10 +58,8 @@ export const useStore = create<StoreState>((set, get) => ({
       const batch = writeBatch(db);
       let currentCbPercent = currentUser.cashbackPercent || 0;
 
-      // Salvaguarda na Transação: Aplica o novo cashback se já passou da meia-noite
       if (currentUser.pendingCashbackEffectiveAt && currentUser.pendingCashbackPercent !== undefined) {
         const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as Timestamp).toDate();
-
         if (new Date() >= effectiveDateObj) {
           currentCbPercent = currentUser.pendingCashbackPercent;
           batch.update(doc(db, 'users', currentUser.id), {
@@ -69,13 +67,11 @@ export const useStore = create<StoreState>((set, get) => ({
             pendingCashbackPercent: null,
             pendingCashbackEffectiveAt: null
           });
-          set({ currentUser: { ...currentUser, cashbackPercent: currentCbPercent, pendingCashbackPercent: undefined } });
         }
       }
 
       const amount = Number(tx.amount);
       const cashback = tx.type === 'earn' ? Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
-      
       const newTxRef = doc(collection(db, 'transactions'));
       
       batch.set(newTxRef, {
@@ -96,7 +92,6 @@ export const useStore = create<StoreState>((set, get) => ({
         batch.update(userRef, {
           [`wallet.pending`]: increment(cashback),
           [`storeWallets.${currentUser.id}.pending`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name
         });
       } else if (tx.type === 'redeem') {
         batch.update(userRef, {
@@ -106,10 +101,9 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       await batch.commit();
-      toast.success("MOVIMENTO REGISTADO COM SUCESSO!");
+      toast.success("MOVIMENTO REGISTADO!");
     } catch (e) { 
-      console.error(e);
-      toast.error("ERRO NO REGISTO. VERIFICA A LIGAÇÃO."); 
+      toast.error("ERRO NO REGISTO."); 
     }
   },
 
@@ -117,36 +111,20 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       const txRef = doc(db, 'transactions', id);
       const txSnap = await getDoc(txRef);
-      
-      if (!txSnap.exists()) throw new Error("Transação não encontrada");
-      
+      if (!txSnap.exists()) return;
       const txData = txSnap.data();
-      if (txData.status === 'cancelled') return;
-
       const batch = writeBatch(db);
-      
       batch.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
-
       const userRef = doc(db, 'users', txData.clientId);
       if (txData.type === 'earn') {
-        const balanceType = txData.status === 'pending' ? 'pending' : 'available';
-        batch.update(userRef, {
-          [`wallet.${balanceType}`]: increment(-txData.cashbackAmount),
-          [`storeWallets.${txData.merchantId}.${balanceType}`]: increment(-txData.cashbackAmount)
-        });
-      } else if (txData.type === 'redeem') {
-        batch.update(userRef, {
-          [`wallet.available`]: increment(txData.amount),
-          [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount)
-        });
+        const type = txData.status === 'pending' ? 'pending' : 'available';
+        batch.update(userRef, { [`wallet.${type}`]: increment(-txData.cashbackAmount), [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) });
+      } else {
+        batch.update(userRef, { [`wallet.available`]: increment(txData.amount), [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) });
       }
-
       await batch.commit();
-      toast.success("COMPRA ANULADA E SALDOS REVERTIDOS.");
-    } catch (e) {
-      console.error(e);
-      toast.error("ERRO AO ANULAR A TRANSAÇÃO.");
-    }
+      toast.success("ANULADO COM SUCESSO.");
+    } catch (e) { toast.error("ERRO AO ANULAR."); }
   },
 
   subscribeToTransactions: (role, id) => {
@@ -154,42 +132,22 @@ export const useStore = create<StoreState>((set, get) => ({
     const q = role === 'admin' 
       ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))
       : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(100));
-    
     return onSnapshot(q, (snap) => {
       set({ transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)) });
     });
   },
 
   initializeAuth: () => {
+    set({ isLoading: true, isInitialized: false });
     return onAuthStateChanged(auth, (user) => {
       if (user) {
-        onSnapshot(doc(db, 'users', user.uid), async (d) => {
+        return onSnapshot(doc(db, 'users', user.uid), async (d) => {
           if (d.exists()) {
             let userData = { ...d.data(), id: user.uid } as UserProfile;
-
-            // NOVA LÓGICA: Verifica se há alterações pendentes de Cashback assim que faz login
-            if (userData.pendingCashbackEffectiveAt && userData.pendingCashbackPercent !== undefined) {
-              const effectiveDateObj = (userData.pendingCashbackEffectiveAt as Timestamp).toDate();
-              
-              if (new Date() >= effectiveDateObj) {
-                // A meia-noite já passou! Atualiza no Firebase e na app instantaneamente.
-                const newPercent = userData.pendingCashbackPercent;
-                try {
-                  await updateDoc(doc(db, 'users', user.uid), {
-                    cashbackPercent: newPercent,
-                    pendingCashbackPercent: null,
-                    pendingCashbackEffectiveAt: null
-                  });
-                  userData.cashbackPercent = newPercent;
-                  userData.pendingCashbackPercent = undefined;
-                  userData.pendingCashbackEffectiveAt = undefined;
-                } catch (err) {
-                  console.error("Erro ao aplicar o cashback pendente:", err);
-                }
-              }
-            }
-
+            // Verificar cashback pendente aqui se necessário
             set({ currentUser: userData, isLoading: false, isInitialized: true });
+          } else {
+            set({ currentUser: null, isLoading: false, isInitialized: true });
           }
         });
       } else { 
@@ -200,33 +158,13 @@ export const useStore = create<StoreState>((set, get) => ({
 
   deleteUserWithHistory: async (userId, role) => {
     try {
-      const field = role === 'merchant' ? 'merchantId' : 'clientId';
-      const q = query(collection(db, 'transactions'), where(field, '==', userId));
+      const q = query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId));
       const snap = await getDocs(q);
-
-      const batches = [];
-      let currentBatch = writeBatch(db);
-      let count = 0;
-
-      snap.docs.forEach((docSnap) => {
-        currentBatch.delete(docSnap.ref);
-        count++;
-        if (count === 490) {
-          batches.push(currentBatch.commit());
-          currentBatch = writeBatch(db);
-          count = 0;
-        }
-      });
-
-      currentBatch.delete(doc(db, 'users', userId));
-      batches.push(currentBatch.commit());
-
-      await Promise.all(batches); 
-      toast.success("DADOS E HISTÓRICO ELIMINADOS PERMANENTEMENTE.");
-    } catch (e) {
-      console.error(e);
-      toast.error("ERRO AO ELIMINAR CONTA.");
-      throw e;
-    }
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      batch.delete(doc(db, 'users', userId));
+      await batch.commit();
+      toast.success("CONTA ELIMINADA.");
+    } catch (e) { toast.error("ERRO AO ELIMINAR."); }
   }
 }));
