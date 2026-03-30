@@ -55,11 +55,31 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!currentUser) return;
     
     try {
-      const amount = Number(tx.amount);
-      // Arredondar a 2 casas decimais para evitar bugs de matemática do JavaScript
-      const cashback = tx.type === 'earn' ? Math.round((amount * (currentUser.cashbackPercent || 0) / 100) * 100) / 100 : amount;
-      
       const batch = writeBatch(db);
+      let currentCbPercent = currentUser.cashbackPercent || 0;
+
+      // RESOLUÇÃO PROBLEMA 1: Aplica cashback pendente se já for o dia seguinte
+      if (currentUser.pendingCashbackEffectiveAt && currentUser.pendingCashbackPercent !== undefined) {
+        const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as any).seconds 
+          ? new Date((currentUser.pendingCashbackEffectiveAt as any).seconds * 1000) 
+          : new Date(currentUser.pendingCashbackEffectiveAt as any);
+
+        if (new Date() >= effectiveDateObj) {
+          currentCbPercent = currentUser.pendingCashbackPercent;
+          // Atualiza permanentemente no lojista
+          batch.update(doc(db, 'users', currentUser.id), {
+            cashbackPercent: currentCbPercent,
+            pendingCashbackPercent: null,
+            pendingCashbackEffectiveAt: null
+          });
+          // Atualiza o estado local para não ter de dar refresh
+          set({ currentUser: { ...currentUser, cashbackPercent: currentCbPercent, pendingCashbackPercent: undefined } });
+        }
+      }
+
+      const amount = Number(tx.amount);
+      const cashback = tx.type === 'earn' ? Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
+      
       const newTxRef = doc(collection(db, 'transactions'));
       
       // 1. Guardar a Transação
@@ -69,24 +89,22 @@ export const useStore = create<StoreState>((set, get) => ({
         merchantName: currentUser.shopName || currentUser.name,
         amount,
         cashbackAmount: cashback,
-        cashbackPercent: currentUser.cashbackPercent || 0,
+        cashbackPercent: currentCbPercent,
         type: tx.type,
         status: tx.type === 'earn' ? 'pending' : 'available',
         createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber // Guardar o NIF na TX para pesquisa fácil
+        clientNif: tx.documentNumber
       });
 
-      // 2. Atualizar o Saldo do Cliente em tempo real
+      // 2. Atualizar o Saldo do Cliente
       const userRef = doc(db, 'users', tx.clientId);
       if (tx.type === 'earn') {
-        // Se ganhou cashback, vai para o PENDENTE
         batch.update(userRef, {
           [`wallet.pending`]: increment(cashback),
           [`storeWallets.${currentUser.id}.pending`]: increment(cashback),
           [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name
         });
       } else if (tx.type === 'redeem') {
-        // Se descontou saldo, retira do DISPONÍVEL
         batch.update(userRef, {
           [`wallet.available`]: increment(-amount),
           [`storeWallets.${currentUser.id}.available`]: increment(-amount)
@@ -113,20 +131,16 @@ export const useStore = create<StoreState>((set, get) => ({
 
       const batch = writeBatch(db);
       
-      // 1. Mudar estado da transação para cancelada
       batch.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
 
-      // 2. Reverter os saldos na carteira do cliente
       const userRef = doc(db, 'users', txData.clientId);
       if (txData.type === 'earn') {
-        // Retira o que tinha sido dado (verifica se estava pendente ou já maturado)
         const balanceType = txData.status === 'pending' ? 'pending' : 'available';
         batch.update(userRef, {
           [`wallet.${balanceType}`]: increment(-txData.cashbackAmount),
           [`storeWallets.${txData.merchantId}.${balanceType}`]: increment(-txData.cashbackAmount)
         });
       } else if (txData.type === 'redeem') {
-        // Devolve o saldo que o cliente tinha tentado gastar
         batch.update(userRef, {
           [`wallet.available`]: increment(txData.amount),
           [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount)
@@ -170,7 +184,6 @@ export const useStore = create<StoreState>((set, get) => ({
       const q = query(collection(db, 'transactions'), where(field, '==', userId));
       const snap = await getDocs(q);
 
-      // Limite do Firebase Batch é 500. Vamos dividir em lotes de 490 por segurança.
       const batches = [];
       let currentBatch = writeBatch(db);
       let count = 0;
@@ -185,11 +198,10 @@ export const useStore = create<StoreState>((set, get) => ({
         }
       });
 
-      // Apagar também o perfil do utilizador na base de dados
       currentBatch.delete(doc(db, 'users', userId));
       batches.push(currentBatch.commit());
 
-      await Promise.all(batches); // Executa todos os blocos de forma assíncrona
+      await Promise.all(batches); 
       toast.success("DADOS E HISTÓRICO ELIMINADOS PERMANENTEMENTE.");
     } catch (e) {
       console.error(e);

@@ -20,13 +20,12 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
   const [loadingFeedbacks, setLoadingFeedbacks] = useState(true);
 
-  // PROTEÇÃO DE DADOS: Limitado a 50 para não estourar os limites gratuitos do Firebase
   useEffect(() => {
     const q = query(
       collection(db, 'feedbacks'),
       where('merchantId', '==', merchantId),
       orderBy('createdAt', 'desc'),
-      limit(50) // Máximo de 50 leituras por sessão
+      limit(50)
     );
     
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -39,7 +38,14 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // ESTATÍSTICA: FLUXO SEMANAL (Horas de Ponta)
+  // RESOLUÇÃO PROBLEMA 5: Parseador robusto para datas do Firestore / Redux / Zustand
+  const parseDate = (createdAt: any) => {
+    if (!createdAt) return new Date();
+    if (createdAt.toDate) return createdAt.toDate();
+    if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
+    return new Date(createdAt);
+  };
+
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const counts = days.map(d => ({ day: d, count: 0, hours: Array(24).fill(0) }));
@@ -47,7 +53,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
     transactions.forEach(t => {
-      const date = t.createdAt?.toDate ? t.createdAt.toDate() : new Date();
+      const date = parseDate(t.createdAt);
       if (date > oneYearAgo && t.type === 'earn' && t.status !== 'cancelled') {
         const dayIdx = date.getDay();
         const hour = date.getHours();
@@ -62,7 +68,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     }));
   }, [transactions]);
 
-  // ESTATÍSTICA: VOLUME DE FATURAÇÃO MENSAL (Últimos 6 meses)
   const monthStats = useMemo(() => {
     const months: MonthStat[] = [];
     
@@ -79,7 +84,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
     transactions.forEach(t => {
       if (t.type === 'earn' && t.status !== 'cancelled') {
-        const date = t.createdAt?.toDate ? t.createdAt.toDate() : new Date();
+        const date = parseDate(t.createdAt);
         const idx = months.findIndex(m => m.m === date.getMonth() && m.y === date.getFullYear());
         if (idx !== -1) {
           months[idx].volume += Number(t.amount || 0);
@@ -89,7 +94,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return months;
   }, [transactions]);
 
-  // ESTATÍSTICA: SAÚDE DO CASHBACK DA LOJA
   const cashbackStats = useMemo(() => {
     let emitted = 0, used = 0, pending = 0, available = 0;
     
@@ -109,7 +113,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return { emitted, used, pending, available: Math.max(0, available) };
   }, [transactions]);
 
-  // ESTATÍSTICA: AVALIAÇÕES DE CLIENTES
   const feedbackStats = useMemo(() => {
     if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
     
@@ -207,7 +210,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         
         <div className="space-y-8 flex-grow relative z-10 mt-auto">
           <div className="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
-            <p className="text-[8px] font-black uppercase text-white/40 tracking-widest mb-2">Responsabilidade Total (Aos Vizinhos)</p>
+            <p className="text-[8px] font-black uppercase text-white/40 tracking-widest mb-2">Responsabilidade Total</p>
             <span className="text-3xl font-black text-[#00d66f] italic tracking-tighter block">{formatCurrency(cashbackStats.available)}</span>
           </div>
 

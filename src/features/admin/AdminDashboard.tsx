@@ -19,19 +19,15 @@ const AdminDashboard: React.FC = () => {
   const navigate = useNavigate();
   const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews'>('overview');
   
-  // Dados globais do Admin
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
   
-  // Estado de carregamentos e processos
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [pendingStores, setPendingStores] = useState<{id: string, name: string, count: number}[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // BUSCAR LOJAS COM TRANSAÇÕES PENDENTES DE MESES ANTERIORES
   const fetchPendingMaturation = useCallback(async () => {
     const now = new Date();
-    // A regra: Tudo o que foi faturado até às 23:59 do último dia do mês passado
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
 
     const q = query(
@@ -52,9 +48,8 @@ const AdminDashboard: React.FC = () => {
     setPendingStores(Array.from(storeMap.values()));
   }, []);
 
-  // Monitorizar todas as transações em tempo real (Limitado a 100 para não esgotar leituras da camada gratuita)
   useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc')); // Retirado limit(100) temporariamente para o Admin ver o fluxo geral. Para grandes volumes, repor limit(100).
+    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
     const unsubTx = onSnapshot(qTx, (snap) => {
         setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
     });
@@ -73,7 +68,6 @@ const AdminDashboard: React.FC = () => {
   }, [fetchPendingMaturation]);
 
 
-  // MATURAR LOJA ESPECÍFICA (Seguro para 10.000+ clientes com Chunking)
   const processStoreMaturation = async (merchantId: string, merchantName: string) => {
     if (!window.confirm(`Maturar todas as transações de "${merchantName}"? Isto irá disponibilizar o saldo a todos os clientes desta loja.`)) return;
 
@@ -91,8 +85,6 @@ const AdminDashboard: React.FC = () => {
 
       const snap = await getDocs(q);
       
-      // O Firebase tem limite de 500 operações por Batch. 
-      // Temos que atualizar a Transação (1) e a Conta do Cliente (1). Portanto, máximo 240 transações por Batch.
       const BATCH_LIMIT = 240; 
       let batches = [];
       let currentBatch = writeBatch(db);
@@ -102,11 +94,9 @@ const AdminDashboard: React.FC = () => {
         const txData = txDoc.data();
         const amount = txData.cashbackAmount;
 
-        // Operação 1: Atualizar Transação
         currentBatch.update(txDoc.ref, { status: 'available', maturedAt: serverTimestamp() });
         operationCount++;
 
-        // Operação 2: Atualizar Saldo do Cliente
         const userRef = doc(db, 'users', txData.clientId);
         currentBatch.update(userRef, {
           [`storeWallets.${merchantId}.available`]: increment(amount),
@@ -116,7 +106,6 @@ const AdminDashboard: React.FC = () => {
         });
         operationCount++;
 
-        // Se o batch estiver a ficar cheio, criamos um novo
         if (operationCount >= BATCH_LIMIT * 2) {
           batches.push(currentBatch.commit());
           currentBatch = writeBatch(db);
@@ -124,14 +113,13 @@ const AdminDashboard: React.FC = () => {
         }
       });
 
-      // Garantir que o último batch incompleto também é executado
       if (operationCount > 0) {
         batches.push(currentBatch.commit());
       }
 
-      await Promise.all(batches); // Executa tudo
+      await Promise.all(batches);
       toast.success(`SALDOS DE ${merchantName} MATURADOS COM SUCESSO!`);
-      fetchPendingMaturation(); // Atualiza a lista visual
+      fetchPendingMaturation(); 
     } catch (e) {
       console.error(e);
       toast.error("ERRO NO PROCESSAMENTO. VERIFIQUE A LIGAÇÃO.");
@@ -145,7 +133,6 @@ const AdminDashboard: React.FC = () => {
     navigate('/login');
   };
 
-  // Função para mudar o Status de Lojistas (Usado no componente AdminMerchants)
   const handleUpdateMerchantStatus = async (merchantId: string, newStatus: string) => {
       try {
           await writeBatch(db).update(doc(db, 'users', merchantId), { status: newStatus }).commit();
@@ -157,52 +144,61 @@ const AdminDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] pb-20">
-      <header className="bg-[#0a2540] text-white p-8 rounded-b-[64px] border-b-8 border-[#00d66f] mb-12 shadow-2xl relative">
-        {/* BOTÕES DE TOPO (DEFINIÇÕES E LOGOUT) */}
-        <div className="absolute top-8 right-8 flex gap-3">
-             <button 
+      
+      {/* RESOLUÇÃO PROBLEMA 4: Cabeçalho modificado para evitar sobreposição de botões */}
+      <header className="bg-[#0a2540] text-white p-6 md:p-8 rounded-b-[40px] border-b-8 border-[#00d66f] mb-12 shadow-2xl relative z-10">
+        <div className="max-w-7xl mx-auto flex flex-col gap-6">
+          
+          {/* Topo: Botões à direita */}
+          <div className="flex justify-end gap-3 w-full">
+            <button 
                 onClick={() => navigate('/settings')} 
-                className="p-3 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors shadow-lg"
+                className="p-3 bg-white/10 rounded-xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
                 title="Configurações Master"
             >
-                <Settings size={20} />
+                <Settings size={18} /> Master
             </button>
             <button 
                 onClick={handleLogout} 
-                className="p-3 bg-white/10 rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-colors shadow-lg"
+                className="p-3 bg-white/10 rounded-xl text-red-400 hover:bg-red-500 hover:text-white transition-colors"
                 title="Sair"
             >
-                <LogOut size={20} />
+                <LogOut size={18} />
             </button>
-        </div>
-
-        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-8 mt-4 md:mt-0">
-          <div className="flex items-center gap-6">
-             <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-[4px_4px_0px_#ffffff]"><ShieldCheck size={40} strokeWidth={3} /></div>
-             <div>
-                <h1 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter leading-none text-[#00d66f]">Admin Console</h1>
-                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Supervisão Vizinho+</p>
-             </div>
           </div>
-          <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-3xl backdrop-blur-sm border border-white/10">
-            {[
-              { id: 'overview', label: 'Dashboard', icon: TrendingUp },
-              { id: 'merchants', label: 'Lojas', icon: Store },
-              { id: 'users', label: 'Vizinhos', icon: Users },
-              { id: 'reviews', label: 'Feedback', icon: MessageSquare },
-            ].map(item => (
-              <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-2 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-lg scale-105' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-                <item.icon size={16} strokeWidth={2.5} /> {item.label}
-              </button>
-            ))}
-          </nav>
+
+          {/* Fundo: Título e Navegação */}
+          <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-4 text-center lg:text-left">
+              <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-[4px_4px_0px_#ffffff] hidden md:block">
+                  <ShieldCheck size={32} strokeWidth={3} />
+              </div>
+              <div>
+                  <h1 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter leading-none text-[#00d66f]">Admin Console</h1>
+                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Supervisão Vizinho+</p>
+              </div>
+            </div>
+            
+            <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 w-full lg:w-auto">
+              {[
+                { id: 'overview', label: 'Painel', icon: TrendingUp },
+                { id: 'merchants', label: 'Lojas', icon: Store },
+                { id: 'users', label: 'Vizinhos', icon: Users },
+                { id: 'reviews', label: 'Feedback', icon: MessageSquare },
+              ].map(item => (
+                <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-2 px-4 py-3 rounded-xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all flex-1 lg:flex-none justify-center ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
+                  <item.icon size={16} strokeWidth={2.5} /> <span className="hidden md:inline">{item.label}</span>
+                </button>
+              ))}
+            </nav>
+          </div>
+
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto px-6 space-y-12">
         {currentView === 'overview' && (
           <>
-            {/* LISTAGEM DE LOJAS COM MATURAÇÃO PENDENTE */}
             <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-8 shadow-[12px_12px_0px_#0a2540] relative overflow-hidden">
               <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
                 <Clock size={160} />
@@ -246,7 +242,6 @@ const AdminDashboard: React.FC = () => {
               </div>
             </div>
 
-            {/* TABELA GLOBAL DE TRANSAÇÕES */}
             <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-8 shadow-[12px_12px_0px_#00d66f]">
                 <h2 className="text-xl font-black uppercase italic tracking-tight text-[#0a2540] mb-8">Auditoria de Transações</h2>
                 <AdminTransactions transactions={globalTransactions} users={[]} />
@@ -254,7 +249,6 @@ const AdminDashboard: React.FC = () => {
           </>
         )}
 
-        {/* OUTRAS VIEWS */}
         {currentView === 'users' && <AdminUsers />}
         
         {currentView === 'merchants' && (
@@ -268,7 +262,6 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'reviews' && <FeedbackList />}
       </main>
 
-      {/* MODAL DE CRIAÇÃO DE LOJISTA */}
       <MerchantModal 
         isOpen={isModalOpen} 
         onClose={() => setIsModalOpen(false)} 
