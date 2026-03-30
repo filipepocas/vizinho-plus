@@ -45,7 +45,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return new Date(createdAt);
   };
 
-  // RESOLUÇÃO 5: Gráfico alimentado pelo Volume de Faturação
+  // Gráfico Diário alimentado pelo Volume (Faturação) exato
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
@@ -58,7 +58,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         const dayIdx = date.getDay();
         const hour = date.getHours();
         counts[dayIdx].count++;
-        counts[dayIdx].volume += Number(t.amount || 0); // Soma o volume
+        counts[dayIdx].volume += Number(t.amount || 0); // Acumula o valor em Euros
         counts[dayIdx].hours[hour]++;
       }
     });
@@ -138,13 +138,17 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         
         <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
           {dayStats.map((d, i) => {
-            const maxVol = Math.max(...dayStats.map(x => x.volume), 1);
-            const height = `${(d.volume / maxVol) * 100}%`;
+            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; // Garante que nunca é zero
+            const heightPercentage = (d.volume / maxVol) * 100;
+            
             return (
               <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
                 <div 
                   className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" 
-                  style={{ height: height, minHeight: '4px' }}
+                  style={{ 
+                    height: `${heightPercentage}%`, 
+                    minHeight: d.volume > 0 ? '8px' : '2px' // Dias a zeros ficam como uma linha fininha
+                  }}
                 >
                     {d.volume > 0 && (
                         <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">
@@ -180,7 +184,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </h3>
         <div className="space-y-6 mt-auto">
           {monthStats.map((m, i) => {
-              const maxVol = Math.max(...monthStats.map(x => x.volume), 1);
+              const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
               return (
                 <div key={i} className="space-y-2">
                   <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">

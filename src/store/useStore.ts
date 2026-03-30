@@ -58,7 +58,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const batch = writeBatch(db);
       let currentCbPercent = currentUser.cashbackPercent || 0;
 
-      // RESOLUÇÃO 1: Verifica corretamente se já passou da meia-noite para aplicar o novo cashback
+      // Salvaguarda na Transação: Aplica o novo cashback se já passou da meia-noite
       if (currentUser.pendingCashbackEffectiveAt && currentUser.pendingCashbackPercent !== undefined) {
         const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as Timestamp).toDate();
 
@@ -152,7 +152,7 @@ export const useStore = create<StoreState>((set, get) => ({
   subscribeToTransactions: (role, id) => {
     if (!id && role !== 'admin') return () => {};
     const q = role === 'admin' 
-      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500)) // Aumentado limite para exportação
+      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))
       : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(100));
     
     return onSnapshot(q, (snap) => {
@@ -163,8 +163,34 @@ export const useStore = create<StoreState>((set, get) => ({
   initializeAuth: () => {
     return onAuthStateChanged(auth, (user) => {
       if (user) {
-        onSnapshot(doc(db, 'users', user.uid), (d) => {
-          if (d.exists()) set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
+        onSnapshot(doc(db, 'users', user.uid), async (d) => {
+          if (d.exists()) {
+            let userData = { ...d.data(), id: user.uid } as UserProfile;
+
+            // NOVA LÓGICA: Verifica se há alterações pendentes de Cashback assim que faz login
+            if (userData.pendingCashbackEffectiveAt && userData.pendingCashbackPercent !== undefined) {
+              const effectiveDateObj = (userData.pendingCashbackEffectiveAt as Timestamp).toDate();
+              
+              if (new Date() >= effectiveDateObj) {
+                // A meia-noite já passou! Atualiza no Firebase e na app instantaneamente.
+                const newPercent = userData.pendingCashbackPercent;
+                try {
+                  await updateDoc(doc(db, 'users', user.uid), {
+                    cashbackPercent: newPercent,
+                    pendingCashbackPercent: null,
+                    pendingCashbackEffectiveAt: null
+                  });
+                  userData.cashbackPercent = newPercent;
+                  userData.pendingCashbackPercent = undefined;
+                  userData.pendingCashbackEffectiveAt = undefined;
+                } catch (err) {
+                  console.error("Erro ao aplicar o cashback pendente:", err);
+                }
+              }
+            }
+
+            set({ currentUser: userData, isLoading: false, isInitialized: true });
+          }
         });
       } else { 
         set({ currentUser: null, isLoading: false, isInitialized: true }); 
