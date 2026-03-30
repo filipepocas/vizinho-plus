@@ -2,21 +2,11 @@ import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
 import { 
-  Search, 
-  Store, 
-  Plus, 
-  CheckCircle2, 
-  XCircle, 
-  Percent, 
-  Hash,
-  MapPin,
-  AlertCircle,
-  Mail,
-  Locate,
-  Trash2,
-  RefreshCw
+  Search, Store, Plus, CheckCircle2, XCircle, Percent, Hash,
+  MapPin, AlertCircle, Mail, Locate, Trash2, RefreshCw, Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 interface AdminMerchantsProps {
   merchants: UserProfile[];
@@ -26,16 +16,12 @@ interface AdminMerchantsProps {
 }
 
 const AdminMerchants: React.FC<AdminMerchantsProps> = ({ 
-  merchants, 
-  onUpdateStatus, 
-  onOpenModal, 
-  loading 
+  merchants, onUpdateStatus, onOpenModal, loading 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const { deleteUserWithHistory } = useStore();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Filtro de Pesquisa Rápida (Client-Side para poupar Leituras Firestore)
   const filteredMerchants = merchants.filter(merchant => {
     const q = searchQuery.toLowerCase();
     return (
@@ -62,11 +48,30 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
       try {
         await deleteUserWithHistory(merchantId, 'merchant');
       } catch (error) {
-        toast.error("Erro ao eliminar parceiro. Verifica a consola.");
+        toast.error("Erro ao eliminar parceiro.");
       } finally {
         setDeletingId(null);
       }
     }
+  };
+
+  // RESOLUÇÃO 6: Exportar Comerciantes
+  const exportToExcel = () => {
+    const dataToExport = filteredMerchants.map(m => ({
+      Loja: m.shopName || m.name || '---',
+      Categoria: m.category || '---',
+      Email: m.email || '---',
+      NIF: m.nif || '---',
+      "Cashback %": m.cashbackPercent || 0,
+      Freguesia: m.freguesia || '---',
+      "Código Postal": m.zipCode || '---',
+      Estado: m.status === 'active' ? 'Ativo' : 'Suspenso'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Comerciantes");
+    XLSX.writeFile(wb, `Comerciantes_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
   };
 
   if (loading) {
@@ -80,27 +85,33 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      {/* CABEÇALHO DE ACÇÕES */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
         <div className="relative flex-1 w-full group">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
           <input 
             type="text" 
-            placeholder="PESQUISAR LOJA, NIF, EMAIL OU CÓDIGO POSTAL..." 
+            placeholder="PESQUISAR LOJA, NIF, EMAIL OU C. POSTAL..." 
             className="w-full p-5 pl-16 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider shadow-inner"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button 
-          onClick={onOpenModal}
-          className="w-full md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 border-2 border-[#0a2540]"
-        >
-          <Plus size={20} strokeWidth={4} /> Registar Novo Parceiro
-        </button>
+        <div className="flex gap-3 w-full md:w-auto">
+            <button 
+                onClick={exportToExcel}
+                className="bg-slate-100 text-[#0a2540] px-6 py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-sm hover:bg-slate-200 transition-all flex items-center justify-center gap-2 border-2 border-slate-200"
+            >
+                <Download size={20} /> Excel
+            </button>
+            <button 
+                onClick={onOpenModal}
+                className="flex-1 md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
+            >
+                <Plus size={20} strokeWidth={4} /> Novo Parceiro
+            </button>
+        </div>
       </div>
 
-      {/* GRELHA DE LOJISTAS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredMerchants.length > 0 ? (
           filteredMerchants.map((merchant) => {
@@ -149,11 +160,10 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                   </div>
                   <div className="flex items-center gap-3 text-slate-500">
                     <MapPin size={14} className="text-[#0a2540]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest truncate" title={merchant.freguesia}>{merchant.freguesia || 'Localização não definida'}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest truncate" title={merchant.freguesia}>{merchant.freguesia || 'Não definida'}</span>
                   </div>
                 </div>
 
-                {/* DASH DE CASHBACK */}
                 <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between shadow-inner">
                   <div className="flex items-center gap-3">
                     <div className="bg-[#00d66f]/20 p-2 rounded-xl">
@@ -164,7 +174,6 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                   <span className="text-2xl font-black text-[#00d66f] italic tracking-tighter">{merchant.cashbackPercent || 0}%</span>
                 </div>
 
-                {/* BOTÕES DE ACÇÃO */}
                 <div className="mt-auto flex gap-3">
                   {merchant.status !== 'active' ? (
                     <button 

@@ -38,7 +38,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // RESOLUÇÃO PROBLEMA 5: Parseador robusto para datas do Firestore / Redux / Zustand
   const parseDate = (createdAt: any) => {
     if (!createdAt) return new Date();
     if (createdAt.toDate) return createdAt.toDate();
@@ -46,9 +45,10 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return new Date(createdAt);
   };
 
+  // RESOLUÇÃO 5: Gráfico alimentado pelo Volume de Faturação
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    const counts = days.map(d => ({ day: d, count: 0, hours: Array(24).fill(0) }));
+    const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
@@ -58,6 +58,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         const dayIdx = date.getDay();
         const hour = date.getHours();
         counts[dayIdx].count++;
+        counts[dayIdx].volume += Number(t.amount || 0); // Soma o volume
         counts[dayIdx].hours[hour]++;
       }
     });
@@ -129,25 +130,25 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
       
-      {/* CARD 1: FLUXO DE CLIENTES */}
+      {/* CARD 1: FLUXO DE CLIENTES BASEADO EM VOLUME */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
-          <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Fluxo Semanal
+          <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
         </h3>
         
         <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
           {dayStats.map((d, i) => {
-            const maxCount = Math.max(...dayStats.map(x => x.count), 1);
-            const height = `${(d.count / maxCount) * 100}%`;
+            const maxVol = Math.max(...dayStats.map(x => x.volume), 1);
+            const height = `${(d.volume / maxVol) * 100}%`;
             return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+              <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
                 <div 
                   className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" 
                   style={{ height: height, minHeight: '4px' }}
                 >
-                    {d.count > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md">
-                            {d.count}
+                    {d.volume > 0 && (
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">
+                            {formatCurrency(d.volume)}
                         </div>
                     )}
                 </div>

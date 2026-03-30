@@ -21,6 +21,7 @@ const AdminDashboard: React.FC = () => {
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
+  const [globalClients, setGlobalClients] = useState<UserProfile[]>([]); // Adicionado para carregar Vizinhos globalmente
   
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [pendingStores, setPendingStores] = useState<{id: string, name: string, count: number}[]>([]);
@@ -59,11 +60,18 @@ const AdminDashboard: React.FC = () => {
         setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
     });
 
+    // RESOLUÇÃO 3: Carregar Clientes globalmente para funcionar imediatamente
+    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
+    const unsubClients = onSnapshot(qClients, (snap) => {
+        setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
+    });
+
     fetchPendingMaturation();
 
     return () => {
         unsubTx();
         unsubMerchants();
+        unsubClients();
     };
   }, [fetchPendingMaturation]);
 
@@ -143,33 +151,15 @@ const AdminDashboard: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-20">
+    <div className="min-h-screen bg-[#f8fafc] pb-20 flex flex-col">
       
-      {/* RESOLUÇÃO PROBLEMA 4: Cabeçalho modificado para evitar sobreposição de botões */}
-      <header className="bg-[#0a2540] text-white p-6 md:p-8 rounded-b-[40px] border-b-8 border-[#00d66f] mb-12 shadow-2xl relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col gap-6">
+      {/* RESOLUÇÃO 4: Cabeçalho restruturado usando Flexbox em vez de Absolutos */}
+      <header className="bg-[#0a2540] text-white p-6 md:p-8 rounded-b-[40px] border-b-8 border-[#00d66f] mb-12 shadow-2xl z-10">
+        <div className="max-w-7xl mx-auto flex flex-col gap-8">
           
-          {/* Topo: Botões à direita */}
-          <div className="flex justify-end gap-3 w-full">
-            <button 
-                onClick={() => navigate('/settings')} 
-                className="p-3 bg-white/10 rounded-xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                title="Configurações Master"
-            >
-                <Settings size={18} /> Master
-            </button>
-            <button 
-                onClick={handleLogout} 
-                className="p-3 bg-white/10 rounded-xl text-red-400 hover:bg-red-500 hover:text-white transition-colors"
-                title="Sair"
-            >
-                <LogOut size={18} />
-            </button>
-          </div>
-
-          {/* Fundo: Título e Navegação */}
-          <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-4 text-center lg:text-left">
+          {/* Topo: Titulo à esquerda, Botões à direita */}
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div className="flex items-center gap-4 text-center sm:text-left">
               <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-[4px_4px_0px_#ffffff] hidden md:block">
                   <ShieldCheck size={32} strokeWidth={3} />
               </div>
@@ -178,8 +168,26 @@ const AdminDashboard: React.FC = () => {
                   <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Supervisão Vizinho+</p>
               </div>
             </div>
-            
-            <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 w-full lg:w-auto">
+
+            <div className="flex gap-3">
+              <button 
+                  onClick={() => navigate('/settings')} 
+                  className="px-4 py-3 bg-white/10 rounded-xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+              >
+                  <Settings size={18} /> Master
+              </button>
+              <button 
+                  onClick={handleLogout} 
+                  className="p-3 bg-white/10 rounded-xl text-red-400 hover:bg-red-500 hover:text-white transition-colors flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+              >
+                  <LogOut size={18} /> Sair
+              </button>
+            </div>
+          </div>
+
+          {/* Fundo: Navegação Pílulas */}
+          <div className="flex justify-start">
+            <nav className="flex flex-wrap gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 w-full lg:w-auto">
               {[
                 { id: 'overview', label: 'Painel', icon: TrendingUp },
                 { id: 'merchants', label: 'Lojas', icon: Store },
@@ -196,7 +204,7 @@ const AdminDashboard: React.FC = () => {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 space-y-12">
+      <main className="max-w-7xl mx-auto px-6 space-y-12 w-full">
         {currentView === 'overview' && (
           <>
             <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-8 shadow-[12px_12px_0px_#0a2540] relative overflow-hidden">
@@ -249,7 +257,7 @@ const AdminDashboard: React.FC = () => {
           </>
         )}
 
-        {currentView === 'users' && <AdminUsers />}
+        {currentView === 'users' && <AdminUsers users={globalClients} />}
         
         {currentView === 'merchants' && (
             <AdminMerchants 
@@ -270,7 +278,6 @@ const AdminDashboard: React.FC = () => {
             setIsModalOpen(false);
         }} 
       />
-
     </div>
   );
 };

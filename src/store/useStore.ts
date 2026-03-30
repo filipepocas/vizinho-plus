@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { 
   collection, onSnapshot, query, orderBy, where, serverTimestamp, 
-  setDoc, doc, getDocs, writeBatch, updateDoc, limit, increment, getDoc 
+  setDoc, doc, getDocs, writeBatch, updateDoc, limit, increment, getDoc, Timestamp 
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -58,21 +58,17 @@ export const useStore = create<StoreState>((set, get) => ({
       const batch = writeBatch(db);
       let currentCbPercent = currentUser.cashbackPercent || 0;
 
-      // RESOLUÇÃO PROBLEMA 1: Aplica cashback pendente se já for o dia seguinte
+      // RESOLUÇÃO 1: Verifica corretamente se já passou da meia-noite para aplicar o novo cashback
       if (currentUser.pendingCashbackEffectiveAt && currentUser.pendingCashbackPercent !== undefined) {
-        const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as any).seconds 
-          ? new Date((currentUser.pendingCashbackEffectiveAt as any).seconds * 1000) 
-          : new Date(currentUser.pendingCashbackEffectiveAt as any);
+        const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as Timestamp).toDate();
 
         if (new Date() >= effectiveDateObj) {
           currentCbPercent = currentUser.pendingCashbackPercent;
-          // Atualiza permanentemente no lojista
           batch.update(doc(db, 'users', currentUser.id), {
             cashbackPercent: currentCbPercent,
             pendingCashbackPercent: null,
             pendingCashbackEffectiveAt: null
           });
-          // Atualiza o estado local para não ter de dar refresh
           set({ currentUser: { ...currentUser, cashbackPercent: currentCbPercent, pendingCashbackPercent: undefined } });
         }
       }
@@ -82,7 +78,6 @@ export const useStore = create<StoreState>((set, get) => ({
       
       const newTxRef = doc(collection(db, 'transactions'));
       
-      // 1. Guardar a Transação
       batch.set(newTxRef, {
         clientId: tx.clientId,
         merchantId: currentUser.id,
@@ -96,7 +91,6 @@ export const useStore = create<StoreState>((set, get) => ({
         clientNif: tx.documentNumber
       });
 
-      // 2. Atualizar o Saldo do Cliente
       const userRef = doc(db, 'users', tx.clientId);
       if (tx.type === 'earn') {
         batch.update(userRef, {
@@ -158,7 +152,7 @@ export const useStore = create<StoreState>((set, get) => ({
   subscribeToTransactions: (role, id) => {
     if (!id && role !== 'admin') return () => {};
     const q = role === 'admin' 
-      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(100))
+      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500)) // Aumentado limite para exportação
       : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(100));
     
     return onSnapshot(q, (snap) => {

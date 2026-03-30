@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, ExternalLink, Navigation } from 'lucide-react';
+import { Search, MapPin, Navigation, Percent } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
 interface UserExploreProps {
@@ -61,20 +61,26 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
       {/* RESULTADOS */}
       <div className="space-y-4">
         {filtered.map((m) => (
-          <div key={m.id} className="bg-white rounded-[35px] border-2 border-slate-50 overflow-hidden shadow-sm flex items-center p-6 justify-between group hover:border-[#00d66f] transition-all">
+          <div key={m.id} className="bg-white rounded-[35px] border-2 border-slate-50 overflow-hidden shadow-sm flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 group hover:border-[#00d66f] transition-all">
             <div className="flex items-center gap-4">
               <div className="bg-slate-50 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] group-hover:text-white transition-colors">
                 <MapPin size={24} />
               </div>
               <div>
                 <span className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest">{m.category || 'Comércio'}</span>
-                <h4 className="text-lg font-black text-[#0a2540] uppercase tracking-tighter leading-none">{m.shopName || m.name}</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{m.freguesia} • {m.zipCode}</p>
+                <h4 className="text-lg font-black text-[#0a2540] uppercase tracking-tighter leading-none mb-1">{m.shopName || m.name}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">{m.freguesia} • {m.zipCode}</p>
+                
+                {/* RESOLUÇÃO 2: MOSTRAR CASHBACK */}
+                <div className="mt-2 inline-flex items-center gap-1 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-[#00d66f]">
+                  <Percent size={10} strokeWidth={3} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
+                </div>
               </div>
             </div>
             <button 
               onClick={() => openInMaps(m)}
-              className="bg-[#0a2540] text-white p-4 rounded-2xl shadow-lg hover:scale-110 transition-all flex items-center gap-2"
+              className="bg-[#0a2540] text-white p-4 rounded-2xl shadow-lg hover:scale-110 transition-all flex items-center justify-center gap-2 w-full sm:w-auto mt-2 sm:mt-0"
             >
               <Navigation size={20} fill="currentColor" />
             </button>
