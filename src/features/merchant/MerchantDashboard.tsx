@@ -1,21 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
-import { User as UserProfile, Transaction } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { User as UserProfile } from '../../types';
+import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings } from 'lucide-react';
 
 // Sub-componentes
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
+import MerchantSettings from './components/MerchantSettings'; // CORRIGIDO: Removida a extensão .tsx
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
-  const [view, setView] = useState<'terminal' | 'bi'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -32,20 +33,32 @@ const MerchantDashboard: React.FC = () => {
 
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
 
+  // Cálculo seguro do Cashback para a pré-visualização
+  const previewCashbackValue = useMemo(() => {
+    const numAmount = parseFloat(amount) || 0;
+    const percent = currentUser?.cashbackPercent || 0;
+    return (numAmount * percent) / 100;
+  }, [amount, currentUser?.cashbackPercent]);
+
   // Pesquisa de Cliente por NIF
   useEffect(() => {
     const search = async () => {
       const cleanNif = cardNumber.replace(/\s/g, '');
       if (cleanNif.length === 9) {
         setIsSearching(true);
-        const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-        } else {
-          setFoundClient(null);
+        try {
+          const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+          } else {
+            setFoundClient(null);
+          }
+        } catch (error) {
+          console.error("Erro na pesquisa:", error);
+        } finally {
+          setIsSearching(false);
         }
-        setIsSearching(false);
       } else {
         setFoundClient(null);
       }
@@ -56,7 +69,10 @@ const MerchantDashboard: React.FC = () => {
 
   // Subscrever Transações
   useEffect(() => {
-    if (currentUser?.id) return subscribeToTransactions('merchant', currentUser.id);
+    if (currentUser?.id) {
+      const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
+      return () => unsubscribe();
+    }
   }, [currentUser?.id, subscribeToTransactions]);
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
@@ -77,15 +93,17 @@ const MerchantDashboard: React.FC = () => {
       await addTransaction({
         clientId: foundClient.id,
         merchantId: currentUser.id,
-        merchantName: currentUser.name || 'Loja Vizinho+',
+        merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
         amount: pendingAction.val,
         type: pendingAction.type,
         documentNumber: documentNumber
       });
       setMessage({ type: 'success', text: "Operação registada com sucesso!" });
-      setAmount(''); setDocumentNumber(''); setCardNumber('');
+      setAmount(''); 
+      setDocumentNumber(''); 
+      setCardNumber('');
     } catch (e) {
-      setMessage({ type: 'error', text: "Erro ao registar: Verifique as regras de segurança." });
+      setMessage({ type: 'error', text: "Erro ao registar: Verifique as permissões." });
     } finally {
       setIsLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
@@ -103,7 +121,7 @@ const MerchantDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans relative pb-20">
       <header className="bg-[#0f172a] p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
         <div className="flex items-center gap-4 text-white">
-          <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.name}</h2>
+          <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.shopName || currentUser.name}</h2>
           <span className="text-[10px] font-black text-[#00d66f] bg-[#00d66f]/10 py-1 px-3 rounded-full border border-[#00d66f]/20 uppercase">Loja Parceira</span>
         </div>
         
@@ -114,6 +132,10 @@ const MerchantDashboard: React.FC = () => {
           
           <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
             <BarChart3 size={16} /> Business Intelligence
+          </button>
+
+          <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}>
+            <Settings size={16} /> Definições
           </button>
 
           <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
@@ -128,8 +150,7 @@ const MerchantDashboard: React.FC = () => {
             cardNumber={cardNumber} setCardNumber={setCardNumber}
             isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
             amount={amount} setAmount={setAmount}
-            // CORREÇÃO: Propriedade renomeada para previewCashback
-            previewCashback={parseFloat(amount || '0') * ((currentUser.cashbackPercent || 0) / 100)}
+            previewCashback={previewCashbackValue}
             documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
@@ -143,6 +164,12 @@ const MerchantDashboard: React.FC = () => {
           <BusinessIntelligence 
             merchantId={currentUser.id}
             transactions={transactions}
+          />
+        )}
+
+        {view === 'settings' && (
+          <MerchantSettings 
+            currentUser={currentUser}
           />
         )}
 
