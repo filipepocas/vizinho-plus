@@ -1,8 +1,8 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
+import { Toaster } from 'react-hot-toast'; 
 
-// --- IMPORTAÇÕES DOS COMPONENTES ---
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
@@ -11,11 +11,9 @@ import TermsPage from './features/public/TermsPage';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
+import ProfileSettings from './features/profile/ProfileSettings';
 
-/**
- * PROTECTED ROUTE
- * Gere o acesso com base no login e no cargo (role).
- */
+// Componente para proteger as rotas (Verifica se está logado e se tem a permissão certa)
 const ProtectedRoute: React.FC<{ 
   children: React.ReactNode; 
   requiredRole?: 'admin' | 'merchant' | 'client' 
@@ -33,15 +31,19 @@ const ProtectedRoute: React.FC<{
     );
   }
 
-  if (!currentUser) {
-    return <Navigate to="/login" replace />;
-  }
+  if (!currentUser) return <Navigate to="/login" replace />;
 
   if (requiredRole && currentUser.role !== requiredRole) {
     return <Navigate to="/login" replace />;
   }
 
   return <>{children}</>;
+};
+
+// Componente "Wrapper" para passar a função de voltar atrás ao ProfileSettings
+const SettingsWrapper = () => {
+  const navigate = useNavigate();
+  return <ProfileSettings onBack={() => navigate(-1)} />;
 };
 
 function App() {
@@ -63,6 +65,20 @@ function App() {
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc]">
+        {/* TOASTER ADICIONADO PARA NOTIFICAÇÕES BRUTALISTAS */}
+        <Toaster position="top-center" toastOptions={{
+          style: {
+            background: '#0a2540',
+            color: '#fff',
+            borderRadius: '15px',
+            border: '4px solid #00d66f',
+            fontFamily: 'Inter, sans-serif',
+            fontWeight: '900',
+            textTransform: 'uppercase',
+            fontSize: '10px'
+          }
+        }} />
+        
         <Routes>
           {/* Rotas Públicas */}
           <Route path="/" element={<LandingPage />} />
@@ -70,49 +86,25 @@ function App() {
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-
-          {/* Redirecionamento de Dashboard */}
-          <Route 
-            path="/dashboard" 
-            element={
-              currentUser ? (
-                currentUser.role === 'admin' ? <Navigate to="/admin" replace /> :
-                currentUser.role === 'merchant' ? <Navigate to="/merchant" replace /> :
-                <Navigate to="/client" replace />
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            } 
-          />
-
-          {/* Rotas Protegidas */}
-          <Route 
-            path="/admin" 
-            element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminDashboard />
-              </ProtectedRoute>
-            } 
-          />
-
-          <Route 
-            path="/merchant" 
-            element={
-              <ProtectedRoute requiredRole="merchant">
-                <MerchantDashboard />
-              </ProtectedRoute>
-            } 
-          />
-
-          <Route 
-            path="/client" 
-            element={
-              <ProtectedRoute requiredRole="client">
-                <UserDashboard />
-              </ProtectedRoute>
-            } 
-          />
-
+          
+          {/* Redirecionamento Automático do Dashboard */}
+          <Route path="/dashboard" element={
+            currentUser ? (
+              currentUser.role === 'admin' ? <Navigate to="/admin" replace /> : 
+              currentUser.role === 'merchant' ? <Navigate to="/merchant" replace /> : 
+              <Navigate to="/client" replace />
+            ) : <Navigate to="/login" replace />
+          } />
+          
+          {/* Rotas Protegidas por Perfil */}
+          <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/merchant" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
+          <Route path="/client" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
+          
+          {/* Rota Protegida Comum (Definições de Perfil) */}
+          <Route path="/settings" element={<ProtectedRoute><SettingsWrapper /></ProtectedRoute>} />
+          
+          {/* Fallback para apanhar links perdidos */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

@@ -1,5 +1,3 @@
-// src/features/admin/AdminMerchants.tsx
-
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
@@ -9,7 +7,6 @@ import {
   Plus, 
   CheckCircle2, 
   XCircle, 
-  Settings, 
   Percent, 
   Hash,
   MapPin,
@@ -19,6 +16,7 @@ import {
   Trash2,
   RefreshCw
 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 interface AdminMerchantsProps {
   merchants: UserProfile[];
@@ -34,8 +32,10 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   loading 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const { deleteUserWithHistory, isLoading: isDeleting } = useStore();
+  const { deleteUserWithHistory } = useStore();
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
+  // Filtro de Pesquisa Rápida (Client-Side para poupar Leituras Firestore)
   const filteredMerchants = merchants.filter(merchant => {
     const q = searchQuery.toLowerCase();
     return (
@@ -58,11 +58,13 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
     );
 
     if (confirmed) {
+      setDeletingId(merchantId);
       try {
         await deleteUserWithHistory(merchantId, 'merchant');
-        alert("Parceiro e histórico eliminados com sucesso.");
       } catch (error) {
-        alert("Erro ao eliminar parceiro. Verifica a consola.");
+        toast.error("Erro ao eliminar parceiro. Verifica a consola.");
+      } finally {
+        setDeletingId(null);
       }
     }
   };
@@ -79,22 +81,22 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
     <div className="space-y-8 animate-in fade-in duration-500">
       
       {/* CABEÇALHO DE ACÇÕES */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-8 rounded-[40px] border-2 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
         <div className="relative flex-1 w-full group">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
           <input 
             type="text" 
             placeholder="PESQUISAR LOJA, NIF, EMAIL OU CÓDIGO POSTAL..." 
-            className="w-full p-4 pl-14 bg-slate-50 border-2 border-transparent rounded-2xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider"
+            className="w-full p-5 pl-16 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider shadow-inner"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
         <button 
           onClick={onOpenModal}
-          className="w-full md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] shadow-lg hover:scale-105 transition-all flex items-center justify-center gap-3 border-2 border-[#0a2540]"
+          className="w-full md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 border-2 border-[#0a2540]"
         >
-          <Plus size={18} strokeWidth={4} /> Registar Novo Parceiro
+          <Plus size={20} strokeWidth={4} /> Registar Novo Parceiro
         </button>
       </div>
 
@@ -103,63 +105,63 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
         {filteredMerchants.length > 0 ? (
           filteredMerchants.map((merchant) => {
             return (
-              <div key={merchant.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-all">
+              <div key={merchant.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#00d66f] flex flex-col relative group hover:-translate-y-2 transition-transform duration-300">
                 
                 <div className="flex justify-between items-start mb-6">
-                  <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
+                  <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors border-2 border-slate-200">
                     <Store size={24} strokeWidth={2.5} />
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-3">
                     <button 
                       onClick={() => handleDeleteMerchant(merchant.id, merchant.shopName || merchant.name || merchant.email)}
-                      disabled={isDeleting}
-                      className="p-2 text-slate-300 hover:text-red-600 hover:bg-red-50 rounded-xl transition-all"
+                      disabled={deletingId === merchant.id}
+                      className="p-3 bg-red-50 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition-all border-2 border-red-100"
                       title="Eliminar parceiro e histórico"
                     >
-                      {isDeleting ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} />}
+                      {deletingId === merchant.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} strokeWidth={3} />}
                     </button>
-                    <span className={`px-4 py-1.5 rounded-full text-[8px] font-black uppercase tracking-[0.15em] border-2 ${
+                    <span className={`px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-[0.2em] border-2 shadow-sm ${
                       merchant.status === 'active' 
-                        ? 'bg-green-50 text-green-600 border-green-200' 
-                        : 'bg-amber-50 text-amber-600 border-amber-200'
+                        ? 'bg-green-100 text-green-700 border-green-300' 
+                        : 'bg-amber-100 text-amber-700 border-amber-300'
                     }`}>
-                      {merchant.status || 'Pendente'}
+                      {merchant.status === 'active' ? 'Ativo' : 'Suspenso'}
                     </span>
                   </div>
                 </div>
 
-                <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 leading-none">
+                <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-3 leading-tight truncate" title={merchant.shopName || merchant.name}>
                   {merchant.shopName || merchant.name || 'Loja sem nome'}
                 </h3>
 
-                <div className="space-y-2 mb-8">
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Mail size={12} className="text-[#00d66f]" />
-                    <span className="text-[10px] font-bold lowercase tracking-tight truncate">{merchant.email}</span>
+                <div className="space-y-3 mb-8 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                  <div className="flex items-center gap-3 text-slate-500">
+                    <Mail size={14} className="text-[#00d66f]" />
+                    <span className="text-[10px] font-bold tracking-widest truncate" title={merchant.email}>{merchant.email}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Hash size={12} className="text-[#00d66f]" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">NIF: {merchant.nif || '---'}</span>
+                  <div className="flex items-center gap-3 text-slate-500">
+                    <Hash size={14} className="text-[#00d66f]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">NIF: {merchant.nif || '---'}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <Locate size={12} className="text-[#00d66f]" />
-                    <span className="text-[10px] font-bold uppercase tracking-tight">CP: {merchant.zipCode || '0000-000'}</span>
+                  <div className="flex items-center gap-3 text-slate-500">
+                    <Locate size={14} className="text-[#00d66f]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest">CP: {merchant.zipCode || '0000-000'}</span>
                   </div>
-                  <div className="flex items-center gap-2 text-slate-400">
-                    <MapPin size={12} />
-                    <span className="text-[10px] font-bold uppercase tracking-tight truncate">{merchant.freguesia || 'Localização não definida'}</span>
+                  <div className="flex items-center gap-3 text-slate-500">
+                    <MapPin size={14} className="text-[#0a2540]" />
+                    <span className="text-[10px] font-bold uppercase tracking-widest truncate" title={merchant.freguesia}>{merchant.freguesia || 'Localização não definida'}</span>
                   </div>
                 </div>
 
                 {/* DASH DE CASHBACK */}
-                <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between border-b-4 border-[#00d66f]">
+                <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between shadow-inner">
                   <div className="flex items-center gap-3">
-                    <div className="bg-[#00d66f]/20 p-2 rounded-lg">
-                      <Percent size={14} className="text-[#00d66f]" />
+                    <div className="bg-[#00d66f]/20 p-2 rounded-xl">
+                      <Percent size={16} className="text-[#00d66f]" />
                     </div>
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Configuração</span>
+                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Retorno Configurado</span>
                   </div>
-                  <span className="text-xl font-black text-[#00d66f] italic">{merchant.cashbackPercent || 0}%</span>
+                  <span className="text-2xl font-black text-[#00d66f] italic tracking-tighter">{merchant.cashbackPercent || 0}%</span>
                 </div>
 
                 {/* BOTÕES DE ACÇÃO */}
@@ -167,29 +169,26 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                   {merchant.status !== 'active' ? (
                     <button 
                       onClick={() => onUpdateStatus(merchant.id, 'active')}
-                      className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
+                      className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
                     >
-                      <CheckCircle2 size={14} strokeWidth={3} /> Ativar
+                      <CheckCircle2 size={16} strokeWidth={3} /> Ativar Conta
                     </button>
                   ) : (
                     <button 
                       onClick={() => onUpdateStatus(merchant.id, 'disabled')}
-                      className="flex-1 bg-white text-slate-300 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:text-red-500 hover:border-red-500 border-2 border-slate-100 transition-all flex items-center justify-center gap-2"
+                      className="flex-1 bg-white text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-[4px_4px_0px_#0a2540] border-2 border-[#0a2540] transition-all flex items-center justify-center gap-2"
                     >
-                      <XCircle size={14} strokeWidth={3} /> Suspender
+                      <XCircle size={16} strokeWidth={3} /> Suspender Conta
                     </button>
                   )}
-                  <button className="bg-slate-100 p-4 rounded-2xl text-slate-400 hover:bg-[#0a2540] hover:text-white transition-all border-2 border-transparent">
-                    <Settings size={16} />
-                  </button>
                 </div>
               </div>
             );
           })
         ) : (
-          <div className="col-span-full p-20 bg-white border-2 border-dashed border-slate-200 rounded-[40px] flex flex-col items-center gap-4 opacity-40">
-            <AlertCircle size={48} />
-            <p className="font-black uppercase tracking-widest text-xs">Nenhum parceiro encontrado</p>
+          <div className="col-span-full p-20 bg-white border-4 border-dashed border-slate-200 rounded-[40px] flex flex-col items-center gap-4 text-slate-300">
+            <AlertCircle size={64} />
+            <p className="font-black uppercase tracking-[0.3em] text-sm">Nenhum parceiro encontrado</p>
           </div>
         )}
       </div>

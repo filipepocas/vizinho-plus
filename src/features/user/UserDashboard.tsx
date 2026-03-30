@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
@@ -10,12 +11,13 @@ import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser } = useStore();
+  const navigate = useNavigate();
   
   const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
@@ -54,22 +56,37 @@ const UserDashboard: React.FC = () => {
     total: (currentUser?.wallet?.available || 0) + (currentUser?.wallet?.pending || 0)
   }), [currentUser?.wallet]);
 
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
   if (!currentUser) return null;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
       
-      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center">
+      {/* HEADER ATUALIZADO COM BOTÃO DE DEFINIÇÕES */}
+      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center shadow-sm">
         <div>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
           <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none">
             {currentUser.name}
           </h1>
         </div>
-        <img src={logoPath} alt="V+" className="h-8 w-auto" />
+        <div className="flex items-center gap-4">
+            <button 
+                onClick={() => navigate('/settings')}
+                className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-[#0a2540] hover:bg-slate-100 transition-colors border-2 border-slate-100"
+                title="Definições de Perfil"
+            >
+                <Settings size={20} />
+            </button>
+            <img src={logoPath} alt="V+" className="h-8 w-auto hidden sm:block" />
+        </div>
       </header>
 
-      <main className="max-w-2xl mx-auto px-6 space-y-6">
+      <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
         {/* CARTÃO DIGITAL VIZINHO+ */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
@@ -187,9 +204,23 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      <footer className="py-12 text-center">
-        <button onClick={() => logout()} className="text-red-500 font-black uppercase text-[10px] tracking-[0.3em] mb-4">Sair da Conta</button>
-        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026</p>
+      <footer className="py-12 flex flex-col items-center gap-4">
+        {/* LINK PARA TERMOS E PRIVACIDADE */}
+        <button 
+            onClick={() => navigate('/terms')}
+            className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] transition-colors"
+        >
+            <ShieldCheck size={14} /> Termos e Privacidade
+        </button>
+
+        <button 
+            onClick={handleLogout} 
+            className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700 transition-colors"
+        >
+            <LogOut size={14} /> Sair da Conta
+        </button>
+        
+        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
       </footer>
 
       {/* MODAL DE FEEDBACK - LIGADO À BASE DE DADOS FEEDBACKS */}
