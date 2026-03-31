@@ -377,6 +377,7 @@ import { getFirestore } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { getAnalytics } from 'firebase/analytics';
 import { getMessaging } from 'firebase/messaging';
+import { getStorage } from 'firebase/storage'; // ADICIONADO
 
 export const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -388,16 +389,14 @@ export const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
 };
 
-// Inicializa o Firebase
 const app = initializeApp(firebaseConfig);
 
-// Inicializa e exporta os serviÃ§os
 export const db = getFirestore(app);
 export const auth = getAuth(app);
+export const storage = getStorage(app); // ADICIONADO
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 
-// Auth secundÃ¡rio para provisionamento (criar contas sem trocar sessÃ£o do admin)
 export const provisionAuth = (() => {
   const name = 'provision';
   const provisionApp = getApps().some(a => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
@@ -415,7 +414,7 @@ import { collection, query, where, getDocs, doc, writeBatch, serverTimestamp, in
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -425,14 +424,16 @@ import AdminUsers from './AdminUsers';
 import AdminMerchants from './AdminMerchants';
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
+import BannerManager from './BannerManager'; // Novo Componente
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews' | 'banners'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
+  const [globalClients, setGlobalClients] = useState<UserProfile[]>([]);
   
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [pendingStores, setPendingStores] = useState<{id: string, name: string, count: number}[]>([]);
@@ -471,17 +472,22 @@ const AdminDashboard: React.FC = () => {
         setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
     });
 
+    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
+    const unsubClients = onSnapshot(qClients, (snap) => {
+        setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
+    });
+
     fetchPendingMaturation();
 
     return () => {
         unsubTx();
         unsubMerchants();
+        unsubClients();
     };
   }, [fetchPendingMaturation]);
 
-
   const processStoreMaturation = async (merchantId: string, merchantName: string) => {
-    if (!window.confirm(`Maturar todas as transaÃ§Ãµes de "${merchantName}"? Isto irÃ¡ disponibilizar o saldo a todos os clientes desta loja.`)) return;
+    if (!window.confirm(`Maturar todas as transaÃ§Ãµes de "${merchantName}"?`)) return;
 
     setIsProcessing(merchantId);
     try {
@@ -496,7 +502,6 @@ const AdminDashboard: React.FC = () => {
       );
 
       const snap = await getDocs(q);
-      
       const BATCH_LIMIT = 240; 
       let batches = [];
       let currentBatch = writeBatch(db);
@@ -525,164 +530,95 @@ const AdminDashboard: React.FC = () => {
         }
       });
 
-      if (operationCount > 0) {
-        batches.push(currentBatch.commit());
-      }
-
+      if (operationCount > 0) batches.push(currentBatch.commit());
       await Promise.all(batches);
-      toast.success(`SALDOS DE ${merchantName} MATURADOS COM SUCESSO!`);
+      toast.success(`SALDOS DE ${merchantName} MATURADOS!`);
       fetchPendingMaturation(); 
     } catch (e) {
-      console.error(e);
-      toast.error("ERRO NO PROCESSAMENTO. VERIFIQUE A LIGAÃ‡ÃƒO.");
+      toast.error("ERRO NO PROCESSAMENTO.");
     } finally {
       setIsProcessing(null);
     }
   };
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
-
-  const handleUpdateMerchantStatus = async (merchantId: string, newStatus: string) => {
-      try {
-          await writeBatch(db).update(doc(db, 'users', merchantId), { status: newStatus }).commit();
-          toast.success("Estado do Lojista atualizado!");
-      } catch (err) {
-          toast.error("Erro ao atualizar o estado.");
-      }
-  };
-
   return (
-    <div className="min-h-screen bg-[#f8fafc] pb-20">
-      
-      {/* RESOLUÃ‡ÃƒO PROBLEMA 4: CabeÃ§alho modificado para evitar sobreposiÃ§Ã£o de botÃµes */}
-      <header className="bg-[#0a2540] text-white p-6 md:p-8 rounded-b-[40px] border-b-8 border-[#00d66f] mb-12 shadow-2xl relative z-10">
-        <div className="max-w-7xl mx-auto flex flex-col gap-6">
-          
-          {/* Topo: BotÃµes Ã  direita */}
-          <div className="flex justify-end gap-3 w-full">
-            <button 
-                onClick={() => navigate('/settings')} 
-                className="p-3 bg-white/10 rounded-xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                title="ConfiguraÃ§Ãµes Master"
-            >
-                <Settings size={18} /> Master
-            </button>
-            <button 
-                onClick={handleLogout} 
-                className="p-3 bg-white/10 rounded-xl text-red-400 hover:bg-red-500 hover:text-white transition-colors"
-                title="Sair"
-            >
-                <LogOut size={18} />
-            </button>
-          </div>
-
-          {/* Fundo: TÃ­tulo e NavegaÃ§Ã£o */}
-          <div className="flex flex-col lg:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-4 text-center lg:text-left">
-              <div className="bg-[#00d66f] p-4 rounded-3xl text-[#0a2540] shadow-[4px_4px_0px_#ffffff] hidden md:block">
-                  <ShieldCheck size={32} strokeWidth={3} />
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col">
+      <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[50px] border-b-[10px] border-[#00d66f] shadow-2xl z-20">
+        <div className="max-w-7xl mx-auto">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+            <div className="flex items-center gap-5">
+              <div className="bg-[#00d66f] p-4 rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
+                <ShieldCheck size={32} strokeWidth={3} />
               </div>
               <div>
-                  <h1 className="text-3xl md:text-4xl font-black uppercase italic tracking-tighter leading-none text-[#00d66f]">Admin Console</h1>
-                  <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">SupervisÃ£o Vizinho+</p>
+                <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter leading-none text-[#00d66f]">Admin Console</h1>
+                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">SupervisÃ£o Vizinho+</p>
               </div>
             </div>
-            
-            <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-sm border border-white/10 w-full lg:w-auto">
-              {[
-                { id: 'overview', label: 'Painel', icon: TrendingUp },
-                { id: 'merchants', label: 'Lojas', icon: Store },
-                { id: 'users', label: 'Vizinhos', icon: Users },
-                { id: 'reviews', label: 'Feedback', icon: MessageSquare },
-              ].map(item => (
-                <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-2 px-4 py-3 rounded-xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all flex-1 lg:flex-none justify-center ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
-                  <item.icon size={16} strokeWidth={2.5} /> <span className="hidden md:inline">{item.label}</span>
-                </button>
-              ))}
-            </nav>
+
+            <div className="flex gap-4">
+              <button onClick={() => navigate('/settings')} className="px-6 py-4 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-white/10">
+                <Settings size={20} /> Master
+              </button>
+              <button onClick={async () => { await logout(); navigate('/login'); }} className="px-6 py-4 bg-red-500/10 rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
+                <LogOut size={20} /> Sair
+              </button>
+            </div>
           </div>
 
+          <nav className="flex flex-wrap gap-2 mt-10 bg-black/20 p-2 rounded-[25px] border border-white/5 inline-flex">
+            {[
+              { id: 'overview', label: 'Painel', icon: TrendingUp },
+              { id: 'merchants', label: 'Lojas', icon: Store },
+              { id: 'users', label: 'Vizinhos', icon: Users },
+              { id: 'banners', label: 'Banners', icon: ImageIcon },
+              { id: 'reviews', label: 'Feedback', icon: MessageSquare },
+            ].map(item => (
+              <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-xl translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
+                <item.icon size={18} strokeWidth={3} /> {item.label}
+              </button>
+            ))}
+          </nav>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 space-y-12">
+      <main className="max-w-7xl mx-auto px-6 py-12 space-y-12 w-full">
         {currentView === 'overview' && (
           <>
-            <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-8 shadow-[12px_12px_0px_#0a2540] relative overflow-hidden">
-              <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-                <Clock size={160} />
+            <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-10 shadow-[12px_12px_0px_#0a2540]">
+              <div className="flex items-center gap-4 mb-10">
+                <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
+                  <Clock size={28} strokeWidth={3} />
+                </div>
+                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540]">MaturaÃ§Ãµes Pendentes</h2>
               </div>
-              
-              <div className="relative z-10">
-                  <div className="flex items-center gap-3 mb-8">
-                    <div className="bg-amber-100 p-3 rounded-2xl">
-                        <Clock className="text-amber-600" size={24} strokeWidth={3} />
-                    </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {pendingStores.map(store => (
+                  <div key={store.id} className="p-8 bg-slate-50 border-4 border-slate-100 rounded-[35px] flex justify-between items-center group hover:border-[#00d66f] transition-all">
                     <div>
-                        <h2 className="text-xl font-black uppercase italic tracking-tight text-[#0a2540]">MaturaÃ§Ãµes Pendentes</h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Regra do MÃªs Seguinte</p>
+                      <p className="font-black uppercase text-base text-[#0a2540] mb-1">{store.name}</p>
+                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{store.count} Movimentos</p>
                     </div>
+                    <button onClick={() => processStoreMaturation(store.id, store.name)} className="bg-[#0a2540] text-[#00d66f] p-5 rounded-2xl hover:bg-black transition-all shadow-lg">
+                      {isProcessing === store.id ? <RefreshCw className="animate-spin" size={24} /> : <TrendingUp size={24} strokeWidth={3} />}
+                    </button>
                   </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {pendingStores.length > 0 ? pendingStores.map(store => (
-                      <div key={store.id} className="p-6 bg-slate-50 border-4 border-slate-100 rounded-[30px] flex justify-between items-center group hover:border-[#00d66f] transition-all">
-                        <div>
-                          <p className="font-black uppercase text-sm text-[#0a2540] leading-tight mb-1">{store.name}</p>
-                          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest bg-white inline-block px-3 py-1 rounded-full border-2 border-slate-100">{store.count} Movimentos</p>
-                        </div>
-                        <button 
-                          onClick={() => processStoreMaturation(store.id, store.name)}
-                          disabled={isProcessing === store.id}
-                          className="bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl hover:bg-black transition-all shadow-lg hover:-translate-y-1 disabled:opacity-50 disabled:hover:translate-y-0"
-                          title="Transformar Saldo Pendente em DisponÃ­vel"
-                        >
-                          {isProcessing === store.id ? <RefreshCw className="animate-spin" size={20} /> : <TrendingUp size={20} strokeWidth={3} />}
-                        </button>
-                      </div>
-                    )) : (
-                      <div className="col-span-full py-16 px-8 text-center bg-green-50 border-4 border-dashed border-green-200 rounded-[30px]">
-                        <ShieldCheck size={48} className="mx-auto text-green-400 mb-4" />
-                        <p className="font-black text-green-700 uppercase tracking-[0.2em] text-sm">Tudo em dia.</p>
-                        <p className="font-bold text-green-600 text-[10px] uppercase mt-2">NÃ£o hÃ¡ saldos pendentes do mÃªs passado para maturar.</p>
-                      </div>
-                    )}
-                  </div>
+                ))}
               </div>
             </div>
-
-            <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-8 shadow-[12px_12px_0px_#00d66f]">
-                <h2 className="text-xl font-black uppercase italic tracking-tight text-[#0a2540] mb-8">Auditoria de TransaÃ§Ãµes</h2>
+            <div className="bg-white rounded-[50px] border-4 border-[#0a2540] p-10 shadow-[15px_15px_0px_#0a2540]">
+                <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-10">Auditoria de TransaÃ§Ãµes</h2>
                 <AdminTransactions transactions={globalTransactions} users={[]} />
             </div>
           </>
         )}
-
-        {currentView === 'users' && <AdminUsers />}
-        
-        {currentView === 'merchants' && (
-            <AdminMerchants 
-                merchants={globalMerchants} 
-                onUpdateStatus={handleUpdateMerchantStatus} 
-                onOpenModal={() => setIsModalOpen(true)} 
-            />
-        )}
-        
+        {currentView === 'users' && <AdminUsers users={globalClients} />}
+        {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'reviews' && <FeedbackList />}
+        {currentView === 'banners' && <BannerManager />}
       </main>
 
-      <MerchantModal 
-        isOpen={isModalOpen} 
-        onClose={() => setIsModalOpen(false)} 
-        onSuccess={() => {
-            toast.success("Lojista criado com sucesso! Partilhe o email e password definidos com o proprietÃ¡rio.");
-            setIsModalOpen(false);
-        }} 
-      />
-
+      <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />
     </div>
   );
 };
@@ -697,21 +633,11 @@ import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
 import { 
-  Search, 
-  Store, 
-  Plus, 
-  CheckCircle2, 
-  XCircle, 
-  Percent, 
-  Hash,
-  MapPin,
-  AlertCircle,
-  Mail,
-  Locate,
-  Trash2,
-  RefreshCw
+  Search, Store, Plus, CheckCircle2, XCircle, Percent, Hash,
+  MapPin, AlertCircle, Mail, Locate, Trash2, RefreshCw, Download
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
 interface AdminMerchantsProps {
   merchants: UserProfile[];
@@ -721,16 +647,12 @@ interface AdminMerchantsProps {
 }
 
 const AdminMerchants: React.FC<AdminMerchantsProps> = ({ 
-  merchants, 
-  onUpdateStatus, 
-  onOpenModal, 
-  loading 
+  merchants, onUpdateStatus, onOpenModal, loading 
 }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const { deleteUserWithHistory } = useStore();
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  // Filtro de Pesquisa RÃ¡pida (Client-Side para poupar Leituras Firestore)
   const filteredMerchants = merchants.filter(merchant => {
     const q = searchQuery.toLowerCase();
     return (
@@ -757,11 +679,30 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
       try {
         await deleteUserWithHistory(merchantId, 'merchant');
       } catch (error) {
-        toast.error("Erro ao eliminar parceiro. Verifica a consola.");
+        toast.error("Erro ao eliminar parceiro.");
       } finally {
         setDeletingId(null);
       }
     }
+  };
+
+  // RESOLUÃ‡ÃƒO 6: Exportar Comerciantes
+  const exportToExcel = () => {
+    const dataToExport = filteredMerchants.map(m => ({
+      Loja: m.shopName || m.name || '---',
+      Categoria: m.category || '---',
+      Email: m.email || '---',
+      NIF: m.nif || '---',
+      "Cashback %": m.cashbackPercent || 0,
+      Freguesia: m.freguesia || '---',
+      "CÃ³digo Postal": m.zipCode || '---',
+      Estado: m.status === 'active' ? 'Ativo' : 'Suspenso'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Comerciantes");
+    XLSX.writeFile(wb, `Comerciantes_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
   };
 
   if (loading) {
@@ -775,27 +716,33 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
-      {/* CABEÃ‡ALHO DE ACÃ‡Ã•ES */}
-      <div className="flex flex-col md:flex-row justify-between items-center gap-6 bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
         <div className="relative flex-1 w-full group">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
           <input 
             type="text" 
-            placeholder="PESQUISAR LOJA, NIF, EMAIL OU CÃ“DIGO POSTAL..." 
+            placeholder="PESQUISAR LOJA, NIF, EMAIL OU C. POSTAL..." 
             className="w-full p-5 pl-16 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider shadow-inner"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
-        <button 
-          onClick={onOpenModal}
-          className="w-full md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 border-2 border-[#0a2540]"
-        >
-          <Plus size={20} strokeWidth={4} /> Registar Novo Parceiro
-        </button>
+        <div className="flex gap-3 w-full md:w-auto">
+            <button 
+                onClick={exportToExcel}
+                className="bg-slate-100 text-[#0a2540] px-6 py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-sm hover:bg-slate-200 transition-all flex items-center justify-center gap-2 border-2 border-slate-200"
+            >
+                <Download size={20} /> Excel
+            </button>
+            <button 
+                onClick={onOpenModal}
+                className="flex-1 md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
+            >
+                <Plus size={20} strokeWidth={4} /> Novo Parceiro
+            </button>
+        </div>
       </div>
 
-      {/* GRELHA DE LOJISTAS */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {filteredMerchants.length > 0 ? (
           filteredMerchants.map((merchant) => {
@@ -844,11 +791,10 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                   </div>
                   <div className="flex items-center gap-3 text-slate-500">
                     <MapPin size={14} className="text-[#0a2540]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest truncate" title={merchant.freguesia}>{merchant.freguesia || 'LocalizaÃ§Ã£o nÃ£o definida'}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-widest truncate" title={merchant.freguesia}>{merchant.freguesia || 'NÃ£o definida'}</span>
                   </div>
                 </div>
 
-                {/* DASH DE CASHBACK */}
                 <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between shadow-inner">
                   <div className="flex items-center gap-3">
                     <div className="bg-[#00d66f]/20 p-2 rounded-xl">
@@ -859,7 +805,6 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
                   <span className="text-2xl font-black text-[#00d66f] italic tracking-tighter">{merchant.cashbackPercent || 0}%</span>
                 </div>
 
-                {/* BOTÃ•ES DE ACÃ‡ÃƒO */}
                 <div className="mt-auto flex gap-3">
                   {merchant.status !== 'active' ? (
                     <button 
@@ -1239,7 +1184,7 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminTransactions.tsx
 ==================================================
 import React, { useState } from 'react';
 import { Transaction, User as UserProfile } from '../../types';
-import { Search, Download, Clock, CheckCircle2, FileText, Calendar, Store, User, Hash } from 'lucide-react';
+import { Search, Download, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 interface AdminTransactionsProps {
@@ -1247,88 +1192,105 @@ interface AdminTransactionsProps {
   users: UserProfile[];
 }
 
-const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, users }) => {
+const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value || 0);
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  const parseDate = (createdAt: any) => {
+    if (!createdAt) return new Date();
+    if (createdAt.toDate) return createdAt.toDate();
+    return new Date(createdAt.seconds * 1000);
+  };
 
   const filteredTransactions = transactions.filter(t => {
     const q = searchQuery.toLowerCase();
-    return t.clientNif?.includes(q) || t.merchantName?.toLowerCase().includes(q) || t.documentNumber?.toLowerCase().includes(q);
+    const matchText = (t.clientNif || '').includes(q) || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q);
+    const txDate = parseDate(t.createdAt);
+    let matchStart = !startDate || txDate >= new Date(startDate);
+    let matchEnd = !endDate || txDate <= new Date(endDate + 'T23:59:59');
+    return matchText && matchStart && matchEnd;
   });
 
+  const exportToExcel = () => {
+    const ws = XLSX.utils.json_to_sheet(filteredTransactions.map(t => ({
+      Data: parseDate(t.createdAt).toLocaleString(),
+      Parceiro: t.merchantName,
+      NIF: t.clientNif,
+      Valor: t.amount,
+      Cashback: t.cashbackAmount,
+      Status: t.status
+    })));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "TransaÃ§Ãµes");
+    XLSX.writeFile(wb, "Auditoria_VizinhoPlus.xlsx");
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+    <div className="space-y-10">
+      {/* BARRA DE FILTROS IGUAL Ã€ IMAGEM */}
+      <div className="flex flex-col lg:flex-row items-center gap-6">
+        <div className="relative flex-1 w-full">
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={24} />
           <input 
             type="text" 
-            placeholder="PROCURAR..." 
-            className="w-full p-5 pl-14 bg-white border-2 border-[#0a2540] rounded-3xl outline-none shadow-[4px_4px_0px_0px_#0a2540] font-black text-xs uppercase"
+            placeholder="PROCURAR LOJA, NIF OU DOC..." 
+            className="w-full p-6 pl-16 bg-slate-50 border-4 border-slate-100 rounded-[30px] outline-none focus:border-[#0a2540] font-black text-xs uppercase tracking-widest shadow-inner"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        
+        <div className="flex items-center gap-3 bg-slate-50 border-4 border-slate-100 rounded-[30px] p-2 px-6 h-[76px]">
+            <Calendar className="text-slate-400" size={20} />
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent outline-none text-xs font-black text-slate-600 uppercase" />
+            <span className="text-slate-300 font-bold">-</span>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent outline-none text-xs font-black text-slate-600 uppercase" />
+        </div>
+
+        <button 
+            onClick={exportToExcel}
+            className="bg-[#00d66f] text-[#0a2540] px-10 h-[76px] rounded-[30px] font-black text-sm uppercase tracking-widest shadow-[6px_6px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center gap-3 border-4 border-[#0a2540]"
+        >
+            <Download size={24} strokeWidth={3} /> Excel
+        </button>
       </div>
 
-      {/* VERSÃƒO DESKTOP: TABELA */}
-      <div className="hidden md:block bg-white rounded-[40px] border-2 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540] overflow-hidden">
+      {/* TABELA BRUTALISTA */}
+      <div className="bg-white rounded-[40px] border-4 border-[#0a2540] overflow-hidden shadow-xl">
         <table className="w-full text-left">
-          <thead className="bg-slate-50 border-b-2 border-[#0a2540]">
+          <thead className="bg-[#0a2540] text-white">
             <tr>
-              <th className="p-6 text-[10px] font-black uppercase">Registo</th>
-              <th className="p-6 text-[10px] font-black uppercase">Parceiro</th>
-              <th className="p-6 text-[10px] font-black uppercase">Vizinho</th>
-              <th className="p-6 text-right text-[10px] font-black uppercase">Valor</th>
-              <th className="p-6 text-center text-[10px] font-black uppercase">Status</th>
-              <th className="p-6 text-right text-[10px] font-black uppercase">Cashback</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em]">Registo</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em]">Parceiro</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-center">Cliente NIF</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Fatura</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-center">Status</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Cashback</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-100">
+          <tbody className="divide-y-4 divide-slate-100">
             {filteredTransactions.map((t) => (
               <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-6 text-xs font-bold">{t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : '---'}</td>
-                <td className="p-6 font-black uppercase italic text-sm">{t.merchantName}</td>
-                <td className="p-6 font-mono text-xs">{t.clientNif}</td>
-                <td className="p-6 text-right text-slate-400 font-black">{formatCurrency(t.amount)}</td>
-                <td className="p-6 text-center">
-                  <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${t.status === 'available' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
-                    {t.status === 'available' ? 'Maturado' : 'Pendente'}
+                <td className="p-8 text-xs font-bold text-slate-500">{parseDate(t.createdAt).toLocaleDateString()}</td>
+                <td className="p-8 font-black uppercase italic text-sm text-[#0a2540]">{t.merchantName}</td>
+                <td className="p-8 font-mono text-xs font-bold text-center text-slate-400">{t.clientNif || '---'}</td>
+                <td className="p-8 text-right text-slate-500 font-black text-lg">{t.amount.toFixed(2)} â‚¬</td>
+                <td className="p-8 text-center">
+                  <span className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-widest border-2 ${
+                      t.status === 'available' ? 'bg-green-100 text-green-700 border-green-200' : 
+                      t.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-red-50 text-red-600 border-red-100'
+                  }`}>
+                    {t.status === 'available' ? 'Maturado' : t.status === 'pending' ? 'Pendente' : 'Cancelado'}
                   </span>
                 </td>
-                <td className={`p-6 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                  {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount)}
+                <td className={`p-8 text-right font-black text-xl ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                  {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)} â‚¬
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
-      </div>
-
-      {/* VERSÃƒO MOBILE: CARDS */}
-      <div className="md:hidden space-y-4">
-        {filteredTransactions.map((t) => (
-          <div key={t.id} className="bg-white p-6 rounded-[30px] border-2 border-[#0a2540] shadow-[6px_6px_0px_0px_#0a2540] space-y-4">
-            <div className="flex justify-between items-start">
-              <div>
-                <p className="text-[8px] font-black text-slate-300 uppercase">{t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : '---'}</p>
-                <h4 className="font-black uppercase italic text-[#0a2540]">{t.merchantName}</h4>
-              </div>
-              <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${t.status === 'available' ? 'bg-green-100 text-green-600' : 'bg-amber-100 text-amber-600'}`}>
-                {t.status === 'available' ? 'Maturado' : 'Pendente'}
-              </span>
-            </div>
-            <div className="flex justify-between items-end border-t pt-4">
-              <div>
-                <p className="text-[8px] font-black text-slate-300 uppercase">Vizinho NIF</p>
-                <p className="font-mono text-sm font-bold">{t.clientNif}</p>
-              </div>
-              <p className={`text-xl font-black italic ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount)}
-              </p>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );
@@ -1340,115 +1302,302 @@ export default AdminTransactions;
 ==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminUsers.tsx
 ==================================================
-import React, { useState, useEffect } from 'react';
-import { collection, query, where, getDocs, doc, updateDoc, limit } from 'firebase/firestore';
+import React, { useState } from 'react';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { User as UserProfile } from '../../types/index';
-import { Search, Users, Mail, Locate, RefreshCw } from 'lucide-react';
+import { Search, Users, Mail, Locate, Download } from 'lucide-react';
 import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
 
-const AdminUsers: React.FC = () => {
+interface AdminUsersProps {
+  users: UserProfile[];
+}
+
+const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
   const [searchQuery, setSearchQuery] = useState('');
-  const [allClients, setAllClients] = useState<UserProfile[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
 
-  // RESOLUÃ‡ÃƒO PROBLEMA 3: Carrega a lista automaticamente ao abrir a pÃ¡gina
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const q = query(collection(db, 'users'), where('role', '==', 'client'), limit(300));
-        const snap = await getDocs(q);
-        const results = snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile));
-        setAllClients(results);
-      } catch (error) {
-        toast.error("Erro ao carregar vizinhos.");
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchUsers();
-  }, []);
-
-  // Pesquisa local inteligente e instantÃ¢nea
-  const filteredUsers = allClients.filter(u => {
-    const q = searchQuery.toLowerCase();
+  // RESOLUÃ‡ÃƒO 3: Filtro super robusto. Lida com nulos e converte strings.
+  const filteredUsers = users.filter(u => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase().trim();
     return (
-        (u.name?.toLowerCase() || '').includes(q) ||
-        (u.nif?.toLowerCase() || '').includes(q) ||
-        (u.zipCode?.toLowerCase() || '').includes(q) ||
-        (u.email?.toLowerCase() || '').includes(q)
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        (u.nif && u.nif.toLowerCase().includes(q)) ||
+        (u.zipCode && u.zipCode.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
     );
   });
 
   const updateStatus = async (id: string, status: string) => {
-    await updateDoc(doc(db, 'users', id), { status });
-    setAllClients(prev => prev.map(u => u.id === id ? { ...u, status: status as any } : u));
-    toast.success("ESTADO ATUALIZADO.");
+    try {
+        await updateDoc(doc(db, 'users', id), { status });
+        toast.success("ESTADO ATUALIZADO.");
+    } catch (err) {
+        toast.error("Erro ao atualizar.");
+    }
+  };
+
+  // RESOLUÃ‡ÃƒO 6: Exportar Vizinhos para Excel
+  const exportToExcel = () => {
+    const dataToExport = filteredUsers.map(u => ({
+      Nome: u.name || '---',
+      Email: u.email || '---',
+      NIF: u.nif || '---',
+      "CÃ³digo Postal": u.zipCode || '---',
+      "Data AdesÃ£o": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
+      Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Vizinhos");
+    XLSX.writeFile(wb, `Vizinhos_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
   };
 
   return (
     <div className="space-y-8">
-      {/* BARRA DE PESQUISA INTELIGENTE */}
-      <div className="relative group">
-        <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-        <input 
-          type="text" 
-          placeholder="PESQUISAR POR NOME, NIF OU CÃ“DIGO POSTAL..." 
-          className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
+      {/* BARRA DE PESQUISA INTELIGENTE E EXPORTAÃ‡ÃƒO */}
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative group flex-1">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+          <input 
+            type="text" 
+            placeholder="PESQUISAR POR NOME, NIF, EMAIL OU C. POSTAL..." 
+            className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+        <button 
+            onClick={exportToExcel}
+            className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#00d66f] hover:bg-black transition-all flex items-center justify-center gap-3 border-2 border-[#00d66f]"
+        >
+            <Download size={20} /> Exportar
+        </button>
       </div>
 
-      {isLoading ? (
-         <div className="flex justify-center p-12">
-             <RefreshCw className="animate-spin text-[#0a2540]" size={32} />
-         </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredUsers.length > 0 ? filteredUsers.map((u) => (
-            <div key={u.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-transform">
-              <div className="flex items-center gap-4 mb-6">
-                <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
-                  <Users size={24} />
-                </div>
-                <div className="overflow-hidden">
-                  <h3 className="font-black text-lg uppercase italic tracking-tighter text-[#0a2540] leading-none truncate">{u.name}</h3>
-                  <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif}</span>
-                </div>
-              </div>
-
-              <div className="space-y-2 mb-8 bg-slate-50 p-4 rounded-2xl border border-slate-100">
-                <div className="flex items-center gap-3 text-slate-500">
-                  <Mail size={14} className="text-[#00d66f]" />
-                  <span className="text-[10px] font-bold truncate">{u.email}</span>
-                </div>
-                <div className="flex items-center gap-3 text-slate-500">
-                  <Locate size={14} className="text-[#00d66f]" />
-                  <span className="text-[10px] font-bold uppercase">{u.zipCode || 'Sem C.Postal'}</span>
-                </div>
-              </div>
-
-              <div className="mt-auto flex flex-col gap-2">
-                {u.status === 'active' ? (
-                  <button onClick={() => updateStatus(u.id, 'disabled')} className="w-full bg-slate-100 hover:bg-red-50 hover:text-red-500 text-slate-400 p-4 rounded-2xl font-black uppercase text-[10px] transition-colors">Suspender Conta</button>
-                ) : (
-                  <button onClick={() => updateStatus(u.id, 'active')} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] shadow-md border-b-4 border-[#0a2540]/20 hover:bg-[#00c265]">Ativar Conta</button>
-                )}
-              </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredUsers.length > 0 ? filteredUsers.map((u) => (
+        <div key={u.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-transform">
+            <div className="flex items-center gap-4 mb-6">
+            <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
+                <Users size={24} />
             </div>
-          )) : (
-            <div className="col-span-full text-center p-12 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
-                <p className="font-black text-slate-300 uppercase tracking-widest text-sm">Nenhum vizinho encontrado.</p>
+            <div className="overflow-hidden">
+                <h3 className="font-black text-lg uppercase italic tracking-tighter text-[#0a2540] leading-none truncate">{u.name}</h3>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif}</span>
             </div>
-          )}
+            </div>
+
+            <div className="space-y-2 mb-8 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+            <div className="flex items-center gap-3 text-slate-500">
+                <Mail size={14} className="text-[#00d66f]" />
+                <span className="text-[10px] font-bold truncate">{u.email}</span>
+            </div>
+            <div className="flex items-center gap-3 text-slate-500">
+                <Locate size={14} className="text-[#00d66f]" />
+                <span className="text-[10px] font-bold uppercase">{u.zipCode || 'Sem C.Postal'}</span>
+            </div>
+            </div>
+
+            <div className="mt-auto flex flex-col gap-2">
+            {u.status === 'active' ? (
+                <button onClick={() => updateStatus(u.id, 'disabled')} className="w-full bg-slate-100 hover:bg-red-50 hover:text-red-500 text-slate-400 p-4 rounded-2xl font-black uppercase text-[10px] transition-colors">Suspender Conta</button>
+            ) : (
+                <button onClick={() => updateStatus(u.id, 'active')} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] shadow-md border-b-4 border-[#0a2540]/20 hover:bg-[#00c265]">Ativar Conta</button>
+            )}
+            </div>
         </div>
-      )}
+        )) : (
+        <div className="col-span-full text-center p-12 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
+            <p className="font-black text-slate-300 uppercase tracking-widest text-sm">Nenhum vizinho encontrado.</p>
+        </div>
+        )}
+      </div>
     </div>
   );
 };
 
 export default AdminUsers;
+
+
+==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\BannerManager.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { db, storage } from '../../config/firebase';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
+import { Image as ImageIcon, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react';
+import toast from 'react-hot-toast';
+
+const BannerManager: React.FC = () => {
+  const [banners, setBanners] = useState<any[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [formData, setFormData] = useState({
+    title: '',
+    startDate: '',
+    endDate: '',
+    file: null as File | null
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setBanners(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+  }, []);
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.file || !formData.startDate || !formData.endDate) {
+      toast.error("Preencha todos os campos e escolha uma imagem.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const storageRef = ref(storage, `banners/${Date.now()}_${formData.file.name}`);
+      await uploadBytes(storageRef, formData.file);
+      const url = await getDownloadURL(storageRef);
+
+      await addDoc(collection(db, 'banners'), {
+        title: formData.title || 'Sem tÃ­tulo',
+        imageUrl: url,
+        storagePath: storageRef.fullPath,
+        startDate: Timestamp.fromDate(new Date(formData.startDate)),
+        endDate: Timestamp.fromDate(new Date(formData.endDate)),
+        isActive: true,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success("Banner agendado com sucesso!");
+      setFormData({ title: '', startDate: '', endDate: '', file: null });
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro ao carregar banner.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string, storagePath: string) => {
+    if (!window.confirm("Eliminar este banner permanentemente?")) return;
+    try {
+      if (storagePath) {
+        const fileRef = ref(storage, storagePath);
+        await deleteObject(fileRef);
+      }
+      await deleteDoc(doc(db, 'banners', id));
+      toast.success("Banner removido.");
+    } catch (error) {
+      toast.error("Erro ao eliminar.");
+    }
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500">
+      <form onSubmit={handleUpload} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="bg-[#00d66f] p-3 rounded-2xl text-[#0a2540] shadow-md">
+            <ImageIcon size={24} strokeWidth={3} />
+          </div>
+          <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540]">Marketing & Banners</h3>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">TÃ­tulo do Banner</label>
+              <input 
+                type="text" placeholder="EX: PROMOÃ‡ÃƒO DE PÃSCOA" 
+                className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]"
+                value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Imagem (Recomendado: 1200x400px)</label>
+              <input 
+                type="file" accept="image/*" 
+                className="w-full p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-[10px]"
+                onChange={(e) => setFormData({...formData, file: e.target.files?.[0] || null})}
+              />
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-4">
+               <div>
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
+                    <Calendar size={14} /> Data de InÃ­cio
+                  </label>
+                  <input 
+                    type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"
+                    value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})}
+                  />
+               </div>
+               <div>
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
+                    <Clock size={14} /> Data de Fim
+                  </label>
+                  <input 
+                    type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"
+                    value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})}
+                  />
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <button 
+          disabled={uploading}
+          className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1"
+        >
+          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Agendar PublicaÃ§Ã£o
+        </button>
+      </form>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {banners.length > 0 ? banners.map(banner => {
+          const now = new Date();
+          const isLive = now >= banner.startDate.toDate() && now <= banner.endDate.toDate();
+          
+          return (
+            <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] overflow-hidden relative group shadow-[8px_8px_0px_#0a2540]">
+              <div className="h-44 relative">
+                <img src={banner.imageUrl} className="w-full h-full object-cover" alt="" />
+                <div className={`absolute top-4 left-4 px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border-2 shadow-lg ${isLive ? 'bg-green-500 text-white border-white' : 'bg-slate-200 text-slate-500 border-white'}`}>
+                  {isLive ? 'â— Live' : 'Agendado'}
+                </div>
+              </div>
+              <div className="p-6">
+                <p className="font-black text-xs uppercase italic text-[#0a2540] mb-3">{banner.title}</p>
+                <div className="space-y-1 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                  <p>InÃ­cio: {banner.startDate.toDate().toLocaleString()}</p>
+                  <p>Fim: {banner.endDate.toDate().toLocaleString()}</p>
+                </div>
+                <button 
+                  onClick={() => handleDelete(banner.id, banner.storagePath)}
+                  className="mt-6 w-full py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2"
+                >
+                  <Trash2 size={14} /> Eliminar Banner
+                </button>
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="col-span-full py-20 text-center bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-200 text-slate-300">
+             <AlertCircle size={48} className="mx-auto mb-4" />
+             <p className="font-black uppercase tracking-widest text-xs">Nenhum banner agendado.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default BannerManager;
 
 
 ==================================================
@@ -1764,30 +1913,41 @@ export default ForgotPassword;
 ==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\auth\LoginPage.tsx
 ==================================================
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { LogIn, Mail, Lock, AlertCircle, ArrowRight } from 'lucide-react';
+import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { useStore } from '../../store/useStore';
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [localLoading, setLocalLoading] = useState(false);
+  const { currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
+
+  // Redirecionamento AutomÃ¡tico via Estado Global
+  useEffect(() => {
+    if (isInitialized && currentUser) {
+      navigate('/dashboard', { replace: true });
+    }
+  }, [currentUser, isInitialized, navigate]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true);
+    if (localLoading) return;
+
+    setLocalLoading(true);
     setError('');
+    
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      navigate('/dashboard');
+      // NÃƒO navegar aqui. Deixar o useEffect acima tratar disso.
     } catch (err: any) {
-      setError('Credenciais invÃ¡lidas. Verifica o teu email e password.');
-    } finally {
-      setLoading(false);
+      setLocalLoading(false);
+      setError('Email ou password incorretos.');
     }
   };
 
@@ -1798,8 +1958,7 @@ const LoginPage: React.FC = () => {
           <div className="bg-[#00d66f] w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#0a2540] rotate-3">
             <LogIn size={32} className="text-[#0a2540]" />
           </div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Bem-vindo de volta!</h2>
-          <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mt-2">Acede Ã  tua rede Vizinho+</p>
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Vizinho+</h2>
         </div>
 
         {error && (
@@ -1814,29 +1973,22 @@ const LoginPage: React.FC = () => {
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
               <input 
-                type="email" 
-                required 
-                value={email} 
+                type="email" required value={email} 
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold transition-all"
+                className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold"
                 placeholder="teu@email.com"
               />
             </div>
           </div>
 
           <div className="space-y-2">
-            <div className="flex justify-between items-center px-2">
-              <label className="text-[10px] font-black uppercase text-slate-400">Password</label>
-              <Link to="/forgot-password" className="text-[10px] font-black uppercase text-[#00d66f] hover:underline">Esqueceste-te?</Link>
-            </div>
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
               <input 
-                type="password" 
-                required 
-                value={password} 
+                type="password" required value={password} 
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold transition-all"
+                className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold"
                 placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
               />
             </div>
@@ -1844,17 +1996,12 @@ const LoginPage: React.FC = () => {
 
           <button 
             type="submit" 
-            disabled={loading}
-            className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all shadow-xl flex items-center justify-center gap-3 disabled:opacity-50"
+            disabled={localLoading}
+            className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 disabled:opacity-70"
           >
-            {loading ? 'A entrar...' : 'Entrar na Conta'} <ArrowRight size={20} />
+            {localLoading ? <Loader2 className="animate-spin" /> : <>Entrar <ArrowRight /></>}
           </button>
         </form>
-
-        <div className="mt-10 text-center">
-          <p className="text-[10px] font-black uppercase text-slate-400">Ainda nÃ£o Ã©s vizinho?</p>
-          <Link to="/register" className="text-sm font-black text-[#0a2540] uppercase italic hover:text-[#00d66f] transition-colors">Cria a tua conta grÃ¡tis</Link>
-        </div>
       </div>
     </div>
   );
@@ -2044,7 +2191,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // RESOLUÃ‡ÃƒO PROBLEMA 5: Parseador robusto para datas do Firestore / Redux / Zustand
   const parseDate = (createdAt: any) => {
     if (!createdAt) return new Date();
     if (createdAt.toDate) return createdAt.toDate();
@@ -2052,9 +2198,10 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return new Date(createdAt);
   };
 
+  // GrÃ¡fico DiÃ¡rio alimentado pelo Volume (FaturaÃ§Ã£o) exato
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'SÃ¡b'];
-    const counts = days.map(d => ({ day: d, count: 0, hours: Array(24).fill(0) }));
+    const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
@@ -2064,6 +2211,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         const dayIdx = date.getDay();
         const hour = date.getHours();
         counts[dayIdx].count++;
+        counts[dayIdx].volume += Number(t.amount || 0); // Acumula o valor em Euros
         counts[dayIdx].hours[hour]++;
       }
     });
@@ -2135,25 +2283,29 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
       
-      {/* CARD 1: FLUXO DE CLIENTES */}
+      {/* CARD 1: FLUXO DE CLIENTES BASEADO EM VOLUME */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
-          <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Fluxo Semanal
+          <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
         </h3>
         
         <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
           {dayStats.map((d, i) => {
-            const maxCount = Math.max(...dayStats.map(x => x.count), 1);
-            const height = `${(d.count / maxCount) * 100}%`;
+            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; // Garante que nunca Ã© zero
+            const heightPercentage = (d.volume / maxVol) * 100;
+            
             return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2 group">
+              <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
                 <div 
                   className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" 
-                  style={{ height: height, minHeight: '4px' }}
+                  style={{ 
+                    height: `${heightPercentage}%`, 
+                    minHeight: d.volume > 0 ? '8px' : '2px' // Dias a zeros ficam como uma linha fininha
+                  }}
                 >
-                    {d.count > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md">
-                            {d.count}
+                    {d.volume > 0 && (
+                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">
+                            {formatCurrency(d.volume)}
                         </div>
                     )}
                 </div>
@@ -2185,7 +2337,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </h3>
         <div className="space-y-6 mt-auto">
           {monthStats.map((m, i) => {
-              const maxVol = Math.max(...monthStats.map(x => x.volume), 1);
+              const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
               return (
                 <div key={i} className="space-y-2">
                   <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
@@ -2291,6 +2443,93 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 };
 
 export default BusinessIntelligence;
+
+
+==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\merchant\components\MerchantSettings.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { User as UserProfile } from '../../../types';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { CheckCircle2, XCircle } from 'lucide-react';
+
+interface MerchantSettingsProps {
+  currentUser: UserProfile;
+}
+
+const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
+  const [cashbackPercent, setCashbackPercent] = useState<string>(currentUser.cashbackPercent?.toString() || '0');
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  useEffect(() => {
+    setCashbackPercent(currentUser.cashbackPercent?.toString() || '0');
+  }, [currentUser.cashbackPercent]);
+
+  const handleSaveCashback = async () => {
+    setIsLoading(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const percent = parseFloat(cashbackPercent);
+      if (isNaN(percent) || percent < 0 || percent > 100) {
+        setMessage({ type: 'error', text: 'Por favor, insira um valor de cashback vÃ¡lido entre 0 e 100.' });
+        return;
+      }
+
+      const merchantRef = doc(db, 'users', currentUser.id);
+      await updateDoc(merchantRef, {
+        cashbackPercent: percent,
+      });
+
+      setMessage({ type: 'success', text: 'Cashback atualizado com sucesso!' });
+    } catch (e) {
+      console.error("Erro ao atualizar o cashback: ", e);
+      setMessage({ type: 'error', text: 'Erro ao atualizar o cashback. Tente novamente.' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[40px] shadow-2xl p-8 mb-8 border-b-8 border-[#00d66f]">
+      <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0f172a] mb-6">DefiniÃ§Ãµes da Loja</h2>
+
+      <div className="mb-6">
+        <label htmlFor="cashback" className="block text-sm font-bold text-gray-700 mb-2">Percentagem de Cashback (%)</label>
+        <input
+          type="number"
+          id="cashback"
+          className="w-full p-4 rounded-2xl bg-gray-100 border-2 border-gray-200 focus:outline-none focus:border-[#00d66f] font-bold text-lg text-[#0f172a]"
+          value={cashbackPercent}
+          onChange={(e) => setCashbackPercent(e.target.value)}
+          min="0"
+          max="100"
+          step="0.1"
+          disabled={isLoading}
+        />
+      </div>
+
+      <button
+        onClick={handleSaveCashback}
+        disabled={isLoading}
+        className="w-full bg-[#00d66f] text-[#0f172a] font-black uppercase text-[15px] py-4 rounded-2xl shadow-lg hover:bg-[#00c263] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {isLoading ? 'A Guardar...' : 'Guardar AlteraÃ§Ãµes'}
+      </button>
+
+      {message.text && (
+        <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-bounce shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
+          {message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+          {message.text}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MerchantSettings;
 
 
 ==================================================
@@ -2568,22 +2807,23 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\merchant\MerchantDashboard.
 ==================================================
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
-import { User as UserProfile, Transaction } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
+import { User as UserProfile } from '../../types';
+import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings } from 'lucide-react';
 
 // Sub-componentes
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
+import MerchantSettings from './components/MerchantSettings'; // CORRIGIDO: Removida a extensÃ£o .tsx
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
-  const [view, setView] = useState<'terminal' | 'bi'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -2600,20 +2840,32 @@ const MerchantDashboard: React.FC = () => {
 
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
 
+  // CÃ¡lculo seguro do Cashback para a prÃ©-visualizaÃ§Ã£o
+  const previewCashbackValue = useMemo(() => {
+    const numAmount = parseFloat(amount) || 0;
+    const percent = currentUser?.cashbackPercent || 0;
+    return (numAmount * percent) / 100;
+  }, [amount, currentUser?.cashbackPercent]);
+
   // Pesquisa de Cliente por NIF
   useEffect(() => {
     const search = async () => {
       const cleanNif = cardNumber.replace(/\s/g, '');
       if (cleanNif.length === 9) {
         setIsSearching(true);
-        const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
-        const snap = await getDocs(q);
-        if (!snap.empty) {
-          setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-        } else {
-          setFoundClient(null);
+        try {
+          const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+          } else {
+            setFoundClient(null);
+          }
+        } catch (error) {
+          console.error("Erro na pesquisa:", error);
+        } finally {
+          setIsSearching(false);
         }
-        setIsSearching(false);
       } else {
         setFoundClient(null);
       }
@@ -2624,7 +2876,10 @@ const MerchantDashboard: React.FC = () => {
 
   // Subscrever TransaÃ§Ãµes
   useEffect(() => {
-    if (currentUser?.id) return subscribeToTransactions('merchant', currentUser.id);
+    if (currentUser?.id) {
+      const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
+      return () => unsubscribe();
+    }
   }, [currentUser?.id, subscribeToTransactions]);
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
@@ -2645,15 +2900,17 @@ const MerchantDashboard: React.FC = () => {
       await addTransaction({
         clientId: foundClient.id,
         merchantId: currentUser.id,
-        merchantName: currentUser.name || 'Loja Vizinho+',
+        merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
         amount: pendingAction.val,
         type: pendingAction.type,
         documentNumber: documentNumber
       });
       setMessage({ type: 'success', text: "OperaÃ§Ã£o registada com sucesso!" });
-      setAmount(''); setDocumentNumber(''); setCardNumber('');
+      setAmount(''); 
+      setDocumentNumber(''); 
+      setCardNumber('');
     } catch (e) {
-      setMessage({ type: 'error', text: "Erro ao registar: Verifique as regras de seguranÃ§a." });
+      setMessage({ type: 'error', text: "Erro ao registar: Verifique as permissÃµes." });
     } finally {
       setIsLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
@@ -2671,7 +2928,7 @@ const MerchantDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans relative pb-20">
       <header className="bg-[#0f172a] p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
         <div className="flex items-center gap-4 text-white">
-          <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.name}</h2>
+          <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.shopName || currentUser.name}</h2>
           <span className="text-[10px] font-black text-[#00d66f] bg-[#00d66f]/10 py-1 px-3 rounded-full border border-[#00d66f]/20 uppercase">Loja Parceira</span>
         </div>
         
@@ -2682,6 +2939,10 @@ const MerchantDashboard: React.FC = () => {
           
           <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
             <BarChart3 size={16} /> Business Intelligence
+          </button>
+
+          <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}>
+            <Settings size={16} /> DefiniÃ§Ãµes
           </button>
 
           <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
@@ -2696,8 +2957,7 @@ const MerchantDashboard: React.FC = () => {
             cardNumber={cardNumber} setCardNumber={setCardNumber}
             isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
             amount={amount} setAmount={setAmount}
-            // CORREÃ‡ÃƒO: Propriedade renomeada para previewCashback
-            previewCashback={parseFloat(amount || '0') * ((currentUser.cashbackPercent || 0) / 100)}
+            previewCashback={previewCashbackValue}
             documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
@@ -2711,6 +2971,12 @@ const MerchantDashboard: React.FC = () => {
           <BusinessIntelligence 
             merchantId={currentUser.id}
             transactions={transactions}
+          />
+        )}
+
+        {view === 'settings' && (
+          <MerchantSettings 
+            currentUser={currentUser}
           />
         )}
 
@@ -3095,7 +3361,7 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\public\TermsPage.tsx
 ==================================================
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, ShieldCheck, ScrollText } from 'lucide-react';
+import { ArrowLeft, ShieldCheck, ScrollText, AlertTriangle } from 'lucide-react';
 
 const TermsPage: React.FC = () => {
   const navigate = useNavigate();
@@ -3107,14 +3373,14 @@ const TermsPage: React.FC = () => {
         {/* HEADER */}
         <div className="flex items-center gap-6 mb-12">
           <button 
-            onClick={() => navigate('/login')}
+            onClick={() => navigate(-1)}
             className="bg-white p-4 rounded-2xl border-4 border-[#0a2540] shadow-[6px_6px_0px_0px_#0a2540] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all active:scale-95"
           >
             <ArrowLeft size={24} strokeWidth={3} />
           </button>
           <div>
             <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">
-              Termos & <span className="text-[#00d66f]">Privacidade</span>
+              Termos & <span className="text-[#00d66f]">CondiÃ§Ãµes</span>
             </h1>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-2 italic">
               Ãšltima atualizaÃ§Ã£o: MarÃ§o 2026
@@ -3131,14 +3397,57 @@ const TermsPage: React.FC = () => {
           <section className="relative z-10">
             <h2 className="flex items-center gap-3 text-xl font-black uppercase italic tracking-tight mb-4 text-[#0a2540]">
               <div className="bg-[#00d66f] p-1.5 rounded-lg"><ShieldCheck size={18} className="text-[#0a2540]" /></div>
-              1. Termos de UtilizaÃ§Ã£o
+              1. Sobre a Plataforma
             </h2>
             <div className="space-y-4 text-sm text-slate-600 font-medium leading-relaxed">
               <p>
-                Bem-vindo ao Vizinho+. Ao utilizar esta plataforma, concorda em cumprir os nossos termos. O Vizinho+ Ã© um sistema de fidelizaÃ§Ã£o que permite acumular cashback em lojas parceiras.
+                A plataforma Vizinho+ atua exclusivamente como uma soluÃ§Ã£o de software (facilitador tecnolÃ³gico) de apoio ao comÃ©rcio local, fornecendo as ferramentas para a gestÃ£o de fidelizaÃ§Ã£o e atribuiÃ§Ã£o de "cashback" (retorno de saldo).
               </p>
               <p>
-                O utilizador compromete-se a fornecer dados verdadeiros (NIF e Email) e a nÃ£o utilizar a plataforma para fins fraudulentos. O saldo acumulado Ã© de uso exclusivo nas lojas onde foi gerado ou conforme as regras de maturaÃ§Ã£o do sistema.
+                Ao criar conta (como Cliente ou Lojista), o utilizador aceita integralmente estes Termos de UtilizaÃ§Ã£o. O saldo gerado nesta plataforma nÃ£o tem valor fiduciÃ¡rio real (nÃ£o pode ser trocado por dinheiro fÃ­sico em conta bancÃ¡ria), servindo unicamente como desconto acumulado a ser utilizado nas lojas parceiras onde foi gerado.
+              </p>
+            </div>
+          </section>
+
+          <section className="relative z-10">
+            <h2 className="flex items-center gap-3 text-xl font-black uppercase italic tracking-tight mb-4 text-[#0a2540]">
+              <div className="bg-[#00d66f] p-1.5 rounded-lg"><AlertTriangle size={18} className="text-[#0a2540]" /></div>
+              2. IsenÃ§Ã£o de Responsabilidade
+            </h2>
+            <div className="space-y-4 text-sm text-slate-600 font-medium leading-relaxed bg-slate-50 p-6 rounded-3xl border-2 border-slate-100">
+              <p>
+                <b>A Vizinho+ nÃ£o Ã© parte integrante de qualquer transaÃ§Ã£o comercial.</b> A venda de produtos, prestaÃ§Ã£o de serviÃ§os, emissÃ£o de faturas e obrigaÃ§Ãµes fiscais sÃ£o da exclusiva e total responsabilidade dos Lojistas Parceiros.
+              </p>
+              <ul className="list-disc ml-5 space-y-3 mt-2">
+                <li>
+                  <b>GestÃ£o de Campanhas:</b> Cada Lojista tem total autonomia para definir e alterar a percentagem de Cashback oferecida. A plataforma nÃ£o garante nem dita as percentagens praticadas.
+                </li>
+                <li>
+                  <b>LitÃ­gios:</b> Qualquer problema relacionado com defeito de produtos, prestaÃ§Ã£o de serviÃ§os, ou falha na atribuiÃ§Ã£o de saldo, deverÃ¡ ser resolvido diretamente entre o Cliente (Vizinho) e o Lojista. A plataforma isenta-se de atuar como mediadora de conflitos de consumo.
+                </li>
+                <li>
+                  <b>Feedback e ComentÃ¡rios:</b> A plataforma permite a avaliaÃ§Ã£o da experiÃªncia por parte dos clientes. O teor desses comentÃ¡rios reflete a opiniÃ£o do cliente e Ã© disponibilizado diretamente ao lojista de forma privada. A plataforma nÃ£o se responsabiliza pelo teor das avaliaÃ§Ãµes efetuadas.
+                </li>
+              </ul>
+            </div>
+          </section>
+
+          <section className="relative z-10">
+            <h2 className="flex items-center gap-3 text-xl font-black uppercase italic tracking-tight mb-4 text-[#0a2540]">
+              <div className="bg-[#00d66f] p-1.5 rounded-lg"><ShieldCheck size={18} className="text-[#0a2540]" /></div>
+              3. Regras e Condutas (PrevenÃ§Ã£o de Fraude)
+            </h2>
+            <div className="space-y-4 text-sm text-slate-600 font-medium leading-relaxed">
+              <p>
+                Para assegurar a justiÃ§a e transparÃªncia da rede, Ã© expressamente proibido:
+              </p>
+              <ul className="list-disc ml-5 space-y-2">
+                <li>Fornecer o NIF de terceiros no momento da compra.</li>
+                <li>AutofaturaÃ§Ã£o ou transaÃ§Ãµes fictÃ­cias por parte de Lojistas com o objetivo de adulterar saldos.</li>
+                <li>Tentativas de engenharia reversa, manipulaÃ§Ã£o do cÃ³digo ou "hack" dos valores em sistema.</li>
+              </ul>
+              <p className="font-bold text-red-500">
+                O incumprimento destas regras resultarÃ¡ no bloqueio imediato e permanente da conta infratora e anulaÃ§Ã£o total dos saldos em sistema, sem direito a recurso.
               </p>
             </div>
           </section>
@@ -3146,29 +3455,24 @@ const TermsPage: React.FC = () => {
           <section className="relative z-10">
             <h2 className="flex items-center gap-3 text-xl font-black uppercase italic tracking-tight mb-4 text-[#0a2540]">
               <div className="bg-[#00d66f] p-1.5 rounded-lg"><ShieldCheck size={18} className="text-[#0a2540]" /></div>
-              2. ProteÃ§Ã£o de Dados (RGPD)
+              4. Privacidade e RGPD
             </h2>
             <div className="space-y-4 text-sm text-slate-600 font-medium leading-relaxed">
               <p>
-                Em conformidade com o Regulamento Geral sobre a ProteÃ§Ã£o de Dados (RGPD), informamos que o Vizinho+ recolhe apenas os dados estritamente necessÃ¡rios para o funcionamento do serviÃ§o:
+                A Vizinho+ recolhe estritamente os dados necessÃ¡rios ao funcionamento (Nome, Email, NIF e CÃ³digo Postal). Os seus dados nÃ£o sÃ£o vendidos ou partilhados com terceiros para fins publicitÃ¡rios.
               </p>
-              <ul className="list-disc ml-5 space-y-2">
-                <li><b>NIF:</b> Para identificaÃ§Ã£o Ãºnica nas transaÃ§Ãµes comerciais.</li>
-                <li><b>Email:</b> Para gestÃ£o de conta e recuperaÃ§Ã£o de password.</li>
-                <li><b>HistÃ³rico de Compras:</b> Para cÃ¡lculo de cashback e estatÃ­sticas de negÃ³cio.</li>
-              </ul>
               <p>
-                Os seus dados nÃ£o sÃ£o partilhados com entidades terceiras para fins comerciais. Tem o direito de aceder, retificar ou eliminar os seus dados a qualquer momento atravÃ©s das definiÃ§Ãµes de perfil.
+                O seu NIF Ã© usado Ãºnica e exclusivamente para ligaÃ§Ã£o segura Ã s transaÃ§Ãµes (cruzamento com faturaÃ§Ã£o do lojista), e os dados agregados sÃ£o anonimizados. Tem o direito de eliminar permanentemente a sua conta e histÃ³rico atravÃ©s das DefiniÃ§Ãµes da App.
               </p>
             </div>
           </section>
 
           <section className="relative z-10 pt-6">
             <button 
-              onClick={() => navigate('/login')}
+              onClick={() => navigate(-1)}
               className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3"
             >
-              Compreendo e Quero Voltar ao Login
+              Compreendi. Voltar AtrÃ¡s.
             </button>
           </section>
         </div>
@@ -3185,10 +3489,91 @@ export default TermsPage;
 
 
 ==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\user\components\BannerCarousel.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { db } from '../../../config/firebase';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { motion, AnimatePresence } from 'framer-motion';
+
+const BannerCarousel: React.FC = () => {
+  const [activeBanners, setActiveBanners] = useState<any[]>([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  useEffect(() => {
+    // Busca banners ativos
+    const q = query(collection(db, 'banners'), where('isActive', '==', true));
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
+      const now = new Date();
+      const valid = snap.docs
+        .map(d => ({ id: d.id, ...d.data() }))
+        .filter((b: any) => {
+          const start = b.startDate.toDate();
+          const end = b.endDate.toDate();
+          return now >= start && now <= end;
+        });
+      setActiveBanners(valid);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // RotaÃ§Ã£o automÃ¡tica a cada 6 segundos
+  useEffect(() => {
+    if (activeBanners.length <= 1) return;
+    
+    const timer = setInterval(() => {
+      setCurrentIndex((prev) => (prev + 1) % activeBanners.length);
+    }, 6000);
+
+    return () => clearInterval(timer);
+  }, [activeBanners]);
+
+  if (activeBanners.length === 0) return null;
+
+  return (
+    <div className="relative w-full h-44 md:h-56 rounded-[40px] overflow-hidden border-4 border-[#0a2540] shadow-[10px_10px_0px_#00d66f] bg-[#0a2540] mb-8">
+      <AnimatePresence mode="wait">
+        <motion.img
+          key={activeBanners[currentIndex].id}
+          src={activeBanners[currentIndex].imageUrl}
+          initial={{ opacity: 0, scale: 1.1 }}
+          animate={{ opacity: 1, scale: 1 }}
+          exit={{ opacity: 0, scale: 0.95 }}
+          transition={{ duration: 0.8, ease: "anticipate" }}
+          className="absolute inset-0 w-full h-full object-cover"
+        />
+      </AnimatePresence>
+
+      {/* Overlay de degradÃª para legibilidade (se necessÃ¡rio) */}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+
+      {/* Indicadores Brutalistas */}
+      {activeBanners.length > 1 && (
+        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
+          {activeBanners.map((_, idx) => (
+            <div 
+              key={idx} 
+              className={`h-2 rounded-full transition-all duration-500 border-2 border-[#0a2540] ${
+                idx === currentIndex ? 'w-8 bg-[#00d66f]' : 'w-2 bg-white/50'
+              }`}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default BannerCarousel;
+
+
+==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\user\components\UserExplore.tsx
 ==================================================
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, ExternalLink, Navigation } from 'lucide-react';
+import { Search, MapPin, Navigation, Percent } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
 interface UserExploreProps {
@@ -3250,20 +3635,26 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
       {/* RESULTADOS */}
       <div className="space-y-4">
         {filtered.map((m) => (
-          <div key={m.id} className="bg-white rounded-[35px] border-2 border-slate-50 overflow-hidden shadow-sm flex items-center p-6 justify-between group hover:border-[#00d66f] transition-all">
+          <div key={m.id} className="bg-white rounded-[35px] border-2 border-slate-50 overflow-hidden shadow-sm flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 group hover:border-[#00d66f] transition-all">
             <div className="flex items-center gap-4">
               <div className="bg-slate-50 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] group-hover:text-white transition-colors">
                 <MapPin size={24} />
               </div>
               <div>
                 <span className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest">{m.category || 'ComÃ©rcio'}</span>
-                <h4 className="text-lg font-black text-[#0a2540] uppercase tracking-tighter leading-none">{m.shopName || m.name}</h4>
-                <p className="text-[10px] font-bold text-slate-400 uppercase mt-1">{m.freguesia} â€¢ {m.zipCode}</p>
+                <h4 className="text-lg font-black text-[#0a2540] uppercase tracking-tighter leading-none mb-1">{m.shopName || m.name}</h4>
+                <p className="text-[10px] font-bold text-slate-400 uppercase">{m.freguesia} â€¢ {m.zipCode}</p>
+                
+                {/* RESOLUÃ‡ÃƒO 2: MOSTRAR CASHBACK */}
+                <div className="mt-2 inline-flex items-center gap-1 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-[#00d66f]">
+                  <Percent size={10} strokeWidth={3} />
+                  <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
+                </div>
               </div>
             </div>
             <button 
               onClick={() => openInMaps(m)}
-              className="bg-[#0a2540] text-white p-4 rounded-2xl shadow-lg hover:scale-110 transition-all flex items-center gap-2"
+              className="bg-[#0a2540] text-white p-4 rounded-2xl shadow-lg hover:scale-110 transition-all flex items-center justify-center gap-2 w-full sm:w-auto mt-2 sm:mt-0"
             >
               <Navigation size={20} fill="currentColor" />
             </button>
@@ -3423,6 +3814,7 @@ import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
+import BannerCarousel from './components/BannerCarousel'; // Novo Componente
 import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
@@ -3478,7 +3870,6 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
       
-      {/* HEADER ATUALIZADO COM BOTÃƒO DE DEFINIÃ‡Ã•ES */}
       <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center shadow-sm">
         <div>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
@@ -3500,23 +3891,23 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
+        {/* CARROSSEL DE BANNERS AGENDADO */}
+        <BannerCarousel />
+
         {/* CARTÃƒO DIGITAL VIZINHO+ */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
                 CartÃ£o Digital
             </div>
-            
             <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
                 <QRCodeSVG value={currentUser.nif || ""} size={120} />
             </div>
-
             <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este cÃ³digo na loja</p>
                 <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
                     {currentUser.nif?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>
-            
             <div className="bg-amber-50 px-6 py-2 rounded-full border border-amber-100 flex items-center gap-2">
                 <QrCode size={14} className="text-amber-600" />
                 <p className="text-[9px] font-bold text-amber-700 uppercase tracking-tight italic">
@@ -3549,7 +3940,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* AÃ‡Ã•ES RÃPIDAS */}
         <div className="grid grid-cols-2 gap-4">
           <button 
             onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')}
@@ -3572,11 +3962,9 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* VIEWS DINÃ‚MICAS */}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
         
-        {/* BOTÃƒO EXPLORAR */}
         <button 
           onClick={() => setView(view === 'explore' ? 'home' : 'explore')}
           className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[6px_6px_0px_#0a2540] active:translate-y-1 active:shadow-none'}`}
@@ -3586,7 +3974,6 @@ const UserDashboard: React.FC = () => {
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
-        {/* BOTÃƒO DOURADO REALISTA */}
         {sysConfig.vantagensUrl && (
           <button 
             onClick={() => window.open(sysConfig.vantagensUrl, '_blank')}
@@ -3596,9 +3983,7 @@ const UserDashboard: React.FC = () => {
                 border: '4px solid #aa771c'
             }}
           >
-            {/* Brilho animado */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-4">
                 <div className="bg-black/20 p-3 rounded-2xl">
@@ -3617,25 +4002,15 @@ const UserDashboard: React.FC = () => {
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-4">
-        {/* LINK PARA TERMOS E PRIVACIDADE */}
-        <button 
-            onClick={() => navigate('/terms')}
-            className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] transition-colors"
-        >
+        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540]">
             <ShieldCheck size={14} /> Termos e Privacidade
         </button>
-
-        <button 
-            onClick={handleLogout} 
-            className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700 transition-colors"
-        >
+        <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700">
             <LogOut size={14} /> Sair da Conta
         </button>
-        
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
       </footer>
 
-      {/* MODAL DE FEEDBACK - LIGADO Ã€ BASE DE DADOS FEEDBACKS */}
       {selectedTxForFeedback && (
         <FeedbackForm 
           transactionId={selectedTxForFeedback.id} 
@@ -3678,7 +4053,7 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\store\useStore.ts
 import { create } from 'zustand';
 import { 
   collection, onSnapshot, query, orderBy, where, serverTimestamp, 
-  setDoc, doc, getDocs, writeBatch, updateDoc, limit, increment, getDoc 
+  setDoc, doc, getDocs, writeBatch, updateDoc, limit, increment, getDoc, Timestamp 
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -3696,7 +4071,7 @@ interface StoreState {
   resetPassword: (email: string) => Promise<void>;
   addTransaction: (transaction: TransactionCreate) => Promise<void>;
   cancelTransaction: (transactionId: string) => Promise<void>;
-  subscribeToTransactions: (role?: string, identifier?: string) => () => void;
+  subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
@@ -3712,8 +4087,13 @@ export const useStore = create<StoreState>((set, get) => ({
   setLoading: (loading) => set({ isLoading: loading }),
 
   logout: async () => {
-    await signOut(auth);
-    set({ currentUser: null, transactions: [], isLoading: false });
+    set({ isLoading: true });
+    try {
+      await signOut(auth);
+      set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
+    } catch (e) {
+      set({ isLoading: false });
+    }
   },
 
   resetPassword: async (email: string) => {
@@ -3730,36 +4110,13 @@ export const useStore = create<StoreState>((set, get) => ({
   addTransaction: async (tx) => {
     const { currentUser } = get();
     if (!currentUser) return;
-    
     try {
       const batch = writeBatch(db);
       let currentCbPercent = currentUser.cashbackPercent || 0;
-
-      // RESOLUÃ‡ÃƒO PROBLEMA 1: Aplica cashback pendente se jÃ¡ for o dia seguinte
-      if (currentUser.pendingCashbackEffectiveAt && currentUser.pendingCashbackPercent !== undefined) {
-        const effectiveDateObj = (currentUser.pendingCashbackEffectiveAt as any).seconds 
-          ? new Date((currentUser.pendingCashbackEffectiveAt as any).seconds * 1000) 
-          : new Date(currentUser.pendingCashbackEffectiveAt as any);
-
-        if (new Date() >= effectiveDateObj) {
-          currentCbPercent = currentUser.pendingCashbackPercent;
-          // Atualiza permanentemente no lojista
-          batch.update(doc(db, 'users', currentUser.id), {
-            cashbackPercent: currentCbPercent,
-            pendingCashbackPercent: null,
-            pendingCashbackEffectiveAt: null
-          });
-          // Atualiza o estado local para nÃ£o ter de dar refresh
-          set({ currentUser: { ...currentUser, cashbackPercent: currentCbPercent, pendingCashbackPercent: undefined } });
-        }
-      }
-
       const amount = Number(tx.amount);
       const cashback = tx.type === 'earn' ? Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
-      
       const newTxRef = doc(collection(db, 'transactions'));
       
-      // 1. Guardar a TransaÃ§Ã£o
       batch.set(newTxRef, {
         clientId: tx.clientId,
         merchantId: currentUser.id,
@@ -3773,118 +4130,97 @@ export const useStore = create<StoreState>((set, get) => ({
         clientNif: tx.documentNumber
       });
 
-      // 2. Atualizar o Saldo do Cliente
       const userRef = doc(db, 'users', tx.clientId);
       if (tx.type === 'earn') {
         batch.update(userRef, {
           [`wallet.pending`]: increment(cashback),
           [`storeWallets.${currentUser.id}.pending`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name
         });
-      } else if (tx.type === 'redeem') {
+      } else {
         batch.update(userRef, {
           [`wallet.available`]: increment(-amount),
           [`storeWallets.${currentUser.id}.available`]: increment(-amount)
         });
       }
-
       await batch.commit();
-      toast.success("MOVIMENTO REGISTADO COM SUCESSO!");
-    } catch (e) { 
-      console.error(e);
-      toast.error("ERRO NO REGISTO. VERIFICA A LIGAÃ‡ÃƒO."); 
-    }
+      toast.success("MOVIMENTO REGISTADO!");
+    } catch (e) { toast.error("ERRO NO REGISTO."); }
   },
 
   cancelTransaction: async (id) => {
     try {
       const txRef = doc(db, 'transactions', id);
       const txSnap = await getDoc(txRef);
-      
-      if (!txSnap.exists()) throw new Error("TransaÃ§Ã£o nÃ£o encontrada");
-      
+      if (!txSnap.exists()) return;
       const txData = txSnap.data();
-      if (txData.status === 'cancelled') return;
-
       const batch = writeBatch(db);
-      
       batch.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
-
       const userRef = doc(db, 'users', txData.clientId);
       if (txData.type === 'earn') {
-        const balanceType = txData.status === 'pending' ? 'pending' : 'available';
-        batch.update(userRef, {
-          [`wallet.${balanceType}`]: increment(-txData.cashbackAmount),
-          [`storeWallets.${txData.merchantId}.${balanceType}`]: increment(-txData.cashbackAmount)
-        });
-      } else if (txData.type === 'redeem') {
-        batch.update(userRef, {
-          [`wallet.available`]: increment(txData.amount),
-          [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount)
-        });
+        const type = txData.status === 'pending' ? 'pending' : 'available';
+        batch.update(userRef, { [`wallet.${type}`]: increment(-txData.cashbackAmount), [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) });
+      } else {
+        batch.update(userRef, { [`wallet.available`]: increment(txData.amount), [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) });
       }
-
       await batch.commit();
-      toast.success("COMPRA ANULADA E SALDOS REVERTIDOS.");
-    } catch (e) {
-      console.error(e);
-      toast.error("ERRO AO ANULAR A TRANSAÃ‡ÃƒO.");
-    }
+      toast.success("ANULADO.");
+    } catch (e) { toast.error("ERRO."); }
   },
 
   subscribeToTransactions: (role, id) => {
     if (!id && role !== 'admin') return () => {};
     const q = role === 'admin' 
       ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(100))
-      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(100));
+      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(50));
     
     return onSnapshot(q, (snap) => {
       set({ transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)) });
-    });
+    }, (err) => console.error("Transactions sub error:", err));
   },
 
   initializeAuth: () => {
-    return onAuthStateChanged(auth, (user) => {
+    let unsubProfile: (() => void) | null = null;
+
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      // Se o utilizador sair, mata o listener do perfil anterior
+      if (unsubProfile) {
+        unsubProfile();
+        unsubProfile = null;
+      }
+
       if (user) {
-        onSnapshot(doc(db, 'users', user.uid), (d) => {
-          if (d.exists()) set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
+        set({ isLoading: true });
+        unsubProfile = onSnapshot(doc(db, 'users', user.uid), (d) => {
+          if (d.exists()) {
+            set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
+          } else {
+            set({ currentUser: null, isLoading: false, isInitialized: true });
+          }
+        }, (err) => {
+          console.error("Profile sub error:", err);
+          set({ isLoading: false, isInitialized: true });
         });
-      } else { 
-        set({ currentUser: null, isLoading: false, isInitialized: true }); 
+      } else {
+        set({ currentUser: null, isLoading: false, isInitialized: true });
       }
     });
+
+    return () => {
+      unsubAuth();
+      if (unsubProfile) unsubProfile();
+    };
   },
 
   deleteUserWithHistory: async (userId, role) => {
     try {
-      const field = role === 'merchant' ? 'merchantId' : 'clientId';
-      const q = query(collection(db, 'transactions'), where(field, '==', userId));
+      const q = query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId));
       const snap = await getDocs(q);
-
-      const batches = [];
-      let currentBatch = writeBatch(db);
-      let count = 0;
-
-      snap.docs.forEach((docSnap) => {
-        currentBatch.delete(docSnap.ref);
-        count++;
-        if (count === 490) {
-          batches.push(currentBatch.commit());
-          currentBatch = writeBatch(db);
-          count = 0;
-        }
-      });
-
-      currentBatch.delete(doc(db, 'users', userId));
-      batches.push(currentBatch.commit());
-
-      await Promise.all(batches); 
-      toast.success("DADOS E HISTÃ“RICO ELIMINADOS PERMANENTEMENTE.");
-    } catch (e) {
-      console.error(e);
-      toast.error("ERRO AO ELIMINAR CONTA.");
-      throw e;
-    }
+      const batch = writeBatch(db);
+      snap.docs.forEach(d => batch.delete(d.ref));
+      batch.delete(doc(db, 'users', userId));
+      await batch.commit();
+      toast.success("DADOS APAGADOS.");
+    } catch (e) { toast.error("ERRO."); }
   }
 }));
 
@@ -4157,7 +4493,6 @@ import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
 import ProfileSettings from './features/profile/ProfileSettings';
 
-// Componente para proteger as rotas (Verifica se estÃ¡ logado e se tem a permissÃ£o certa)
 const ProtectedRoute: React.FC<{ 
   children: React.ReactNode; 
   requiredRole?: 'admin' | 'merchant' | 'client' 
@@ -4166,11 +4501,8 @@ const ProtectedRoute: React.FC<{
 
   if (!isInitialized || isLoading) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-[#0f172a]">
-        <div className="w-12 h-12 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin mb-4"></div>
-        <div className="text-[#00d66f] font-black uppercase tracking-[0.3em] text-[10px]">
-          Validando Acesso Vizinho+ ...
-        </div>
+      <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
+        <div className="w-12 h-12 border-4 border-[#0a2540] border-t-[#00d66f] rounded-full animate-spin"></div>
       </div>
     );
   }
@@ -4178,13 +4510,12 @@ const ProtectedRoute: React.FC<{
   if (!currentUser) return <Navigate to="/login" replace />;
 
   if (requiredRole && currentUser.role !== requiredRole) {
-    return <Navigate to="/login" replace />;
+    return <Navigate to="/dashboard" replace />;
   }
 
   return <>{children}</>;
 };
 
-// Componente "Wrapper" para passar a funÃ§Ã£o de voltar atrÃ¡s ao ProfileSettings
 const SettingsWrapper = () => {
   const navigate = useNavigate();
   return <ProfileSettings onBack={() => navigate(-1)} />;
@@ -4193,68 +4524,49 @@ const SettingsWrapper = () => {
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
 
+  // 1. Inicializa o Auth UMA VEZ
   useEffect(() => {
-    const unsubscribe = initializeAuth();
-    return () => unsubscribe();
-  }, [initializeAuth]);
+    const unsub = initializeAuth();
+    return () => unsub();
+  }, []); // Sem dependÃªncias para nÃ£o repetir
 
+  // 2. Subscreve transaÃ§Ãµes APENAS quando o user ID estÃ¡ estÃ¡vel
   useEffect(() => {
-    let unsubscribeTrans: (() => void) | undefined;
-    if (currentUser) {
-      unsubscribeTrans = subscribeToTransactions(currentUser.role, currentUser.id);
+    if (currentUser?.id) {
+      const unsub = subscribeToTransactions(currentUser.role, currentUser.id);
+      return () => unsub();
     }
-    return () => { if (unsubscribeTrans) unsubscribeTrans(); };
-  }, [currentUser, subscribeToTransactions]);
+  }, [currentUser?.id, currentUser?.role]);
 
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc]">
-        {/* TOASTER ADICIONADO PARA NOTIFICAÃ‡Ã•ES BRUTALISTAS */}
-        <Toaster position="top-center" toastOptions={{
-          style: {
-            background: '#0a2540',
-            color: '#fff',
-            borderRadius: '15px',
-            border: '4px solid #00d66f',
-            fontFamily: 'Inter, sans-serif',
-            fontWeight: '900',
-            textTransform: 'uppercase',
-            fontSize: '10px'
-          }
-        }} />
-        
+        <Toaster position="top-center" />
         <Routes>
-          {/* Rotas PÃºblicas */}
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          
-          {/* Redirecionamento AutomÃ¡tico do Dashboard */}
-          <Route path="/dashboard" element={
-            currentUser ? (
-              currentUser.role === 'admin' ? <Navigate to="/admin" replace /> : 
-              currentUser.role === 'merchant' ? <Navigate to="/merchant" replace /> : 
-              <Navigate to="/client" replace />
-            ) : <Navigate to="/login" replace />
-          } />
-          
-          {/* Rotas Protegidas por Perfil */}
+          <Route path="/dashboard" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
           <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/merchant" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
           <Route path="/client" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
-          
-          {/* Rota Protegida Comum (DefiniÃ§Ãµes de Perfil) */}
           <Route path="/settings" element={<ProtectedRoute><SettingsWrapper /></ProtectedRoute>} />
-          
-          {/* Fallback para apanhar links perdidos */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </BrowserRouter>
   );
 }
+
+const DashboardRedirect = () => {
+  const { currentUser } = useStore();
+  if (!currentUser) return <Navigate to="/login" />;
+  if (currentUser.role === 'admin') return <Navigate to="/admin" />;
+  if (currentUser.role === 'merchant') return <Navigate to="/merchant" />;
+  return <Navigate to="/client" />;
+};
 
 export default App;
 

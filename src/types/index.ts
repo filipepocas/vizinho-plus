@@ -55,11 +55,12 @@ export interface User {
   uid?: string;
   email: string;
   role: UserRole;
-  isSuperAdmin?: boolean; // PROPRIEDADE ADICIONADA AQUI
+  isSuperAdmin?: boolean;
   status: UserStatus;
   name?: string;
+  responsibleName?: string; // NOVO: Nome do responsável (Lojista)
   nif?: string;
-  phone?: string;
+  phone?: string; // NOVO: Telefone
   customerNumber?: string;
   wallet?: {
     available: number;
@@ -103,4 +104,19 @@ export interface Transaction extends TransactionCore {
   createdAt: FirestoreTimestamp;
   maturedAt?: FirestoreTimestamp;
   clientNif?: string;
+}
+
+// NOVO: Interface para os pedidos de registo de comerciantes
+export interface MerchantRequest {
+  id?: string;
+  shopName: string;
+  responsibleName: string;
+  email: string;
+  phone: string;
+  nif: string;
+  category: string;
+  freguesia: string;
+  zipCode: string;
+  password?: string; // Usado apenas temporariamente para a criação
+  createdAt: any;
 }

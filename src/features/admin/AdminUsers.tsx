@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { User as UserProfile } from '../../types/index';
-import { Search, Users, Mail, Locate, Download } from 'lucide-react';
+import { Search, Users, Mail, Locate, Download, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -13,7 +13,6 @@ interface AdminUsersProps {
 const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // RESOLUÇÃO 3: Filtro super robusto. Lida com nulos e converte strings.
   const filteredUsers = users.filter(u => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase().trim();
@@ -34,11 +33,11 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
     }
   };
 
-  // RESOLUÇÃO 6: Exportar Vizinhos para Excel
   const exportToExcel = () => {
     const dataToExport = filteredUsers.map(u => ({
       Nome: u.name || '---',
       Email: u.email || '---',
+      Telefone: u.phone || '---', // NOVO: Exportação Telefone
       NIF: u.nif || '---',
       "Código Postal": u.zipCode || '---',
       "Data Adesão": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
@@ -53,22 +52,12 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
 
   return (
     <div className="space-y-8">
-      {/* BARRA DE PESQUISA INTELIGENTE E EXPORTAÇÃO */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative group flex-1">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-          <input 
-            type="text" 
-            placeholder="PESQUISAR POR NOME, NIF, EMAIL OU C. POSTAL..." 
-            className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <input type="text" placeholder="PESQUISAR POR NOME, NIF, EMAIL OU C. POSTAL..." className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        <button 
-            onClick={exportToExcel}
-            className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#00d66f] hover:bg-black transition-all flex items-center justify-center gap-3 border-2 border-[#00d66f]"
-        >
+        <button onClick={exportToExcel} className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#00d66f] hover:bg-black transition-all flex items-center justify-center gap-3 border-2 border-[#00d66f]">
             <Download size={20} /> Exportar
         </button>
       </div>
@@ -91,6 +80,12 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
                 <Mail size={14} className="text-[#00d66f]" />
                 <span className="text-[10px] font-bold truncate">{u.email}</span>
             </div>
+            {u.phone && (
+              <div className="flex items-center gap-3 text-slate-500">
+                  <Phone size={14} className="text-[#00d66f]" />
+                  <span className="text-[10px] font-bold truncate">{u.phone}</span>
+              </div>
+            )}
             <div className="flex items-center gap-3 text-slate-500">
                 <Locate size={14} className="text-[#00d66f]" />
                 <span className="text-[10px] font-bold uppercase">{u.zipCode || 'Sem C.Postal'}</span>

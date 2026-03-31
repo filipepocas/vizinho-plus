@@ -1,18 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { db, storage } from '../../config/firebase';
+import { db } from '../../config/firebase'; // Removemos a importação do storage!
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Image as ImageIcon, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const BannerManager: React.FC = () => {
   const [banners, setBanners] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // Em vez de "file", usamos "imageBase64" para guardar a imagem transformada
   const [formData, setFormData] = useState({
     title: '',
     startDate: '',
     endDate: '',
-    file: null as File | null
+    imageBase64: '' 
   });
 
   useEffect(() => {
@@ -22,46 +23,80 @@ const BannerManager: React.FC = () => {
     });
   }, []);
 
+  // ESTA É A MAGIA: Converte a imagem para Base64 e comprime para não pesar na Base de Dados
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Limita a largura a 1000 pixels (perfeito para Banners e super leve)
+        if (width > 1000) {
+          height = Math.round((height * 1000) / width);
+          width = 1000;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Comprime para formato JPEG com 70% de qualidade
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setFormData(prev => ({ ...prev, imageBase64: compressedBase64 }));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.file || !formData.startDate || !formData.endDate) {
-      toast.error("Preencha todos os campos e escolha uma imagem.");
+    if (!formData.imageBase64 || !formData.startDate || !formData.endDate) {
+      toast.error("Preencha todos os campos e escolha uma imagem válida.");
       return;
     }
 
     setUploading(true);
     try {
-      const storageRef = ref(storage, `banners/${Date.now()}_${formData.file.name}`);
-      await uploadBytes(storageRef, formData.file);
-      const url = await getDownloadURL(storageRef);
+      const startD = new Date(formData.startDate);
+      const endD = new Date(formData.endDate);
 
+      // Guardamos a imagem em formato de texto diretamente no Firestore!
       await addDoc(collection(db, 'banners'), {
         title: formData.title || 'Sem título',
-        imageUrl: url,
-        storagePath: storageRef.fullPath,
-        startDate: Timestamp.fromDate(new Date(formData.startDate)),
-        endDate: Timestamp.fromDate(new Date(formData.endDate)),
+        imageUrl: formData.imageBase64, // A imagem comprimida
+        startDate: Timestamp.fromDate(startD),
+        endDate: Timestamp.fromDate(endD),
         isActive: true,
         createdAt: serverTimestamp()
       });
 
       toast.success("Banner agendado com sucesso!");
-      setFormData({ title: '', startDate: '', endDate: '', file: null });
-    } catch (error) {
-      console.error(error);
-      toast.error("Erro ao carregar banner.");
+      setFormData({ title: '', startDate: '', endDate: '', imageBase64: '' });
+      
+      // Limpa o ficheiro selecionado no input visualmente
+      const fileInput = document.getElementById('bannerFileInput') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error: any) {
+      console.error("Erro:", error);
+      toast.error("Erro ao agendar banner. Tenta novamente.");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDelete = async (id: string, storagePath: string) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Eliminar este banner permanentemente?")) return;
     try {
-      if (storagePath) {
-        const fileRef = ref(storage, storagePath);
-        await deleteObject(fileRef);
-      }
+      // Como não usamos o Firebase Storage, só precisamos de apagar o documento na base de dados
       await deleteDoc(doc(db, 'banners', id));
       toast.success("Banner removido.");
     } catch (error) {
@@ -83,51 +118,30 @@ const BannerManager: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Título do Banner</label>
-              <input 
-                type="text" placeholder="EX: PROMOÇÃO DE PÁSCOA" 
-                className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]"
-                value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
-              />
+              <input type="text" placeholder="EX: PROMOÇÃO DE PÁSCOA" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
             </div>
             <div>
-              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Imagem (Recomendado: 1200x400px)</label>
-              <input 
-                type="file" accept="image/*" 
-                className="w-full p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-[10px]"
-                onChange={(e) => setFormData({...formData, file: e.target.files?.[0] || null})}
-              />
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Imagem (Carrega do teu PC/Telemóvel)</label>
+              <input id="bannerFileInput" type="file" accept="image/*" className="w-full p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-[10px]" onChange={handleFileChange} />
             </div>
           </div>
           
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-4">
                <div>
-                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
-                    <Calendar size={14} /> Data de Início
-                  </label>
-                  <input 
-                    type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"
-                    value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})}
-                  />
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2"><Calendar size={14} /> Data de Início</label>
+                  <input required type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
                </div>
                <div>
-                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
-                    <Clock size={14} /> Data de Fim
-                  </label>
-                  <input 
-                    type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"
-                    value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})}
-                  />
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2"><Clock size={14} /> Data de Fim</label>
+                  <input required type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
                </div>
             </div>
           </div>
         </div>
 
-        <button 
-          disabled={uploading}
-          className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1"
-        >
-          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Agendar Publicação
+        <button disabled={uploading} className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
+          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Agendar Publicação Gratuita
         </button>
       </form>
 
@@ -138,8 +152,8 @@ const BannerManager: React.FC = () => {
           
           return (
             <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] overflow-hidden relative group shadow-[8px_8px_0px_#0a2540]">
-              <div className="h-44 relative">
-                <img src={banner.imageUrl} className="w-full h-full object-cover" alt="" />
+              <div className="h-44 relative bg-slate-100 flex items-center justify-center">
+                <img src={banner.imageUrl} className="w-full h-full object-cover" alt="Banner" />
                 <div className={`absolute top-4 left-4 px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border-2 shadow-lg ${isLive ? 'bg-green-500 text-white border-white' : 'bg-slate-200 text-slate-500 border-white'}`}>
                   {isLive ? '● Live' : 'Agendado'}
                 </div>
@@ -150,10 +164,7 @@ const BannerManager: React.FC = () => {
                   <p>Início: {banner.startDate.toDate().toLocaleString()}</p>
                   <p>Fim: {banner.endDate.toDate().toLocaleString()}</p>
                 </div>
-                <button 
-                  onClick={() => handleDelete(banner.id, banner.storagePath)}
-                  className="mt-6 w-full py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2"
-                >
+                <button onClick={() => handleDelete(banner.id)} className="mt-6 w-full py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
                   <Trash2 size={14} /> Eliminar Banner
                 </button>
               </div>

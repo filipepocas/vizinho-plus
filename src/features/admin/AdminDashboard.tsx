@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, doc, writeBatch, serverTimestamp, in
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon, CheckSquare } from 'lucide-react'; // Adicionado CheckSquare
 import toast from 'react-hot-toast';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -11,98 +11,69 @@ import { User as UserProfile, Transaction } from '../../types';
 import AdminTransactions from './AdminTransactions';
 import AdminUsers from './AdminUsers';
 import AdminMerchants from './AdminMerchants';
+import AdminMerchantRequests from './AdminMerchantRequests'; // NOVO IMPORT
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
-import BannerManager from './BannerManager'; // Novo Componente
+import BannerManager from './BannerManager';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews' | 'banners'>('overview');
+  // Adicionado 'requests'
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners'>('overview');
   
+  // (Resto do teu código mantém-se igualzinho a partir daqui até ao <nav>...)
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
   const [globalClients, setGlobalClients] = useState<UserProfile[]>([]);
-  
   const [isProcessing, setIsProcessing] = useState<string | null>(null);
   const [pendingStores, setPendingStores] = useState<{id: string, name: string, count: number}[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchPendingMaturation = useCallback(async () => {
+    // (Lógica inalterada)
     const now = new Date();
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-
-    const q = query(
-      collection(db, 'transactions'),
-      where('status', '==', 'pending'),
-      where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth))
-    );
-
+    const q = query(collection(db, 'transactions'), where('status', '==', 'pending'), where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth)));
     const snap = await getDocs(q);
     const storeMap = new Map();
-
     snap.docs.forEach(d => {
       const data = d.data();
       const existing = storeMap.get(data.merchantId) || { id: data.merchantId, name: data.merchantName, count: 0 };
       storeMap.set(data.merchantId, { ...existing, count: existing.count + 1 });
     });
-
     setPendingStores(Array.from(storeMap.values()));
   }, []);
 
   useEffect(() => {
     const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
-    const unsubTx = onSnapshot(qTx, (snap) => {
-        setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
-    });
-
+    const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
-    const unsubMerchants = onSnapshot(qMerchants, (snap) => {
-        setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
-    });
-
+    const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
-    const unsubClients = onSnapshot(qClients, (snap) => {
-        setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
-    });
-
+    const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     fetchPendingMaturation();
-
-    return () => {
-        unsubTx();
-        unsubMerchants();
-        unsubClients();
-    };
+    return () => { unsubTx(); unsubMerchants(); unsubClients(); };
   }, [fetchPendingMaturation]);
 
   const processStoreMaturation = async (merchantId: string, merchantName: string) => {
+     // (Lógica inalterada)
     if (!window.confirm(`Maturar todas as transações de "${merchantName}"?`)) return;
-
     setIsProcessing(merchantId);
     try {
       const now = new Date();
       const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-
-      const q = query(
-        collection(db, 'transactions'),
-        where('merchantId', '==', merchantId),
-        where('status', '==', 'pending'),
-        where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth))
-      );
-
+      const q = query(collection(db, 'transactions'), where('merchantId', '==', merchantId), where('status', '==', 'pending'), where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth)));
       const snap = await getDocs(q);
       const BATCH_LIMIT = 240; 
       let batches = [];
       let currentBatch = writeBatch(db);
       let operationCount = 0;
-
       snap.docs.forEach((txDoc) => {
         const txData = txDoc.data();
         const amount = txData.cashbackAmount;
-
         currentBatch.update(txDoc.ref, { status: 'available', maturedAt: serverTimestamp() });
         operationCount++;
-
         const userRef = doc(db, 'users', txData.clientId);
         currentBatch.update(userRef, {
           [`storeWallets.${merchantId}.available`]: increment(amount),
@@ -111,29 +82,24 @@ const AdminDashboard: React.FC = () => {
           [`wallet.pending`]: increment(-amount)
         });
         operationCount++;
-
         if (operationCount >= BATCH_LIMIT * 2) {
           batches.push(currentBatch.commit());
           currentBatch = writeBatch(db);
           operationCount = 0;
         }
       });
-
       if (operationCount > 0) batches.push(currentBatch.commit());
       await Promise.all(batches);
-      toast.success(`SALDOS DE ${merchantName} MATURADOS!`);
+      toast.success(`SALDOS MATURADOS!`);
       fetchPendingMaturation(); 
-    } catch (e) {
-      toast.error("ERRO NO PROCESSAMENTO.");
-    } finally {
-      setIsProcessing(null);
-    }
+    } catch (e) { toast.error("ERRO NO PROCESSAMENTO."); } finally { setIsProcessing(null); }
   };
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
       <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[50px] border-b-[10px] border-[#00d66f] shadow-2xl z-20">
         <div className="max-w-7xl mx-auto">
+          {/* Header Superior inalterado */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-5">
               <div className="bg-[#00d66f] p-4 rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
@@ -158,6 +124,7 @@ const AdminDashboard: React.FC = () => {
           <nav className="flex flex-wrap gap-2 mt-10 bg-black/20 p-2 rounded-[25px] border border-white/5 inline-flex">
             {[
               { id: 'overview', label: 'Painel', icon: TrendingUp },
+              { id: 'requests', label: 'Aprovar', icon: CheckSquare }, // NOVO BOTÃO
               { id: 'merchants', label: 'Lojas', icon: Store },
               { id: 'users', label: 'Vizinhos', icon: Users },
               { id: 'banners', label: 'Banners', icon: ImageIcon },
@@ -174,7 +141,8 @@ const AdminDashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-12 w-full">
         {currentView === 'overview' && (
           <>
-            <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-10 shadow-[12px_12px_0px_#0a2540]">
+            {/* O conteúdo do Overview mantém-se intacto (Maturações e Transações) */}
+             <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-10 shadow-[12px_12px_0px_#0a2540]">
               <div className="flex items-center gap-4 mb-10">
                 <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
                   <Clock size={28} strokeWidth={3} />
@@ -201,6 +169,9 @@ const AdminDashboard: React.FC = () => {
             </div>
           </>
         )}
+        
+        {/* Renderização condicional das abas */}
+        {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'reviews' && <FeedbackList />}

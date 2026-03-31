@@ -3,13 +3,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, Mail, Lock, User, Hash, ArrowRight, MapPin, CheckCircle } from 'lucide-react';
+import { UserPlus, ArrowRight, Phone } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import toast from 'react-hot-toast';
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', nif: '', email: '', password: '', zipCode: '' });
-  const [acceptedTerms, setAcceptedTerms] = useState(false); // RGPD
+  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', password: '', zipCode: '' });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { checkNifExists } = useStore();
@@ -48,6 +48,7 @@ const RegisterPage: React.FC = () => {
         id: userCredential.user.uid,
         name: formData.name.trim(),
         nif: formData.nif,
+        phone: formData.phone.trim(), // NOVO CAMPO
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
         role: 'client',
@@ -67,7 +68,7 @@ const RegisterPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
-      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12">
+      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
         <div className="text-center mb-10">
           <div className="bg-[#0a2540] w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#00d66f]">
             <UserPlus size={32} className="text-[#00d66f]" />
@@ -92,9 +93,15 @@ const RegisterPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
-            <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
+              <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel <span className="text-[8px]">(Opcional)</span></label>
+              <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -102,7 +109,6 @@ const RegisterPage: React.FC = () => {
             <input type="password" minLength={6} required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
-          {/* CHECKBOX RGPD */}
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
             <input 
               type="checkbox" 
@@ -122,8 +128,8 @@ const RegisterPage: React.FC = () => {
           </button>
         </form>
 
-        <div className="mt-8 text-center">
-          <Link to="/login" className="text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540]">Já tenho conta. Quero entrar.</Link>
+        <div className="mt-8 text-center space-y-4">
+          <Link to="/login" className="block text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540]">Já tenho conta. Quero entrar.</Link>
         </div>
       </div>
     </div>
