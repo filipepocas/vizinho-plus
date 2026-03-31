@@ -3,25 +3,25 @@ import { collection, query, where, getDocs, doc, writeBatch, serverTimestamp, in
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon, CheckSquare } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon, CheckSquare, FileText } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { User as UserProfile, Transaction } from '../../types';
 
-// Componentes
 import AdminTransactions from './AdminTransactions';
 import AdminUsers from './AdminUsers';
 import AdminMerchants from './AdminMerchants';
 import AdminMerchantRequests from './AdminMerchantRequests'; 
-import AdminSettings from './AdminSettings'; // ADICIONADO AQUI
+import AdminSettings from './AdminSettings';
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
 import BannerManager from './BannerManager';
+import AdminLeaflets from './AdminLeaflets'; // NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  // Adicionado 'settings' ao currentView
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'settings'>('overview');
+  // Adicionado 'leaflets'
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -125,6 +125,7 @@ const AdminDashboard: React.FC = () => {
               { id: 'merchants', label: 'Lojas', icon: Store },
               { id: 'users', label: 'Vizinhos', icon: Users },
               { id: 'banners', label: 'Banners', icon: ImageIcon },
+              { id: 'leaflets', label: 'Folhetos', icon: FileText }, // ADICIONADO AQUI
               { id: 'reviews', label: 'Feedback', icon: MessageSquare },
             ].map(item => (
               <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-xl translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
@@ -171,6 +172,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'banners' && <BannerManager />}
+        {currentView === 'leaflets' && <AdminLeaflets />}
         {currentView === 'settings' && <AdminSettings />}
       </main>
 

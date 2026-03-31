@@ -4,14 +4,15 @@ import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Transaction, User as UserProfile } from '../../types';
+import { Transaction, User as UserProfile, Leaflet } from '../../types';
 
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck, Mail } from 'lucide-react';
+
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck, Mail, Sparkles } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
@@ -24,6 +25,9 @@ const UserDashboard: React.FC = () => {
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
+  
+  // FOLHETOS
+  const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -38,6 +42,7 @@ const UserDashboard: React.FC = () => {
     fetchData();
   }, []);
 
+  // Buscar Feedbacks
   useEffect(() => {
     if (!currentUser?.id) return;
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
@@ -45,6 +50,22 @@ const UserDashboard: React.FC = () => {
       setEvaluatedIds(snapshot.docs.map(doc => doc.data().transactionId));
     });
   }, [currentUser?.id]);
+
+  // Buscar Folhetos Ativos (Com link URL)
+  useEffect(() => {
+    const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
+    return onSnapshot(q, (snap) => {
+      const now = new Date();
+      const valid = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Leaflet))
+        .filter(l => {
+          const start = l.startDate.toDate();
+          const end = l.endDate.toDate();
+          return now >= start && now <= end;
+        });
+      setActiveLeaflets(valid);
+    });
+  }, []);
 
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
@@ -59,6 +80,12 @@ const UserDashboard: React.FC = () => {
   const handleLogout = async () => {
     await logout();
     navigate('/login');
+  };
+
+  const openLeaflet = () => {
+    if (activeLeaflets.length > 0) {
+      window.open(activeLeaflets[0].leafletUrl, '_blank');
+    }
   };
 
   if (!currentUser) return null;
@@ -88,6 +115,40 @@ const UserDashboard: React.FC = () => {
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
         <BannerCarousel />
+
+        {/* BOTÃO GRANDES OPORTUNIDADES COM CRACHÁ NOVO */}
+        <button 
+          onClick={openLeaflet}
+          disabled={activeLeaflets.length === 0}
+          className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${
+            activeLeaflets.length > 0 
+              ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' 
+              : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'
+          }`}
+        >
+          {activeLeaflets.length > 0 && (
+             <div className="absolute -top-3 -right-3 bg-red-500 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center font-black uppercase tracking-widest text-[9px] border-4 border-[#0a2540] animate-pulse rotate-12 shadow-xl z-20">
+               <Star size={12} fill="currentColor" className="mb-0.5" /> Novo
+             </div>
+          )}
+          
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="bg-[#0a2540] p-3 rounded-2xl">
+              <Sparkles size={32} className="text-[#00d66f]" />
+            </div>
+            <div className="text-left">
+              <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter text-[#0a2540]">
+                Grandes Oportunidades
+              </h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#0a2540] opacity-70 mt-1">
+                {activeLeaflets.length > 0 ? 'Toca para ver folheto' : 'Sem folhetos ativos no momento'}
+              </p>
+            </div>
+          </div>
+          {activeLeaflets.length > 0 && (
+            <ExternalLink size={20} className="text-[#0a2540] opacity-50 relative z-10" />
+          )}
+        </button>
 
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
@@ -196,7 +257,6 @@ const UserDashboard: React.FC = () => {
 
       <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
         
-        {/* BOTÃO PARA ENTRAR EM CONTACTO COM O ADMIN */}
         <a 
           href={`mailto:${sysConfig.supportEmail}`} 
           className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all"

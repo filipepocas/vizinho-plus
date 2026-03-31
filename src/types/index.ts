@@ -114,9 +114,19 @@ export interface MerchantRequest {
   phone: string;
   nif: string;
   category: string;
-  cashbackPercent?: string | number; // NOVO CAMPO: Percentagem pretendida
+  cashbackPercent?: string | number;
   freguesia: string;
   zipCode: string;
   password?: string; 
   createdAt: any;
+}
+
+export interface Leaflet {
+  id?: string;
+  title: string;
+  leafletUrl: string; // NOVO: Alterado de pdfBase64 para um link URL
+  startDate: FirestoreTimestamp;
+  endDate: FirestoreTimestamp;
+  isActive: boolean;
+  createdAt: FirestoreTimestamp;
 }
