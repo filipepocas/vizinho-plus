@@ -35,20 +35,26 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
+      // 1. PRIMEIRO: AUTENTICA O UTILIZADOR NO AUTH
+      // (Necessário para as regras do Firebase permitirem verificar o NIF a seguir)
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
+      
+      // 2. SEGUNDO: COM A SESSÃO INICIADA, VERIFICA SE O NIF JÁ EXISTE
       const nifExists = await checkNifExists(formData.nif);
       if (nifExists) {
+        // Se o NIF já existe, elimina imediatamente a conta que acabou de criar no Auth
+        await userCredential.user.delete();
         toast.error("ESTE NIF JÁ ESTÁ REGISTADO.");
         setLoading(false);
         return;
       }
 
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      
+      // 3. TERCEIRO: O NIF É VÁLIDO, CRIA O PERFIL NA BASE DE DADOS FIRESTORE
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
         nif: formData.nif,
-        phone: formData.phone.trim(), // NOVO CAMPO
+        phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
         role: 'client',
@@ -59,8 +65,14 @@ const RegisterPage: React.FC = () => {
 
       toast.success("BEM-VINDO VIZINHO!");
       navigate('/dashboard');
+      
     } catch (err: any) {
-      toast.error("ERRO AO CRIAR CONTA.");
+      if (err.code === 'auth/email-already-in-use') {
+        toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
+      } else {
+        toast.error("ERRO AO CRIAR CONTA.");
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }
