@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { db, provisionAuth } from '../../config/firebase';
 import { collection, query, onSnapshot, doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { CheckCircle2, XCircle, Store, Mail, Phone, MapPin, Hash, Loader2, AlertCircle } from 'lucide-react';
+import { CheckCircle2, XCircle, Store, Mail, Phone, MapPin, Hash, Loader2, AlertCircle, Percent, Tag } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MerchantRequest } from '../../types';
 
@@ -19,13 +19,11 @@ const AdminMerchantRequests: React.FC = () => {
   }, []);
 
   const handleApprove = async (req: MerchantRequest) => {
-    if (!window.confirm(`Aprovar a loja ${req.shopName} e criar conta?`)) return;
+    if (!window.confirm(`Aprovar a loja ${req.shopName} e criar conta com ${req.cashbackPercent}% de cashback?`)) return;
     setLoadingId(req.id!);
     try {
-      // 1. Cria a conta no Firebase Auth com a password escolhida no pedido
       const userCredential = await createUserWithEmailAndPassword(provisionAuth, req.email.trim(), req.password || 'Mudar1234!');
       
-      // 2. Salva o perfil do lojista nos "users"
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: req.shopName.trim(),
@@ -37,14 +35,13 @@ const AdminMerchantRequests: React.FC = () => {
         role: 'merchant',
         status: 'active',
         category: req.category,
-        cashbackPercent: 5, // Padrão 5%, o lojista altera depois
+        cashbackPercent: Number(req.cashbackPercent) || 5, // Usa o que o Lojista pediu
         freguesia: req.freguesia.trim(),
         zipCode: req.zipCode.trim(),
         wallet: { available: 0, pending: 0 },
         createdAt: serverTimestamp()
       });
 
-      // 3. Elimina o pedido
       await deleteDoc(doc(db, 'merchant_requests', req.id!));
       toast.success('Lojista aprovado e conta criada com sucesso!');
     } catch (err: any) {
@@ -91,6 +88,9 @@ const AdminMerchantRequests: React.FC = () => {
               </div>
 
               <div className="space-y-3 mb-8 bg-slate-50 p-6 rounded-3xl border-2 border-slate-100">
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Tag size={16} className="text-[#00d66f]" /> Categoria: {req.category}</div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Percent size={16} className="text-[#00d66f]" /> Cashback Desejado: {req.cashbackPercent}%</div>
+                <div className="my-2 border-b border-slate-200"></div>
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Mail size={16} className="text-[#00d66f]" /> {req.email}</div>
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Phone size={16} className="text-[#00d66f]" /> {req.phone}</div>
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Hash size={16} className="text-[#00d66f]" /> NIF: {req.nif}</div>
@@ -99,7 +99,7 @@ const AdminMerchantRequests: React.FC = () => {
 
               <div className="flex gap-4">
                 <button onClick={() => handleApprove(req)} disabled={loadingId === req.id} className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]">
-                  {loadingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle2 size={16} strokeWidth={3} /> Aprovar</>}
+                  {loadingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle2 size={16} strokeWidth={3} /> Aprovar Lojista</>}
                 </button>
                 <button onClick={() => handleReject(req.id!)} disabled={loadingId === req.id} className="px-6 bg-white text-red-500 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-50 shadow-sm border-2 border-red-200 transition-all flex items-center justify-center gap-2">
                    <XCircle size={16} strokeWidth={3} /> Rejeitar

@@ -58,9 +58,9 @@ export interface User {
   isSuperAdmin?: boolean;
   status: UserStatus;
   name?: string;
-  responsibleName?: string; // NOVO: Nome do responsável (Lojista)
+  responsibleName?: string; 
   nif?: string;
-  phone?: string; // NOVO: Telefone
+  phone?: string; 
   customerNumber?: string;
   wallet?: {
     available: number;
@@ -106,7 +106,6 @@ export interface Transaction extends TransactionCore {
   clientNif?: string;
 }
 
-// NOVO: Interface para os pedidos de registo de comerciantes
 export interface MerchantRequest {
   id?: string;
   shopName: string;
@@ -115,8 +114,9 @@ export interface MerchantRequest {
   phone: string;
   nif: string;
   category: string;
+  cashbackPercent?: string | number; // NOVO CAMPO: Percentagem pretendida
   freguesia: string;
   zipCode: string;
-  password?: string; // Usado apenas temporariamente para a criação
+  password?: string; 
   createdAt: any;
 }

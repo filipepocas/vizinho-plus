@@ -3,7 +3,7 @@ import { collection, query, where, getDocs, doc, writeBatch, serverTimestamp, in
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon, CheckSquare } from 'lucide-react'; // Adicionado CheckSquare
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon, CheckSquare } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -11,7 +11,8 @@ import { User as UserProfile, Transaction } from '../../types';
 import AdminTransactions from './AdminTransactions';
 import AdminUsers from './AdminUsers';
 import AdminMerchants from './AdminMerchants';
-import AdminMerchantRequests from './AdminMerchantRequests'; // NOVO IMPORT
+import AdminMerchantRequests from './AdminMerchantRequests'; 
+import AdminSettings from './AdminSettings'; // ADICIONADO AQUI
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
 import BannerManager from './BannerManager';
@@ -19,10 +20,9 @@ import BannerManager from './BannerManager';
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  // Adicionado 'requests'
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners'>('overview');
+  // Adicionado 'settings' ao currentView
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'settings'>('overview');
   
-  // (Resto do teu código mantém-se igualzinho a partir daqui até ao <nav>...)
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
   const [globalClients, setGlobalClients] = useState<UserProfile[]>([]);
@@ -31,7 +31,6 @@ const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchPendingMaturation = useCallback(async () => {
-    // (Lógica inalterada)
     const now = new Date();
     const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
     const q = query(collection(db, 'transactions'), where('status', '==', 'pending'), where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth)));
@@ -57,7 +56,6 @@ const AdminDashboard: React.FC = () => {
   }, [fetchPendingMaturation]);
 
   const processStoreMaturation = async (merchantId: string, merchantName: string) => {
-     // (Lógica inalterada)
     if (!window.confirm(`Maturar todas as transações de "${merchantName}"?`)) return;
     setIsProcessing(merchantId);
     try {
@@ -99,7 +97,6 @@ const AdminDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
       <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[50px] border-b-[10px] border-[#00d66f] shadow-2xl z-20">
         <div className="max-w-7xl mx-auto">
-          {/* Header Superior inalterado */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-6">
             <div className="flex items-center gap-5">
               <div className="bg-[#00d66f] p-4 rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
@@ -112,7 +109,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="flex gap-4">
-              <button onClick={() => navigate('/settings')} className="px-6 py-4 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-white/10">
+              <button onClick={() => setCurrentView('settings')} className="px-6 py-4 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-white/10">
                 <Settings size={20} /> Master
               </button>
               <button onClick={async () => { await logout(); navigate('/login'); }} className="px-6 py-4 bg-red-500/10 rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
@@ -124,7 +121,7 @@ const AdminDashboard: React.FC = () => {
           <nav className="flex flex-wrap gap-2 mt-10 bg-black/20 p-2 rounded-[25px] border border-white/5 inline-flex">
             {[
               { id: 'overview', label: 'Painel', icon: TrendingUp },
-              { id: 'requests', label: 'Aprovar', icon: CheckSquare }, // NOVO BOTÃO
+              { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
               { id: 'merchants', label: 'Lojas', icon: Store },
               { id: 'users', label: 'Vizinhos', icon: Users },
               { id: 'banners', label: 'Banners', icon: ImageIcon },
@@ -141,7 +138,6 @@ const AdminDashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-12 w-full">
         {currentView === 'overview' && (
           <>
-            {/* O conteúdo do Overview mantém-se intacto (Maturações e Transações) */}
              <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-10 shadow-[12px_12px_0px_#0a2540]">
               <div className="flex items-center gap-4 mb-10">
                 <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
@@ -170,12 +166,12 @@ const AdminDashboard: React.FC = () => {
           </>
         )}
         
-        {/* Renderização condicional das abas */}
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'banners' && <BannerManager />}
+        {currentView === 'settings' && <AdminSettings />}
       </main>
 
       <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />

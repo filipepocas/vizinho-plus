@@ -3,9 +3,19 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2, Store, X, User, Phone, MapPin, Hash, Tag } from 'lucide-react';
+import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2, Store, X, User, Phone, MapPin, Hash, Tag, Percent } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import toast from 'react-hot-toast';
+
+const MERCH_CATEGORIES = [
+  "Restauração & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
+  "Padarias & Pastelarias", "Moda & Acessórios", "Saúde & Farmácias",
+  "Beleza & Cabeleireiros", "Oficinas & Automóveis", "Construção & Bricolage",
+  "Artigos para Casa & Decoração", "Papelarias & Livrarias", "Floristas & Jardinagem",
+  "Petshops & Veterinários", "Tecnologia & Informática", "Desporto & Lazer",
+  "Ópticas", "Ourivesarias & Relojoarias", "Lavandarias & Engomadoria",
+  "Sapateiros & Reparações", "Educação & Centros de Explicações", "Outros"
+];
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
@@ -13,10 +23,9 @@ const LoginPage: React.FC = () => {
   const [error, setError] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
   
-  // Modal de Comerciante
   const [showMerchantModal, setShowMerchantModal] = useState(false);
   const [merchantData, setMerchantData] = useState({
-    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', zipCode: '', freguesia: '', pass: ''
+    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: '', pass: ''
   });
   const [submittingMerchant, setSubmittingMerchant] = useState(false);
 
@@ -45,6 +54,11 @@ const LoginPage: React.FC = () => {
 
   const handleMerchantRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!merchantData.category) {
+      toast.error('Por favor, selecione um setor de atividade.');
+      return;
+    }
+
     setSubmittingMerchant(true);
     try {
       await addDoc(collection(db, 'merchant_requests'), {
@@ -54,7 +68,7 @@ const LoginPage: React.FC = () => {
       });
       toast.success('Pedido enviado! Aguarde contacto da nossa equipa.');
       setShowMerchantModal(false);
-      setMerchantData({ shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', zipCode: '', freguesia: '', pass: '' });
+      setMerchantData({ shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: '', pass: '' });
     } catch (err) {
       toast.error('Erro ao enviar pedido. Tente novamente.');
     } finally {
@@ -100,7 +114,6 @@ const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* LINKS FALTANTES ADICIONADOS AQUI */}
         <div className="mt-8 flex flex-col items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
             <Link to="/register" className="text-[#00d66f] hover:text-[#00b05b] bg-[#00d66f]/10 px-6 py-3 rounded-xl w-full text-center border border-[#00d66f]/20">Criar Nova Conta (Cliente)</Link>
             <Link to="/forgot-password" className="hover:text-[#0a2540] underline">Esqueci-me da Password</Link>
@@ -109,7 +122,6 @@ const LoginPage: React.FC = () => {
         </div>
       </div>
 
-      {/* MODAL DE PEDIDO DE COMERCIANTE */}
       {showMerchantModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-8">
@@ -174,7 +186,10 @@ const LoginPage: React.FC = () => {
                   <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label>
                   <div className="relative">
                     <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                    <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" placeholder="Ex: Restauração, Moda..." value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})} />
+                    <select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}>
+                      <option value="">SELECIONE O SETOR...</option>
+                      {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+                    </select>
                   </div>
                 </div>
               </div>
@@ -188,7 +203,7 @@ const LoginPage: React.FC = () => {
                   </div>
                 </div>
                 <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Cód. Postal</label>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Código Postal</label>
                   <input required maxLength={8} placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.zipCode} onChange={e => {
                       let val = e.target.value.replace(/\D/g, '');
                       if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
@@ -197,11 +212,20 @@ const LoginPage: React.FC = () => {
                 </div>
               </div>
               
-              <div>
-                 <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Defina uma Password de Acesso</label>
-                 <div className="relative">
-                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                    <input required type="password" minLength={6} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.pass} onChange={e => setMerchantData({...merchantData, pass: e.target.value})} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Defina uma Password</label>
+                    <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                        <input required type="password" minLength={6} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.pass} onChange={e => setMerchantData({...merchantData, pass: e.target.value})} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">% Cashback Pretendido</label>
+                    <div className="relative">
+                        <Percent className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                        <input required type="number" min="0" max="100" step="0.1" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.cashbackPercent} onChange={e => setMerchantData({...merchantData, cashbackPercent: e.target.value})} />
+                    </div>
                   </div>
               </div>
 

@@ -6,13 +6,12 @@ import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'fire
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile } from '../../types';
 
-// Componentes
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
-import BannerCarousel from './components/BannerCarousel'; // Novo Componente
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck } from 'lucide-react';
+import BannerCarousel from './components/BannerCarousel';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck, Mail } from 'lucide-react';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
@@ -88,10 +87,8 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
-        {/* CARROSSEL DE BANNERS AGENDADO */}
         <BannerCarousel />
 
-        {/* CARTÃO DIGITAL VIZINHO+ */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
                 Cartão Digital
@@ -113,7 +110,6 @@ const UserDashboard: React.FC = () => {
             </div>
         </div>
 
-        {/* BLOCO DE SALDOS */}
         <div className="bg-[#0a2540] rounded-[40px] p-8 text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10 space-y-6">
             <div>
@@ -198,8 +194,17 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      <footer className="py-12 flex flex-col items-center gap-4">
-        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540]">
+      <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
+        
+        {/* BOTÃO PARA ENTRAR EM CONTACTO COM O ADMIN */}
+        <a 
+          href={`mailto:${sysConfig.supportEmail}`} 
+          className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all"
+        >
+            <Mail size={16} className="text-[#00d66f]" /> Entrar em Contacto
+        </a>
+
+        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] mt-4">
             <ShieldCheck size={14} /> Termos e Privacidade
         </button>
         <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700">
