@@ -4,7 +4,7 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings, History, Save, X } from 'lucide-react';
 
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
@@ -12,10 +12,10 @@ import BusinessIntelligence from './components/BusinessIntelligence';
 import MerchantSettings from './components/MerchantSettings';
 
 const MerchantDashboard: React.FC = () => {
-  const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
+  const { currentUser, transactions, addTransaction, updateTransactionDocument, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
-  const [view, setView] = useState<'terminal' | 'bi' | 'settings'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -27,6 +27,14 @@ const MerchantDashboard: React.FC = () => {
   
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
+
+  // Modal Pós-Transação (Para pedir fatura opcional)
+  const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
+  const [postInvoiceNum, setPostInvoiceNum] = useState('');
+
+  // Edição no Histórico
+  const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
+  const [editingInvoiceVal, setEditingInvoiceVal] = useState('');
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
@@ -61,28 +69,19 @@ const MerchantDashboard: React.FC = () => {
     }
   }, [currentUser?.id, subscribeToTransactions]);
 
-  const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
+  const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const invoiceVal = parseFloat(amount);
     
-    // CORREÇÃO AQUI: Adicionado !currentUser para garantir que o utilizador existe
-    if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0 || !documentNumber) {
-      alert("Preencha o valor e o número da fatura corretamente.");
+    if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0) {
+      alert("Preencha o valor da nova compra corretamente.");
       return;
     }
 
     let valToProcess = invoiceVal;
 
-    // APLICAÇÃO DA REGRA DE REDEEM (DESCONTO MÁXIMO 50%)
     if (type === 'redeem') {
-      // Como já garantimos acima que currentUser não é null, agora é 100% seguro ler currentUser.id
-      const clientBalance = foundClient.storeWallets?.[currentUser.id]?.available || 0;
-      const maxDiscount = invoiceVal * 0.5;
-      valToProcess = Math.min(clientBalance, maxDiscount);
-
-      if (valToProcess <= 0) {
-        alert("O cliente não tem saldo suficiente para descontar.");
-        return;
-      }
+      if (!redeemAmount || redeemAmount <= 0) return;
+      valToProcess = redeemAmount; // Usa exatamente o valor que o Comerciante digitou
     }
 
     setPendingAction({ type, val: valToProcess });
@@ -94,22 +93,43 @@ const MerchantDashboard: React.FC = () => {
     setShowConfirmModal(false);
     setIsLoading(true);
     try {
-      await addTransaction({
+      const newTxId = await addTransaction({
         clientId: foundClient.id,
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
-        amount: pendingAction.val, // Se for redeem, este é o valor já cortado aos 50%
+        amount: pendingAction.val,
         type: pendingAction.type,
-        documentNumber: documentNumber
+        documentNumber: documentNumber // Opcional
       });
-      setMessage({ type: 'success', text: "Operação registada com sucesso!" });
-      setAmount(''); setDocumentNumber(''); setCardNumber('');
+      
+      // Abre o modal de sucesso com opção de adicionar fatura se faltar
+      setPostTxModal({ 
+        isOpen: true, 
+        txId: newTxId || '', 
+        needsInvoice: !documentNumber.trim() 
+      });
+
+      setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
     } catch (e) {
       setMessage({ type: 'error', text: "Erro ao registar." });
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     } finally {
       setIsLoading(false);
-      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     }
+  };
+
+  const savePostInvoice = async () => {
+    if (postTxModal.txId && postInvoiceNum.trim()) {
+      await updateTransactionDocument(postTxModal.txId, postInvoiceNum);
+    }
+    setPostTxModal({ isOpen: false, txId: '', needsInvoice: false });
+    setPostInvoiceNum('');
+  };
+
+  const handleUpdateHistoryInvoice = async (id: string) => {
+    if (!editingInvoiceVal.trim()) return;
+    await updateTransactionDocument(id, editingInvoiceVal);
+    setEditingInvoiceId(null);
   };
 
   if (!currentUser) return null;
@@ -124,6 +144,7 @@ const MerchantDashboard: React.FC = () => {
         
         <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-md">
           <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><LayoutDashboard size={16} /> Terminal</button>
+          <button onClick={() => setView('history')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'history' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><History size={16} /> Histórico</button>
           <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BarChart3 size={16} /> Business Intelligence</button>
           <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}><Settings size={16} /> Definições</button>
           <button onClick={async () => { await logout(); navigate('/login'); }} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all"><LogOut size={20} /></button>
@@ -146,23 +167,76 @@ const MerchantDashboard: React.FC = () => {
           />
         )}
 
+        {view === 'history' && (
+            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] animate-in fade-in">
+                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Últimos Movimentos (60 dias)</h3>
+                <div className="overflow-x-auto">
+                    <table className="w-full text-left min-w-[600px]">
+                        <thead>
+                            <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                                <th className="p-4 rounded-l-2xl">Data</th>
+                                <th className="p-4">Tipo</th>
+                                <th className="p-4">Valor Base</th>
+                                <th className="p-4">Movimento</th>
+                                <th className="p-4 rounded-r-2xl text-center">Nº Fatura / Recibo</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {transactions.map(t => (
+                                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                                    <td className="p-4 text-xs font-bold text-slate-600">{t.createdAt?.toDate ? t.createdAt.toDate().toLocaleString() : 'Recente'}</td>
+                                    <td className="p-4 text-[10px] font-black uppercase tracking-widest">
+                                        <span className={`px-2 py-1 rounded-md ${t.type === 'earn' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                            {t.type === 'earn' ? 'Atribuição' : 'Desconto'}
+                                        </span>
+                                    </td>
+                                    <td className="p-4 font-black">{formatCurrency(t.amount)}</td>
+                                    <td className={`p-4 font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-blue-500'}`}>
+                                        {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.type === 'earn' ? t.cashbackAmount : t.amount)}
+                                    </td>
+                                    <td className="p-4">
+                                        {editingInvoiceId === t.id ? (
+                                            <div className="flex gap-2">
+                                                <input 
+                                                    type="text" value={editingInvoiceVal} onChange={e=>setEditingInvoiceVal(e.target.value.toUpperCase())}
+                                                    className="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-1 text-xs font-bold outline-none focus:border-[#00d66f]" 
+                                                    placeholder="Nº Fatura"
+                                                />
+                                                <button onClick={() => handleUpdateHistoryInvoice(t.id)} className="bg-[#0a2540] text-[#00d66f] px-3 rounded-lg"><Save size={14}/></button>
+                                                <button onClick={() => setEditingInvoiceId(null)} className="bg-slate-100 text-slate-500 px-3 rounded-lg"><X size={14}/></button>
+                                            </div>
+                                        ) : (
+                                            <div className="flex justify-center items-center gap-3">
+                                                <span className={`text-xs font-bold ${t.documentNumber ? 'text-slate-600' : 'text-red-400 italic'}`}>
+                                                    {t.documentNumber || 'Falta Fatura'}
+                                                </span>
+                                                <button onClick={() => { setEditingInvoiceId(t.id); setEditingInvoiceVal(t.documentNumber || ''); }} className="text-slate-400 hover:text-[#00d66f] transition-colors"><Settings size={14}/></button>
+                                            </div>
+                                        )}
+                                    </td>
+                                </tr>
+                            ))}
+                            {transactions.length === 0 && (
+                                <tr><td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-bold uppercase">Nenhum movimento recente.</td></tr>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        )}
+
         {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
-        {message.text && view === 'terminal' && (
-          <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-bounce shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
-            {message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
-            {message.text}
-          </div>
-        )}
       </main>
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
 
+      {/* CONFIRMAÇÃO DE TRANSAÇÃO */}
       {showConfirmModal && pendingAction && (
         <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl border-4 border-[#0f172a] animate-in zoom-in">
-            <div className={`p-8 text-center ${pendingAction.type === 'earn' ? 'bg-[#00d66f]' : 'bg-red-500'} text-[#0f172a]`}>
+            <div className={`p-8 text-center ${pendingAction.type === 'earn' ? 'bg-[#00d66f]' : 'bg-blue-500 text-white'} text-[#0f172a]`}>
               <AlertTriangle size={48} className="mx-auto mb-4" />
               <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar Operação?</h3>
               <p className="font-bold text-[10px] uppercase opacity-70 mt-2">{foundClient?.name}</p>
@@ -177,11 +251,46 @@ const MerchantDashboard: React.FC = () => {
             </div>
             <div className="p-8 grid grid-cols-2 gap-4">
               <button onClick={() => setShowConfirmModal(false)} className="py-4 bg-slate-100 rounded-2xl font-black uppercase text-[10px] text-slate-400">Cancelar</button>
-              <button onClick={handleConfirm} className="py-4 bg-[#00d66f] rounded-2xl font-black uppercase text-[10px] text-[#0a2540] shadow-lg">Confirmar</button>
+              <button onClick={handleConfirm} className="py-4 bg-[#0a2540] rounded-2xl font-black uppercase text-[10px] text-[#00d66f] shadow-lg">Confirmar</button>
             </div>
           </div>
         </div>
       )}
+
+      {/* MODAL DE SUCESSO E PEDIDO DE FATURA */}
+      {postTxModal.isOpen && (
+        <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
+            <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl border-4 border-[#0a2540] animate-in zoom-in">
+                <div className="p-8 text-center bg-[#00d66f] text-[#0a2540] flex flex-col items-center">
+                    <CheckCircle2 size={56} className="mb-4" />
+                    <h3 className="text-2xl font-black uppercase italic tracking-tighter">Concluído!</h3>
+                    <p className="font-bold text-[10px] uppercase mt-2 opacity-80">A transação foi validada e registada no sistema.</p>
+                </div>
+                <div className="p-8 bg-white">
+                    {postTxModal.needsInvoice ? (
+                        <div className="space-y-4 text-center">
+                            <p className="text-xs font-bold text-slate-500">Para um melhor controlo, é recomendado associar um número de Fatura ou Recibo a esta transação.</p>
+                            <input 
+                                type="text" value={postInvoiceNum} onChange={e => setPostInvoiceNum(e.target.value.toUpperCase())}
+                                placeholder="Insira o nº da Fatura (Opcional)"
+                                className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-center font-black uppercase outline-none focus:border-[#00d66f]" 
+                            />
+                            <div className="flex gap-4 pt-4">
+                                <button onClick={() => setPostTxModal({isOpen: false, txId:'', needsInvoice: false})} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px]">Fechar</button>
+                                <button onClick={savePostInvoice} disabled={!postInvoiceNum.trim()} className="flex-1 py-4 bg-[#0a2540] text-[#00d66f] rounded-2xl font-black uppercase text-[10px] disabled:opacity-50">Guardar Fatura</button>
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="text-center pt-2">
+                            <p className="text-sm font-bold text-slate-500 mb-6">A fatura já está registada no movimento.</p>
+                            <button onClick={() => setPostTxModal({isOpen: false, txId:'', needsInvoice: false})} className="w-full py-5 bg-[#0a2540] text-white rounded-3xl font-black uppercase tracking-widest text-[11px]">Fechar Aviso</button>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+      )}
+
     </div>
   );
 };

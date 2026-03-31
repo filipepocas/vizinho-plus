@@ -2,13 +2,17 @@ import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useStore } from '../../../store/useStore';
 
 const BannerCarousel: React.FC = () => {
+  const { currentUser } = useStore();
   const [activeBanners, setActiveBanners] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
   useEffect(() => {
-    // Busca banners ativos
+    if (!currentUser) return;
+    const userZipBase = currentUser.zipCode?.substring(0, 4);
+
     const q = query(collection(db, 'banners'), where('isActive', '==', true));
     
     const unsubscribe = onSnapshot(q, (snap) => {
@@ -16,24 +20,26 @@ const BannerCarousel: React.FC = () => {
       const valid = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter((b: any) => {
+          // Verifica se está na data
           const start = b.startDate.toDate();
           const end = b.endDate.toDate();
-          return now >= start && now <= end;
+          const isTimeValid = now >= start && now <= end;
+          
+          // Verifica Código Postal com operador de segurança
+          const hasTargetZips = b.targetZipCodes && b.targetZipCodes.length > 0;
+          const isZipValid = !hasTargetZips || (userZipBase && b.targetZipCodes?.includes(userZipBase));
+
+          return isTimeValid && isZipValid;
         });
       setActiveBanners(valid);
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [currentUser]);
 
-  // Rotação automática a cada 6 segundos
   useEffect(() => {
     if (activeBanners.length <= 1) return;
-    
-    const timer = setInterval(() => {
-      setCurrentIndex((prev) => (prev + 1) % activeBanners.length);
-    }, 6000);
-
+    const timer = setInterval(() => setCurrentIndex((prev) => (prev + 1) % activeBanners.length), 6000);
     return () => clearInterval(timer);
   }, [activeBanners]);
 
@@ -53,10 +59,8 @@ const BannerCarousel: React.FC = () => {
         />
       </AnimatePresence>
 
-      {/* Overlay de degradê para legibilidade (se necessário) */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
 
-      {/* Indicadores Brutalistas */}
       {activeBanners.length > 1 && (
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
           {activeBanners.map((_, idx) => (

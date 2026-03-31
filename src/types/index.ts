@@ -124,9 +124,10 @@ export interface MerchantRequest {
 export interface Leaflet {
   id?: string;
   title: string;
-  leafletUrl: string; // NOVO: Alterado de pdfBase64 para um link URL
+  leafletUrl: string;
   startDate: FirestoreTimestamp;
   endDate: FirestoreTimestamp;
   isActive: boolean;
+  targetZipCodes?: string[]; // NOVO
   createdAt: FirestoreTimestamp;
 }

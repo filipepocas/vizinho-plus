@@ -409,137 +409,46 @@ export default app;
 ==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminDashboard.tsx
 ==================================================
-import React, { useState, useEffect, useCallback } from 'react';
-import { collection, query, where, getDocs, doc, writeBatch, serverTimestamp, increment, Timestamp, onSnapshot, orderBy } from 'firebase/firestore';
+import React, { useState, useEffect } from 'react';
+import { collection, query, where, onSnapshot, orderBy, doc, writeBatch } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, Clock, RefreshCw, MessageSquare, Image as ImageIcon } from 'lucide-react';
-import toast from 'react-hot-toast';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
-// Componentes
 import AdminTransactions from './AdminTransactions';
 import AdminUsers from './AdminUsers';
 import AdminMerchants from './AdminMerchants';
+import AdminMerchantRequests from './AdminMerchantRequests'; 
+import AdminSettings from './AdminSettings';
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
-import BannerManager from './BannerManager'; // Novo Componente
+import BannerManager from './BannerManager';
+import AdminLeaflets from './AdminLeaflets';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'users' | 'reviews' | 'banners'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
   const [globalClients, setGlobalClients] = useState<UserProfile[]>([]);
-  
-  const [isProcessing, setIsProcessing] = useState<string | null>(null);
-  const [pendingStores, setPendingStores] = useState<{id: string, name: string, count: number}[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
-
-  const fetchPendingMaturation = useCallback(async () => {
-    const now = new Date();
-    const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-
-    const q = query(
-      collection(db, 'transactions'),
-      where('status', '==', 'pending'),
-      where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth))
-    );
-
-    const snap = await getDocs(q);
-    const storeMap = new Map();
-
-    snap.docs.forEach(d => {
-      const data = d.data();
-      const existing = storeMap.get(data.merchantId) || { id: data.merchantId, name: data.merchantName, count: 0 };
-      storeMap.set(data.merchantId, { ...existing, count: existing.count + 1 });
-    });
-
-    setPendingStores(Array.from(storeMap.values()));
-  }, []);
 
   useEffect(() => {
     const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
-    const unsubTx = onSnapshot(qTx, (snap) => {
-        setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
-    });
-
+    const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
+    
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
-    const unsubMerchants = onSnapshot(qMerchants, (snap) => {
-        setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
-    });
-
+    const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
+    
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
-    const unsubClients = onSnapshot(qClients, (snap) => {
-        setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
-    });
-
-    fetchPendingMaturation();
-
-    return () => {
-        unsubTx();
-        unsubMerchants();
-        unsubClients();
-    };
-  }, [fetchPendingMaturation]);
-
-  const processStoreMaturation = async (merchantId: string, merchantName: string) => {
-    if (!window.confirm(`Maturar todas as transaÃ§Ãµes de "${merchantName}"?`)) return;
-
-    setIsProcessing(merchantId);
-    try {
-      const now = new Date();
-      const startOfCurrentMonth = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0);
-
-      const q = query(
-        collection(db, 'transactions'),
-        where('merchantId', '==', merchantId),
-        where('status', '==', 'pending'),
-        where('createdAt', '<', Timestamp.fromDate(startOfCurrentMonth))
-      );
-
-      const snap = await getDocs(q);
-      const BATCH_LIMIT = 240; 
-      let batches = [];
-      let currentBatch = writeBatch(db);
-      let operationCount = 0;
-
-      snap.docs.forEach((txDoc) => {
-        const txData = txDoc.data();
-        const amount = txData.cashbackAmount;
-
-        currentBatch.update(txDoc.ref, { status: 'available', maturedAt: serverTimestamp() });
-        operationCount++;
-
-        const userRef = doc(db, 'users', txData.clientId);
-        currentBatch.update(userRef, {
-          [`storeWallets.${merchantId}.available`]: increment(amount),
-          [`storeWallets.${merchantId}.pending`]: increment(-amount),
-          [`wallet.available`]: increment(amount),
-          [`wallet.pending`]: increment(-amount)
-        });
-        operationCount++;
-
-        if (operationCount >= BATCH_LIMIT * 2) {
-          batches.push(currentBatch.commit());
-          currentBatch = writeBatch(db);
-          operationCount = 0;
-        }
-      });
-
-      if (operationCount > 0) batches.push(currentBatch.commit());
-      await Promise.all(batches);
-      toast.success(`SALDOS DE ${merchantName} MATURADOS!`);
-      fetchPendingMaturation(); 
-    } catch (e) {
-      toast.error("ERRO NO PROCESSAMENTO.");
-    } finally {
-      setIsProcessing(null);
-    }
-  };
+    const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
+    
+    return () => { unsubTx(); unsubMerchants(); unsubClients(); };
+  }, []);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col">
@@ -557,7 +466,7 @@ const AdminDashboard: React.FC = () => {
             </div>
 
             <div className="flex gap-4">
-              <button onClick={() => navigate('/settings')} className="px-6 py-4 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-white/10">
+              <button onClick={() => setCurrentView('settings')} className="px-6 py-4 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-white/10">
                 <Settings size={20} /> Master
               </button>
               <button onClick={async () => { await logout(); navigate('/login'); }} className="px-6 py-4 bg-red-500/10 rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
@@ -568,10 +477,12 @@ const AdminDashboard: React.FC = () => {
 
           <nav className="flex flex-wrap gap-2 mt-10 bg-black/20 p-2 rounded-[25px] border border-white/5 inline-flex">
             {[
-              { id: 'overview', label: 'Painel', icon: TrendingUp },
+              { id: 'overview', label: 'Auditoria', icon: TrendingUp },
+              { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
               { id: 'merchants', label: 'Lojas', icon: Store },
               { id: 'users', label: 'Vizinhos', icon: Users },
               { id: 'banners', label: 'Banners', icon: ImageIcon },
+              { id: 'leaflets', label: 'Folhetos', icon: FileText },
               { id: 'reviews', label: 'Feedback', icon: MessageSquare },
             ].map(item => (
               <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-xl translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
@@ -584,38 +495,19 @@ const AdminDashboard: React.FC = () => {
 
       <main className="max-w-7xl mx-auto px-6 py-12 space-y-12 w-full">
         {currentView === 'overview' && (
-          <>
-            <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-10 shadow-[12px_12px_0px_#0a2540]">
-              <div className="flex items-center gap-4 mb-10">
-                <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
-                  <Clock size={28} strokeWidth={3} />
-                </div>
-                <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540]">MaturaÃ§Ãµes Pendentes</h2>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {pendingStores.map(store => (
-                  <div key={store.id} className="p-8 bg-slate-50 border-4 border-slate-100 rounded-[35px] flex justify-between items-center group hover:border-[#00d66f] transition-all">
-                    <div>
-                      <p className="font-black uppercase text-base text-[#0a2540] mb-1">{store.name}</p>
-                      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{store.count} Movimentos</p>
-                    </div>
-                    <button onClick={() => processStoreMaturation(store.id, store.name)} className="bg-[#0a2540] text-[#00d66f] p-5 rounded-2xl hover:bg-black transition-all shadow-lg">
-                      {isProcessing === store.id ? <RefreshCw className="animate-spin" size={24} /> : <TrendingUp size={24} strokeWidth={3} />}
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </div>
-            <div className="bg-white rounded-[50px] border-4 border-[#0a2540] p-10 shadow-[15px_15px_0px_#0a2540]">
-                <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-10">Auditoria de TransaÃ§Ãµes</h2>
-                <AdminTransactions transactions={globalTransactions} users={[]} />
-            </div>
-          </>
+          <div className="bg-white rounded-[50px] border-4 border-[#0a2540] p-10 shadow-[15px_15px_0px_#0a2540]">
+              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-10">Auditoria de TransaÃ§Ãµes</h2>
+              <AdminTransactions transactions={globalTransactions} users={[]} />
+          </div>
         )}
+        
+        {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'banners' && <BannerManager />}
+        {currentView === 'leaflets' && <AdminLeaflets />}
+        {currentView === 'settings' && <AdminSettings />}
       </main>
 
       <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />
@@ -627,15 +519,297 @@ export default AdminDashboard;
 
 
 ==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminLeaflets.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { db } from '../../config/firebase';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
+import { FileText, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Leaflet } from '../../types';
+
+const AdminLeaflets: React.FC = () => {
+  const [leaflets, setLeaflets] = useState<Leaflet[]>([]);
+  const [uploading, setUploading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    startDate: '',
+    endDate: '',
+    leafletUrl: '' 
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'leaflets'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setLeaflets(snap.docs.map(d => ({ id: d.id, ...d.data() } as Leaflet)));
+    });
+  }, []);
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.leafletUrl || !formData.startDate || !formData.endDate) {
+      toast.error("Preencha todos os campos e insira um link vÃ¡lido.");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const startD = new Date(formData.startDate);
+      const endD = new Date(formData.endDate);
+
+      await addDoc(collection(db, 'leaflets'), {
+        title: formData.title || 'Folheto de Oportunidades',
+        leafletUrl: formData.leafletUrl,
+        startDate: Timestamp.fromDate(startD),
+        endDate: Timestamp.fromDate(endD),
+        isActive: true,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success("Folheto/Link agendado com sucesso!");
+      setFormData({ title: '', startDate: '', endDate: '', leafletUrl: '' });
+
+    } catch (error: any) {
+      console.error("Erro:", error);
+      toast.error("Erro ao agendar folheto. Tenta novamente.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Eliminar este folheto permanentemente?")) return;
+    try {
+      await deleteDoc(doc(db, 'leaflets', id));
+      toast.success("Folheto removido.");
+    } catch (error) {
+      toast.error("Erro ao eliminar.");
+    }
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500">
+      <form onSubmit={handleUpload} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="bg-[#00d66f] p-3 rounded-2xl text-[#0a2540] shadow-md">
+            <FileText size={24} strokeWidth={3} />
+          </div>
+          <div>
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Grandes Oportunidades</h3>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Ligar Folhetos / Oportunidades Externas</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">TÃ­tulo do Folheto / AÃ§Ã£o</label>
+              <input type="text" placeholder="EX: FOLHETO MENSAL DE DESCONTOS" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Link do Folheto (Canva, Drive, Site, etc)</label>
+              <div className="relative">
+                <LinkIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input required type="url" placeholder="https://..." className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.leafletUrl} onChange={e => setFormData({...formData, leafletUrl: e.target.value})} />
+              </div>
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 gap-4">
+               <div>
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2"><Calendar size={14} /> Data de InÃ­cio</label>
+                  <input required type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
+               </div>
+               <div>
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2"><Clock size={14} /> Data de Fim</label>
+                  <input required type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
+               </div>
+            </div>
+          </div>
+        </div>
+
+        <button disabled={uploading} className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
+          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Agendar PublicaÃ§Ã£o
+        </button>
+      </form>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {leaflets.length > 0 ? leaflets.map(leaflet => {
+          const now = new Date();
+          const isLive = now >= leaflet.startDate.toDate() && now <= leaflet.endDate.toDate();
+          
+          return (
+            <div key={leaflet.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] overflow-hidden relative group shadow-[8px_8px_0px_#0a2540] p-6">
+              <div className="flex justify-between items-start mb-4">
+                <div className="bg-red-100 p-4 rounded-2xl text-red-500">
+                    <FileText size={32} />
+                </div>
+                <div className={`px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border-2 shadow-sm ${isLive ? 'bg-green-500 text-white border-white' : 'bg-slate-200 text-slate-500 border-white'}`}>
+                  {isLive ? 'â— Live' : 'Agendado'}
+                </div>
+              </div>
+              
+              <p className="font-black text-sm uppercase italic text-[#0a2540] mb-3 truncate" title={leaflet.title}>{leaflet.title}</p>
+              
+              <div className="space-y-1 text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                <p>InÃ­cio: {leaflet.startDate.toDate().toLocaleString()}</p>
+                <p>Fim: {leaflet.endDate.toDate().toLocaleString()}</p>
+              </div>
+              
+              <div className="flex gap-3 mt-6">
+                <a href={leaflet.leafletUrl} target="_blank" rel="noopener noreferrer" className="flex-1 py-3 bg-[#0a2540] text-white rounded-2xl font-black uppercase text-[9px] hover:bg-black transition-all flex items-center justify-center gap-2">
+                  <ExternalLink size={14} /> Abrir Link
+                </a>
+                <button onClick={() => handleDelete(leaflet.id!)} className="px-4 py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            </div>
+          );
+        }) : (
+          <div className="col-span-full py-20 text-center bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-200 text-slate-300">
+             <AlertCircle size={48} className="mx-auto mb-4" />
+             <p className="font-black uppercase tracking-widest text-xs">Nenhum folheto agendado.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AdminLeaflets;
+
+
+==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminMerchantRequests.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { db, provisionAuth } from '../../config/firebase';
+import { collection, query, onSnapshot, doc, deleteDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { CheckCircle2, XCircle, Store, Mail, Phone, MapPin, Hash, Loader2, AlertCircle, Percent, Tag } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { MerchantRequest } from '../../types';
+
+const AdminMerchantRequests: React.FC = () => {
+  const [requests, setRequests] = useState<MerchantRequest[]>([]);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const q = query(collection(db, 'merchant_requests'));
+    const unsub = onSnapshot(q, (snap) => {
+      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as MerchantRequest)));
+    });
+    return () => unsub();
+  }, []);
+
+  const handleApprove = async (req: MerchantRequest) => {
+    if (!window.confirm(`Aprovar a loja ${req.shopName} e criar conta com ${req.cashbackPercent}% de cashback?`)) return;
+    setLoadingId(req.id!);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(provisionAuth, req.email.trim(), req.password || 'Mudar1234!');
+      
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        id: userCredential.user.uid,
+        name: req.shopName.trim(),
+        shopName: req.shopName.trim(),
+        responsibleName: req.responsibleName.trim(),
+        phone: req.phone.trim(),
+        email: req.email.toLowerCase().trim(),
+        nif: req.nif.trim(),
+        role: 'merchant',
+        status: 'active',
+        category: req.category,
+        cashbackPercent: Number(req.cashbackPercent) || 5, // Usa o que o Lojista pediu
+        freguesia: req.freguesia.trim(),
+        zipCode: req.zipCode.trim(),
+        wallet: { available: 0, pending: 0 },
+        createdAt: serverTimestamp()
+      });
+
+      await deleteDoc(doc(db, 'merchant_requests', req.id!));
+      toast.success('Lojista aprovado e conta criada com sucesso!');
+    } catch (err: any) {
+      toast.error(`Erro ao aprovar: ${err.message}`);
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  const handleReject = async (id: string) => {
+    if (!window.confirm("Rejeitar e apagar este pedido? Esta aÃ§Ã£o Ã© irreversÃ­vel.")) return;
+    setLoadingId(id);
+    try {
+      await deleteDoc(doc(db, 'merchant_requests', id));
+      toast.success('Pedido rejeitado.');
+    } catch (err) {
+      toast.error('Erro ao rejeitar pedido.');
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Pedidos de AdesÃ£o Pendentes</h2>
+      
+      {requests.length === 0 ? (
+         <div className="p-20 bg-white border-4 border-dashed border-slate-200 rounded-[40px] flex flex-col items-center gap-4 text-slate-300">
+            <AlertCircle size={64} />
+            <p className="font-black uppercase tracking-[0.3em] text-sm">Nenhum pedido pendente</p>
+         </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {requests.map(req => (
+            <div key={req.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] relative">
+              <div className="flex items-center gap-4 mb-6 pb-6 border-b-2 border-slate-100">
+                <div className="bg-amber-100 p-4 rounded-2xl text-amber-600">
+                  <Store size={24} strokeWidth={3} />
+                </div>
+                <div>
+                  <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">{req.shopName}</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Resp: {req.responsibleName}</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 mb-8 bg-slate-50 p-6 rounded-3xl border-2 border-slate-100">
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Tag size={16} className="text-[#00d66f]" /> Categoria: {req.category}</div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Percent size={16} className="text-[#00d66f]" /> Cashback Desejado: {req.cashbackPercent}%</div>
+                <div className="my-2 border-b border-slate-200"></div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Mail size={16} className="text-[#00d66f]" /> {req.email}</div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Phone size={16} className="text-[#00d66f]" /> {req.phone}</div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Hash size={16} className="text-[#00d66f]" /> NIF: {req.nif}</div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><MapPin size={16} className="text-[#00d66f]" /> {req.freguesia} ({req.zipCode})</div>
+              </div>
+
+              <div className="flex gap-4">
+                <button onClick={() => handleApprove(req)} disabled={loadingId === req.id} className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]">
+                  {loadingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle2 size={16} strokeWidth={3} /> Aprovar Lojista</>}
+                </button>
+                <button onClick={() => handleReject(req.id!)} disabled={loadingId === req.id} className="px-6 bg-white text-red-500 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-50 shadow-sm border-2 border-red-200 transition-all flex items-center justify-center gap-2">
+                   <XCircle size={16} strokeWidth={3} /> Rejeitar
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default AdminMerchantRequests;
+
+
+==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminMerchants.tsx
 ==================================================
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
-import { 
-  Search, Store, Plus, CheckCircle2, XCircle, Percent, Hash,
-  MapPin, AlertCircle, Mail, Locate, Trash2, RefreshCw, Download
-} from 'lucide-react';
+import { Search, Store, Plus, CheckCircle2, XCircle, Percent, Hash, MapPin, AlertCircle, Mail, Locate, Trash2, RefreshCw, Download, User, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -646,9 +820,7 @@ interface AdminMerchantsProps {
   loading?: boolean;
 }
 
-const AdminMerchants: React.FC<AdminMerchantsProps> = ({ 
-  merchants, onUpdateStatus, onOpenModal, loading 
-}) => {
+const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStatus, onOpenModal, loading }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const { deleteUserWithHistory } = useStore();
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -666,30 +838,20 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
   });
 
   const handleDeleteMerchant = async (merchantId: string, shopName: string) => {
-    const confirmed = window.confirm(
-      `ALERTA CRÃTICO: EstÃ¡s a eliminar o Parceiro "${shopName}".\n\n` +
-      `Esta aÃ§Ã£o irÃ¡ apagar permanentemente:\n` +
-      `- O perfil do Lojista\n` +
-      `- TODAS as transaÃ§Ãµes registadas por esta loja\n\n` +
-      `Esta operaÃ§Ã£o Ã© irreversÃ­vel. Confirmas a eliminaÃ§Ã£o total?`
-    );
-
+    const confirmed = window.confirm(`ALERTA CRÃTICO: EstÃ¡s a eliminar o Parceiro "${shopName}".\n\nEsta operaÃ§Ã£o Ã© irreversÃ­vel. Confirmas?`);
     if (confirmed) {
       setDeletingId(merchantId);
       try {
         await deleteUserWithHistory(merchantId, 'merchant');
-      } catch (error) {
-        toast.error("Erro ao eliminar parceiro.");
-      } finally {
-        setDeletingId(null);
-      }
+      } catch (error) { toast.error("Erro ao eliminar parceiro."); } finally { setDeletingId(null); }
     }
   };
 
-  // RESOLUÃ‡ÃƒO 6: Exportar Comerciantes
   const exportToExcel = () => {
     const dataToExport = filteredMerchants.map(m => ({
       Loja: m.shopName || m.name || '---',
+      ResponsÃ¡vel: m.responsibleName || '---', // NOVO CAMPO EXCEL
+      Telefone: m.phone || '---', // NOVO CAMPO EXCEL
       Categoria: m.category || '---',
       Email: m.email || '---',
       NIF: m.nif || '---',
@@ -705,127 +867,72 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({
     XLSX.writeFile(wb, `Comerciantes_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
   };
 
-  if (loading) {
-    return (
-      <div className="flex justify-center p-20">
-        <div className="animate-spin rounded-full h-12 w-12 border-4 border-[#0a2540] border-t-[#00d66f]"></div>
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center p-20"><div className="animate-spin rounded-full h-12 w-12 border-4 border-[#0a2540] border-t-[#00d66f]"></div></div>;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      
       <div className="flex flex-col md:flex-row justify-between items-center gap-4 bg-white p-6 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540]">
         <div className="relative flex-1 w-full group">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-[#00d66f] transition-colors" size={20} />
-          <input 
-            type="text" 
-            placeholder="PESQUISAR LOJA, NIF, EMAIL OU C. POSTAL..." 
-            className="w-full p-5 pl-16 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider shadow-inner"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+          <input type="text" placeholder="PESQUISAR LOJA, NIF, EMAIL OU C. POSTAL..." className="w-full p-5 pl-16 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#00d66f] focus:bg-white transition-all font-black text-xs uppercase tracking-wider shadow-inner" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         <div className="flex gap-3 w-full md:w-auto">
-            <button 
-                onClick={exportToExcel}
-                className="bg-slate-100 text-[#0a2540] px-6 py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-sm hover:bg-slate-200 transition-all flex items-center justify-center gap-2 border-2 border-slate-200"
-            >
-                <Download size={20} /> Excel
-            </button>
-            <button 
-                onClick={onOpenModal}
-                className="flex-1 md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
-            >
-                <Plus size={20} strokeWidth={4} /> Novo Parceiro
-            </button>
+            <button onClick={exportToExcel} className="bg-slate-100 text-[#0a2540] px-6 py-5 rounded-3xl font-black text-[11px] uppercase tracking-widest shadow-sm hover:bg-slate-200 transition-all flex items-center justify-center gap-2 border-2 border-slate-200"><Download size={20} /> Excel</button>
+            <button onClick={onOpenModal} className="flex-1 md:w-auto bg-[#00d66f] text-[#0a2540] px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"><Plus size={20} strokeWidth={4} /> Novo Parceiro</button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-        {filteredMerchants.length > 0 ? (
-          filteredMerchants.map((merchant) => {
-            return (
-              <div key={merchant.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#00d66f] flex flex-col relative group hover:-translate-y-2 transition-transform duration-300">
-                
-                <div className="flex justify-between items-start mb-6">
-                  <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors border-2 border-slate-200">
-                    <Store size={24} strokeWidth={2.5} />
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <button 
-                      onClick={() => handleDeleteMerchant(merchant.id, merchant.shopName || merchant.name || merchant.email)}
-                      disabled={deletingId === merchant.id}
-                      className="p-3 bg-red-50 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition-all border-2 border-red-100"
-                      title="Eliminar parceiro e histÃ³rico"
-                    >
-                      {deletingId === merchant.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} strokeWidth={3} />}
-                    </button>
-                    <span className={`px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-[0.2em] border-2 shadow-sm ${
-                      merchant.status === 'active' 
-                        ? 'bg-green-100 text-green-700 border-green-300' 
-                        : 'bg-amber-100 text-amber-700 border-amber-300'
-                    }`}>
-                      {merchant.status === 'active' ? 'Ativo' : 'Suspenso'}
-                    </span>
-                  </div>
-                </div>
-
-                <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-3 leading-tight truncate" title={merchant.shopName || merchant.name}>
-                  {merchant.shopName || merchant.name || 'Loja sem nome'}
-                </h3>
-
-                <div className="space-y-3 mb-8 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
-                  <div className="flex items-center gap-3 text-slate-500">
-                    <Mail size={14} className="text-[#00d66f]" />
-                    <span className="text-[10px] font-bold tracking-widest truncate" title={merchant.email}>{merchant.email}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-500">
-                    <Hash size={14} className="text-[#00d66f]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">NIF: {merchant.nif || '---'}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-500">
-                    <Locate size={14} className="text-[#00d66f]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest">CP: {merchant.zipCode || '0000-000'}</span>
-                  </div>
-                  <div className="flex items-center gap-3 text-slate-500">
-                    <MapPin size={14} className="text-[#0a2540]" />
-                    <span className="text-[10px] font-bold uppercase tracking-widest truncate" title={merchant.freguesia}>{merchant.freguesia || 'NÃ£o definida'}</span>
-                  </div>
-                </div>
-
-                <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between shadow-inner">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-[#00d66f]/20 p-2 rounded-xl">
-                      <Percent size={16} className="text-[#00d66f]" />
-                    </div>
-                    <span className="text-[10px] font-black text-white uppercase tracking-widest">Retorno Configurado</span>
-                  </div>
-                  <span className="text-2xl font-black text-[#00d66f] italic tracking-tighter">{merchant.cashbackPercent || 0}%</span>
-                </div>
-
-                <div className="mt-auto flex gap-3">
-                  {merchant.status !== 'active' ? (
-                    <button 
-                      onClick={() => onUpdateStatus(merchant.id, 'active')}
-                      className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"
-                    >
-                      <CheckCircle2 size={16} strokeWidth={3} /> Ativar Conta
-                    </button>
-                  ) : (
-                    <button 
-                      onClick={() => onUpdateStatus(merchant.id, 'disabled')}
-                      className="flex-1 bg-white text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-[4px_4px_0px_#0a2540] border-2 border-[#0a2540] transition-all flex items-center justify-center gap-2"
-                    >
-                      <XCircle size={16} strokeWidth={3} /> Suspender Conta
-                    </button>
-                  )}
-                </div>
+        {filteredMerchants.length > 0 ? filteredMerchants.map((merchant) => (
+          <div key={merchant.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#00d66f] flex flex-col relative group hover:-translate-y-2 transition-transform duration-300">
+            <div className="flex justify-between items-start mb-6">
+              <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors border-2 border-slate-200">
+                <Store size={24} strokeWidth={2.5} />
               </div>
-            );
-          })
-        ) : (
+              <div className="flex items-center gap-3">
+                <button onClick={() => handleDeleteMerchant(merchant.id, merchant.shopName || merchant.name || merchant.email)} disabled={deletingId === merchant.id} className="p-3 bg-red-50 text-red-400 hover:text-white hover:bg-red-500 rounded-xl transition-all border-2 border-red-100" title="Eliminar parceiro">{deletingId === merchant.id ? <RefreshCw size={16} className="animate-spin" /> : <Trash2 size={16} strokeWidth={3} />}</button>
+                <span className={`px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-[0.2em] border-2 shadow-sm ${merchant.status === 'active' ? 'bg-green-100 text-green-700 border-green-300' : 'bg-amber-100 text-amber-700 border-amber-300'}`}>{merchant.status === 'active' ? 'Ativo' : 'Suspenso'}</span>
+              </div>
+            </div>
+
+            <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-3 leading-tight truncate" title={merchant.shopName || merchant.name}>{merchant.shopName || merchant.name || 'Loja sem nome'}</h3>
+
+            <div className="space-y-3 mb-8 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+              <div className="flex items-center gap-3 text-slate-500">
+                <Mail size={14} className="text-[#00d66f]" /><span className="text-[10px] font-bold tracking-widest truncate">{merchant.email}</span>
+              </div>
+              {merchant.responsibleName && (
+                <div className="flex items-center gap-3 text-slate-500">
+                  <User size={14} className="text-[#00d66f]" /><span className="text-[10px] font-bold uppercase tracking-widest truncate">{merchant.responsibleName}</span>
+                </div>
+              )}
+              {merchant.phone && (
+                <div className="flex items-center gap-3 text-slate-500">
+                  <Phone size={14} className="text-[#00d66f]" /><span className="text-[10px] font-bold uppercase tracking-widest">{merchant.phone}</span>
+                </div>
+              )}
+              <div className="flex items-center gap-3 text-slate-500">
+                <Locate size={14} className="text-[#00d66f]" /><span className="text-[10px] font-bold uppercase tracking-widest">CP: {merchant.zipCode || '0000-000'}</span>
+              </div>
+            </div>
+
+            <div className="bg-[#0a2540] rounded-3xl p-5 mb-8 flex items-center justify-between shadow-inner">
+              <div className="flex items-center gap-3">
+                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Percent size={16} className="text-[#00d66f]" /></div>
+                <span className="text-[10px] font-black text-white uppercase tracking-widest">Retorno Config</span>
+              </div>
+              <span className="text-2xl font-black text-[#00d66f] italic tracking-tighter">{merchant.cashbackPercent || 0}%</span>
+            </div>
+
+            <div className="mt-auto flex gap-3">
+              {merchant.status !== 'active' ? (
+                <button onClick={() => onUpdateStatus(merchant.id, 'active')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]"><CheckCircle2 size={16} strokeWidth={3} /> Ativar</button>
+              ) : (
+                <button onClick={() => onUpdateStatus(merchant.id, 'disabled')} className="flex-1 bg-white text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-50 shadow-[4px_4px_0px_#0a2540] border-2 border-[#0a2540] transition-all flex items-center justify-center gap-2"><XCircle size={16} strokeWidth={3} /> Suspender</button>
+              )}
+            </div>
+          </div>
+        )) : (
           <div className="col-span-full p-20 bg-white border-4 border-dashed border-slate-200 rounded-[40px] flex flex-col items-center gap-4 text-slate-300">
             <AlertCircle size={64} />
             <p className="font-black uppercase tracking-[0.3em] text-sm">Nenhum parceiro encontrado</p>
@@ -845,39 +952,21 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminSettings.tsx
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { db, provisionAuth } from '../../config/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { 
-  ArrowLeft, 
-  ShieldCheck, 
-  Mail, 
-  Lock, 
-  Save, 
-  AlertCircle,
-  CheckCircle2,
-  Clock,
-  Percent,
-  Activity,
-  Wallet,
-  ExternalLink,
-  Star,
-  Database
-} from 'lucide-react';
+import { db } from '../../config/firebase';
+import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database } from 'lucide-react';
 import { SystemConfig } from '../../types';
 
-const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+const AdminSettings: React.FC = () => {
   const { currentUser, setCurrentUser } = useStore();
   
-  const [activeTab, setActiveTab] = useState<'security' | 'system'>('security');
+  const [activeTab, setActiveTab] = useState<'system' | 'security'>('system');
   const [newEmail, setNewEmail] = useState(currentUser?.email || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [newAdminEmail, setNewAdminEmail] = useState('');
-  const [newAdminPassword, setNewAdminPassword] = useState('');
   
   const [sysConfig, setSysConfig] = useState<SystemConfig>({
     globalServiceFee: 0,
-    maturationHours: 48,
+    maturationHours: 0,
     minRedeemAmount: 5.00,
     platformStatus: 'active',
     supportEmail: 'ajuda@vizinho-plus.pt',
@@ -887,9 +976,6 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
-  // NOVA LÃ“GICA DE SUPERADMIN: Verifica a propriedade isSuperAdmin no objeto do utilizador
-  const isSuperAdmin = currentUser?.isSuperAdmin === true;
-
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -897,13 +983,10 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
           const data = docSnap.data() as SystemConfig;
-          setSysConfig({
-            ...data,
-            supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt'
-          });
+          setSysConfig({ ...data, supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt' });
         }
       } catch (e) {
-        console.error("Erro ao carregar configuraÃ§Ãµes:", e);
+        console.error("Erro:", e);
       }
     };
     fetchConfig();
@@ -921,24 +1004,12 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
     try {
       const adminRef = doc(db, 'users', currentUser?.id || 'admin');
-      await setDoc(adminRef, {
-        email: newEmail.toLowerCase().trim(),
-        updatedAt: serverTimestamp(),
-        auditRef: "seguranca_admin_update"
-      }, { merge: true });
-
-      if (currentUser) {
-        setCurrentUser({ ...currentUser, email: newEmail });
-      }
+      await setDoc(adminRef, { email: newEmail.toLowerCase().trim(), updatedAt: serverTimestamp() }, { merge: true });
+      if (currentUser) setCurrentUser({ ...currentUser, email: newEmail });
       
-      setMessage({ type: 'success', text: 'Credenciais de Admin atualizadas!' });
-      setNewPassword('');
-      setConfirmPassword('');
-    } catch (error) {
-      setMessage({ type: 'error', text: 'Erro ao atualizar base de dados.' });
-    } finally {
-      setIsSaving(false);
-    }
+      setMessage({ type: 'success', text: 'Credenciais atualizadas!' });
+      setNewPassword(''); setConfirmPassword('');
+    } catch (error) { setMessage({ type: 'error', text: 'Erro ao atualizar.' }); } finally { setIsSaving(false); }
   };
 
   const handleUpdateSystem = async (e: React.FormEvent) => {
@@ -947,231 +1018,85 @@ const AdminSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setMessage({ type: '', text: '' });
     
     try {
-      await setDoc(doc(db, 'system', 'config'), {
-        ...sysConfig,
-        updatedAt: serverTimestamp(),
-        lastChangeBy: currentUser?.id || 'admin',
-        auditRef: "config_sistema_mensal"
-      }, { merge: true });
-      
-      setMessage({ type: 'success', text: 'ConfiguraÃ§Ãµes aplicadas ao ecossistema!' });
-    } catch (e) {
-      setMessage({ type: 'error', text: 'Falha ao gravar configuraÃ§Ãµes.' });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCreateAdmin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isSuperAdmin) return;
-
-    setIsSaving(true);
-    setMessage({ type: '', text: '' });
-    try {
-      const email = newAdminEmail.toLowerCase().trim();
-      const userCredential = await createUserWithEmailAndPassword(provisionAuth, email, newAdminPassword);
-
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        id: userCredential.user.uid,
-        email,
-        role: 'admin',
-        status: 'active',
-        createdAt: serverTimestamp(),
-        createdBy: currentUser?.id || 'superadmin',
-      }, { merge: true });
-
-      setMessage({ type: 'success', text: 'Novo administrador criado!' });
-      setNewAdminEmail('');
-      setNewAdminPassword('');
-    } catch (error: any) {
-      setMessage({ type: 'error', text: 'Erro ao criar conta de admin.' });
-    } finally {
-      setIsSaving(false);
-    }
+      await setDoc(doc(db, 'system', 'config'), { ...sysConfig, updatedAt: serverTimestamp(), lastChangeBy: currentUser?.id || 'admin' }, { merge: true });
+      setMessage({ type: 'success', text: 'ConfiguraÃ§Ãµes globais aplicadas!' });
+    } catch (e) { setMessage({ type: 'error', text: 'Falha ao gravar.' }); } finally { setIsSaving(false); }
   };
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] p-4 md:p-12 font-sans text-[#0a2540]">
-      <div className="max-w-4xl mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-12">
-          <div className="flex items-center gap-6">
-            <button 
-              onClick={onBack}
-              className="bg-white p-5 rounded-2xl border-4 border-[#0a2540] shadow-[6px_6px_0px_0px_#0a2540] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all"
-            >
-              <ArrowLeft size={24} strokeWidth={3} />
-            </button>
-            <div>
-              <h2 className="text-4xl font-black uppercase italic tracking-tighter leading-none">
-                DefiniÃ§Ãµes <span className="text-[#00d66f]">Master</span>
-              </h2>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-3 flex items-center gap-2">
-                <Database size={12} /> Ref: sistema_vizinho_plus_2026
-              </p>
-            </div>
+    <div className="font-sans text-[#0a2540] animate-in fade-in duration-500">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-8">
+          <div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none">DefiniÃ§Ãµes <span className="text-[#00d66f]">Master</span></h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-3 flex items-center gap-2"><Database size={12} /> Ajustes Globais da Plataforma</p>
           </div>
 
           <div className="flex bg-[#0a2540] border-4 border-[#0a2540] p-1 rounded-3xl shadow-[6px_6px_0px_0px_#00d66f]">
-            <button 
-              onClick={() => setActiveTab('security')}
-              className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                activeTab === 'security' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'
-              }`}
-            >
-              SeguranÃ§a
-            </button>
-            <button 
-              onClick={() => setActiveTab('system')}
-              className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                activeTab === 'system' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'
-              }`}
-            >
-              Sistema
-            </button>
+            <button onClick={() => setActiveTab('system')} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Plataforma</button>
+            <button onClick={() => setActiveTab('security')} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'security' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>SeguranÃ§a</button>
           </div>
         </div>
 
         {message.text && (
-          <div className={`mb-8 p-8 rounded-3xl border-4 font-black text-[11px] uppercase flex items-center gap-4 animate-in zoom-in-95 ${
-            message.type === 'success' ? 'bg-[#00d66f]/10 text-[#00d66f] border-[#00d66f]' : 'bg-red-50 text-red-600 border-red-500'
-          }`}>
-            {message.type === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />}
-            {message.text}
+          <div className={`mb-8 p-6 rounded-3xl border-4 font-black text-[11px] uppercase flex items-center gap-4 animate-in zoom-in-95 ${message.type === 'success' ? 'bg-[#00d66f]/10 text-[#00d66f] border-[#00d66f]' : 'bg-red-50 text-red-600 border-red-500'}`}>
+            {message.type === 'success' ? <CheckCircle2 size={24} /> : <AlertCircle size={24} />} {message.text}
+          </div>
+        )}
+
+        {activeTab === 'system' && (
+          <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12">
+            <form onSubmit={handleUpdateSystem} className="space-y-10">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                <div className="space-y-4">
+                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
+                    <Mail size={16} className="text-[#00d66f]" /> E-mail Apoio ao Cliente (Aparece no RodapÃ©)
+                  </label>
+                  <input type="email" value={sysConfig.supportEmail} onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black" />
+                </div>
+
+                <div className="space-y-4 bg-amber-50 p-6 rounded-3xl border-4 border-amber-200">
+                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-amber-700 ml-1">
+                    <Star size={16} className="text-amber-500 fill-amber-500" /> Link para "Vantagens VIP" (App Clientes)
+                  </label>
+                  <div className="relative">
+                    <input type="url" placeholder="https://..." value={sysConfig.vantagensUrl} onChange={e => setSysConfig({...sysConfig, vantagensUrl: e.target.value})} className="w-full p-6 bg-white border-4 border-amber-300 rounded-3xl font-black" />
+                    <ExternalLink className="absolute right-6 top-1/2 -translate-y-1/2 text-amber-400" size={24} />
+                  </div>
+                </div>
+              </div>
+
+              <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#00c265] transition-all shadow-xl border-b-8 border-black/10">
+                <Save size={20} /> Gravar ConfiguraÃ§Ãµes Globais
+              </button>
+            </form>
           </div>
         )}
 
         {activeTab === 'security' && (
           <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] p-8 md:p-12 relative overflow-hidden">
-            <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none">
-              <ShieldCheck size={280} className="text-[#0a2540]" />
-            </div>
+            <div className="absolute top-0 right-0 p-12 opacity-[0.03] pointer-events-none"><ShieldCheck size={280} className="text-[#0a2540]" /></div>
             
             <form onSubmit={handleUpdateAdmin} className="relative z-10 space-y-10">
               <div className="space-y-4">
-                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                  <Mail size={16} className="text-[#0a2540]" /> E-mail de Administrador
-                </label>
-                <input 
-                  type="email" 
-                  value={newEmail} 
-                  onChange={(e) => setNewEmail(e.target.value)}
-                  className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-black"
-                  required
-                />
+                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1"><Mail size={16} className="text-[#0a2540]" /> E-mail de Administrador</label>
+                <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-black" required />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Lock size={16} className="text-[#0a2540]" /> Nova Password
-                  </label>
-                  <input 
-                    type="password" 
-                    value={newPassword} 
-                    onChange={(e) => setNewPassword(e.target.value)}
-                    placeholder="Vazio para manter"
-                    className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-black"
-                  />
+                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1"><Lock size={16} className="text-[#0a2540]" /> Nova Password</label>
+                  <input type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="Vazio para manter" className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-black" />
                 </div>
                 <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Lock size={16} className="text-[#0a2540]" /> Confirmar Password
-                  </label>
-                  <input 
-                    type="password" 
-                    value={confirmPassword} 
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-black"
-                  />
+                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1"><Lock size={16} className="text-[#0a2540]" /> Confirmar Password</label>
+                  <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-black" />
                 </div>
               </div>
 
-              <button type="submit" disabled={isSaving} className="w-full bg-[#0a2540] text-white p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-4 disabled:opacity-50 shadow-xl">
-                <Save size={20} /> Atualizar Credenciais
-              </button>
-            </form>
-
-            {isSuperAdmin && (
-              <div className="relative z-10 mt-10 pt-10 border-t-2 border-slate-100">
-                <h3 className="text-[11px] font-black uppercase tracking-widest text-slate-500 mb-6">Criar Novo Administrador</h3>
-                <form onSubmit={handleCreateAdmin} className="space-y-6">
-                  <input type="email" required value={newAdminEmail} onChange={(e) => setNewAdminEmail(e.target.value)} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black" placeholder="admin@exemplo.pt" />
-                  <input type="password" required value={newAdminPassword} onChange={(e) => setNewAdminPassword(e.target.value)} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black" placeholder="Password Inicial" minLength={6} />
-                  <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-[#00c265] border-b-8 border-black/10">Criar Admin</button>
-                </form>
-              </div>
-            )}
-          </div>
-        )}
-
-        {activeTab === 'system' && (
-          <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12 animate-in fade-in">
-            <form onSubmit={handleUpdateSystem} className="space-y-10">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Mail size={16} className="text-[#00d66f]" /> E-mail Suporte Vizinho+
-                  </label>
-                  <input type="email" value={sysConfig.supportEmail} onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black" />
-                </div>
-
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Activity size={16} className="text-amber-500" /> Estado da Plataforma
-                  </label>
-                  <select value={sysConfig.platformStatus} onChange={e => setSysConfig({...sysConfig, platformStatus: e.target.value as any})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-[10px] uppercase">
-                    <option value="active">ðŸŸ¢ OPERACIONAL (LIVE)</option>
-                    <option value="maintenance">ðŸŸ  MANUTENÃ‡ÃƒO (RESTRICTED)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="space-y-4 bg-blue-50 p-8 rounded-[40px] border-4 border-blue-100">
-                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-blue-700 ml-1">
-                  <Clock size={16} className="text-blue-500" /> Regra de MaturaÃ§Ã£o de Cashback
-                </label>
-                <div className="bg-white p-6 rounded-3xl border-2 border-blue-200">
-                  <p className="text-sm font-black text-[#0a2540] uppercase italic">CalendÃ¡rio Mensal (MÃªs Seguinte)</p>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mt-2 leading-relaxed italic">
-                    * O cashback acumulado num mÃªs sÃ³ fica disponÃ­vel no dia 1 do mÃªs seguinte, apÃ³s o processamento manual no Dashboard Principal.
-                  </p>
-                </div>
-              </div>
-
-              <div className="space-y-4 bg-amber-50 p-8 rounded-[40px] border-4 border-amber-200">
-                <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-amber-700 ml-1">
-                  <Star size={16} className="text-amber-500 fill-amber-500" /> Link "Vantagens+"
-                </label>
-                <div className="relative">
-                  <input type="url" placeholder="https://..." value={sysConfig.vantagensUrl} onChange={e => setSysConfig({...sysConfig, vantagensUrl: e.target.value})} className="w-full p-6 bg-white border-4 border-amber-300 rounded-3xl font-black" />
-                  <ExternalLink className="absolute right-6 top-1/2 -translate-y-1/2 text-amber-400" size={24} />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Percent size={16} className="text-[#00d66f]" /> Taxa de ServiÃ§o Global (%)
-                  </label>
-                  <input type="number" step="0.1" value={sysConfig.globalServiceFee} onChange={e => setSysConfig({...sysConfig, globalServiceFee: Number(e.target.value)})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-2xl" />
-                </div>
-
-                <div className="space-y-4">
-                  <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Wallet size={16} className="text-[#00d66f]" /> Levantamento MÃ­nimo (â‚¬)
-                  </label>
-                  <input type="number" step="1" value={sysConfig.minRedeemAmount} onChange={e => setSysConfig({...sysConfig, minRedeemAmount: Number(e.target.value)})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-2xl" />
-                </div>
-              </div>
-
-              <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#00c265] transition-all shadow-xl border-b-8 border-black/10">
-                <Save size={20} /> Gravar ConfiguraÃ§Ãµes Master
-              </button>
+              <button type="submit" disabled={isSaving} className="w-full bg-[#0a2540] text-white p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-4 disabled:opacity-50 shadow-xl"><Save size={20} /> Atualizar Credenciais</button>
             </form>
           </div>
         )}
-      </div>
     </div>
   );
 };
@@ -1217,28 +1142,22 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
       Data: parseDate(t.createdAt).toLocaleString(),
       Parceiro: t.merchantName,
       NIF: t.clientNif,
-      Valor: t.amount,
-      Cashback: t.cashbackAmount,
+      "Fatura Original": t.amount,
+      "Valor Movimentado": t.cashbackAmount,
+      Tipo: t.type === 'earn' ? 'AtribuiÃ§Ã£o' : 'Desconto',
       Status: t.status
     })));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "TransaÃ§Ãµes");
+    XLSX.utils.book_append_sheet(wb, ws, "Transacoes");
     XLSX.writeFile(wb, "Auditoria_VizinhoPlus.xlsx");
   };
 
   return (
     <div className="space-y-10">
-      {/* BARRA DE FILTROS IGUAL Ã€ IMAGEM */}
       <div className="flex flex-col lg:flex-row items-center gap-6">
         <div className="relative flex-1 w-full">
           <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={24} />
-          <input 
-            type="text" 
-            placeholder="PROCURAR LOJA, NIF OU DOC..." 
-            className="w-full p-6 pl-16 bg-slate-50 border-4 border-slate-100 rounded-[30px] outline-none focus:border-[#0a2540] font-black text-xs uppercase tracking-widest shadow-inner"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <input type="text" placeholder="PROCURAR LOJA, NIF OU DOC..." className="w-full p-6 pl-16 bg-slate-50 border-4 border-slate-100 rounded-[30px] outline-none focus:border-[#0a2540] font-black text-xs uppercase tracking-widest shadow-inner" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
         
         <div className="flex items-center gap-3 bg-slate-50 border-4 border-slate-100 rounded-[30px] p-2 px-6 h-[76px]">
@@ -1248,15 +1167,11 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
             <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent outline-none text-xs font-black text-slate-600 uppercase" />
         </div>
 
-        <button 
-            onClick={exportToExcel}
-            className="bg-[#00d66f] text-[#0a2540] px-10 h-[76px] rounded-[30px] font-black text-sm uppercase tracking-widest shadow-[6px_6px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center gap-3 border-4 border-[#0a2540]"
-        >
+        <button onClick={exportToExcel} className="bg-[#00d66f] text-[#0a2540] px-10 h-[76px] rounded-[30px] font-black text-sm uppercase tracking-widest shadow-[6px_6px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center gap-3 border-4 border-[#0a2540]">
             <Download size={24} strokeWidth={3} /> Excel
         </button>
       </div>
 
-      {/* TABELA BRUTALISTA */}
       <div className="bg-white rounded-[40px] border-4 border-[#0a2540] overflow-hidden shadow-xl">
         <table className="w-full text-left">
           <thead className="bg-[#0a2540] text-white">
@@ -1266,7 +1181,7 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
               <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-center">Cliente NIF</th>
               <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Fatura</th>
               <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-center">Status</th>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Cashback</th>
+              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Movimento</th>
             </tr>
           </thead>
           <tbody className="divide-y-4 divide-slate-100">
@@ -1278,10 +1193,9 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
                 <td className="p-8 text-right text-slate-500 font-black text-lg">{t.amount.toFixed(2)} â‚¬</td>
                 <td className="p-8 text-center">
                   <span className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-widest border-2 ${
-                      t.status === 'available' ? 'bg-green-100 text-green-700 border-green-200' : 
-                      t.status === 'pending' ? 'bg-amber-50 text-amber-600 border-amber-100' : 'bg-red-50 text-red-600 border-red-100'
+                      t.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-100 text-green-700 border-green-200'
                   }`}>
-                    {t.status === 'available' ? 'Maturado' : t.status === 'pending' ? 'Pendente' : 'Cancelado'}
+                    {t.status === 'cancelled' ? 'Anulado' : 'Aprovado'}
                   </span>
                 </td>
                 <td className={`p-8 text-right font-black text-xl ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
@@ -1306,7 +1220,7 @@ import React, { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { User as UserProfile } from '../../types/index';
-import { Search, Users, Mail, Locate, Download } from 'lucide-react';
+import { Search, Users, Mail, Locate, Download, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -1317,7 +1231,6 @@ interface AdminUsersProps {
 const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
-  // RESOLUÃ‡ÃƒO 3: Filtro super robusto. Lida com nulos e converte strings.
   const filteredUsers = users.filter(u => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase().trim();
@@ -1338,11 +1251,11 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
     }
   };
 
-  // RESOLUÃ‡ÃƒO 6: Exportar Vizinhos para Excel
   const exportToExcel = () => {
     const dataToExport = filteredUsers.map(u => ({
       Nome: u.name || '---',
       Email: u.email || '---',
+      Telefone: u.phone || '---', // NOVO: ExportaÃ§Ã£o Telefone
       NIF: u.nif || '---',
       "CÃ³digo Postal": u.zipCode || '---',
       "Data AdesÃ£o": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
@@ -1357,22 +1270,12 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
 
   return (
     <div className="space-y-8">
-      {/* BARRA DE PESQUISA INTELIGENTE E EXPORTAÃ‡ÃƒO */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative group flex-1">
           <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-          <input 
-            type="text" 
-            placeholder="PESQUISAR POR NOME, NIF, EMAIL OU C. POSTAL..." 
-            className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
+          <input type="text" placeholder="PESQUISAR POR NOME, NIF, EMAIL OU C. POSTAL..." className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
         </div>
-        <button 
-            onClick={exportToExcel}
-            className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#00d66f] hover:bg-black transition-all flex items-center justify-center gap-3 border-2 border-[#00d66f]"
-        >
+        <button onClick={exportToExcel} className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#00d66f] hover:bg-black transition-all flex items-center justify-center gap-3 border-2 border-[#00d66f]">
             <Download size={20} /> Exportar
         </button>
       </div>
@@ -1395,6 +1298,12 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
                 <Mail size={14} className="text-[#00d66f]" />
                 <span className="text-[10px] font-bold truncate">{u.email}</span>
             </div>
+            {u.phone && (
+              <div className="flex items-center gap-3 text-slate-500">
+                  <Phone size={14} className="text-[#00d66f]" />
+                  <span className="text-[10px] font-bold truncate">{u.phone}</span>
+              </div>
+            )}
             <div className="flex items-center gap-3 text-slate-500">
                 <Locate size={14} className="text-[#00d66f]" />
                 <span className="text-[10px] font-bold uppercase">{u.zipCode || 'Sem C.Postal'}</span>
@@ -1426,20 +1335,21 @@ export default AdminUsers;
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\BannerManager.tsx
 ==================================================
 import React, { useState, useEffect } from 'react';
-import { db, storage } from '../../config/firebase';
+import { db } from '../../config/firebase'; // Removemos a importaÃ§Ã£o do storage!
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL, deleteObject } from 'firebase/storage';
 import { Image as ImageIcon, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const BannerManager: React.FC = () => {
   const [banners, setBanners] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
+  
+  // Em vez de "file", usamos "imageBase64" para guardar a imagem transformada
   const [formData, setFormData] = useState({
     title: '',
     startDate: '',
     endDate: '',
-    file: null as File | null
+    imageBase64: '' 
   });
 
   useEffect(() => {
@@ -1449,46 +1359,80 @@ const BannerManager: React.FC = () => {
     });
   }, []);
 
+  // ESTA Ã‰ A MAGIA: Converte a imagem para Base64 e comprime para nÃ£o pesar na Base de Dados
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Limita a largura a 1000 pixels (perfeito para Banners e super leve)
+        if (width > 1000) {
+          height = Math.round((height * 1000) / width);
+          width = 1000;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        // Comprime para formato JPEG com 70% de qualidade
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
+        setFormData(prev => ({ ...prev, imageBase64: compressedBase64 }));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.file || !formData.startDate || !formData.endDate) {
-      toast.error("Preencha todos os campos e escolha uma imagem.");
+    if (!formData.imageBase64 || !formData.startDate || !formData.endDate) {
+      toast.error("Preencha todos os campos e escolha uma imagem vÃ¡lida.");
       return;
     }
 
     setUploading(true);
     try {
-      const storageRef = ref(storage, `banners/${Date.now()}_${formData.file.name}`);
-      await uploadBytes(storageRef, formData.file);
-      const url = await getDownloadURL(storageRef);
+      const startD = new Date(formData.startDate);
+      const endD = new Date(formData.endDate);
 
+      // Guardamos a imagem em formato de texto diretamente no Firestore!
       await addDoc(collection(db, 'banners'), {
         title: formData.title || 'Sem tÃ­tulo',
-        imageUrl: url,
-        storagePath: storageRef.fullPath,
-        startDate: Timestamp.fromDate(new Date(formData.startDate)),
-        endDate: Timestamp.fromDate(new Date(formData.endDate)),
+        imageUrl: formData.imageBase64, // A imagem comprimida
+        startDate: Timestamp.fromDate(startD),
+        endDate: Timestamp.fromDate(endD),
         isActive: true,
         createdAt: serverTimestamp()
       });
 
       toast.success("Banner agendado com sucesso!");
-      setFormData({ title: '', startDate: '', endDate: '', file: null });
-    } catch (error) {
-      console.error(error);
-      toast.error("Erro ao carregar banner.");
+      setFormData({ title: '', startDate: '', endDate: '', imageBase64: '' });
+      
+      // Limpa o ficheiro selecionado no input visualmente
+      const fileInput = document.getElementById('bannerFileInput') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error: any) {
+      console.error("Erro:", error);
+      toast.error("Erro ao agendar banner. Tenta novamente.");
     } finally {
       setUploading(false);
     }
   };
 
-  const handleDelete = async (id: string, storagePath: string) => {
+  const handleDelete = async (id: string) => {
     if (!window.confirm("Eliminar este banner permanentemente?")) return;
     try {
-      if (storagePath) {
-        const fileRef = ref(storage, storagePath);
-        await deleteObject(fileRef);
-      }
+      // Como nÃ£o usamos o Firebase Storage, sÃ³ precisamos de apagar o documento na base de dados
       await deleteDoc(doc(db, 'banners', id));
       toast.success("Banner removido.");
     } catch (error) {
@@ -1510,51 +1454,30 @@ const BannerManager: React.FC = () => {
           <div className="space-y-6">
             <div>
               <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">TÃ­tulo do Banner</label>
-              <input 
-                type="text" placeholder="EX: PROMOÃ‡ÃƒO DE PÃSCOA" 
-                className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]"
-                value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})}
-              />
+              <input type="text" placeholder="EX: PROMOÃ‡ÃƒO DE PÃSCOA" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
             </div>
             <div>
-              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Imagem (Recomendado: 1200x400px)</label>
-              <input 
-                type="file" accept="image/*" 
-                className="w-full p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-[10px]"
-                onChange={(e) => setFormData({...formData, file: e.target.files?.[0] || null})}
-              />
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Imagem (Carrega do teu PC/TelemÃ³vel)</label>
+              <input id="bannerFileInput" type="file" accept="image/*" className="w-full p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-[10px]" onChange={handleFileChange} />
             </div>
           </div>
           
           <div className="space-y-6">
             <div className="grid grid-cols-1 gap-4">
                <div>
-                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
-                    <Calendar size={14} /> Data de InÃ­cio
-                  </label>
-                  <input 
-                    type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"
-                    value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})}
-                  />
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2"><Calendar size={14} /> Data de InÃ­cio</label>
+                  <input required type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
                </div>
                <div>
-                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
-                    <Clock size={14} /> Data de Fim
-                  </label>
-                  <input 
-                    type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"
-                    value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})}
-                  />
+                  <label className="flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 mb-2 ml-2"><Clock size={14} /> Data de Fim</label>
+                  <input required type="datetime-local" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.endDate} onChange={e => setFormData({...formData, endDate: e.target.value})} />
                </div>
             </div>
           </div>
         </div>
 
-        <button 
-          disabled={uploading}
-          className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1"
-        >
-          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Agendar PublicaÃ§Ã£o
+        <button disabled={uploading} className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
+          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Agendar PublicaÃ§Ã£o Gratuita
         </button>
       </form>
 
@@ -1565,8 +1488,8 @@ const BannerManager: React.FC = () => {
           
           return (
             <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] overflow-hidden relative group shadow-[8px_8px_0px_#0a2540]">
-              <div className="h-44 relative">
-                <img src={banner.imageUrl} className="w-full h-full object-cover" alt="" />
+              <div className="h-44 relative bg-slate-100 flex items-center justify-center">
+                <img src={banner.imageUrl} className="w-full h-full object-cover" alt="Banner" />
                 <div className={`absolute top-4 left-4 px-4 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border-2 shadow-lg ${isLive ? 'bg-green-500 text-white border-white' : 'bg-slate-200 text-slate-500 border-white'}`}>
                   {isLive ? 'â— Live' : 'Agendado'}
                 </div>
@@ -1577,10 +1500,7 @@ const BannerManager: React.FC = () => {
                   <p>InÃ­cio: {banner.startDate.toDate().toLocaleString()}</p>
                   <p>Fim: {banner.endDate.toDate().toLocaleString()}</p>
                 </div>
-                <button 
-                  onClick={() => handleDelete(banner.id, banner.storagePath)}
-                  className="mt-6 w-full py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2"
-                >
+                <button onClick={() => handleDelete(banner.id)} className="mt-6 w-full py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
                   <Trash2 size={14} /> Eliminar Banner
                 </button>
               </div>
@@ -1604,7 +1524,7 @@ export default BannerManager;
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\MerchantModal.tsx
 ==================================================
 import React, { useState } from 'react';
-import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag } from 'lucide-react';
+import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag, User, Phone } from 'lucide-react';
 import { provisionAuth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -1615,29 +1535,14 @@ interface MerchantModalProps {
   onSuccess: () => void;
 }
 
-// Lista de 20 setores principais de comÃ©rcio local + Outros
 const MERCH_CATEGORIES = [
-  "RestauraÃ§Ã£o & Bebidas",
-  "Mercearias & Supermercados",
-  "Talhos & Peixarias",
-  "Padarias & Pastelarias",
-  "Moda & AcessÃ³rios",
-  "SaÃºde & FarmÃ¡cias",
-  "Beleza & Cabeleireiros",
-  "Oficinas & AutomÃ³veis",
-  "ConstruÃ§Ã£o & Bricolage",
-  "Artigos para Casa & DecoraÃ§Ã£o",
-  "Papelarias & Livrarias",
-  "Floristas & Jardinagem",
-  "Petshops & VeterinÃ¡rios",
-  "Tecnologia & InformÃ¡tica",
-  "Desporto & Lazer",
-  "Ã“pticas",
-  "Ourivesarias & Relojoarias",
-  "Lavandarias & Engomadoria",
-  "Sapateiros & ReparaÃ§Ãµes",
-  "EducaÃ§Ã£o & Centros de ExplicaÃ§Ãµes",
-  "Outros"
+  "RestauraÃ§Ã£o & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
+  "Padarias & Pastelarias", "Moda & AcessÃ³rios", "SaÃºde & FarmÃ¡cias",
+  "Beleza & Cabeleireiros", "Oficinas & AutomÃ³veis", "ConstruÃ§Ã£o & Bricolage",
+  "Artigos para Casa & DecoraÃ§Ã£o", "Papelarias & Livrarias", "Floristas & Jardinagem",
+  "Petshops & VeterinÃ¡rios", "Tecnologia & InformÃ¡tica", "Desporto & Lazer",
+  "Ã“pticas", "Ourivesarias & Relojoarias", "Lavandarias & Engomadoria",
+  "Sapateiros & ReparaÃ§Ãµes", "EducaÃ§Ã£o & Centros de ExplicaÃ§Ãµes", "Outros"
 ];
 
 const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSuccess }) => {
@@ -1645,37 +1550,24 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({
-    name: '',
-    email: '',
-    password: '',
-    nif: '',
-    cashbackPercent: '5',
-    category: '',
-    freguesia: '',
-    zipCode: ''
+    name: '', responsibleName: '', phone: '', email: '', password: '', 
+    nif: '', cashbackPercent: '5', category: '', freguesia: '', zipCode: ''
   });
 
   if (!isOpen) return null;
 
-  // MÃ¡scara para CÃ³digo Postal (xxxx-xxx)
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
-    if (value.length > 4) {
-      value = value.substring(0, 4) + '-' + value.substring(4, 7);
-    }
+    if (value.length > 4) value = value.substring(0, 4) + '-' + value.substring(4, 7);
     setFormData({ ...formData, zipCode: value });
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // ValidaÃ§Ã£o de Categoria
     if (!formData.category) {
       setError('POR FAVOR, SELECIONE UM SETOR DE ATIVIDADE.');
       return;
     }
-
-    // Validar formato do CÃ³digo Postal antes de enviar
     const zipCodeRegex = /^\d{4}-\d{3}$/;
     if (!zipCodeRegex.test(formData.zipCode)) {
       setError('CÃ“DIGO POSTAL INVÃLIDO. USE O FORMATO 0000-000');
@@ -1686,17 +1578,14 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
     setError('');
 
     try {
-      // 1. Criar conta no Auth
-      const userCredential = await createUserWithEmailAndPassword(
-        provisionAuth, 
-        formData.email.trim(), 
-        formData.password
-      );
-
-      // 2. Criar perfil de Lojista no Firestore
+      const userCredential = await createUserWithEmailAndPassword(provisionAuth, formData.email.trim(), formData.password);
+      
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
-        name: formData.name.trim(),
+        name: formData.name.trim(), // Shop Name
+        shopName: formData.name.trim(), // Shop Name redundante para garantir
+        responsibleName: formData.responsibleName.trim(), // NOVO CAMPO
+        phone: formData.phone.trim(), // NOVO CAMPO
         email: formData.email.toLowerCase().trim(),
         nif: formData.nif.trim(),
         role: 'merchant',
@@ -1712,7 +1601,6 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
       onSuccess();
       onClose();
     } catch (err: any) {
-      console.error(err);
       setError(err.message || 'Erro ao criar parceiro.');
     } finally {
       setLoading(false);
@@ -1720,9 +1608,8 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300">
-        
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-8">
         <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
           <div className="flex items-center gap-3">
             <Store className="text-[#00d66f]" size={24} />
@@ -1733,46 +1620,51 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-5">
+        <form onSubmit={handleSubmit} className="p-8 space-y-4">
           {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border-2 border-red-100">{error}</div>}
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label>
               <div className="relative">
                 <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                  value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
               </div>
             </div>
-
             <div>
-              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF</label>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome do ResponsÃ¡vel</label>
               <div className="relative">
-                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                <input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                  value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} />
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.responsibleName} onChange={e => setFormData({...formData, responsibleName: e.target.value})} />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            <div className="md:col-span-2">
-              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor de Atividade</label>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label>
               <div className="relative">
-                <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                <select 
-                  required 
-                  className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none"
-                  value={formData.category} 
-                  onChange={e => setFormData({...formData, category: e.target.value})}
-                >
-                  <option value="">SELECIONE O SETOR...</option>
-                  {MERCH_CATEGORIES.map(cat => (
-                    <option key={cat} value={cat}>{cat.toUpperCase()}</option>
-                  ))}
-                </select>
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required type="tel" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
               </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF</label>
+              <div className="relative">
+                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor de Atividade</label>
+            <div className="relative">
+              <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+              <select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                <option value="">SELECIONE O SETOR...</option>
+                {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+              </select>
             </div>
           </div>
 
@@ -1780,53 +1672,42 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
             <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">E-mail de Acesso</label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-              <input required type="email" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+              <input required type="email" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Palavra-passe</label>
-              <input required type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+              <input required type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">% Cashback</label>
               <div className="relative">
                 <Percent className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                <input required type="number" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                  value={formData.cashbackPercent} onChange={e => setFormData({...formData, cashbackPercent: e.target.value})} />
+                <input required type="number" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.cashbackPercent} onChange={e => setFormData({...formData, cashbackPercent: e.target.value})} />
               </div>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia</label>
               <div className="relative">
                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                  value={formData.freguesia} onChange={e => setFormData({...formData, freguesia: e.target.value})} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.freguesia} onChange={e => setFormData({...formData, freguesia: e.target.value})} />
               </div>
             </div>
             <div>
               <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">CÃ³digo Postal</label>
               <div className="relative">
                 <Locate className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                <input 
-                  required 
-                  maxLength={8}
-                  placeholder="0000-000"
-                  className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" 
-                  value={formData.zipCode} 
-                  onChange={handleZipCodeChange} 
-                />
+                <input required maxLength={8} placeholder="0000-000" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.zipCode} onChange={handleZipCodeChange} />
               </div>
             </div>
           </div>
 
-          <button disabled={loading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all flex items-center justify-center gap-3 border-b-4 border-[#0a2540]">
+          <button disabled={loading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all flex items-center justify-center gap-3 border-b-4 border-[#0a2540] mt-4">
             {loading ? <Loader2 className="animate-spin" /> : 'Confirmar Registo'}
           </button>
         </form>
@@ -1915,20 +1796,38 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\auth\LoginPage.tsx
 ==================================================
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
-import { auth } from '../../config/firebase';
+import { auth, db } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
-import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2 } from 'lucide-react';
+import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2, Store, X, User, Phone, MapPin, Hash, Tag, Percent } from 'lucide-react';
 import { useStore } from '../../store/useStore';
+import toast from 'react-hot-toast';
+
+const MERCH_CATEGORIES = [
+  "RestauraÃ§Ã£o & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
+  "Padarias & Pastelarias", "Moda & AcessÃ³rios", "SaÃºde & FarmÃ¡cias",
+  "Beleza & Cabeleireiros", "Oficinas & AutomÃ³veis", "ConstruÃ§Ã£o & Bricolage",
+  "Artigos para Casa & DecoraÃ§Ã£o", "Papelarias & Livrarias", "Floristas & Jardinagem",
+  "Petshops & VeterinÃ¡rios", "Tecnologia & InformÃ¡tica", "Desporto & Lazer",
+  "Ã“pticas", "Ourivesarias & Relojoarias", "Lavandarias & Engomadoria",
+  "Sapateiros & ReparaÃ§Ãµes", "EducaÃ§Ã£o & Centros de ExplicaÃ§Ãµes", "Outros"
+];
 
 const LoginPage: React.FC = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [localLoading, setLocalLoading] = useState(false);
+  
+  const [showMerchantModal, setShowMerchantModal] = useState(false);
+  const [merchantData, setMerchantData] = useState({
+    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: '', pass: ''
+  });
+  const [submittingMerchant, setSubmittingMerchant] = useState(false);
+
   const { currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
 
-  // Redirecionamento AutomÃ¡tico via Estado Global
   useEffect(() => {
     if (isInitialized && currentUser) {
       navigate('/dashboard', { replace: true });
@@ -1938,22 +1837,44 @@ const LoginPage: React.FC = () => {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (localLoading) return;
-
     setLocalLoading(true);
     setError('');
     
     try {
       await signInWithEmailAndPassword(auth, email.trim(), password);
-      // NÃƒO navegar aqui. Deixar o useEffect acima tratar disso.
     } catch (err: any) {
       setLocalLoading(false);
       setError('Email ou password incorretos.');
     }
   };
 
+  const handleMerchantRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!merchantData.category) {
+      toast.error('Por favor, selecione um setor de atividade.');
+      return;
+    }
+
+    setSubmittingMerchant(true);
+    try {
+      await addDoc(collection(db, 'merchant_requests'), {
+        ...merchantData,
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      toast.success('Pedido enviado! Aguarde contacto da nossa equipa.');
+      setShowMerchantModal(false);
+      setMerchantData({ shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: '', pass: '' });
+    } catch (err) {
+      toast.error('Erro ao enviar pedido. Tente novamente.');
+    } finally {
+      setSubmittingMerchant(false);
+    }
+  };
+
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
-      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12">
+    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
+      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 relative">
         <div className="text-center mb-10">
           <div className="bg-[#00d66f] w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#0a2540] rotate-3">
             <LogIn size={32} className="text-[#0a2540]" />
@@ -1972,12 +1893,7 @@ const LoginPage: React.FC = () => {
             <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
             <div className="relative">
               <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-              <input 
-                type="email" required value={email} 
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold"
-                placeholder="teu@email.com"
-              />
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="teu@email.com" />
             </div>
           </div>
 
@@ -1985,24 +1901,137 @@ const LoginPage: React.FC = () => {
             <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Password</label>
             <div className="relative">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-              <input 
-                type="password" required value={password} 
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold"
-                placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢"
-              />
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" />
             </div>
           </div>
 
-          <button 
-            type="submit" 
-            disabled={localLoading}
-            className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 disabled:opacity-70"
-          >
+          <button type="submit" disabled={localLoading} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 disabled:opacity-70 shadow-xl border-b-8 border-black/20">
             {localLoading ? <Loader2 className="animate-spin" /> : <>Entrar <ArrowRight /></>}
           </button>
         </form>
+
+        <div className="mt-8 flex flex-col items-center gap-4 text-[10px] font-black uppercase tracking-widest text-slate-400">
+            <Link to="/register" className="text-[#00d66f] hover:text-[#00b05b] bg-[#00d66f]/10 px-6 py-3 rounded-xl w-full text-center border border-[#00d66f]/20">Criar Nova Conta (Cliente)</Link>
+            <Link to="/forgot-password" className="hover:text-[#0a2540] underline">Esqueci-me da Password</Link>
+            <button onClick={() => setShowMerchantModal(true)} className="hover:text-[#0a2540] underline text-blue-500">Sou Comerciante / Quero Aderir</button>
+            <Link to="/terms" className="hover:text-[#0a2540] mt-4">Termos e CondiÃ§Ãµes</Link>
+        </div>
       </div>
+
+      {showMerchantModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-8">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Store className="text-[#00d66f]" size={24} />
+                <h2 className="font-black uppercase italic tracking-tighter text-xl">Aderir ao Vizinho+</h2>
+              </div>
+              <button onClick={() => setShowMerchantModal(false)} className="hover:rotate-90 transition-transform">
+                <X size={24} />
+              </button>
+            </div>
+
+            <form onSubmit={handleMerchantRequest} className="p-8 space-y-4">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">
+                Preencha os dados da sua loja. A nossa equipa irÃ¡ validar o pedido e ativar a sua conta.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label>
+                  <div className="relative">
+                    <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.shopName} onChange={e => setMerchantData({...merchantData, shopName: e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome do ResponsÃ¡vel</label>
+                  <div className="relative">
+                    <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.responsibleName} onChange={e => setMerchantData({...merchantData, responsibleName: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Email (Para Login)</label>
+                  <div className="relative">
+                    <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input required type="email" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.email} onChange={e => setMerchantData({...merchantData, email: e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label>
+                  <div className="relative">
+                    <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input required type="tel" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.phone} onChange={e => setMerchantData({...merchantData, phone: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF Comercial</label>
+                  <div className="relative">
+                    <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.nif} onChange={e => setMerchantData({...merchantData, nif: e.target.value.replace(/\D/g, '')})} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label>
+                  <div className="relative">
+                    <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}>
+                      <option value="">SELECIONE O SETOR...</option>
+                      {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia</label>
+                  <div className="relative">
+                    <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                    <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.freguesia} onChange={e => setMerchantData({...merchantData, freguesia: e.target.value})} />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">CÃ³digo Postal</label>
+                  <input required maxLength={8} placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.zipCode} onChange={e => {
+                      let val = e.target.value.replace(/\D/g, '');
+                      if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
+                      setMerchantData({...merchantData, zipCode: val});
+                  }} />
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <div>
+                    <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Defina uma Password</label>
+                    <div className="relative">
+                        <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                        <input required type="password" minLength={6} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.pass} onChange={e => setMerchantData({...merchantData, pass: e.target.value})} />
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">% Cashback Pretendido</label>
+                    <div className="relative">
+                        <Percent className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                        <input required type="number" min="0" max="100" step="0.1" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.cashbackPercent} onChange={e => setMerchantData({...merchantData, cashbackPercent: e.target.value})} />
+                    </div>
+                  </div>
+              </div>
+
+              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all flex items-center justify-center gap-3 border-b-4 border-[#0a2540] mt-4">
+                {submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de AdesÃ£o'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -2018,13 +2047,13 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, Mail, Lock, User, Hash, ArrowRight, MapPin, CheckCircle } from 'lucide-react';
+import { UserPlus, ArrowRight, Phone } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import toast from 'react-hot-toast';
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', nif: '', email: '', password: '', zipCode: '' });
-  const [acceptedTerms, setAcceptedTerms] = useState(false); // RGPD
+  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', password: '', zipCode: '' });
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { checkNifExists } = useStore();
@@ -2050,19 +2079,26 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
+      // 1. PRIMEIRO: AUTENTICA O UTILIZADOR NO AUTH
+      // (NecessÃ¡rio para as regras do Firebase permitirem verificar o NIF a seguir)
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
+      
+      // 2. SEGUNDO: COM A SESSÃƒO INICIADA, VERIFICA SE O NIF JÃ EXISTE
       const nifExists = await checkNifExists(formData.nif);
       if (nifExists) {
+        // Se o NIF jÃ¡ existe, elimina imediatamente a conta que acabou de criar no Auth
+        await userCredential.user.delete();
         toast.error("ESTE NIF JÃ ESTÃ REGISTADO.");
         setLoading(false);
         return;
       }
 
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      
+      // 3. TERCEIRO: O NIF Ã‰ VÃLIDO, CRIA O PERFIL NA BASE DE DADOS FIRESTORE
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
         nif: formData.nif,
+        phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
         role: 'client',
@@ -2073,8 +2109,14 @@ const RegisterPage: React.FC = () => {
 
       toast.success("BEM-VINDO VIZINHO!");
       navigate('/dashboard');
+      
     } catch (err: any) {
-      toast.error("ERRO AO CRIAR CONTA.");
+      if (err.code === 'auth/email-already-in-use') {
+        toast.error("ESTE EMAIL JÃ ESTÃ REGISTADO.");
+      } else {
+        toast.error("ERRO AO CRIAR CONTA.");
+        console.error(err);
+      }
     } finally {
       setLoading(false);
     }
@@ -2082,7 +2124,7 @@ const RegisterPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
-      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12">
+      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
         <div className="text-center mb-10">
           <div className="bg-[#0a2540] w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#00d66f]">
             <UserPlus size={32} className="text-[#00d66f]" />
@@ -2107,9 +2149,15 @@ const RegisterPage: React.FC = () => {
             </div>
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
-            <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
+              <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">TelemÃ³vel <span className="text-[8px]">(Opcional)</span></label>
+              <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+            </div>
           </div>
 
           <div className="space-y-1">
@@ -2117,7 +2165,6 @@ const RegisterPage: React.FC = () => {
             <input type="password" minLength={6} required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
-          {/* CHECKBOX RGPD */}
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
             <input 
               type="checkbox" 
@@ -2137,8 +2184,8 @@ const RegisterPage: React.FC = () => {
           </button>
         </form>
 
-        <div className="mt-8 text-center">
-          <Link to="/login" className="text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540]">JÃ¡ tenho conta. Quero entrar.</Link>
+        <div className="mt-8 text-center space-y-4">
+          <Link to="/login" className="block text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540]">JÃ¡ tenho conta. Quero entrar.</Link>
         </div>
       </div>
     </div>
@@ -2198,7 +2245,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return new Date(createdAt);
   };
 
-  // GrÃ¡fico DiÃ¡rio alimentado pelo Volume (FaturaÃ§Ã£o) exato
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'SÃ¡b'];
     const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
@@ -2211,7 +2257,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         const dayIdx = date.getDay();
         const hour = date.getHours();
         counts[dayIdx].count++;
-        counts[dayIdx].volume += Number(t.amount || 0); // Acumula o valor em Euros
+        counts[dayIdx].volume += Number(t.amount || 0); 
         counts[dayIdx].hours[hour]++;
       }
     });
@@ -2249,30 +2295,27 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   }, [transactions]);
 
   const cashbackStats = useMemo(() => {
-    let emitted = 0, used = 0, pending = 0, available = 0;
+    let emitted = 0, used = 0, available = 0;
     
     transactions.forEach(t => {
       if (t.status === 'cancelled') return;
       
       if (t.type === 'earn') {
         emitted += t.cashbackAmount;
-        if (t.status === 'pending') pending += t.cashbackAmount;
-        if (t.status === 'available') available += t.cashbackAmount;
+        available += t.cashbackAmount; // Fica logo disponÃ­vel
       } else if (t.type === 'redeem') {
-        used += t.amount;
+        used += t.amount; // amount na transaÃ§Ã£o redeem Ã© o valor do desconto!
         available -= t.amount;
       }
     });
     
-    return { emitted, used, pending, available: Math.max(0, available) };
+    return { emitted, used, available: Math.max(0, available) };
   }, [transactions]);
 
   const feedbackStats = useMemo(() => {
     if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
-    
     const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
     const promotersCount = feedbacks.filter(f => f.rating >= 4).length;
-    
     return {
       avg: (sum / feedbacks.length).toFixed(1),
       count: feedbacks.length,
@@ -2283,7 +2326,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
       
-      {/* CARD 1: FLUXO DE CLIENTES BASEADO EM VOLUME */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
           <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
@@ -2291,23 +2333,13 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         
         <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
           {dayStats.map((d, i) => {
-            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; // Garante que nunca Ã© zero
+            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
             const heightPercentage = (d.volume / maxVol) * 100;
             
             return (
               <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
-                <div 
-                  className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" 
-                  style={{ 
-                    height: `${heightPercentage}%`, 
-                    minHeight: d.volume > 0 ? '8px' : '2px' // Dias a zeros ficam como uma linha fininha
-                  }}
-                >
-                    {d.volume > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">
-                            {formatCurrency(d.volume)}
-                        </div>
-                    )}
+                <div className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" style={{ height: `${heightPercentage}%`, minHeight: d.volume > 0 ? '8px' : '2px' }}>
+                    {d.volume > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">{formatCurrency(d.volume)}</div>}
                 </div>
                 <span className="text-[8px] font-black uppercase text-slate-400">{d.day}</span>
               </div>
@@ -2321,16 +2353,13 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
               {dayStats.filter(d => d.count > 0).slice(0, 4).map((d, i) => (
                 <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold uppercase border border-slate-100">
                   <span className="text-slate-500">{d.day}</span>
-                  <span className="text-[#0a2540] flex items-center gap-1">
-                    <Clock size={10} className="text-[#00d66f]"/> {d.peakHour}
-                  </span>
+                  <span className="text-[#0a2540] flex items-center gap-1"><Clock size={10} className="text-[#00d66f]"/> {d.peakHour}</span>
                 </div>
               ))}
           </div>
         </div>
       </div>
 
-      {/* CARD 2: FATURAÃ‡ÃƒO MENSAL */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
           <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
@@ -2345,10 +2374,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                     <span className="text-[#0a2540] italic">{formatCurrency(m.volume)}</span>
                   </div>
                   <div className="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                    <div 
-                        className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" 
-                        style={{ width: `${(m.volume / maxVol) * 100}%` }} 
-                    />
+                    <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
                   </div>
                 </div>
               );
@@ -2356,12 +2382,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
       </div>
 
-      {/* CARD 3: ECONOMIA DA LOJA (CASHBACK) */}
       <div className="bg-[#0a2540] p-8 rounded-[40px] text-white shadow-2xl flex flex-col relative overflow-hidden border-4 border-[#0a2540]">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-            <Wallet size={120} />
-        </div>
-        
+        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wallet size={120} /></div>
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
           <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Wallet size={16} /></div> GestÃ£o de Saldo
         </h3>
@@ -2383,16 +2405,10 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                   <span className="text-sm font-bold text-red-400">-{formatCurrency(cashbackStats.used)}</span>
               </div>
             </div>
-            
-            <div className="flex justify-between items-center bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
-              <span className="text-[9px] font-black uppercase text-amber-500/80 tracking-widest">A Maturar</span>
-              <span className="text-sm font-black text-amber-500">{formatCurrency(cashbackStats.pending)}</span>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* CARD 4: SATISFAÃ‡ÃƒO DE CLIENTES */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col h-[480px]">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6 shrink-0">
           <div className="bg-amber-100 p-2 rounded-xl"><Star size={16} className="text-amber-500 fill-amber-500" /></div> SatisfaÃ§Ã£o
@@ -2410,9 +2426,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
         
         <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
-          <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">
-            Ãšltimos ComentÃ¡rios (Max. 50)
-          </p>
+          <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">Ãšltimos ComentÃ¡rios</p>
           
           {loadingFeedbacks ? (
               <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
@@ -2424,9 +2438,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                         <Star key={si} size={10} fill={si < f.rating ? "#0a2540" : "none"} className={si < f.rating ? "text-[#0a2540]" : "text-slate-300"} />
                     ))}
                   </div>
-                  <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">
-                    "{f.comment || 'Sem comentÃ¡rio adicional.'}"
-                  </p>
+                  <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">"{f.comment || 'Sem comentÃ¡rio adicional.'}"</p>
                 </div>
               ))
           ) : (
@@ -2536,15 +2548,7 @@ export default MerchantSettings;
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\merchant\components\MerchantTerminal.tsx
 ==================================================
 import React from 'react';
-import { 
-  Search, 
-  Camera, 
-  ArrowRight, 
-  User as UserIcon,
-  Coins, 
-  Gift, 
-  RotateCcw 
-} from 'lucide-react';
+import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, RotateCcw, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
 interface MerchantTerminalProps {
@@ -2571,111 +2575,87 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching
 }) => {
 
-  // Formatar o input do NIF para agrupar 3 em 3 (Visual apenas)
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, ''); // Remove tudo o que nÃ£o for nÃºmero
+    let val = e.target.value.replace(/\D/g, ''); 
     if (val.length > 9) val = val.substring(0, 9);
-    
-    // FormataÃ§Ã£o visual: 123 456 789
     let formatted = val;
-    if (val.length > 6) {
-      formatted = `${val.substring(0, 3)} ${val.substring(3, 6)} ${val.substring(6, 9)}`;
-    } else if (val.length > 3) {
-      formatted = `${val.substring(0, 3)} ${val.substring(3, 6)}`;
-    }
-    
+    if (val.length > 6) formatted = `${val.substring(0, 3)} ${val.substring(3, 6)} ${val.substring(6, 9)}`;
+    else if (val.length > 3) formatted = `${val.substring(0, 3)} ${val.substring(3, 6)}`;
     setCardNumber(formatted);
   };
 
-  // Validar se o botÃ£o de Ganhar/Descontar deve estar ativo
-  const canProcess = !isLoading && foundClient !== null && Number(amount) > 0 && documentNumber.trim().length > 0;
-  // Validar se pode cancelar (Apenas precisa do NIF e Doc)
+  const invoiceAmount = Number(amount) || 0;
+  // CÃLCULO DA REGRA DOS 50%
+  const maxDiscountAllowed = invoiceAmount * 0.5;
+  const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
+
+  const canProcess = !isLoading && foundClient !== null && invoiceAmount > 0 && documentNumber.trim().length > 0;
   const canCancel = !isLoading && foundClient !== null && documentNumber.trim().length > 0;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
       
-      {/* LADO ESQUERDO: TERMINAL DE INTRODUÃ‡ÃƒO */}
       <div className="lg:col-span-2 bg-white p-8 md:p-12 rounded-[40px] shadow-[12px_12px_0px_0px_#0a2540] border-4 border-[#0a2540] relative overflow-hidden">
         <div className="space-y-10 relative z-10">
           
-          {/* IDENTIFICAÃ‡ÃƒO DO CLIENTE */}
           <div className="space-y-4">
             <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
               <Search size={16} /> Identificar Cliente (NIF)
             </label>
             <div className="flex gap-4">
               <input 
-                type="text" 
-                inputMode="numeric"
-                value={cardNumber} 
-                onChange={handleNifChange}
-                placeholder="000 000 000" 
+                type="text" inputMode="numeric" value={cardNumber} onChange={handleNifChange} placeholder="000 000 000" 
                 className={`flex-grow p-6 bg-slate-50 border-4 rounded-3xl text-3xl font-black text-[#0a2540] outline-none transition-all shadow-inner tracking-widest ${isNifValid ? 'border-[#00d66f] bg-green-50/30' : 'border-slate-100 focus:border-[#0a2540]'}`}
               />
-              <button 
-                onClick={onOpenScanner} 
-                className="bg-[#0a2540] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-[6px_6px_0px_0px_#00d66f] border-2 border-[#00d66f] active:translate-y-1 active:shadow-none"
-                title="Ler QR Code"
-              >
-                <Camera size={32} />
-              </button>
+              <button onClick={onOpenScanner} className="bg-[#0a2540] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-[6px_6px_0px_0px_#00d66f] border-2 border-[#00d66f] active:translate-y-1 active:shadow-none"><Camera size={32} /></button>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            {/* VALOR DA FATURA */}
             <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor Fatura (â‚¬)</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Nova Fatura (â‚¬)</label>
               <input 
-                type="number" 
-                step="0.01"
-                min="0"
-                value={amount} 
-                onChange={e => setAmount(e.target.value)} 
-                placeholder="0.00" 
+                type="number" step="0.01" min="0" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" 
                 className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner" 
               />
               
-              {/* ESTIMATIVA DE RETORNO */}
-              {Number(amount) > 0 && (
-                <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200 animate-in zoom-in">
-                  <ArrowRight size={16} className="text-[#00d66f]" />
-                  <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
-                    Cashback Emitido: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
-                  </span>
+              {invoiceAmount > 0 && (
+                <div className="flex flex-col gap-2 animate-in zoom-in">
+                  <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
+                    <ArrowRight size={16} className="text-[#00d66f]" />
+                    <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
+                      Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
+                    </span>
+                  </div>
+
+                  {clientStoreBalance > 0 && (
+                     <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-200">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
+                           <AlertTriangle size={14} /> Regra de Desconto (MÃ¡x 50%)
+                        </p>
+                        <div className="flex justify-between text-[11px] font-bold text-blue-600">
+                           <span>Limite Permitido: {formatCurrency(maxDiscountAllowed)}</span>
+                           <span className="font-black text-blue-900">Aplicar: {formatCurrency(actualDiscountToApply)}</span>
+                        </div>
+                     </div>
+                  )}
                 </div>
               )}
             </div>
 
-            {/* DOCUMENTO FISCAL */}
             <div className="space-y-4">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">NÂº Fatura / Recibo</label>
-              <input 
-                type="text"
-                value={documentNumber} 
-                onChange={e => setDocumentNumber(e.target.value.toUpperCase())} 
-                placeholder="EX: FT 123/2026" 
-                className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black uppercase text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner tracking-widest" 
-              />
-              <p className="text-[8px] font-bold text-slate-400 uppercase tracking-widest ml-2 mt-2 leading-relaxed">
-                * ObrigatÃ³rio para auditorias e cruzamento de dados com a Autoridade TributÃ¡ria em caso de disputa.
-              </p>
+              <input type="text" value={documentNumber} onChange={e => setDocumentNumber(e.target.value.toUpperCase())} placeholder="EX: FT 123/2026" className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black uppercase text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner tracking-widest" />
             </div>
           </div>
         </div>
       </div>
 
-      {/* LADO DIREITO: AÃ‡Ã•ES DO LOJISTA */}
       <div className="flex flex-col gap-4">
-        
-        {/* CAIXA DE IDENTIFICAÃ‡ÃƒO (STATUS) */}
         <div className={`p-6 rounded-[35px] border-4 transition-all flex flex-col items-center gap-3 justify-center shadow-lg ${foundClient ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-300 border-dashed'}`}>
           {foundClient ? (
             <>
-              <div className="p-3 bg-white/30 rounded-2xl mb-1 border-2 border-[#0a2540]/10">
-                <UserIcon size={24} className="text-[#0a2540]" strokeWidth={3} />
-              </div>
+              <div className="p-3 bg-white/30 rounded-2xl mb-1 border-2 border-[#0a2540]/10"><UserIcon size={24} className="text-[#0a2540]" strokeWidth={3} /></div>
               <h4 className="font-black uppercase text-center text-sm tracking-tighter italic">{foundClient.name}</h4>
               <div className="bg-[#0a2540] px-4 py-2 rounded-xl text-center w-full mt-2 shadow-inner border border-[#0a2540]">
                 <p className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest mb-1">Saldo nesta Loja</p>
@@ -2685,37 +2665,22 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
           ) : (
             <>
                <Search size={32} className="opacity-50" />
-               <p className="text-[10px] font-black uppercase tracking-widest text-center">{isSearching ? 'A pesquisar base de dados...' : 'Aguardando Cliente...'}</p>
+               <p className="text-[10px] font-black uppercase tracking-widest text-center">{isSearching ? 'A pesquisar...' : 'Aguardando Cliente...'}</p>
             </>
           )}
         </div>
 
-        {/* BOTÃƒO GANHAR (EARN) */}
-        <button 
-          onClick={() => onProcessAction('earn')} 
-          disabled={!canProcess} 
-          className="flex-1 bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100"
-        >
+        <button onClick={() => onProcessAction('earn')} disabled={!canProcess} className="flex-1 bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100">
           <Coins size={32} className="text-[#00d66f]" />
           <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback</span>
         </button>
 
-        {/* BOTÃƒO UTILIZAR SALDO (REDEEM) */}
-        <button 
-          onClick={() => onProcessAction('redeem')} 
-          disabled={!canProcess || clientStoreBalance <= 0 || Number(amount) > clientStoreBalance} 
-          className="flex-1 bg-white p-6 rounded-[35px] text-[#0a2540] border-4 border-[#0a2540] transition-all hover:bg-slate-50 hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:hover:scale-100"
-        >
+        <button onClick={() => onProcessAction('redeem')} disabled={!canProcess || clientStoreBalance <= 0 || actualDiscountToApply <= 0} className="flex-1 bg-white p-6 rounded-[35px] text-[#0a2540] border-4 border-[#0a2540] transition-all hover:bg-slate-50 hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:hover:scale-100">
           <Gift size={32} className="text-[#0a2540]" />
           <span className="font-black text-[11px] uppercase tracking-[0.2em]">Descontar Saldo</span>
         </button>
 
-        {/* BOTÃƒO ANULAR */}
-        <button 
-          onClick={() => onProcessAction('cancel')} 
-          disabled={!canCancel} 
-          className="py-6 px-4 bg-red-50 rounded-[35px] text-red-500 border-4 border-red-100 transition-all hover:bg-red-500 hover:text-white hover:border-red-600 flex items-center justify-center gap-3 disabled:opacity-40"
-        >
+        <button onClick={() => onProcessAction('cancel')} disabled={!canCancel} className="py-6 px-4 bg-red-50 rounded-[35px] text-red-500 border-4 border-red-100 transition-all hover:bg-red-500 hover:text-white hover:border-red-600 flex items-center justify-center gap-3 disabled:opacity-40">
           <RotateCcw size={16} strokeWidth={3} />
           <span className="font-black text-[10px] uppercase tracking-widest">Anular Movimento</span>
         </button>
@@ -2813,11 +2778,10 @@ import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
 import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings } from 'lucide-react';
 
-// Sub-componentes
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
-import MerchantSettings from './components/MerchantSettings'; // CORRIGIDO: Removida a extensÃ£o .tsx
+import MerchantSettings from './components/MerchantSettings';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
@@ -2837,17 +2801,14 @@ const MerchantDashboard: React.FC = () => {
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
-
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
 
-  // CÃ¡lculo seguro do Cashback para a prÃ©-visualizaÃ§Ã£o
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
     const percent = currentUser?.cashbackPercent || 0;
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
 
-  // Pesquisa de Cliente por NIF
   useEffect(() => {
     const search = async () => {
       const cleanNif = cardNumber.replace(/\s/g, '');
@@ -2856,25 +2817,15 @@ const MerchantDashboard: React.FC = () => {
         try {
           const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
           const snap = await getDocs(q);
-          if (!snap.empty) {
-            setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-          } else {
-            setFoundClient(null);
-          }
-        } catch (error) {
-          console.error("Erro na pesquisa:", error);
-        } finally {
-          setIsSearching(false);
-        }
-      } else {
-        setFoundClient(null);
-      }
+          if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+          else setFoundClient(null);
+        } catch (error) { console.error(error); } finally { setIsSearching(false); }
+      } else { setFoundClient(null); }
     };
     const timer = setTimeout(search, 500);
     return () => clearTimeout(timer);
   }, [cardNumber]);
 
-  // Subscrever TransaÃ§Ãµes
   useEffect(() => {
     if (currentUser?.id) {
       const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
@@ -2883,12 +2834,30 @@ const MerchantDashboard: React.FC = () => {
   }, [currentUser?.id, subscribeToTransactions]);
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
-    const val = parseFloat(amount);
-    if (!foundClient || isNaN(val) || val <= 0 || !documentNumber) {
+    const invoiceVal = parseFloat(amount);
+    
+    // CORREÃ‡ÃƒO AQUI: Adicionado !currentUser para garantir que o utilizador existe
+    if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0 || !documentNumber) {
       alert("Preencha o valor e o nÃºmero da fatura corretamente.");
       return;
     }
-    setPendingAction({ type, val });
+
+    let valToProcess = invoiceVal;
+
+    // APLICAÃ‡ÃƒO DA REGRA DE REDEEM (DESCONTO MÃXIMO 50%)
+    if (type === 'redeem') {
+      // Como jÃ¡ garantimos acima que currentUser nÃ£o Ã© null, agora Ã© 100% seguro ler currentUser.id
+      const clientBalance = foundClient.storeWallets?.[currentUser.id]?.available || 0;
+      const maxDiscount = invoiceVal * 0.5;
+      valToProcess = Math.min(clientBalance, maxDiscount);
+
+      if (valToProcess <= 0) {
+        alert("O cliente nÃ£o tem saldo suficiente para descontar.");
+        return;
+      }
+    }
+
+    setPendingAction({ type, val: valToProcess });
     setShowConfirmModal(true);
   };
 
@@ -2901,25 +2870,18 @@ const MerchantDashboard: React.FC = () => {
         clientId: foundClient.id,
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
-        amount: pendingAction.val,
+        amount: pendingAction.val, // Se for redeem, este Ã© o valor jÃ¡ cortado aos 50%
         type: pendingAction.type,
         documentNumber: documentNumber
       });
       setMessage({ type: 'success', text: "OperaÃ§Ã£o registada com sucesso!" });
-      setAmount(''); 
-      setDocumentNumber(''); 
-      setCardNumber('');
+      setAmount(''); setDocumentNumber(''); setCardNumber('');
     } catch (e) {
-      setMessage({ type: 'error', text: "Erro ao registar: Verifique as permissÃµes." });
+      setMessage({ type: 'error', text: "Erro ao registar." });
     } finally {
       setIsLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
   };
 
   if (!currentUser) return null;
@@ -2933,21 +2895,10 @@ const MerchantDashboard: React.FC = () => {
         </div>
         
         <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-md">
-          <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
-            <LayoutDashboard size={16} /> Terminal
-          </button>
-          
-          <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
-            <BarChart3 size={16} /> Business Intelligence
-          </button>
-
-          <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}>
-            <Settings size={16} /> DefiniÃ§Ãµes
-          </button>
-
-          <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
-            <LogOut size={20} />
-          </button>
+          <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><LayoutDashboard size={16} /> Terminal</button>
+          <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BarChart3 size={16} /> Business Intelligence</button>
+          <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}><Settings size={16} /> DefiniÃ§Ãµes</button>
+          <button onClick={async () => { await logout(); navigate('/login'); }} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all"><LogOut size={20} /></button>
         </nav>
       </header>
 
@@ -2967,18 +2918,8 @@ const MerchantDashboard: React.FC = () => {
           />
         )}
 
-        {view === 'bi' && (
-          <BusinessIntelligence 
-            merchantId={currentUser.id}
-            transactions={transactions}
-          />
-        )}
-
-        {view === 'settings' && (
-          <MerchantSettings 
-            currentUser={currentUser}
-          />
-        )}
+        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
+        {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
         {message.text && view === 'terminal' && (
           <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-bounce shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
@@ -2997,6 +2938,14 @@ const MerchantDashboard: React.FC = () => {
               <AlertTriangle size={48} className="mx-auto mb-4" />
               <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar OperaÃ§Ã£o?</h3>
               <p className="font-bold text-[10px] uppercase opacity-70 mt-2">{foundClient?.name}</p>
+              
+              <div className="mt-4 p-4 bg-white/20 rounded-2xl border border-white/30">
+                 <p className="font-black text-lg">
+                    {pendingAction.type === 'earn' 
+                      ? `Atribuir Cashback sobre ${formatCurrency(parseFloat(amount))}` 
+                      : `Descontar ${formatCurrency(pendingAction.val)}`}
+                 </p>
+              </div>
             </div>
             <div className="p-8 grid grid-cols-2 gap-4">
               <button onClick={() => setShowConfirmModal(false)} className="py-4 bg-slate-100 rounded-2xl font-black uppercase text-[10px] text-slate-400">Cancelar</button>
@@ -3759,10 +3708,9 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
       .map(([id, data]: [string, any]) => ({
         id,
         name: data.merchantName,
-        available: data.available || 0,
-        pending: data.pending || 0
+        available: data.available || 0
       }))
-      .filter(b => b.available > 0 || b.pending > 0);
+      .filter(b => b.available > 0);
   }, [currentUser?.storeWallets]);
 
   return (
@@ -3779,12 +3727,6 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
               <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">{formatCurrency(m.available)} disponÃ­vel</p>
             </div>
           </div>
-          {m.pending > 0 && (
-            <div className="text-right">
-              <p className="text-[8px] font-black text-amber-500 uppercase">A Processar</p>
-              <p className="text-xs font-black text-amber-600">+{formatCurrency(m.pending)}</p>
-            </div>
-          )}
         </div>
       )) : (
         <div className="bg-slate-50 p-8 rounded-[30px] text-center text-slate-400 text-[10px] font-black uppercase">
@@ -3807,15 +3749,16 @@ import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Transaction, User as UserProfile } from '../../types';
+import { Transaction, User as UserProfile, Leaflet } from '../../types';
 
-// Componentes
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
-import BannerCarousel from './components/BannerCarousel'; // Novo Componente
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck } from 'lucide-react';
+import BannerCarousel from './components/BannerCarousel';
+
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2 } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
@@ -3828,6 +3771,13 @@ const UserDashboard: React.FC = () => {
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
+  
+  // FOLHETOS
+  const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
+  
+  // MODAL DE CONTACTO
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -3850,6 +3800,21 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser?.id]);
 
+  useEffect(() => {
+    const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
+    return onSnapshot(q, (snap) => {
+      const now = new Date();
+      const valid = snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Leaflet))
+        .filter(l => {
+          const start = l.startDate.toDate();
+          const end = l.endDate.toDate();
+          return now >= start && now <= end;
+        });
+      setActiveLeaflets(valid);
+    });
+  }, []);
+
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
   }, [transactions, evaluatedIds]);
@@ -3865,6 +3830,27 @@ const UserDashboard: React.FC = () => {
     navigate('/login');
   };
 
+  const openLeaflet = () => {
+    if (activeLeaflets.length > 0) {
+      window.open(activeLeaflets[0].leafletUrl, '_blank');
+    }
+  };
+
+  // FUNÃ‡Ã•ES DE CONTACTO
+  const handleOpenEmailApp = () => {
+    // Formata um link mailto robusto
+    const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${currentUser?.nif}`);
+    const body = encodeURIComponent(`OlÃ¡ equipa Vizinho+,\n\nPreciso de ajuda com...`);
+    window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
+  };
+
+  const handleCopyEmail = () => {
+    navigator.clipboard.writeText(sysConfig.supportEmail);
+    setEmailCopied(true);
+    toast.success("E-mail copiado para a Ã¡rea de transferÃªncia!");
+    setTimeout(() => setEmailCopied(false), 3000);
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -3878,11 +3864,7 @@ const UserDashboard: React.FC = () => {
           </h1>
         </div>
         <div className="flex items-center gap-4">
-            <button 
-                onClick={() => navigate('/settings')}
-                className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-[#0a2540] hover:bg-slate-100 transition-colors border-2 border-slate-100"
-                title="DefiniÃ§Ãµes de Perfil"
-            >
+            <button onClick={() => navigate('/settings')} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-[#0a2540] hover:bg-slate-100 transition-colors border-2 border-slate-100" title="DefiniÃ§Ãµes de Perfil">
                 <Settings size={20} />
             </button>
             <img src={logoPath} alt="V+" className="h-8 w-auto hidden sm:block" />
@@ -3891,10 +3873,30 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
-        {/* CARROSSEL DE BANNERS AGENDADO */}
         <BannerCarousel />
 
-        {/* CARTÃƒO DIGITAL VIZINHO+ */}
+        <button 
+          onClick={openLeaflet}
+          disabled={activeLeaflets.length === 0}
+          className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${activeLeaflets.length > 0 ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'}`}
+        >
+          {activeLeaflets.length > 0 && (
+             <div className="absolute -top-3 -right-3 bg-red-500 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center font-black uppercase tracking-widest text-[9px] border-4 border-[#0a2540] animate-pulse rotate-12 shadow-xl z-20">
+               <Star size={12} fill="currentColor" className="mb-0.5" /> Novo
+             </div>
+          )}
+          
+          <div className="flex items-center gap-4 relative z-10">
+            <div className="bg-[#0a2540] p-3 rounded-2xl"><Sparkles size={32} className="text-[#00d66f]" /></div>
+            <div className="text-left">
+              <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter text-[#0a2540]">Grandes Oportunidades</h4>
+              <p className="text-[10px] font-black uppercase tracking-widest text-[#0a2540] opacity-70 mt-1">{activeLeaflets.length > 0 ? 'Toca para ver folheto' : 'Sem folhetos ativos no momento'}</p>
+            </div>
+          </div>
+          {activeLeaflets.length > 0 && <ExternalLink size={20} className="text-[#0a2540] opacity-50 relative z-10" />}
+        </button>
+
+        {/* CARTÃƒO DIGITAL DO CLIENTE COM AVISO LEGAL */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
                 CartÃ£o Digital
@@ -3908,22 +3910,21 @@ const UserDashboard: React.FC = () => {
                     {currentUser.nif?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>
-            <div className="bg-amber-50 px-6 py-2 rounded-full border border-amber-100 flex items-center gap-2">
-                <QrCode size={14} className="text-amber-600" />
-                <p className="text-[9px] font-bold text-amber-700 uppercase tracking-tight italic">
-                    Apresente sempre o seu cartÃ£o ao fazer compras
+            
+            {/* AVISO LEGAL ADICIONADO AQUI */}
+            <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mt-2 w-full text-center">
+                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed flex items-center justify-center gap-2">
+                  <AlertCircle size={12} className="text-slate-400 shrink-0" />
+                  <span>Reserva-se ao comerciante o direito de nÃ£o aplicar cashback em produtos especÃ­ficos.</span>
                 </p>
             </div>
         </div>
 
-        {/* BLOCO DE SALDOS */}
         <div className="bg-[#0a2540] rounded-[40px] p-8 text-white shadow-2xl relative overflow-hidden">
           <div className="relative z-10 space-y-6">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00d66f] mb-1">Saldo DisponÃ­vel</p>
-              <h2 className="text-5xl font-black italic tracking-tighter text-[#00d66f]">
-                {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}
-              </h2>
+              <h2 className="text-5xl font-black italic tracking-tighter text-[#00d66f]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}</h2>
             </div>
             <div className="pt-4 border-t border-white/10 flex justify-between">
               <div>
@@ -3932,31 +3933,19 @@ const UserDashboard: React.FC = () => {
               </div>
               <div className="text-right">
                 <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Total Ganho</p>
-                <p className="text-sm font-bold text-white">
-                    {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.total)}
-                </p>
+                <p className="text-sm font-bold text-white">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.total)}</p>
               </div>
             </div>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')}
-            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] -rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}
-          >
+          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] -rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}>
             <Wallet size={32} />
             <span className="text-[9px] font-black uppercase tracking-widest">O meu Saldo</span>
           </button>
-          <button 
-            onClick={() => setView(view === 'history' ? 'home' : 'history')}
-            className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}
-          >
-            {pendingEvaluations.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-4 border-[#f8fafc] animate-bounce">
-                {pendingEvaluations.length}
-              </span>
-            )}
+          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}>
+            {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-4 border-[#f8fafc] animate-bounce">{pendingEvaluations.length}</span>}
             <MessageSquare size={32} />
             <span className="text-[9px] font-black uppercase tracking-widest">Avaliar Lojas</span>
           </button>
@@ -3965,30 +3954,18 @@ const UserDashboard: React.FC = () => {
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
         
-        <button 
-          onClick={() => setView(view === 'explore' ? 'home' : 'explore')}
-          className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[6px_6px_0px_#0a2540] active:translate-y-1 active:shadow-none'}`}
-        >
+        <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[6px_6px_0px_#0a2540] active:translate-y-1 active:shadow-none'}`}>
           {view === 'explore' ? 'Fechar Pesquisa' : 'Ver Lojas Parceiras'}
         </button>
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
         {sysConfig.vantagensUrl && (
-          <button 
-            onClick={() => window.open(sysConfig.vantagensUrl, '_blank')}
-            className="w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all group"
-            style={{
-                background: 'linear-gradient(135deg, #bf953f 0%, #fcf6ba 45%, #b38728 50%, #fcf6ba 55%, #aa771c 100%)',
-                border: '4px solid #aa771c'
-            }}
-          >
+          <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all group" style={{background: 'linear-gradient(135deg, #bf953f 0%, #fcf6ba 45%, #b38728 50%, #fcf6ba 55%, #aa771c 100%)', border: '4px solid #aa771c'}}>
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-4">
-                <div className="bg-black/20 p-3 rounded-2xl">
-                  <Star size={32} className="text-white fill-white" />
-                </div>
+                <div className="bg-black/20 p-3 rounded-2xl"><Star size={32} className="text-white fill-white" /></div>
                 <div className="text-left">
                   <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter text-[#5c4414]">Vantagens Exclusivas</h4>
                   <p className="text-[10px] font-black uppercase tracking-widest text-[#5c4414] opacity-80">Acesso VIP Vizinho+</p>
@@ -4001,26 +3978,74 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      <footer className="py-12 flex flex-col items-center gap-4">
-        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540]">
-            <ShieldCheck size={14} /> Termos e Privacidade
+      <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
+        
+        {/* BOTÃƒO DE CONTACTO QUE ABRE O MODAL */}
+        <button 
+          onClick={() => setShowContactModal(true)} 
+          className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all"
+        >
+            <Mail size={16} className="text-[#00d66f]" /> Entrar em Contacto
         </button>
-        <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700">
-            <LogOut size={14} /> Sair da Conta
-        </button>
+
+        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] mt-4"><ShieldCheck size={14} /> Termos e Privacidade</button>
+        <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700"><LogOut size={14} /> Sair da Conta</button>
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
       </footer>
 
       {selectedTxForFeedback && (
-        <FeedbackForm 
-          transactionId={selectedTxForFeedback.id} 
-          merchantId={selectedTxForFeedback.merchantId} 
-          merchantName={selectedTxForFeedback.merchantName} 
-          userId={currentUser.id} 
-          userName={currentUser.name || 'Vizinho'} 
-          onClose={() => setSelectedTxForFeedback(null)} 
-        />
+        <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />
       )}
+
+      {/* MODAL PROFISSIONAL DE CONTACTO */}
+      {showContactModal && (
+        <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
+          <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300">
+            
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Mail className="text-[#00d66f]" size={24} />
+                <h2 className="font-black uppercase italic tracking-tighter text-xl">Apoio ao Cliente</h2>
+              </div>
+              <button onClick={() => setShowContactModal(false)} className="hover:rotate-90 transition-transform">
+                <X size={24} />
+              </button>
+            </div>
+
+            <div className="p-8 space-y-6 text-center">
+              <p className="text-sm font-bold text-slate-500 leading-relaxed">
+                A nossa equipa estÃ¡ pronta para ajudar. Como prefere entrar em contacto?
+              </p>
+
+              <div className="space-y-3">
+                {/* 1. BotÃ£o para Abrir a App de E-mail */}
+                <button 
+                  onClick={handleOpenEmailApp}
+                  className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg border-2 border-[#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-3"
+                >
+                  <ExternalLink size={18} /> Abrir a Minha App de Email
+                </button>
+
+                {/* 2. BotÃ£o para apenas Copiar o Email */}
+                <button 
+                  onClick={handleCopyEmail}
+                  className={`w-full p-5 rounded-2xl font-black uppercase text-xs tracking-widest border-4 transition-all flex items-center justify-center gap-3 ${emailCopied ? 'bg-green-100 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 hover:text-[#0a2540]'}`}
+                >
+                  {emailCopied ? <CheckCircle2 size={18} /> : <Copy size={18} />} 
+                  {emailCopied ? 'E-mail Copiado!' : 'Copiar o E-mail'}
+                </button>
+              </div>
+              
+              <div className="pt-4 border-t-2 border-slate-100">
+                <p className="text-[10px] font-black uppercase text-slate-300 tracking-widest">O nosso email direto:</p>
+                <p className="text-sm font-bold text-[#0a2540] mt-1">{sysConfig.supportEmail}</p>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };
@@ -4051,10 +4076,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 FILE: C:\Users\Filipepocas\vizinho-plus\src\store\useStore.ts
 ==================================================
 import { create } from 'zustand';
-import { 
-  collection, onSnapshot, query, orderBy, where, serverTimestamp, 
-  setDoc, doc, getDocs, writeBatch, updateDoc, limit, increment, getDoc, Timestamp 
-} from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
@@ -4125,18 +4147,20 @@ export const useStore = create<StoreState>((set, get) => ({
         cashbackAmount: cashback,
         cashbackPercent: currentCbPercent,
         type: tx.type,
-        status: tx.type === 'earn' ? 'pending' : 'available',
+        status: 'available', // AGORA FICA LOGO DISPONÃVEL
         createdAt: serverTimestamp(),
         clientNif: tx.documentNumber
       });
 
       const userRef = doc(db, 'users', tx.clientId);
       if (tx.type === 'earn') {
+        // Incrementa LOGO no saldo disponÃ­vel
         batch.update(userRef, {
-          [`wallet.pending`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.pending`]: increment(cashback),
+          [`wallet.available`]: increment(cashback),
+          [`storeWallets.${currentUser.id}.available`]: increment(cashback),
         });
       } else {
+        // Desconta o valor utilizado do saldo disponÃ­vel
         batch.update(userRef, {
           [`wallet.available`]: increment(-amount),
           [`storeWallets.${currentUser.id}.available`]: increment(-amount)
@@ -4156,11 +4180,18 @@ export const useStore = create<StoreState>((set, get) => ({
       const batch = writeBatch(db);
       batch.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
       const userRef = doc(db, 'users', txData.clientId);
+      
       if (txData.type === 'earn') {
-        const type = txData.status === 'pending' ? 'pending' : 'available';
-        batch.update(userRef, { [`wallet.${type}`]: increment(-txData.cashbackAmount), [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) });
+        const type = txData.status === 'pending' ? 'pending' : 'available'; // SeguranÃ§a para movimentos antigos
+        batch.update(userRef, { 
+            [`wallet.${type}`]: increment(-txData.cashbackAmount), 
+            [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) 
+        });
       } else {
-        batch.update(userRef, { [`wallet.available`]: increment(txData.amount), [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) });
+        batch.update(userRef, { 
+            [`wallet.available`]: increment(txData.amount), 
+            [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) 
+        });
       }
       await batch.commit();
       toast.success("ANULADO.");
@@ -4182,11 +4213,7 @@ export const useStore = create<StoreState>((set, get) => ({
     let unsubProfile: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
-      // Se o utilizador sair, mata o listener do perfil anterior
-      if (unsubProfile) {
-        unsubProfile();
-        unsubProfile = null;
-      }
+      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
 
       if (user) {
         set({ isLoading: true });
@@ -4197,7 +4224,6 @@ export const useStore = create<StoreState>((set, get) => ({
             set({ currentUser: null, isLoading: false, isInitialized: true });
           }
         }, (err) => {
-          console.error("Profile sub error:", err);
           set({ isLoading: false, isInitialized: true });
         });
       } else {
@@ -4205,10 +4231,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
     });
 
-    return () => {
-      unsubAuth();
-      if (unsubProfile) unsubProfile();
-    };
+    return () => { unsubAuth(); if (unsubProfile) unsubProfile(); };
   },
 
   deleteUserWithHistory: async (userId, role) => {
@@ -4285,11 +4308,12 @@ export interface User {
   uid?: string;
   email: string;
   role: UserRole;
-  isSuperAdmin?: boolean; // PROPRIEDADE ADICIONADA AQUI
+  isSuperAdmin?: boolean;
   status: UserStatus;
   name?: string;
+  responsibleName?: string; 
   nif?: string;
-  phone?: string;
+  phone?: string; 
   customerNumber?: string;
   wallet?: {
     available: number;
@@ -4333,6 +4357,31 @@ export interface Transaction extends TransactionCore {
   createdAt: FirestoreTimestamp;
   maturedAt?: FirestoreTimestamp;
   clientNif?: string;
+}
+
+export interface MerchantRequest {
+  id?: string;
+  shopName: string;
+  responsibleName: string;
+  email: string;
+  phone: string;
+  nif: string;
+  category: string;
+  cashbackPercent?: string | number;
+  freguesia: string;
+  zipCode: string;
+  password?: string; 
+  createdAt: any;
+}
+
+export interface Leaflet {
+  id?: string;
+  title: string;
+  leafletUrl: string; // NOVO: Alterado de pdfBase64 para um link URL
+  startDate: FirestoreTimestamp;
+  endDate: FirestoreTimestamp;
+  isActive: boolean;
+  createdAt: FirestoreTimestamp;
 }
 
 

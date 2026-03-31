@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, RotateCcw, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
@@ -14,7 +14,7 @@ interface MerchantTerminalProps {
   documentNumber: string;
   setDocumentNumber: (val: string) => void;
   onOpenScanner: () => void;
-  onProcessAction: (type: 'earn' | 'redeem' | 'cancel') => void;
+  onProcessAction: (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => void;
   isLoading: boolean;
   clientStoreBalance: number;
   formatCurrency: (val: number) => string;
@@ -26,6 +26,8 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching
 }) => {
 
+  const [customRedeem, setCustomRedeem] = useState<string>('');
+
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, ''); 
     if (val.length > 9) val = val.substring(0, 9);
@@ -36,12 +38,14 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   };
 
   const invoiceAmount = Number(amount) || 0;
+  
   // CÁLCULO DA REGRA DOS 50%
   const maxDiscountAllowed = invoiceAmount * 0.5;
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
 
-  const canProcess = !isLoading && foundClient !== null && invoiceAmount > 0 && documentNumber.trim().length > 0;
-  const canCancel = !isLoading && foundClient !== null && documentNumber.trim().length > 0;
+  // A Fatura já não é obrigatória para avançar aqui
+  const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0;
+  const canProcessRedeem = !isLoading && foundClient !== null && invoiceAmount > 0 && Number(customRedeem) > 0 && Number(customRedeem) <= actualDiscountToApply;
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
@@ -66,7 +70,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
             <div className="space-y-4">
               <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Nova Fatura (€)</label>
               <input 
-                type="number" step="0.01" min="0" value={amount} onChange={e => setAmount(e.target.value)} placeholder="0.00" 
+                type="number" step="0.01" min="0" value={amount} onChange={e => { setAmount(e.target.value); setCustomRedeem(''); }} placeholder="0.00" 
                 className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner" 
               />
               
@@ -78,24 +82,12 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
                       Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
                     </span>
                   </div>
-
-                  {clientStoreBalance > 0 && (
-                     <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-200">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
-                           <AlertTriangle size={14} /> Regra de Desconto (Máx 50%)
-                        </p>
-                        <div className="flex justify-between text-[11px] font-bold text-blue-600">
-                           <span>Limite Permitido: {formatCurrency(maxDiscountAllowed)}</span>
-                           <span className="font-black text-blue-900">Aplicar: {formatCurrency(actualDiscountToApply)}</span>
-                        </div>
-                     </div>
-                  )}
                 </div>
               )}
             </div>
 
             <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Nº Fatura / Recibo</label>
+              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Nº Fatura / Recibo (Opcional)</label>
               <input type="text" value={documentNumber} onChange={e => setDocumentNumber(e.target.value.toUpperCase())} placeholder="EX: FT 123/2026" className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black uppercase text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner tracking-widest" />
             </div>
           </div>
@@ -121,20 +113,33 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
           )}
         </div>
 
-        <button onClick={() => onProcessAction('earn')} disabled={!canProcess} className="flex-1 bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100">
+        <button onClick={() => onProcessAction('earn')} disabled={!canProcessEarn} className="flex-1 bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100">
           <Coins size={32} className="text-[#00d66f]" />
           <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback</span>
         </button>
 
-        <button onClick={() => onProcessAction('redeem')} disabled={!canProcess || clientStoreBalance <= 0 || actualDiscountToApply <= 0} className="flex-1 bg-white p-6 rounded-[35px] text-[#0a2540] border-4 border-[#0a2540] transition-all hover:bg-slate-50 hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:hover:scale-100">
-          <Gift size={32} className="text-[#0a2540]" />
-          <span className="font-black text-[11px] uppercase tracking-[0.2em]">Descontar Saldo</span>
-        </button>
-
-        <button onClick={() => onProcessAction('cancel')} disabled={!canCancel} className="py-6 px-4 bg-red-50 rounded-[35px] text-red-500 border-4 border-red-100 transition-all hover:bg-red-500 hover:text-white hover:border-red-600 flex items-center justify-center gap-3 disabled:opacity-40">
-          <RotateCcw size={16} strokeWidth={3} />
-          <span className="font-black text-[10px] uppercase tracking-widest">Anular Movimento</span>
-        </button>
+        {/* SECÇÃO PARA DESCONTAR SALDO COM VALOR PERSONALIZADO */}
+        {clientStoreBalance > 0 && invoiceAmount > 0 && (
+           <div className="bg-blue-50 p-4 rounded-3xl border-2 border-blue-200 animate-in fade-in">
+              <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
+                 <AlertTriangle size={14} /> Máximo a descontar (Regra 50%): <span className="font-bold text-lg">{formatCurrency(actualDiscountToApply)}</span>
+              </p>
+              <input 
+                type="number" step="0.01" min="0" max={actualDiscountToApply}
+                value={customRedeem} onChange={e => setCustomRedeem(e.target.value)} 
+                placeholder="Qual o valor a descontar?" 
+                className="w-full p-4 bg-white border-2 border-blue-300 rounded-2xl text-center font-black text-blue-900 outline-none focus:border-blue-500 mb-2" 
+              />
+              <button 
+                onClick={() => onProcessAction('redeem', Number(customRedeem))} 
+                disabled={!canProcessRedeem} 
+                className="w-full bg-white p-4 rounded-2xl text-[#0a2540] border-4 border-[#0a2540] transition-all hover:bg-slate-50 hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-1 disabled:opacity-40 disabled:hover:scale-100"
+              >
+                <Gift size={24} className="text-[#0a2540]" />
+                <span className="font-black text-[10px] uppercase tracking-[0.2em]">Confirmar Desconto</span>
+              </button>
+           </div>
+        )}
       </div>
     </div>
   );

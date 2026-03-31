@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit, updateDoc } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
@@ -14,8 +14,9 @@ interface StoreState {
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
   resetPassword: (email: string) => Promise<void>;
-  addTransaction: (transaction: TransactionCreate) => Promise<void>;
+  addTransaction: (transaction: TransactionCreate) => Promise<string | undefined>;
   cancelTransaction: (transactionId: string) => Promise<void>;
+  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>; // NOVO
   subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
@@ -70,20 +71,20 @@ export const useStore = create<StoreState>((set, get) => ({
         cashbackAmount: cashback,
         cashbackPercent: currentCbPercent,
         type: tx.type,
-        status: 'available', // AGORA FICA LOGO DISPONÍVEL
+        status: 'available',
         createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber
+        clientNif: tx.documentNumber || "", // Aproveita o campo mas permite vazio inicial
+        documentNumber: tx.documentNumber || "" // Garante que o docNumber vai pro firestore
       });
 
       const userRef = doc(db, 'users', tx.clientId);
       if (tx.type === 'earn') {
-        // Incrementa LOGO no saldo disponível
         batch.update(userRef, {
           [`wallet.available`]: increment(cashback),
           [`storeWallets.${currentUser.id}.available`]: increment(cashback),
+          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name // Garante o nome
         });
       } else {
-        // Desconta o valor utilizado do saldo disponível
         batch.update(userRef, {
           [`wallet.available`]: increment(-amount),
           [`storeWallets.${currentUser.id}.available`]: increment(-amount)
@@ -91,7 +92,17 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       await batch.commit();
       toast.success("MOVIMENTO REGISTADO!");
+      return newTxRef.id; // Retorna o ID para podermos editar a fatura a seguir
     } catch (e) { toast.error("ERRO NO REGISTO."); }
+  },
+
+  // NOVA FUNÇÃO: Atualizar Fatura
+  updateTransactionDocument: async (transactionId, documentNumber) => {
+    try {
+        const txRef = doc(db, 'transactions', transactionId);
+        await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
+        toast.success("Fatura associada com sucesso!");
+    } catch(e) { toast.error("Erro ao atualizar fatura."); }
   },
 
   cancelTransaction: async (id) => {
@@ -105,7 +116,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const userRef = doc(db, 'users', txData.clientId);
       
       if (txData.type === 'earn') {
-        const type = txData.status === 'pending' ? 'pending' : 'available'; // Segurança para movimentos antigos
+        const type = txData.status === 'pending' ? 'pending' : 'available';
         batch.update(userRef, { 
             [`wallet.${type}`]: increment(-txData.cashbackAmount), 
             [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) 

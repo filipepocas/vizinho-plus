@@ -1,19 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../../config/firebase'; // Removemos a importação do storage!
+import { db } from '../../config/firebase';
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
-import { Image as ImageIcon, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle } from 'lucide-react';
+import { Image as ImageIcon, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 const BannerManager: React.FC = () => {
   const [banners, setBanners] = useState<any[]>([]);
   const [uploading, setUploading] = useState(false);
   
-  // Em vez de "file", usamos "imageBase64" para guardar a imagem transformada
   const [formData, setFormData] = useState({
     title: '',
     startDate: '',
     endDate: '',
-    imageBase64: '' 
+    imageBase64: '',
+    targetZips: '' // NOVO CAMPO
   });
 
   useEffect(() => {
@@ -23,7 +23,6 @@ const BannerManager: React.FC = () => {
     });
   }, []);
 
-  // ESTA É A MAGIA: Converte a imagem para Base64 e comprime para não pesar na Base de Dados
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -36,7 +35,6 @@ const BannerManager: React.FC = () => {
         let width = img.width;
         let height = img.height;
 
-        // Limita a largura a 1000 pixels (perfeito para Banners e super leve)
         if (width > 1000) {
           height = Math.round((height * 1000) / width);
           width = 1000;
@@ -47,7 +45,6 @@ const BannerManager: React.FC = () => {
         const ctx = canvas.getContext('2d');
         ctx?.drawImage(img, 0, 0, width, height);
 
-        // Comprime para formato JPEG com 70% de qualidade
         const compressedBase64 = canvas.toDataURL('image/jpeg', 0.7);
         setFormData(prev => ({ ...prev, imageBase64: compressedBase64 }));
       };
@@ -68,20 +65,23 @@ const BannerManager: React.FC = () => {
       const startD = new Date(formData.startDate);
       const endD = new Date(formData.endDate);
 
-      // Guardamos a imagem em formato de texto diretamente no Firestore!
+      const zipArray = formData.targetZips 
+        ? formData.targetZips.split(',').map(z => z.trim()).filter(z => z.length === 4)
+        : [];
+
       await addDoc(collection(db, 'banners'), {
         title: formData.title || 'Sem título',
-        imageUrl: formData.imageBase64, // A imagem comprimida
+        imageUrl: formData.imageBase64,
         startDate: Timestamp.fromDate(startD),
         endDate: Timestamp.fromDate(endD),
         isActive: true,
+        targetZipCodes: zipArray, // Guarda o Array na BD
         createdAt: serverTimestamp()
       });
 
       toast.success("Banner agendado com sucesso!");
-      setFormData({ title: '', startDate: '', endDate: '', imageBase64: '' });
+      setFormData({ title: '', startDate: '', endDate: '', imageBase64: '', targetZips: '' });
       
-      // Limpa o ficheiro selecionado no input visualmente
       const fileInput = document.getElementById('bannerFileInput') as HTMLInputElement;
       if (fileInput) fileInput.value = '';
 
@@ -96,7 +96,6 @@ const BannerManager: React.FC = () => {
   const handleDelete = async (id: string) => {
     if (!window.confirm("Eliminar este banner permanentemente?")) return;
     try {
-      // Como não usamos o Firebase Storage, só precisamos de apagar o documento na base de dados
       await deleteDoc(doc(db, 'banners', id));
       toast.success("Banner removido.");
     } catch (error) {
@@ -138,6 +137,13 @@ const BannerManager: React.FC = () => {
                </div>
             </div>
           </div>
+
+          <div className="col-span-1 md:col-span-2">
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2 flex items-center gap-2">
+                <MapPin size={14} className="text-[#00d66f]" /> Mostrar apenas nos Códigos Postais (4 primeiros dígitos):
+              </label>
+              <input type="text" placeholder="EX: 4000, 4400, 4780 (Deixa em branco para mostrar a TODOS)" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.targetZips} onChange={e => setFormData({...formData, targetZips: e.target.value})} />
+          </div>
         </div>
 
         <button disabled={uploading} className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
@@ -149,7 +155,8 @@ const BannerManager: React.FC = () => {
         {banners.length > 0 ? banners.map(banner => {
           const now = new Date();
           const isLive = now >= banner.startDate.toDate() && now <= banner.endDate.toDate();
-          
+          const targets = banner.targetZipCodes?.join(', ') || 'Todos (Global)';
+
           return (
             <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] overflow-hidden relative group shadow-[8px_8px_0px_#0a2540]">
               <div className="h-44 relative bg-slate-100 flex items-center justify-center">
@@ -160,10 +167,15 @@ const BannerManager: React.FC = () => {
               </div>
               <div className="p-6">
                 <p className="font-black text-xs uppercase italic text-[#0a2540] mb-3">{banner.title}</p>
-                <div className="space-y-1 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+                <div className="space-y-1 text-[8px] font-black text-slate-400 uppercase tracking-widest mb-3">
                   <p>Início: {banner.startDate.toDate().toLocaleString()}</p>
                   <p>Fim: {banner.endDate.toDate().toLocaleString()}</p>
                 </div>
+                
+                <div className="text-[8px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 p-2 rounded-xl border border-blue-100 flex items-center gap-1">
+                  <MapPin size={10} /> Alvo: {targets}
+                </div>
+
                 <button onClick={() => handleDelete(banner.id)} className="mt-6 w-full py-3 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[9px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
                   <Trash2 size={14} /> Eliminar Banner
                 </button>

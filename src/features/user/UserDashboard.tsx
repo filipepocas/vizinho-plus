@@ -27,10 +27,7 @@ const UserDashboard: React.FC = () => {
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   
-  // FOLHETOS
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
-  
-  // MODAL DE CONTACTO
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
@@ -56,6 +53,9 @@ const UserDashboard: React.FC = () => {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    if (!currentUser) return;
+    const userZipBase = currentUser.zipCode?.substring(0, 4);
+
     const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
     return onSnapshot(q, (snap) => {
       const now = new Date();
@@ -64,11 +64,17 @@ const UserDashboard: React.FC = () => {
         .filter(l => {
           const start = l.startDate.toDate();
           const end = l.endDate.toDate();
-          return now >= start && now <= end;
+          const isTimeValid = now >= start && now <= end;
+          
+          const hasTargetZips = l.targetZipCodes && l.targetZipCodes.length > 0;
+          // Corrigido aqui adicionando ?. (optional chaining)
+          const isZipValid = !hasTargetZips || (userZipBase && l.targetZipCodes?.includes(userZipBase));
+
+          return isTimeValid && isZipValid;
         });
       setActiveLeaflets(valid);
     });
-  }, []);
+  }, [currentUser]);
 
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
@@ -91,9 +97,7 @@ const UserDashboard: React.FC = () => {
     }
   };
 
-  // FUNÇÕES DE CONTACTO
   const handleOpenEmailApp = () => {
-    // Formata um link mailto robusto
     const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${currentUser?.nif}`);
     const body = encodeURIComponent(`Olá equipa Vizinho+,\n\nPreciso de ajuda com...`);
     window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
@@ -110,7 +114,6 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
-      
       <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center shadow-sm">
         <div>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
@@ -151,7 +154,6 @@ const UserDashboard: React.FC = () => {
           {activeLeaflets.length > 0 && <ExternalLink size={20} className="text-[#0a2540] opacity-50 relative z-10" />}
         </button>
 
-        {/* CARTÃO DIGITAL DO CLIENTE COM AVISO LEGAL */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
             <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
                 Cartão Digital
@@ -166,7 +168,6 @@ const UserDashboard: React.FC = () => {
                 </h3>
             </div>
             
-            {/* AVISO LEGAL ADICIONADO AQUI */}
             <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mt-2 w-full text-center">
                 <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed flex items-center justify-center gap-2">
                   <AlertCircle size={12} className="text-slate-400 shrink-0" />
@@ -234,8 +235,6 @@ const UserDashboard: React.FC = () => {
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
-        
-        {/* BOTÃO DE CONTACTO QUE ABRE O MODAL */}
         <button 
           onClick={() => setShowContactModal(true)} 
           className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all"
@@ -252,55 +251,37 @@ const UserDashboard: React.FC = () => {
         <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />
       )}
 
-      {/* MODAL PROFISSIONAL DE CONTACTO */}
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300">
-            
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <Mail className="text-[#00d66f]" size={24} />
                 <h2 className="font-black uppercase italic tracking-tighter text-xl">Apoio ao Cliente</h2>
               </div>
-              <button onClick={() => setShowContactModal(false)} className="hover:rotate-90 transition-transform">
-                <X size={24} />
-              </button>
+              <button onClick={() => setShowContactModal(false)} className="hover:rotate-90 transition-transform"><X size={24} /></button>
             </div>
-
             <div className="p-8 space-y-6 text-center">
               <p className="text-sm font-bold text-slate-500 leading-relaxed">
                 A nossa equipa está pronta para ajudar. Como prefere entrar em contacto?
               </p>
-
               <div className="space-y-3">
-                {/* 1. Botão para Abrir a App de E-mail */}
-                <button 
-                  onClick={handleOpenEmailApp}
-                  className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg border-2 border-[#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-3"
-                >
+                <button onClick={handleOpenEmailApp} className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg border-2 border-[#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
                   <ExternalLink size={18} /> Abrir a Minha App de Email
                 </button>
-
-                {/* 2. Botão para apenas Copiar o Email */}
-                <button 
-                  onClick={handleCopyEmail}
-                  className={`w-full p-5 rounded-2xl font-black uppercase text-xs tracking-widest border-4 transition-all flex items-center justify-center gap-3 ${emailCopied ? 'bg-green-100 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 hover:text-[#0a2540]'}`}
-                >
+                <button onClick={handleCopyEmail} className={`w-full p-5 rounded-2xl font-black uppercase text-xs tracking-widest border-4 transition-all flex items-center justify-center gap-3 ${emailCopied ? 'bg-green-100 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 hover:text-[#0a2540]'}`}>
                   {emailCopied ? <CheckCircle2 size={18} /> : <Copy size={18} />} 
                   {emailCopied ? 'E-mail Copiado!' : 'Copiar o E-mail'}
                 </button>
               </div>
-              
               <div className="pt-4 border-t-2 border-slate-100">
                 <p className="text-[10px] font-black uppercase text-slate-300 tracking-widest">O nosso email direto:</p>
                 <p className="text-sm font-bold text-[#0a2540] mt-1">{sysConfig.supportEmail}</p>
               </div>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
-import { FileText, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle, Link as LinkIcon, ExternalLink } from 'lucide-react';
+import { FileText, Plus, Trash2, Calendar, Clock, Loader2, AlertCircle, Link as LinkIcon, ExternalLink, MapPin } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Leaflet } from '../../types';
 
@@ -13,7 +13,8 @@ const AdminLeaflets: React.FC = () => {
     title: '',
     startDate: '',
     endDate: '',
-    leafletUrl: '' 
+    leafletUrl: '',
+    targetZips: '' // NOVO CAMPO
   });
 
   useEffect(() => {
@@ -35,17 +36,23 @@ const AdminLeaflets: React.FC = () => {
       const startD = new Date(formData.startDate);
       const endD = new Date(formData.endDate);
 
+      // Limpar e formatar os códigos postais introduzidos
+      const zipArray = formData.targetZips 
+        ? formData.targetZips.split(',').map(z => z.trim()).filter(z => z.length === 4)
+        : [];
+
       await addDoc(collection(db, 'leaflets'), {
         title: formData.title || 'Folheto de Oportunidades',
         leafletUrl: formData.leafletUrl,
         startDate: Timestamp.fromDate(startD),
         endDate: Timestamp.fromDate(endD),
         isActive: true,
+        targetZipCodes: zipArray, // Guarda o Array na BD
         createdAt: serverTimestamp()
       });
 
-      toast.success("Folheto/Link agendado com sucesso!");
-      setFormData({ title: '', startDate: '', endDate: '', leafletUrl: '' });
+      toast.success("Folheto agendado com sucesso!");
+      setFormData({ title: '', startDate: '', endDate: '', leafletUrl: '', targetZips: '' });
 
     } catch (error: any) {
       console.error("Erro:", error);
@@ -105,6 +112,15 @@ const AdminLeaflets: React.FC = () => {
                </div>
             </div>
           </div>
+
+          {/* NOVO CAMPO DE SEGMENTAÇÃO */}
+          <div className="col-span-1 md:col-span-2">
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2 flex items-center gap-2">
+                <MapPin size={14} className="text-[#00d66f]" /> Mostrar apenas nos Códigos Postais (4 primeiros dígitos):
+              </label>
+              <input type="text" placeholder="EX: 4000, 4400, 4780 (Deixa em branco para mostrar a TODOS)" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.targetZips} onChange={e => setFormData({...formData, targetZips: e.target.value})} />
+          </div>
+
         </div>
 
         <button disabled={uploading} className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
@@ -116,6 +132,7 @@ const AdminLeaflets: React.FC = () => {
         {leaflets.length > 0 ? leaflets.map(leaflet => {
           const now = new Date();
           const isLive = now >= leaflet.startDate.toDate() && now <= leaflet.endDate.toDate();
+          const targets = leaflet.targetZipCodes?.join(', ') || 'Todos (Global)';
           
           return (
             <div key={leaflet.id} className="bg-white border-4 border-[#0a2540] rounded-[40px] overflow-hidden relative group shadow-[8px_8px_0px_#0a2540] p-6">
@@ -130,9 +147,13 @@ const AdminLeaflets: React.FC = () => {
               
               <p className="font-black text-sm uppercase italic text-[#0a2540] mb-3 truncate" title={leaflet.title}>{leaflet.title}</p>
               
-              <div className="space-y-1 text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+              <div className="space-y-1 text-[8px] font-black text-slate-400 uppercase tracking-widest bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mb-2">
                 <p>Início: {leaflet.startDate.toDate().toLocaleString()}</p>
                 <p>Fim: {leaflet.endDate.toDate().toLocaleString()}</p>
+              </div>
+
+              <div className="text-[8px] font-black text-blue-500 uppercase tracking-widest bg-blue-50 p-2 rounded-xl border border-blue-100 flex items-center gap-1">
+                <MapPin size={10} /> Alvo: {targets}
               </div>
               
               <div className="flex gap-3 mt-6">
