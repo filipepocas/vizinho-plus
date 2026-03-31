@@ -6,11 +6,10 @@ import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
 import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings } from 'lucide-react';
 
-// Sub-componentes
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
-import MerchantSettings from './components/MerchantSettings'; // CORRIGIDO: Removida a extensão .tsx
+import MerchantSettings from './components/MerchantSettings';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, subscribeToTransactions, logout } = useStore();
@@ -30,17 +29,14 @@ const MerchantDashboard: React.FC = () => {
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
-
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
 
-  // Cálculo seguro do Cashback para a pré-visualização
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
     const percent = currentUser?.cashbackPercent || 0;
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
 
-  // Pesquisa de Cliente por NIF
   useEffect(() => {
     const search = async () => {
       const cleanNif = cardNumber.replace(/\s/g, '');
@@ -49,25 +45,15 @@ const MerchantDashboard: React.FC = () => {
         try {
           const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
           const snap = await getDocs(q);
-          if (!snap.empty) {
-            setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-          } else {
-            setFoundClient(null);
-          }
-        } catch (error) {
-          console.error("Erro na pesquisa:", error);
-        } finally {
-          setIsSearching(false);
-        }
-      } else {
-        setFoundClient(null);
-      }
+          if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+          else setFoundClient(null);
+        } catch (error) { console.error(error); } finally { setIsSearching(false); }
+      } else { setFoundClient(null); }
     };
     const timer = setTimeout(search, 500);
     return () => clearTimeout(timer);
   }, [cardNumber]);
 
-  // Subscrever Transações
   useEffect(() => {
     if (currentUser?.id) {
       const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
@@ -76,12 +62,30 @@ const MerchantDashboard: React.FC = () => {
   }, [currentUser?.id, subscribeToTransactions]);
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel') => {
-    const val = parseFloat(amount);
-    if (!foundClient || isNaN(val) || val <= 0 || !documentNumber) {
+    const invoiceVal = parseFloat(amount);
+    
+    // CORREÇÃO AQUI: Adicionado !currentUser para garantir que o utilizador existe
+    if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0 || !documentNumber) {
       alert("Preencha o valor e o número da fatura corretamente.");
       return;
     }
-    setPendingAction({ type, val });
+
+    let valToProcess = invoiceVal;
+
+    // APLICAÇÃO DA REGRA DE REDEEM (DESCONTO MÁXIMO 50%)
+    if (type === 'redeem') {
+      // Como já garantimos acima que currentUser não é null, agora é 100% seguro ler currentUser.id
+      const clientBalance = foundClient.storeWallets?.[currentUser.id]?.available || 0;
+      const maxDiscount = invoiceVal * 0.5;
+      valToProcess = Math.min(clientBalance, maxDiscount);
+
+      if (valToProcess <= 0) {
+        alert("O cliente não tem saldo suficiente para descontar.");
+        return;
+      }
+    }
+
+    setPendingAction({ type, val: valToProcess });
     setShowConfirmModal(true);
   };
 
@@ -94,25 +98,18 @@ const MerchantDashboard: React.FC = () => {
         clientId: foundClient.id,
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
-        amount: pendingAction.val,
+        amount: pendingAction.val, // Se for redeem, este é o valor já cortado aos 50%
         type: pendingAction.type,
         documentNumber: documentNumber
       });
       setMessage({ type: 'success', text: "Operação registada com sucesso!" });
-      setAmount(''); 
-      setDocumentNumber(''); 
-      setCardNumber('');
+      setAmount(''); setDocumentNumber(''); setCardNumber('');
     } catch (e) {
-      setMessage({ type: 'error', text: "Erro ao registar: Verifique as permissões." });
+      setMessage({ type: 'error', text: "Erro ao registar." });
     } finally {
       setIsLoading(false);
       setTimeout(() => setMessage({ type: '', text: '' }), 4000);
     }
-  };
-
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
   };
 
   if (!currentUser) return null;
@@ -126,21 +123,10 @@ const MerchantDashboard: React.FC = () => {
         </div>
         
         <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-md">
-          <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
-            <LayoutDashboard size={16} /> Terminal
-          </button>
-          
-          <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>
-            <BarChart3 size={16} /> Business Intelligence
-          </button>
-
-          <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}>
-            <Settings size={16} /> Definições
-          </button>
-
-          <button onClick={handleLogout} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all">
-            <LogOut size={20} />
-          </button>
+          <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><LayoutDashboard size={16} /> Terminal</button>
+          <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BarChart3 size={16} /> Business Intelligence</button>
+          <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}><Settings size={16} /> Definições</button>
+          <button onClick={async () => { await logout(); navigate('/login'); }} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all"><LogOut size={20} /></button>
         </nav>
       </header>
 
@@ -160,18 +146,8 @@ const MerchantDashboard: React.FC = () => {
           />
         )}
 
-        {view === 'bi' && (
-          <BusinessIntelligence 
-            merchantId={currentUser.id}
-            transactions={transactions}
-          />
-        )}
-
-        {view === 'settings' && (
-          <MerchantSettings 
-            currentUser={currentUser}
-          />
-        )}
+        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
+        {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
         {message.text && view === 'terminal' && (
           <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-bounce shadow-xl border-b-4 ${message.type === 'success' ? 'bg-green-500 text-white border-green-700' : 'bg-red-500 text-white border-red-700'}`}>
@@ -190,6 +166,14 @@ const MerchantDashboard: React.FC = () => {
               <AlertTriangle size={48} className="mx-auto mb-4" />
               <h3 className="text-xl font-black uppercase italic tracking-tighter">Confirmar Operação?</h3>
               <p className="font-bold text-[10px] uppercase opacity-70 mt-2">{foundClient?.name}</p>
+              
+              <div className="mt-4 p-4 bg-white/20 rounded-2xl border border-white/30">
+                 <p className="font-black text-lg">
+                    {pendingAction.type === 'earn' 
+                      ? `Atribuir Cashback sobre ${formatCurrency(parseFloat(amount))}` 
+                      : `Descontar ${formatCurrency(pendingAction.val)}`}
+                 </p>
+              </div>
             </div>
             <div className="p-8 grid grid-cols-2 gap-4">
               <button onClick={() => setShowConfirmModal(false)} className="py-4 bg-slate-100 rounded-2xl font-black uppercase text-[10px] text-slate-400">Cancelar</button>

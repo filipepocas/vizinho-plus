@@ -1,8 +1,5 @@
 import { create } from 'zustand';
-import { 
-  collection, onSnapshot, query, orderBy, where, serverTimestamp, 
-  setDoc, doc, getDocs, writeBatch, updateDoc, limit, increment, getDoc, Timestamp 
-} from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
@@ -73,18 +70,20 @@ export const useStore = create<StoreState>((set, get) => ({
         cashbackAmount: cashback,
         cashbackPercent: currentCbPercent,
         type: tx.type,
-        status: tx.type === 'earn' ? 'pending' : 'available',
+        status: 'available', // AGORA FICA LOGO DISPONÍVEL
         createdAt: serverTimestamp(),
         clientNif: tx.documentNumber
       });
 
       const userRef = doc(db, 'users', tx.clientId);
       if (tx.type === 'earn') {
+        // Incrementa LOGO no saldo disponível
         batch.update(userRef, {
-          [`wallet.pending`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.pending`]: increment(cashback),
+          [`wallet.available`]: increment(cashback),
+          [`storeWallets.${currentUser.id}.available`]: increment(cashback),
         });
       } else {
+        // Desconta o valor utilizado do saldo disponível
         batch.update(userRef, {
           [`wallet.available`]: increment(-amount),
           [`storeWallets.${currentUser.id}.available`]: increment(-amount)
@@ -104,11 +103,18 @@ export const useStore = create<StoreState>((set, get) => ({
       const batch = writeBatch(db);
       batch.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
       const userRef = doc(db, 'users', txData.clientId);
+      
       if (txData.type === 'earn') {
-        const type = txData.status === 'pending' ? 'pending' : 'available';
-        batch.update(userRef, { [`wallet.${type}`]: increment(-txData.cashbackAmount), [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) });
+        const type = txData.status === 'pending' ? 'pending' : 'available'; // Segurança para movimentos antigos
+        batch.update(userRef, { 
+            [`wallet.${type}`]: increment(-txData.cashbackAmount), 
+            [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) 
+        });
       } else {
-        batch.update(userRef, { [`wallet.available`]: increment(txData.amount), [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) });
+        batch.update(userRef, { 
+            [`wallet.available`]: increment(txData.amount), 
+            [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) 
+        });
       }
       await batch.commit();
       toast.success("ANULADO.");
@@ -130,11 +136,7 @@ export const useStore = create<StoreState>((set, get) => ({
     let unsubProfile: (() => void) | null = null;
 
     const unsubAuth = onAuthStateChanged(auth, (user) => {
-      // Se o utilizador sair, mata o listener do perfil anterior
-      if (unsubProfile) {
-        unsubProfile();
-        unsubProfile = null;
-      }
+      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
 
       if (user) {
         set({ isLoading: true });
@@ -145,7 +147,6 @@ export const useStore = create<StoreState>((set, get) => ({
             set({ currentUser: null, isLoading: false, isInitialized: true });
           }
         }, (err) => {
-          console.error("Profile sub error:", err);
           set({ isLoading: false, isInitialized: true });
         });
       } else {
@@ -153,10 +154,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
     });
 
-    return () => {
-      unsubAuth();
-      if (unsubProfile) unsubProfile();
-    };
+    return () => { unsubAuth(); if (unsubProfile) unsubProfile(); };
   },
 
   deleteUserWithHistory: async (userId, role) => {

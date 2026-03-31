@@ -45,7 +45,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return new Date(createdAt);
   };
 
-  // Gráfico Diário alimentado pelo Volume (Faturação) exato
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
     const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
@@ -58,7 +57,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         const dayIdx = date.getDay();
         const hour = date.getHours();
         counts[dayIdx].count++;
-        counts[dayIdx].volume += Number(t.amount || 0); // Acumula o valor em Euros
+        counts[dayIdx].volume += Number(t.amount || 0); 
         counts[dayIdx].hours[hour]++;
       }
     });
@@ -96,30 +95,27 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   }, [transactions]);
 
   const cashbackStats = useMemo(() => {
-    let emitted = 0, used = 0, pending = 0, available = 0;
+    let emitted = 0, used = 0, available = 0;
     
     transactions.forEach(t => {
       if (t.status === 'cancelled') return;
       
       if (t.type === 'earn') {
         emitted += t.cashbackAmount;
-        if (t.status === 'pending') pending += t.cashbackAmount;
-        if (t.status === 'available') available += t.cashbackAmount;
+        available += t.cashbackAmount; // Fica logo disponível
       } else if (t.type === 'redeem') {
-        used += t.amount;
+        used += t.amount; // amount na transação redeem é o valor do desconto!
         available -= t.amount;
       }
     });
     
-    return { emitted, used, pending, available: Math.max(0, available) };
+    return { emitted, used, available: Math.max(0, available) };
   }, [transactions]);
 
   const feedbackStats = useMemo(() => {
     if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
-    
     const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
     const promotersCount = feedbacks.filter(f => f.rating >= 4).length;
-    
     return {
       avg: (sum / feedbacks.length).toFixed(1),
       count: feedbacks.length,
@@ -130,7 +126,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
       
-      {/* CARD 1: FLUXO DE CLIENTES BASEADO EM VOLUME */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
           <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
@@ -138,23 +133,13 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         
         <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
           {dayStats.map((d, i) => {
-            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; // Garante que nunca é zero
+            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
             const heightPercentage = (d.volume / maxVol) * 100;
             
             return (
               <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
-                <div 
-                  className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" 
-                  style={{ 
-                    height: `${heightPercentage}%`, 
-                    minHeight: d.volume > 0 ? '8px' : '2px' // Dias a zeros ficam como uma linha fininha
-                  }}
-                >
-                    {d.volume > 0 && (
-                        <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">
-                            {formatCurrency(d.volume)}
-                        </div>
-                    )}
+                <div className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" style={{ height: `${heightPercentage}%`, minHeight: d.volume > 0 ? '8px' : '2px' }}>
+                    {d.volume > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">{formatCurrency(d.volume)}</div>}
                 </div>
                 <span className="text-[8px] font-black uppercase text-slate-400">{d.day}</span>
               </div>
@@ -168,16 +153,13 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
               {dayStats.filter(d => d.count > 0).slice(0, 4).map((d, i) => (
                 <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold uppercase border border-slate-100">
                   <span className="text-slate-500">{d.day}</span>
-                  <span className="text-[#0a2540] flex items-center gap-1">
-                    <Clock size={10} className="text-[#00d66f]"/> {d.peakHour}
-                  </span>
+                  <span className="text-[#0a2540] flex items-center gap-1"><Clock size={10} className="text-[#00d66f]"/> {d.peakHour}</span>
                 </div>
               ))}
           </div>
         </div>
       </div>
 
-      {/* CARD 2: FATURAÇÃO MENSAL */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
           <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
@@ -192,10 +174,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                     <span className="text-[#0a2540] italic">{formatCurrency(m.volume)}</span>
                   </div>
                   <div className="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                    <div 
-                        className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" 
-                        style={{ width: `${(m.volume / maxVol) * 100}%` }} 
-                    />
+                    <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
                   </div>
                 </div>
               );
@@ -203,12 +182,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
       </div>
 
-      {/* CARD 3: ECONOMIA DA LOJA (CASHBACK) */}
       <div className="bg-[#0a2540] p-8 rounded-[40px] text-white shadow-2xl flex flex-col relative overflow-hidden border-4 border-[#0a2540]">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-            <Wallet size={120} />
-        </div>
-        
+        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wallet size={120} /></div>
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
           <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Wallet size={16} /></div> Gestão de Saldo
         </h3>
@@ -230,16 +205,10 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                   <span className="text-sm font-bold text-red-400">-{formatCurrency(cashbackStats.used)}</span>
               </div>
             </div>
-            
-            <div className="flex justify-between items-center bg-amber-500/10 p-4 rounded-2xl border border-amber-500/20">
-              <span className="text-[9px] font-black uppercase text-amber-500/80 tracking-widest">A Maturar</span>
-              <span className="text-sm font-black text-amber-500">{formatCurrency(cashbackStats.pending)}</span>
-            </div>
           </div>
         </div>
       </div>
 
-      {/* CARD 4: SATISFAÇÃO DE CLIENTES */}
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col h-[480px]">
         <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6 shrink-0">
           <div className="bg-amber-100 p-2 rounded-xl"><Star size={16} className="text-amber-500 fill-amber-500" /></div> Satisfação
@@ -257,9 +226,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         </div>
         
         <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
-          <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">
-            Últimos Comentários (Max. 50)
-          </p>
+          <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">Últimos Comentários</p>
           
           {loadingFeedbacks ? (
               <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
@@ -271,9 +238,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                         <Star key={si} size={10} fill={si < f.rating ? "#0a2540" : "none"} className={si < f.rating ? "text-[#0a2540]" : "text-slate-300"} />
                     ))}
                   </div>
-                  <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">
-                    "{f.comment || 'Sem comentário adicional.'}"
-                  </p>
+                  <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">"{f.comment || 'Sem comentário adicional.'}"</p>
                 </div>
               ))
           ) : (

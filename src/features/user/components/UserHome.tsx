@@ -19,10 +19,9 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
       .map(([id, data]: [string, any]) => ({
         id,
         name: data.merchantName,
-        available: data.available || 0,
-        pending: data.pending || 0
+        available: data.available || 0
       }))
-      .filter(b => b.available > 0 || b.pending > 0);
+      .filter(b => b.available > 0);
   }, [currentUser?.storeWallets]);
 
   return (
@@ -39,12 +38,6 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
               <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">{formatCurrency(m.available)} disponível</p>
             </div>
           </div>
-          {m.pending > 0 && (
-            <div className="text-right">
-              <p className="text-[8px] font-black text-amber-500 uppercase">A Processar</p>
-              <p className="text-xs font-black text-amber-600">+{formatCurrency(m.pending)}</p>
-            </div>
-          )}
         </div>
       )) : (
         <div className="bg-slate-50 p-8 rounded-[30px] text-center text-slate-400 text-[10px] font-black uppercase">
