@@ -4236,68 +4236,99 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\hooks\usePWAInstall.ts
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
+// 1. VARIÃVEIS GLOBAIS
+// Capturam o evento mal o site abre (ex: na pÃ¡gina de Login), 
+// para nÃ£o se perder quando o utilizador navega para os Dashboards.
+let globalDeferredPrompt: any = null;
+let globalIsInstallable = false;
+const listeners: Set<() => void> = new Set();
+
+const notifyListeners = () => listeners.forEach(fn => fn());
+
+// 2. ESCUTA GLOBAL DO EVENTO
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Previne que o Chrome mostre o mini-aviso nativo imediatamente
+    e.preventDefault();
+    // Guarda o evento para usarmos no nosso botÃ£o
+    globalDeferredPrompt = e;
+    globalIsInstallable = true;
+    notifyListeners();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    globalDeferredPrompt = null;
+    globalIsInstallable = false;
+    notifyListeners();
+    toast.success("App instalada com sucesso!");
+  });
+}
+
+// 3. O HOOK QUE OS DASHBOARDS CONSOMEM
 export const usePWAInstall = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstallable, setIsInstallable] = useState(globalIsInstallable);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Deteta se Ã© iPhone/iPad
+    // FunÃ§Ã£o para atualizar o botÃ£o nos Dashboards se o estado global mudar
+    const updateState = () => setIsInstallable(globalIsInstallable);
+    listeners.add(updateState);
+
+    // Deteta se Ã© dispositivo Apple (iOS)
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIosDevice);
 
-    // Verifica se jÃ¡ estÃ¡ instalada (a correr como app)
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+    // Verifica se a app JÃ ESTÃ a correr como App Instalada (Standalone)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    if (isStandalone) {
       setIsInstalled(true);
-      return;
-    }
-
-    // Se for iOS e nÃ£o estiver instalada, consideramos "instalÃ¡vel" via partilha
-    if (isIosDevice && !window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstallable(true);
-    }
-
-    // Ouve o evento do Android/Chrome para instalar
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-    };
-
-    const handleAppInstalled = () => {
       setIsInstallable(false);
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-      toast.success("App instalada com sucesso!");
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
+    } else if (isIosDevice) {
+      // No iOS a Apple nÃ£o suporta o 'beforeinstallprompt'. 
+      // Por isso, se for iOS e nÃ£o estiver instalada, forÃ§amos o botÃ£o a aparecer.
+      setIsInstallable(true);
+    } else {
+      // Sincroniza com a variÃ¡vel global para Android/Chrome/PC
+      setIsInstallable(globalIsInstallable);
+    }
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
+      listeners.delete(updateState);
     };
   }, []);
 
   const installApp = async () => {
     if (isIOS) {
-      alert("No iPhone/iPad:\n\n1. Toque no Ã­cone de Partilhar (quadrado com uma seta para cima) no fundo do ecrÃ£.\n2. Escolha a opÃ§Ã£o 'Adicionar ao ecrÃ£ principal'.");
+      // A Apple nÃ£o permite instalaÃ§Ã£o automÃ¡tica por botÃ£o. 
+      // Temos de mostrar as instruÃ§Ãµes nativas.
+      alert("Para instalar no iPhone/iPad:\n\n1. Toque no Ã­cone de Partilhar (quadrado com uma seta para cima) no fundo do ecrÃ£.\n2. Escolha a opÃ§Ã£o 'Adicionar ao ecrÃ£ principal' (Add to Home Screen).");
       return false;
     }
 
-    if (!deferredPrompt) return false;
-    
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      setIsInstallable(false);
+    if (!globalDeferredPrompt) {
+      alert("A instalaÃ§Ã£o nÃ£o estÃ¡ disponÃ­vel neste momento. Tente abrir o site no Google Chrome ou verifique se jÃ¡ a tem instalada nas suas AplicaÃ§Ãµes.");
+      return false;
     }
-    setDeferredPrompt(null);
-    return outcome === 'accepted';
+    
+    try {
+      // Dispara o prompt de instalaÃ§Ã£o do Google Chrome / Android
+      globalDeferredPrompt.prompt();
+      const { outcome } = await globalDeferredPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+        globalIsInstallable = false;
+        setIsInstallable(false);
+        globalDeferredPrompt = null;
+        notifyListeners();
+      }
+      return outcome === 'accepted';
+    } catch (error) {
+      console.error("Erro no prompt de instalaÃ§Ã£o:", error);
+      return false;
+    }
   };
 
   return { isInstallable, isInstalled, installApp };
