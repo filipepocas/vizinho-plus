@@ -53,6 +53,7 @@ const RegisterPage: React.FC = () => {
       // Se o utilizador preencheu o NIF, verificamos se já existe
       if (formData.nif.trim() !== '') {
         const nifExists = await checkNifExists(formData.nif);
+        console.log('NIF exists check:', nifExists, 'for NIF:', formData.nif);
         if (nifExists) {
           toast.error("ESTE NIF JÁ ESTÁ REGISTADO.");
           setLoading(false);
