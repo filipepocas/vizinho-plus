@@ -4,7 +4,7 @@ import { db } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
-  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, Percent 
+  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail 
 } from 'lucide-react';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -23,8 +23,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     freguesia: currentUser?.freguesia || ''
   });
 
-  const [cashbackInput, setCashbackInput] = useState(currentUser?.cashbackPercent?.toString() || '0');
-
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser?.id) return;
@@ -32,19 +30,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setLoading(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
-      let updates: any = { ...formData };
-
-      // LÓGICA DO CASHBACK PENDENTE (EFEITO NO DIA SEGUINTE)
-      if (currentUser.role === 'merchant' && Number(cashbackInput) !== currentUser.cashbackPercent) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0, 0, 0, 0); // Meia-noite do dia seguinte
-
-        updates.pendingCashbackPercent = Number(cashbackInput);
-        updates.pendingCashbackEffectiveAt = tomorrow;
-      }
-
-      await updateDoc(userRef, updates);
+      await updateDoc(userRef, formData);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -135,28 +121,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div className="bg-slate-100 p-2 rounded-xl"><MapPin className="text-[#0f172a]" size={20} strokeWidth={3} /></div>
                 <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados da Loja</h3>
               </div>
-
-              {/* CASHBACK CONFIG */}
-              <div className="bg-green-50 p-6 rounded-3xl border-2 border-green-200 mb-6">
-                <label className="flex items-center gap-2 text-[10px] font-black uppercase text-green-700 ml-2 mb-2">
-                  <Percent size={14} /> Percentagem de Cashback
-                </label>
-                <input 
-                  type="number" 
-                  step="0.1"
-                  min="0"
-                  value={cashbackInput}
-                  onChange={(e) => setCashbackInput(e.target.value)}
-                  className="w-full bg-white border-4 border-green-300 rounded-2xl px-5 py-4 text-xl font-black text-[#0f172a] outline-none focus:border-[#00d66f]"
-                />
-                {currentUser?.pendingCashbackEffectiveAt && (
-                   <p className="text-[9px] font-bold text-amber-600 uppercase mt-3 bg-amber-100 p-2 rounded-xl border border-amber-200">
-                     Aviso: Uma alteração para {currentUser.pendingCashbackPercent}% entrará em vigor à meia-noite.
-                   </p>
-                )}
-                <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 leading-relaxed italic">* As alterações de cashback só entram em vigor à meia-noite do dia seguinte.</p>
-              </div>
-
               <div className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoria / Ramo</label>

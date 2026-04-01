@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, orderBy, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
@@ -27,13 +27,14 @@ const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
+    // LIMITES ADICIONADOS PARA POUPAR A FREE TIER DO FIREBASE
+    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
     const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
     
-    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
+    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(200));
     const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
-    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
+    const qClients = query(collection(db, 'users'), where('role', '==', 'client'), limit(1000));
     const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
     return () => { unsubTx(); unsubMerchants(); unsubClients(); };
