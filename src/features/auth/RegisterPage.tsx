@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', password: '', zipCode: '' });
+  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -42,6 +42,13 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
+    // Se o NIF foi preenchido, validamos o seu formato (9 dígitos)
+    if (formData.nif.trim() !== '' && formData.nif.trim().length !== 9) {
+      toast.error("NIF INVÁLIDO (TEM DE TER 9 DÍGITOS)");
+      setLoading(false);
+      return;
+    }
+
     try {
       // Se o utilizador preencheu o NIF, verificamos se já existe
       if (formData.nif.trim() !== '') {
@@ -65,6 +72,7 @@ const RegisterPage: React.FC = () => {
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
+        birthDate: formData.birthDate, // NOVO: Data de Nascimento (Opcional)
         role: 'client',
         status: 'active',
         wallet: { available: 0, pending: 0 },
@@ -127,6 +135,11 @@ const RegisterPage: React.FC = () => {
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel <span className="text-[8px]">(Opcional)</span></label>
               <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Nascimento <span className="text-[8px]">(Opcional)</span></label>
+            <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
           <div className="space-y-1">
