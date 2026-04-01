@@ -4,7 +4,7 @@ import { db } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
-  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail 
+  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, IdCard 
 } from 'lucide-react';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -20,7 +20,8 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     address: currentUser?.address || '',
     category: currentUser?.category || '',
     zipCode: currentUser?.zipCode || '',
-    freguesia: currentUser?.freguesia || ''
+    freguesia: currentUser?.freguesia || '',
+    nif: currentUser?.nif || '' // AGORA O NIF PODE SER ATUALIZADO
   });
 
   const handleSave = async (e: React.FormEvent) => {
@@ -86,6 +87,22 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       <main className="max-w-xl mx-auto px-6">
         <form onSubmit={handleSave} className="space-y-6">
+          
+          {/* APRESENTA O NÚMERO DE CARTÃO GERADO AUTOMATICAMENTE */}
+          {currentUser?.role === 'client' && (
+            <div className="bg-[#00d66f] p-6 rounded-[30px] border-4 border-[#0a2540] shadow-[6px_6px_0px_#0a2540] flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase text-[#0a2540] opacity-80 tracking-widest mb-1">O Teu Cartão Digital Vizinho+</p>
+                <p className="text-2xl font-mono font-black text-[#0a2540] tracking-[0.2em]">
+                  {currentUser.customerNumber?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') || 'Sem Cartão'}
+                </p>
+              </div>
+              <div className="bg-[#0a2540] p-3 rounded-2xl text-[#00d66f]">
+                <IdCard size={24} />
+              </div>
+            </div>
+          )}
+
           {/* Dados Pessoais */}
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
             <div className="flex items-center gap-3 mb-8">
@@ -97,6 +114,13 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome Completo</label>
                 <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white" required />
               </div>
+              
+              {/* O NIF AGORA PODE SER PREENCHIDO MAIS TARDE NAS DEFINIÇÕES */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
+                <input type="text" maxLength={9} value={formData.nif} onChange={(e) => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} placeholder="Ainda não inseriu o NIF" className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white" />
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel</label>
                 <div className="relative">
@@ -114,7 +138,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Dados da Loja */}
           {currentUser?.role === 'merchant' && (
             <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
               <div className="flex items-center gap-3 mb-8">
@@ -146,14 +169,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </div>
             </div>
           )}
-
-          <div className="bg-slate-200/30 p-6 rounded-[30px] border-2 border-dashed border-slate-300">
-            <div className="flex items-center gap-3 opacity-60">
-              <ShieldCheck size={16} className="text-[#0f172a]" />
-              <p className="text-[10px] font-black uppercase tracking-widest">Verificação NIF: {currentUser?.nif}</p>
-            </div>
-            <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 ml-7 leading-relaxed">O Número de Identificação Fiscal está vinculado à sua conta e não pode ser alterado por segurança.</p>
-          </div>
 
           <button type="submit" disabled={loading || isDeleting} className={`w-full py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all ${saved ? 'bg-[#00d66f] text-[#0f172a]' : 'bg-[#0f172a] text-white hover:bg-black'}`}>
             {loading ? <RefreshCw size={24} className="animate-spin text-[#00d66f]" /> : saved ? <><CheckCircle2 size={24} strokeWidth={3} /> Sucesso!</> : <><Save size={24} strokeWidth={3} /> Guardar Alterações</>}

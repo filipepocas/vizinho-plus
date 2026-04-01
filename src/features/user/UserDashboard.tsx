@@ -12,15 +12,17 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2 } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser } = useStore();
   const navigate = useNavigate();
-  
+  const { isInstallable, installApp } = usePWAInstall();
+
   const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
@@ -30,6 +32,9 @@ const UserDashboard: React.FC = () => {
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+
+  // Fallback: Se o cliente for antigo e não tiver customerNumber, usa o NIF no cartão
+  const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
   useEffect(() => {
     const fetchData = async () => {
@@ -65,11 +70,8 @@ const UserDashboard: React.FC = () => {
           const start = l.startDate.toDate();
           const end = l.endDate.toDate();
           const isTimeValid = now >= start && now <= end;
-          
           const hasTargetZips = l.targetZipCodes && l.targetZipCodes.length > 0;
-          // Corrigido aqui adicionando ?. (optional chaining)
           const isZipValid = !hasTargetZips || (userZipBase && l.targetZipCodes?.includes(userZipBase));
-
           return isTimeValid && isZipValid;
         });
       setActiveLeaflets(valid);
@@ -92,13 +94,11 @@ const UserDashboard: React.FC = () => {
   };
 
   const openLeaflet = () => {
-    if (activeLeaflets.length > 0) {
-      window.open(activeLeaflets[0].leafletUrl, '_blank');
-    }
+    if (activeLeaflets.length > 0) window.open(activeLeaflets[0].leafletUrl, '_blank');
   };
 
   const handleOpenEmailApp = () => {
-    const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${currentUser?.nif}`);
+    const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${displayCardNumber}`);
     const body = encodeURIComponent(`Olá equipa Vizinho+,\n\nPreciso de ajuda com...`);
     window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
   };
@@ -106,7 +106,7 @@ const UserDashboard: React.FC = () => {
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(sysConfig.supportEmail);
     setEmailCopied(true);
-    toast.success("E-mail copiado para a área de transferência!");
+    toast.success("E-mail copiado!");
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
@@ -114,12 +114,18 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
-      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center shadow-sm">
+      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-start shadow-sm">
         <div>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
-          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none">
+          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none mb-1">
             {currentUser.name}
           </h1>
+          {/* SE O CLIENTE TEM NIF, MOSTRA AQUI DEBAIXO DO NOME */}
+          {currentUser.nif && (
+            <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 bg-slate-50 w-fit px-2 py-1 rounded-md border border-slate-100">
+               <IdCard size={12} /> NIF: {currentUser.nif}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
             <button onClick={() => navigate('/settings')} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-[#0a2540] hover:bg-slate-100 transition-colors border-2 border-slate-100" title="Definições de Perfil">
@@ -131,19 +137,27 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
+        {isInstallable && (
+          <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#0a2540] p-2 rounded-xl text-[#00d66f]"><Smartphone size={20} /></div>
+              <div>
+                <p className="font-black uppercase text-[11px] text-[#0a2540] tracking-tighter">Instalar App</p>
+                <p className="text-[9px] font-bold text-[#0a2540] opacity-80 uppercase">Acesso rápido no ecrã</p>
+              </div>
+            </div>
+            <button onClick={installApp} className="bg-[#0a2540] text-white px-5 py-3 rounded-2xl font-black uppercase text-[9px] tracking-widest active:scale-95 transition-all">Instalar</button>
+          </div>
+        )}
+
         <BannerCarousel />
 
-        <button 
-          onClick={openLeaflet}
-          disabled={activeLeaflets.length === 0}
-          className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${activeLeaflets.length > 0 ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'}`}
-        >
+        <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${activeLeaflets.length > 0 ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'}`}>
           {activeLeaflets.length > 0 && (
              <div className="absolute -top-3 -right-3 bg-red-500 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center font-black uppercase tracking-widest text-[9px] border-4 border-[#0a2540] animate-pulse rotate-12 shadow-xl z-20">
                <Star size={12} fill="currentColor" className="mb-0.5" /> Novo
              </div>
           )}
-          
           <div className="flex items-center gap-4 relative z-10">
             <div className="bg-[#0a2540] p-3 rounded-2xl"><Sparkles size={32} className="text-[#00d66f]" /></div>
             <div className="text-left">
@@ -159,12 +173,14 @@ const UserDashboard: React.FC = () => {
                 Cartão Digital
             </div>
             <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
-                <QRCodeSVG value={currentUser.nif || ""} size={120} />
+                {/* QR CODE AGORA MOSTRA O NUMERO DO CARTÃO */}
+                <QRCodeSVG value={displayCardNumber} size={120} />
             </div>
             <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este código na loja</p>
                 <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
-                    {currentUser.nif?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
+                    {/* APRESENTA O NÚMERO DE CARTÃO FORMATADO */}
+                    {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>
             
@@ -231,25 +247,18 @@ const UserDashboard: React.FC = () => {
             </div>
           </button>
         )}
-
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
-        <button 
-          onClick={() => setShowContactModal(true)} 
-          className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all"
-        >
+        <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all">
             <Mail size={16} className="text-[#00d66f]" /> Entrar em Contacto
         </button>
-
         <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] mt-4"><ShieldCheck size={14} /> Termos e Privacidade</button>
         <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700"><LogOut size={14} /> Sair da Conta</button>
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
       </footer>
 
-      {selectedTxForFeedback && (
-        <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />
-      )}
+      {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
 
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">

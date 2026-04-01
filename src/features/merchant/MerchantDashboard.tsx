@@ -4,17 +4,20 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings, History, Save, X } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, Smartphone, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
 import MerchantSettings from './components/MerchantSettings';
+import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, updateTransactionDocument, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
+  const { isInstallable, installApp } = usePWAInstall();
+
   const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
@@ -28,11 +31,9 @@ const MerchantDashboard: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
 
-  // Modal Pós-Transação (Para pedir fatura opcional)
   const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
   const [postInvoiceNum, setPostInvoiceNum] = useState('');
 
-  // Edição no Histórico
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [editingInvoiceVal, setEditingInvoiceVal] = useState('');
 
@@ -45,14 +46,23 @@ const MerchantDashboard: React.FC = () => {
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
 
+  // PESQUISA ATUALIZADA: Tenta o Nº de Cartão (customerNumber) PRIMEIRO, se não encontrar, tenta o NIF.
   useEffect(() => {
     const search = async () => {
-      const cleanNif = cardNumber.replace(/\s/g, '');
-      if (cleanNif.length === 9) {
+      const cleanInput = cardNumber.replace(/\s/g, '');
+      if (cleanInput.length === 9) {
         setIsSearching(true);
         try {
-          const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
-          const snap = await getDocs(q);
+          // 1. Tenta pesquisar pelo Número do Cartão
+          let q = query(collection(db, 'users'), where('customerNumber', '==', cleanInput), where('role', '==', 'client'));
+          let snap = await getDocs(q);
+          
+          // 2. Se não encontrou pelo cartão, tenta pelo NIF
+          if (snap.empty) {
+            q = query(collection(db, 'users'), where('nif', '==', cleanInput), where('role', '==', 'client'));
+            snap = await getDocs(q);
+          }
+
           if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
           else setFoundClient(null);
         } catch (error) { console.error(error); } finally { setIsSearching(false); }
@@ -71,19 +81,15 @@ const MerchantDashboard: React.FC = () => {
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const invoiceVal = parseFloat(amount);
-    
     if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0) {
       alert("Preencha o valor da nova compra corretamente.");
       return;
     }
-
     let valToProcess = invoiceVal;
-
     if (type === 'redeem') {
       if (!redeemAmount || redeemAmount <= 0) return;
-      valToProcess = redeemAmount; // Usa exatamente o valor que o Comerciante digitou
+      valToProcess = redeemAmount;
     }
-
     setPendingAction({ type, val: valToProcess });
     setShowConfirmModal(true);
   };
@@ -99,16 +105,9 @@ const MerchantDashboard: React.FC = () => {
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
         amount: pendingAction.val,
         type: pendingAction.type,
-        documentNumber: documentNumber // Opcional
+        documentNumber: documentNumber
       });
-      
-      // Abre o modal de sucesso com opção de adicionar fatura se faltar
-      setPostTxModal({ 
-        isOpen: true, 
-        txId: newTxId || '', 
-        needsInvoice: !documentNumber.trim() 
-      });
-
+      setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
     } catch (e) {
       setMessage({ type: 'error', text: "Erro ao registar." });
@@ -152,6 +151,24 @@ const MerchantDashboard: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 w-full">
+        
+        {isInstallable && (
+          <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#0a2540] p-2 rounded-xl text-[#00d66f]">
+                <Smartphone size={20} />
+              </div>
+              <div>
+                <p className="font-black uppercase text-[11px] text-[#0a2540] tracking-tighter">Instalar App Vizinho+</p>
+                <p className="text-[9px] font-bold text-[#0a2540] opacity-80 uppercase">Acesso rápido no ecrã para si e para a sua equipa</p>
+              </div>
+            </div>
+            <button onClick={installApp} className="bg-[#0a2540] text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all">
+              Instalar
+            </button>
+          </div>
+        )}
+
         {view === 'terminal' && (
           <MerchantTerminal 
             cardNumber={cardNumber} setCardNumber={setCardNumber}
@@ -232,7 +249,6 @@ const MerchantDashboard: React.FC = () => {
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
 
-      {/* CONFIRMAÇÃO DE TRANSAÇÃO */}
       {showConfirmModal && pendingAction && (
         <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl border-4 border-[#0f172a] animate-in zoom-in">
@@ -257,7 +273,6 @@ const MerchantDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DE SUCESSO E PEDIDO DE FATURA */}
       {postTxModal.isOpen && (
         <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
             <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl border-4 border-[#0a2540] animate-in zoom-in">

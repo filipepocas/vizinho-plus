@@ -3,9 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight, Phone } from 'lucide-react';
+import { UserPlus, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', password: '', zipCode: '' });
@@ -13,11 +14,18 @@ const RegisterPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { checkNifExists } = useStore();
+  
+  const { isInstallable, installApp } = usePWAInstall();
 
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, '');
     if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
     setFormData({ ...formData, zipCode: val });
+  };
+
+  // Função para gerar número de cliente único com 9 dígitos (Ex: 123456789)
+  const generateCustomerNumber = () => {
+    return Math.floor(100000000 + Math.random() * 900000000).toString();
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -35,25 +43,25 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
-      // 1. PRIMEIRO: AUTENTICA O UTILIZADOR NO AUTH
-      // (Necessário para as regras do Firebase permitirem verificar o NIF a seguir)
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      
-      // 2. SEGUNDO: COM A SESSÃO INICIADA, VERIFICA SE O NIF JÁ EXISTE
-      const nifExists = await checkNifExists(formData.nif);
-      if (nifExists) {
-        // Se o NIF já existe, elimina imediatamente a conta que acabou de criar no Auth
-        await userCredential.user.delete();
-        toast.error("ESTE NIF JÁ ESTÁ REGISTADO.");
-        setLoading(false);
-        return;
+      // Se o utilizador preencheu o NIF, verificamos se já existe
+      if (formData.nif.trim() !== '') {
+        const nifExists = await checkNifExists(formData.nif);
+        if (nifExists) {
+          toast.error("ESTE NIF JÁ ESTÁ REGISTADO.");
+          setLoading(false);
+          return;
+        }
       }
 
-      // 3. TERCEIRO: O NIF É VÁLIDO, CRIA O PERFIL NA BASE DE DADOS FIRESTORE
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
+      
+      const newCustomerNumber = generateCustomerNumber();
+
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
-        nif: formData.nif,
+        nif: formData.nif.trim(), // Pode ir vazio
+        customerNumber: newCustomerNumber, // NOVO: Número de Cartão
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
@@ -64,6 +72,11 @@ const RegisterPage: React.FC = () => {
       });
 
       toast.success("BEM-VINDO VIZINHO!");
+      
+      if (isInstallable) {
+        try { await installApp(); } catch (error) { console.log("Instalação adiada"); }
+      }
+
       navigate('/dashboard');
       
     } catch (err: any) {
@@ -71,7 +84,6 @@ const RegisterPage: React.FC = () => {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
       } else {
         toast.error("ERRO AO CRIAR CONTA.");
-        console.error(err);
       }
     } finally {
       setLoading(false);
@@ -96,8 +108,9 @@ const RegisterPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF</label>
-              <input type="text" maxLength={9} required value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+              {/* NIF AGORA É OPCIONAL */}
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
+              <input type="text" maxLength={9} value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Cód. Postal</label>
@@ -122,13 +135,7 @@ const RegisterPage: React.FC = () => {
           </div>
 
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
-            <input 
-              type="checkbox" 
-              id="terms" 
-              checked={acceptedTerms} 
-              onChange={e => setAcceptedTerms(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-[#00d66f]"
-            />
+            <input type="checkbox" id="terms" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} className="mt-1 w-5 h-5 accent-[#00d66f]" />
             <label htmlFor="terms" className="text-[9px] font-bold uppercase text-slate-500 leading-tight">
               Aceito os <Link to="/terms" className="text-[#0a2540] underline">Termos de Utilização</Link> e a 
               <Link to="/terms" className="text-[#0a2540] underline"> Política de Privacidade</Link> do Vizinho+.

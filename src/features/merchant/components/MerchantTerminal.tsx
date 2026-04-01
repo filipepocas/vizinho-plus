@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
 interface MerchantTerminalProps {
@@ -39,11 +39,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
 
   const invoiceAmount = Number(amount) || 0;
   
-  // CÁLCULO DA REGRA DOS 50%
   const maxDiscountAllowed = invoiceAmount * 0.5;
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
 
-  // A Fatura já não é obrigatória para avançar aqui
   const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0;
   const canProcessRedeem = !isLoading && foundClient !== null && invoiceAmount > 0 && Number(customRedeem) > 0 && Number(customRedeem) <= actualDiscountToApply;
 
@@ -54,8 +52,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
         <div className="space-y-10 relative z-10">
           
           <div className="space-y-4">
+            {/* TEXTO ATUALIZADO AQUI */}
             <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-              <Search size={16} /> Identificar Cliente (NIF)
+              <Search size={16} /> Identificar Cliente (Nº Cartão ou NIF)
             </label>
             <div className="flex gap-4">
               <input 
@@ -118,7 +117,6 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
           <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback</span>
         </button>
 
-        {/* SECÇÃO PARA DESCONTAR SALDO COM VALOR PERSONALIZADO */}
         {clientStoreBalance > 0 && invoiceAmount > 0 && (
            <div className="bg-blue-50 p-4 rounded-3xl border-2 border-blue-200 animate-in fade-in">
               <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
