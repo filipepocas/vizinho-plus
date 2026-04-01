@@ -225,7 +225,6 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Garantia de seguranÃ§a: Buscar o UID diretamente da fonte de autenticaÃ§Ã£o
     const currentUser = auth.currentUser;
     if (!currentUser) {
       alert("Erro: SessÃ£o nÃ£o encontrada. Por favor, faz login novamente.");
@@ -240,7 +239,7 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
         transactionId: transactionId || "",
         merchantId: merchantId || "",
         merchantName: merchantName || "",
-        userId: currentUser.uid, // FONTE DA VERDADE: Garante match com as Rules
+        userId: currentUser.uid, 
         userName: userName || "Cliente",
         rating: Number(rating),
         comment: comment.trim(),
@@ -259,8 +258,8 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[250] flex items-center justify-center p-6 bg-[#0f172a]/95 backdrop-blur-md">
-      <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#0f172a] shadow-[12px_12px_0px_#00d66f] relative overflow-hidden">
+    <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 sm:p-6 bg-[#0f172a]/95 backdrop-blur-md overflow-y-auto">
+      <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#0f172a] shadow-[12px_12px_0px_#00d66f] relative overflow-hidden my-auto">
         
         <button 
           onClick={onClose} 
@@ -269,35 +268,35 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           <X size={20} strokeWidth={3} />
         </button>
 
-        <div className="bg-[#0f172a] p-8 text-white">
+        <div className="bg-[#0f172a] p-6 sm:p-8 text-white">
           <div className="flex items-center gap-3 mb-2">
             <div className="bg-[#00d66f] p-2 rounded-lg">
               <Star size={20} className="text-[#0f172a]" fill="currentColor" />
             </div>
-            <h3 className="font-black uppercase italic tracking-tighter text-2xl">Avaliar Visita</h3>
+            <h3 className="font-black uppercase italic tracking-tighter text-xl sm:text-2xl">Avaliar Visita</h3>
           </div>
-          <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.2em] opacity-90">
+          <p className="text-[#00d66f] text-[10px] font-black uppercase tracking-[0.2em] opacity-90 truncate pr-8">
             {merchantName}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-8 space-y-8">
+        <form onSubmit={handleSubmit} className="p-6 sm:p-8 space-y-6 sm:space-y-8">
           
           <div className="flex flex-col items-center gap-4">
-            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Qual a tua nota?</p>
+            <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Qual a tua nota geral?</p>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map((star) => (
                 <button
                   key={star}
                   type="button"
                   onClick={() => setRating(star)}
-                  className={`w-12 h-14 rounded-2xl border-4 transition-all flex flex-col items-center justify-center shadow-[4px_4px_0px_#0f172a] active:translate-y-1 active:shadow-none ${
+                  className={`w-10 h-12 sm:w-12 sm:h-14 rounded-2xl border-4 transition-all flex flex-col items-center justify-center shadow-[4px_4px_0px_#0f172a] active:translate-y-1 active:shadow-none ${
                     rating >= star 
                     ? 'bg-[#00d66f] border-[#0f172a] text-[#0f172a] -rotate-2' 
                     : 'bg-white border-slate-200 text-slate-200 hover:border-[#0f172a]'
                   }`}
                 >
-                  <Star size={24} fill={rating >= star ? "currentColor" : "none"} strokeWidth={3} />
+                  <Star size={20} className="sm:w-6 sm:h-6" fill={rating >= star ? "currentColor" : "none"} strokeWidth={3} />
                   <span className={`text-[8px] font-black mt-1 ${rating >= star ? 'block' : 'hidden'}`}>{star}</span>
                 </button>
               ))}
@@ -307,56 +306,57 @@ const FeedbackForm: React.FC<FeedbackFormProps> = ({
           <div className="space-y-4">
             <div className="flex items-center gap-2 justify-center">
                 <AlertCircle size={14} className="text-[#00d66f]" />
-                <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Recomendarias a um vizinho?</p>
+                <p className="text-[9px] sm:text-[10px] font-black uppercase text-slate-400 tracking-widest text-center">Recomendarias a um vizinho?</p>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <button
                 type="button"
                 onClick={() => setRecommend(true)}
-                className={`p-4 rounded-2xl border-4 flex items-center justify-center gap-2 font-black uppercase text-xs transition-all shadow-[4px_4px_0px_#0f172a] active:translate-y-1 active:shadow-none ${
+                className={`p-3 sm:p-4 rounded-2xl border-4 flex items-center justify-center gap-2 font-black uppercase text-[10px] sm:text-xs transition-all shadow-[4px_4px_0px_#0f172a] active:translate-y-1 active:shadow-none ${
                   recommend === true ? 'bg-[#00d66f] border-[#0f172a] text-[#0f172a]' : 'bg-white border-slate-100 text-slate-300'
                 }`}
               >
-                <ThumbsUp size={18} strokeWidth={3} /> Sim
+                <ThumbsUp size={16} className="sm:w-[18px]" strokeWidth={3} /> Sim
               </button>
               <button
                 type="button"
                 onClick={() => setRecommend(false)}
-                className={`p-4 rounded-2xl border-4 flex items-center justify-center gap-2 font-black uppercase text-xs transition-all shadow-[4px_4px_0px_#0f172a] active:translate-y-1 active:shadow-none ${
+                className={`p-3 sm:p-4 rounded-2xl border-4 flex items-center justify-center gap-2 font-black uppercase text-[10px] sm:text-xs transition-all shadow-[4px_4px_0px_#0f172a] active:translate-y-1 active:shadow-none ${
                   recommend === false ? 'bg-red-500 border-[#0f172a] text-white' : 'bg-white border-slate-100 text-slate-300'
                 }`}
               >
-                <ThumbsDown size={18} strokeWidth={3} /> NÃ£o
+                <ThumbsDown size={16} className="sm:w-[18px]" strokeWidth={3} /> NÃ£o
               </button>
             </div>
           </div>
 
+          {/* ÃREA DE TEXTO ATUALIZADA PARA INCENTIVAR FEEDBACK CONSTRUTIVO */}
           <div className="space-y-2">
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest flex items-center gap-2 ml-2">
-              <MessageSquare size={14} /> Mensagem (Opcional)
+              <MessageSquare size={14} /> Ajude a melhorar (Opcional)
             </label>
             <textarea
               value={comment}
               onChange={(e) => setComment(e.target.value)}
-              className="w-full border-4 border-[#0f172a] rounded-[25px] p-5 text-sm font-bold focus:bg-slate-50 outline-none min-h-[120px] resize-none placeholder:text-slate-300 transition-colors shadow-inner"
-              placeholder="Como foi a experiÃªncia?"
+              className="w-full border-4 border-[#0f172a] rounded-[25px] p-4 sm:p-5 text-xs sm:text-sm font-bold focus:bg-slate-50 outline-none min-h-[100px] sm:min-h-[120px] resize-none placeholder:text-slate-300 transition-colors shadow-inner"
+              placeholder="Ex: O que poderia ser melhorado? Faltou algum produto/serviÃ§o? Como foi o atendimento?"
             />
           </div>
 
           <button
             type="submit"
             disabled={isSubmitting || rating === 0}
-            className={`w-full p-6 rounded-[25px] font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${
+            className={`w-full p-5 sm:p-6 rounded-[25px] font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all text-xs sm:text-sm ${
               isSubmitting || rating === 0
               ? 'bg-slate-100 text-slate-300 border-4 border-slate-200 cursor-not-allowed'
               : 'bg-[#0f172a] text-white border-b-8 border-black hover:bg-black active:border-b-0 active:translate-y-2'
             }`}
           >
             {isSubmitting ? (
-              <div className="w-6 h-6 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div>
+              <div className="w-5 h-5 sm:w-6 sm:h-6 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div>
             ) : (
               <>
-                Confirmar AvaliaÃ§Ã£o <Send size={20} strokeWidth={3} className="text-[#00d66f]" />
+                Confirmar AvaliaÃ§Ã£o <Send size={18} strokeWidth={3} className="text-[#00d66f]" />
               </>
             )}
           </button>
@@ -410,7 +410,7 @@ export default app;
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminDashboard.tsx
 ==================================================
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, orderBy, doc, writeBatch } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
@@ -438,65 +438,74 @@ const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'));
+    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
     const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
     
-    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
+    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(200));
     const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
-    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
+    const qClients = query(collection(db, 'users'), where('role', '==', 'client'), limit(1000));
     const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
     return () => { unsubTx(); unsubMerchants(); unsubClients(); };
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex flex-col">
-      <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[50px] border-b-[10px] border-[#00d66f] shadow-2xl z-20">
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col overflow-x-hidden">
+      <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[40px] md:rounded-b-[50px] border-b-[8px] md:border-b-[10px] border-[#00d66f] shadow-2xl z-20">
         <div className="max-w-7xl mx-auto">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-6">
-            <div className="flex items-center gap-5">
-              <div className="bg-[#00d66f] p-4 rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
-                <ShieldCheck size={32} strokeWidth={3} />
+          
+          {/* TOPO: TÃTULO E BOTÃ•ES */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+            <div className="flex items-center gap-4 md:gap-5">
+              <div className="bg-[#00d66f] p-3 md:p-4 rounded-[20px] md:rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
+                <ShieldCheck size={28} className="md:w-8 md:h-8" strokeWidth={3} />
               </div>
               <div>
-                <h1 className="text-3xl md:text-5xl font-black uppercase italic tracking-tighter leading-none text-[#00d66f]">Admin Console</h1>
-                <p className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mt-2">SupervisÃ£o Vizinho+</p>
+                <h1 className="text-2xl sm:text-3xl md:text-5xl font-black uppercase italic tracking-tighter leading-none text-[#00d66f]">Admin Console</h1>
+                <p className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mt-1 md:mt-2">SupervisÃ£o Vizinho+</p>
               </div>
             </div>
 
-            <div className="flex gap-4">
-              <button onClick={() => setCurrentView('settings')} className="px-6 py-4 bg-white/10 rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-white/10">
-                <Settings size={20} /> Master
+            <div className="flex gap-3 w-full md:w-auto">
+              <button onClick={() => setCurrentView('settings')} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-white/10 rounded-xl md:rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-white/10">
+                <Settings size={18} /> Master
               </button>
-              <button onClick={async () => { await logout(); navigate('/login'); }} className="px-6 py-4 bg-red-500/10 rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
-                <LogOut size={20} /> Sair
+              <button onClick={async () => { await logout(); navigate('/login'); }} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-red-500/10 rounded-xl md:rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
+                <LogOut size={18} /> Sair
               </button>
             </div>
           </div>
 
-          <nav className="flex flex-wrap gap-2 mt-10 bg-black/20 p-2 rounded-[25px] border border-white/5 inline-flex">
-            {[
-              { id: 'overview', label: 'Auditoria', icon: TrendingUp },
-              { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
-              { id: 'merchants', label: 'Lojas', icon: Store },
-              { id: 'users', label: 'Vizinhos', icon: Users },
-              { id: 'banners', label: 'Banners', icon: ImageIcon },
-              { id: 'leaflets', label: 'Folhetos', icon: FileText },
-              { id: 'reviews', label: 'Feedback', icon: MessageSquare },
-            ].map(item => (
-              <button key={item.id} onClick={() => setCurrentView(item.id as any)} className={`flex items-center gap-3 px-6 py-4 rounded-2xl text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-xl translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
-                <item.icon size={18} strokeWidth={3} /> {item.label}
-              </button>
-            ))}
-          </nav>
+          {/* MENU DESLIZANTE PARA MOBILE (SCROLL HORIZONTAL) */}
+          <div className="mt-8 -mx-6 px-6 md:mx-0 md:px-0">
+            <nav className="flex overflow-x-auto gap-2 bg-black/20 p-2 md:rounded-[25px] border-y md:border border-white/5 scrollbar-hide pb-2">
+              {[
+                { id: 'overview', label: 'Auditoria', icon: TrendingUp },
+                { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
+                { id: 'merchants', label: 'Lojas', icon: Store },
+                { id: 'users', label: 'Vizinhos', icon: Users },
+                { id: 'banners', label: 'Banners', icon: ImageIcon },
+                { id: 'leaflets', label: 'Folhetos', icon: FileText },
+                { id: 'reviews', label: 'Feedback', icon: MessageSquare },
+              ].map(item => (
+                <button 
+                  key={item.id} 
+                  onClick={() => setCurrentView(item.id as any)} 
+                  className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-2xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-[#00d66f] text-[#0a2540] shadow-xl md:translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
+                >
+                  <item.icon size={16} className="md:w-[18px] md:h-[18px]" strokeWidth={3} /> {item.label}
+                </button>
+              ))}
+            </nav>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-6 py-12 space-y-12 w-full">
+      <main className="max-w-7xl mx-auto px-4 md:px-6 py-8 md:py-12 space-y-8 md:space-y-12 w-full">
         {currentView === 'overview' && (
-          <div className="bg-white rounded-[50px] border-4 border-[#0a2540] p-10 shadow-[15px_15px_0px_#0a2540]">
-              <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-10">Auditoria de TransaÃ§Ãµes</h2>
+          <div className="bg-white rounded-[30px] md:rounded-[50px] border-4 border-[#0a2540] p-6 md:p-10 shadow-[8px_8px_0px_#0a2540] md:shadow-[15px_15px_0px_#0a2540] w-full overflow-hidden">
+              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 md:mb-10">Auditoria de TransaÃ§Ãµes</h2>
               <AdminTransactions transactions={globalTransactions} users={[]} />
           </div>
         )}
@@ -1174,58 +1183,77 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
   };
 
   return (
-    <div className="space-y-10">
-      <div className="flex flex-col lg:flex-row items-center gap-6">
-        <div className="relative flex-1 w-full">
-          <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={24} />
-          <input type="text" placeholder="PROCURAR LOJA, NIF OU DOC..." className="w-full p-6 pl-16 bg-slate-50 border-4 border-slate-100 rounded-[30px] outline-none focus:border-[#0a2540] font-black text-xs uppercase tracking-widest shadow-inner" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+    <div className="space-y-6 md:space-y-10 w-full">
+      
+      {/* FILTROS RESPONSIVOS */}
+      <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-4 xl:gap-6">
+        <div className="relative w-full">
+          {/* CORREÃ‡ÃƒO FEITA AQUI: Apenas um className */}
+          <Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-slate-300 md:w-6 md:h-6" size={20} />
+          <input 
+            type="text" 
+            placeholder="PROCURAR LOJA, NIF OU DOC..." 
+            className="w-full p-4 md:p-6 pl-12 md:pl-16 bg-slate-50 border-4 border-slate-100 rounded-[20px] md:rounded-[30px] outline-none focus:border-[#0a2540] font-black text-[10px] md:text-xs uppercase tracking-widest shadow-inner" 
+            value={searchQuery} 
+            onChange={(e) => setSearchQuery(e.target.value)} 
+          />
         </div>
         
-        <div className="flex items-center gap-3 bg-slate-50 border-4 border-slate-100 rounded-[30px] p-2 px-6 h-[76px]">
-            <Calendar className="text-slate-400" size={20} />
-            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent outline-none text-xs font-black text-slate-600 uppercase" />
-            <span className="text-slate-300 font-bold">-</span>
-            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent outline-none text-xs font-black text-slate-600 uppercase" />
-        </div>
+        <div className="flex flex-col sm:flex-row gap-4 xl:gap-6 w-full xl:w-auto">
+            <div className="flex-1 flex items-center gap-2 md:gap-3 bg-slate-50 border-4 border-slate-100 rounded-[20px] md:rounded-[30px] p-2 px-4 md:px-6 h-[60px] md:h-[76px] justify-between">
+                <Calendar className="text-slate-400 shrink-0" size={18} />
+                <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="bg-transparent outline-none text-[9px] md:text-xs font-black text-slate-600 uppercase w-full" />
+                <span className="text-slate-300 font-bold">-</span>
+                <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="bg-transparent outline-none text-[9px] md:text-xs font-black text-slate-600 uppercase w-full" />
+            </div>
 
-        <button onClick={exportToExcel} className="bg-[#00d66f] text-[#0a2540] px-10 h-[76px] rounded-[30px] font-black text-sm uppercase tracking-widest shadow-[6px_6px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center gap-3 border-4 border-[#0a2540]">
-            <Download size={24} strokeWidth={3} /> Excel
-        </button>
+            <button onClick={exportToExcel} className="w-full sm:w-auto bg-[#00d66f] text-[#0a2540] px-6 md:px-10 h-[60px] md:h-[76px] rounded-[20px] md:rounded-[30px] font-black text-[10px] md:text-sm uppercase tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-2 md:gap-3 border-4 border-[#0a2540] shrink-0">
+                <Download size={18} className="md:w-6 md:h-6" strokeWidth={3} /> Excel
+            </button>
+        </div>
       </div>
 
-      <div className="bg-white rounded-[40px] border-4 border-[#0a2540] overflow-hidden shadow-xl">
-        <table className="w-full text-left">
-          <thead className="bg-[#0a2540] text-white">
-            <tr>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em]">Registo</th>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em]">Parceiro</th>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-center">Cliente NIF</th>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Fatura</th>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-center">Status</th>
-              <th className="p-8 text-[11px] font-black uppercase tracking-[0.2em] text-right">Movimento</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y-4 divide-slate-100">
-            {filteredTransactions.map((t) => (
-              <tr key={t.id} className="hover:bg-slate-50 transition-colors">
-                <td className="p-8 text-xs font-bold text-slate-500">{parseDate(t.createdAt).toLocaleDateString()}</td>
-                <td className="p-8 font-black uppercase italic text-sm text-[#0a2540]">{t.merchantName}</td>
-                <td className="p-8 font-mono text-xs font-bold text-center text-slate-400">{t.clientNif || '---'}</td>
-                <td className="p-8 text-right text-slate-500 font-black text-lg">{t.amount.toFixed(2)} â‚¬</td>
-                <td className="p-8 text-center">
-                  <span className={`px-5 py-2 rounded-full text-[9px] font-black uppercase tracking-widest border-2 ${
-                      t.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-100 text-green-700 border-green-200'
-                  }`}>
-                    {t.status === 'cancelled' ? 'Anulado' : 'Aprovado'}
-                  </span>
-                </td>
-                <td className={`p-8 text-right font-black text-xl ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                  {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)} â‚¬
-                </td>
+      {/* TABELA COM SCROLL HORIZONTAL (MOBILE FRIENDLY) */}
+      <div className="bg-white rounded-[25px] md:rounded-[40px] border-4 border-[#0a2540] shadow-lg md:shadow-xl overflow-hidden w-full">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left min-w-[700px]">
+            <thead className="bg-[#0a2540] text-white">
+              <tr>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] whitespace-nowrap">Registo</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em]">Parceiro</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Cliente ID</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-right">Fatura</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Status</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-right">Movimento</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
+            </thead>
+            <tbody className="divide-y-4 divide-slate-100">
+              {filteredTransactions.map((t) => (
+                <tr key={t.id} className="hover:bg-slate-50 transition-colors">
+                  <td className="p-5 md:p-8 text-[10px] md:text-xs font-bold text-slate-500 whitespace-nowrap">{parseDate(t.createdAt).toLocaleDateString()}</td>
+                  <td className="p-5 md:p-8 font-black uppercase italic text-xs md:text-sm text-[#0a2540]">{t.merchantName}</td>
+                  <td className="p-5 md:p-8 font-mono text-[10px] md:text-xs font-bold text-center text-slate-400">{t.clientNif || '---'}</td>
+                  <td className="p-5 md:p-8 text-right text-slate-500 font-black text-sm md:text-lg whitespace-nowrap">{t.amount.toFixed(2)} â‚¬</td>
+                  <td className="p-5 md:p-8 text-center">
+                    <span className={`px-3 md:px-5 py-2 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest border-2 whitespace-nowrap ${
+                        t.status === 'cancelled' ? 'bg-red-50 text-red-600 border-red-100' : 'bg-green-100 text-green-700 border-green-200'
+                    }`}>
+                      {t.status === 'cancelled' ? 'Anulado' : 'Aprovado'}
+                    </span>
+                  </td>
+                  <td className={`p-5 md:p-8 text-right font-black text-lg md:text-xl whitespace-nowrap ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                    {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)} â‚¬
+                  </td>
+                </tr>
+              ))}
+              {filteredTransactions.length === 0 && (
+                  <tr>
+                      <td colSpan={6} className="p-10 text-center text-slate-400 font-black text-[10px] uppercase tracking-widest">Nenhuma transaÃ§Ã£o encontrada.</td>
+                  </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
@@ -2080,9 +2108,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight, Phone } from 'lucide-react';
+import { UserPlus, ArrowRight } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', password: '', zipCode: '' });
@@ -2090,11 +2119,18 @@ const RegisterPage: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { checkNifExists } = useStore();
+  
+  const { isInstallable, installApp } = usePWAInstall();
 
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, '');
     if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
     setFormData({ ...formData, zipCode: val });
+  };
+
+  // FunÃ§Ã£o para gerar nÃºmero de cliente Ãºnico com 9 dÃ­gitos (Ex: 123456789)
+  const generateCustomerNumber = () => {
+    return Math.floor(100000000 + Math.random() * 900000000).toString();
   };
 
   const handleRegister = async (e: React.FormEvent) => {
@@ -2112,25 +2148,25 @@ const RegisterPage: React.FC = () => {
     }
 
     try {
-      // 1. PRIMEIRO: AUTENTICA O UTILIZADOR NO AUTH
-      // (NecessÃ¡rio para as regras do Firebase permitirem verificar o NIF a seguir)
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      
-      // 2. SEGUNDO: COM A SESSÃƒO INICIADA, VERIFICA SE O NIF JÃ EXISTE
-      const nifExists = await checkNifExists(formData.nif);
-      if (nifExists) {
-        // Se o NIF jÃ¡ existe, elimina imediatamente a conta que acabou de criar no Auth
-        await userCredential.user.delete();
-        toast.error("ESTE NIF JÃ ESTÃ REGISTADO.");
-        setLoading(false);
-        return;
+      // Se o utilizador preencheu o NIF, verificamos se jÃ¡ existe
+      if (formData.nif.trim() !== '') {
+        const nifExists = await checkNifExists(formData.nif);
+        if (nifExists) {
+          toast.error("ESTE NIF JÃ ESTÃ REGISTADO.");
+          setLoading(false);
+          return;
+        }
       }
 
-      // 3. TERCEIRO: O NIF Ã‰ VÃLIDO, CRIA O PERFIL NA BASE DE DADOS FIRESTORE
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
+      
+      const newCustomerNumber = generateCustomerNumber();
+
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
-        nif: formData.nif,
+        nif: formData.nif.trim(), // Pode ir vazio
+        customerNumber: newCustomerNumber, // NOVO: NÃºmero de CartÃ£o
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
@@ -2141,6 +2177,11 @@ const RegisterPage: React.FC = () => {
       });
 
       toast.success("BEM-VINDO VIZINHO!");
+      
+      if (isInstallable) {
+        try { await installApp(); } catch (error) { console.log("InstalaÃ§Ã£o adiada"); }
+      }
+
       navigate('/dashboard');
       
     } catch (err: any) {
@@ -2148,7 +2189,6 @@ const RegisterPage: React.FC = () => {
         toast.error("ESTE EMAIL JÃ ESTÃ REGISTADO.");
       } else {
         toast.error("ERRO AO CRIAR CONTA.");
-        console.error(err);
       }
     } finally {
       setLoading(false);
@@ -2173,8 +2213,9 @@ const RegisterPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF</label>
-              <input type="text" maxLength={9} required value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+              {/* NIF AGORA Ã‰ OPCIONAL */}
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
+              <input type="text" maxLength={9} value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">CÃ³d. Postal</label>
@@ -2199,13 +2240,7 @@ const RegisterPage: React.FC = () => {
           </div>
 
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
-            <input 
-              type="checkbox" 
-              id="terms" 
-              checked={acceptedTerms} 
-              onChange={e => setAcceptedTerms(e.target.checked)}
-              className="mt-1 w-5 h-5 accent-[#00d66f]"
-            />
+            <input type="checkbox" id="terms" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} className="mt-1 w-5 h-5 accent-[#00d66f]" />
             <label htmlFor="terms" className="text-[9px] font-bold uppercase text-slate-500 leading-tight">
               Aceito os <Link to="/terms" className="text-[#0a2540] underline">Termos de UtilizaÃ§Ã£o</Link> e a 
               <Link to="/terms" className="text-[#0a2540] underline"> PolÃ­tica de Privacidade</Link> do Vizinho+.
@@ -2581,7 +2616,7 @@ export default MerchantSettings;
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\merchant\components\MerchantTerminal.tsx
 ==================================================
 import React, { useState } from 'react';
-import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, RotateCcw, AlertTriangle } from 'lucide-react';
+import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 
 interface MerchantTerminalProps {
@@ -2621,11 +2656,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
 
   const invoiceAmount = Number(amount) || 0;
   
-  // CÃLCULO DA REGRA DOS 50%
   const maxDiscountAllowed = invoiceAmount * 0.5;
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
 
-  // A Fatura jÃ¡ nÃ£o Ã© obrigatÃ³ria para avanÃ§ar aqui
   const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0;
   const canProcessRedeem = !isLoading && foundClient !== null && invoiceAmount > 0 && Number(customRedeem) > 0 && Number(customRedeem) <= actualDiscountToApply;
 
@@ -2636,8 +2669,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
         <div className="space-y-10 relative z-10">
           
           <div className="space-y-4">
+            {/* TEXTO ATUALIZADO AQUI */}
             <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-              <Search size={16} /> Identificar Cliente (NIF)
+              <Search size={16} /> Identificar Cliente (NÂº CartÃ£o ou NIF)
             </label>
             <div className="flex gap-4">
               <input 
@@ -2700,7 +2734,6 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
           <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback</span>
         </button>
 
-        {/* SECÃ‡ÃƒO PARA DESCONTAR SALDO COM VALOR PERSONALIZADO */}
         {clientStoreBalance > 0 && invoiceAmount > 0 && (
            <div className="bg-blue-50 p-4 rounded-3xl border-2 border-blue-200 animate-in fade-in">
               <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
@@ -2814,17 +2847,20 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, CheckCircle2, XCircle, AlertTriangle, Settings, History, Save, X } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, Smartphone, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
 import MerchantSettings from './components/MerchantSettings';
+import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, updateTransactionDocument, subscribeToTransactions, logout } = useStore();
   const navigate = useNavigate();
   
+  const { isInstallable, installApp } = usePWAInstall();
+
   const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
@@ -2838,11 +2874,9 @@ const MerchantDashboard: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
 
-  // Modal PÃ³s-TransaÃ§Ã£o (Para pedir fatura opcional)
   const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
   const [postInvoiceNum, setPostInvoiceNum] = useState('');
 
-  // EdiÃ§Ã£o no HistÃ³rico
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [editingInvoiceVal, setEditingInvoiceVal] = useState('');
 
@@ -2855,14 +2889,23 @@ const MerchantDashboard: React.FC = () => {
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
 
+  // PESQUISA ATUALIZADA: Tenta o NÂº de CartÃ£o (customerNumber) PRIMEIRO, se nÃ£o encontrar, tenta o NIF.
   useEffect(() => {
     const search = async () => {
-      const cleanNif = cardNumber.replace(/\s/g, '');
-      if (cleanNif.length === 9) {
+      const cleanInput = cardNumber.replace(/\s/g, '');
+      if (cleanInput.length === 9) {
         setIsSearching(true);
         try {
-          const q = query(collection(db, 'users'), where('nif', '==', cleanNif), where('role', '==', 'client'));
-          const snap = await getDocs(q);
+          // 1. Tenta pesquisar pelo NÃºmero do CartÃ£o
+          let q = query(collection(db, 'users'), where('customerNumber', '==', cleanInput), where('role', '==', 'client'));
+          let snap = await getDocs(q);
+          
+          // 2. Se nÃ£o encontrou pelo cartÃ£o, tenta pelo NIF
+          if (snap.empty) {
+            q = query(collection(db, 'users'), where('nif', '==', cleanInput), where('role', '==', 'client'));
+            snap = await getDocs(q);
+          }
+
           if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
           else setFoundClient(null);
         } catch (error) { console.error(error); } finally { setIsSearching(false); }
@@ -2881,19 +2924,15 @@ const MerchantDashboard: React.FC = () => {
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const invoiceVal = parseFloat(amount);
-    
     if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0) {
       alert("Preencha o valor da nova compra corretamente.");
       return;
     }
-
     let valToProcess = invoiceVal;
-
     if (type === 'redeem') {
       if (!redeemAmount || redeemAmount <= 0) return;
-      valToProcess = redeemAmount; // Usa exatamente o valor que o Comerciante digitou
+      valToProcess = redeemAmount;
     }
-
     setPendingAction({ type, val: valToProcess });
     setShowConfirmModal(true);
   };
@@ -2909,16 +2948,9 @@ const MerchantDashboard: React.FC = () => {
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
         amount: pendingAction.val,
         type: pendingAction.type,
-        documentNumber: documentNumber // Opcional
+        documentNumber: documentNumber
       });
-      
-      // Abre o modal de sucesso com opÃ§Ã£o de adicionar fatura se faltar
-      setPostTxModal({ 
-        isOpen: true, 
-        txId: newTxId || '', 
-        needsInvoice: !documentNumber.trim() 
-      });
-
+      setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
     } catch (e) {
       setMessage({ type: 'error', text: "Erro ao registar." });
@@ -2962,6 +2994,24 @@ const MerchantDashboard: React.FC = () => {
       </header>
 
       <main className="max-w-7xl mx-auto p-4 w-full">
+        
+        {isInstallable && (
+          <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500 mb-8">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#0a2540] p-2 rounded-xl text-[#00d66f]">
+                <Smartphone size={20} />
+              </div>
+              <div>
+                <p className="font-black uppercase text-[11px] text-[#0a2540] tracking-tighter">Instalar App Vizinho+</p>
+                <p className="text-[9px] font-bold text-[#0a2540] opacity-80 uppercase">Acesso rÃ¡pido no ecrÃ£ para si e para a sua equipa</p>
+              </div>
+            </div>
+            <button onClick={installApp} className="bg-[#0a2540] text-white px-6 py-3 rounded-2xl font-black uppercase text-[10px] tracking-widest active:scale-95 transition-all">
+              Instalar
+            </button>
+          </div>
+        )}
+
         {view === 'terminal' && (
           <MerchantTerminal 
             cardNumber={cardNumber} setCardNumber={setCardNumber}
@@ -3042,7 +3092,6 @@ const MerchantDashboard: React.FC = () => {
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
 
-      {/* CONFIRMAÃ‡ÃƒO DE TRANSAÃ‡ÃƒO */}
       {showConfirmModal && pendingAction && (
         <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
           <div className="bg-white rounded-[40px] w-full max-w-sm overflow-hidden shadow-2xl border-4 border-[#0f172a] animate-in zoom-in">
@@ -3067,7 +3116,6 @@ const MerchantDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DE SUCESSO E PEDIDO DE FATURA */}
       {postTxModal.isOpen && (
         <div className="fixed inset-0 bg-[#0f172a]/90 backdrop-blur-sm z-[100] flex items-center justify-center p-6">
             <div className="bg-white rounded-[40px] w-full max-w-md overflow-hidden shadow-2xl border-4 border-[#0a2540] animate-in zoom-in">
@@ -3117,7 +3165,7 @@ import { db } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
-  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, Percent 
+  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, IdCard 
 } from 'lucide-react';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -3133,10 +3181,9 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     address: currentUser?.address || '',
     category: currentUser?.category || '',
     zipCode: currentUser?.zipCode || '',
-    freguesia: currentUser?.freguesia || ''
+    freguesia: currentUser?.freguesia || '',
+    nif: currentUser?.nif || '' // AGORA O NIF PODE SER ATUALIZADO
   });
-
-  const [cashbackInput, setCashbackInput] = useState(currentUser?.cashbackPercent?.toString() || '0');
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -3145,19 +3192,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     setLoading(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
-      let updates: any = { ...formData };
-
-      // LÃ“GICA DO CASHBACK PENDENTE (EFEITO NO DIA SEGUINTE)
-      if (currentUser.role === 'merchant' && Number(cashbackInput) !== currentUser.cashbackPercent) {
-        const tomorrow = new Date();
-        tomorrow.setDate(tomorrow.getDate() + 1);
-        tomorrow.setHours(0, 0, 0, 0); // Meia-noite do dia seguinte
-
-        updates.pendingCashbackPercent = Number(cashbackInput);
-        updates.pendingCashbackEffectiveAt = tomorrow;
-      }
-
-      await updateDoc(userRef, updates);
+      await updateDoc(userRef, formData);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (error) {
@@ -3213,6 +3248,22 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
       <main className="max-w-xl mx-auto px-6">
         <form onSubmit={handleSave} className="space-y-6">
+          
+          {/* APRESENTA O NÃšMERO DE CARTÃƒO GERADO AUTOMATICAMENTE */}
+          {currentUser?.role === 'client' && (
+            <div className="bg-[#00d66f] p-6 rounded-[30px] border-4 border-[#0a2540] shadow-[6px_6px_0px_#0a2540] flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-black uppercase text-[#0a2540] opacity-80 tracking-widest mb-1">O Teu CartÃ£o Digital Vizinho+</p>
+                <p className="text-2xl font-mono font-black text-[#0a2540] tracking-[0.2em]">
+                  {currentUser.customerNumber?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') || 'Sem CartÃ£o'}
+                </p>
+              </div>
+              <div className="bg-[#0a2540] p-3 rounded-2xl text-[#00d66f]">
+                <IdCard size={24} />
+              </div>
+            </div>
+          )}
+
           {/* Dados Pessoais */}
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
             <div className="flex items-center gap-3 mb-8">
@@ -3224,6 +3275,13 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome Completo</label>
                 <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white" required />
               </div>
+              
+              {/* O NIF AGORA PODE SER PREENCHIDO MAIS TARDE NAS DEFINIÃ‡Ã•ES */}
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
+                <input type="text" maxLength={9} value={formData.nif} onChange={(e) => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} placeholder="Ainda nÃ£o inseriu o NIF" className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white" />
+              </div>
+
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">TelemÃ³vel</label>
                 <div className="relative">
@@ -3241,35 +3299,12 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* Dados da Loja */}
           {currentUser?.role === 'merchant' && (
             <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
               <div className="flex items-center gap-3 mb-8">
                 <div className="bg-slate-100 p-2 rounded-xl"><MapPin className="text-[#0f172a]" size={20} strokeWidth={3} /></div>
                 <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados da Loja</h3>
               </div>
-
-              {/* CASHBACK CONFIG */}
-              <div className="bg-green-50 p-6 rounded-3xl border-2 border-green-200 mb-6">
-                <label className="flex items-center gap-2 text-[10px] font-black uppercase text-green-700 ml-2 mb-2">
-                  <Percent size={14} /> Percentagem de Cashback
-                </label>
-                <input 
-                  type="number" 
-                  step="0.1"
-                  min="0"
-                  value={cashbackInput}
-                  onChange={(e) => setCashbackInput(e.target.value)}
-                  className="w-full bg-white border-4 border-green-300 rounded-2xl px-5 py-4 text-xl font-black text-[#0f172a] outline-none focus:border-[#00d66f]"
-                />
-                {currentUser?.pendingCashbackEffectiveAt && (
-                   <p className="text-[9px] font-bold text-amber-600 uppercase mt-3 bg-amber-100 p-2 rounded-xl border border-amber-200">
-                     Aviso: Uma alteraÃ§Ã£o para {currentUser.pendingCashbackPercent}% entrarÃ¡ em vigor Ã  meia-noite.
-                   </p>
-                )}
-                <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 leading-relaxed italic">* As alteraÃ§Ãµes de cashback sÃ³ entram em vigor Ã  meia-noite do dia seguinte.</p>
-              </div>
-
               <div className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoria / Ramo</label>
@@ -3295,14 +3330,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               </div>
             </div>
           )}
-
-          <div className="bg-slate-200/30 p-6 rounded-[30px] border-2 border-dashed border-slate-300">
-            <div className="flex items-center gap-3 opacity-60">
-              <ShieldCheck size={16} className="text-[#0f172a]" />
-              <p className="text-[10px] font-black uppercase tracking-widest">VerificaÃ§Ã£o NIF: {currentUser?.nif}</p>
-            </div>
-            <p className="text-[8px] font-bold text-slate-400 uppercase mt-2 ml-7 leading-relaxed">O NÃºmero de IdentificaÃ§Ã£o Fiscal estÃ¡ vinculado Ã  sua conta e nÃ£o pode ser alterado por seguranÃ§a.</p>
-          </div>
 
           <button type="submit" disabled={loading || isDeleting} className={`w-full py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all ${saved ? 'bg-[#00d66f] text-[#0f172a]' : 'bg-[#0f172a] text-white hover:bg-black'}`}>
             {loading ? <RefreshCw size={24} className="animate-spin text-[#00d66f]" /> : saved ? <><CheckCircle2 size={24} strokeWidth={3} /> Sucesso!</> : <><Save size={24} strokeWidth={3} /> Guardar AlteraÃ§Ãµes</>}
@@ -3917,15 +3944,17 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, QrCode, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2 } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser } = useStore();
   const navigate = useNavigate();
-  
+  const { isInstallable, installApp } = usePWAInstall();
+
   const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
@@ -3935,6 +3964,9 @@ const UserDashboard: React.FC = () => {
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+
+  // Fallback: Se o cliente for antigo e nÃ£o tiver customerNumber, usa o NIF no cartÃ£o
+  const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
   useEffect(() => {
     const fetchData = async () => {
@@ -3970,11 +4002,8 @@ const UserDashboard: React.FC = () => {
           const start = l.startDate.toDate();
           const end = l.endDate.toDate();
           const isTimeValid = now >= start && now <= end;
-          
           const hasTargetZips = l.targetZipCodes && l.targetZipCodes.length > 0;
-          // Corrigido aqui adicionando ?. (optional chaining)
           const isZipValid = !hasTargetZips || (userZipBase && l.targetZipCodes?.includes(userZipBase));
-
           return isTimeValid && isZipValid;
         });
       setActiveLeaflets(valid);
@@ -3997,13 +4026,11 @@ const UserDashboard: React.FC = () => {
   };
 
   const openLeaflet = () => {
-    if (activeLeaflets.length > 0) {
-      window.open(activeLeaflets[0].leafletUrl, '_blank');
-    }
+    if (activeLeaflets.length > 0) window.open(activeLeaflets[0].leafletUrl, '_blank');
   };
 
   const handleOpenEmailApp = () => {
-    const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${currentUser?.nif}`);
+    const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${displayCardNumber}`);
     const body = encodeURIComponent(`OlÃ¡ equipa Vizinho+,\n\nPreciso de ajuda com...`);
     window.location.href = `mailto:${sysConfig.supportEmail}?subject=${subject}&body=${body}`;
   };
@@ -4011,7 +4038,7 @@ const UserDashboard: React.FC = () => {
   const handleCopyEmail = () => {
     navigator.clipboard.writeText(sysConfig.supportEmail);
     setEmailCopied(true);
-    toast.success("E-mail copiado para a Ã¡rea de transferÃªncia!");
+    toast.success("E-mail copiado!");
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
@@ -4019,12 +4046,18 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
-      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-center shadow-sm">
+      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-start shadow-sm">
         <div>
           <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
-          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none">
+          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none mb-1">
             {currentUser.name}
           </h1>
+          {/* SE O CLIENTE TEM NIF, MOSTRA AQUI DEBAIXO DO NOME */}
+          {currentUser.nif && (
+            <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 bg-slate-50 w-fit px-2 py-1 rounded-md border border-slate-100">
+               <IdCard size={12} /> NIF: {currentUser.nif}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
             <button onClick={() => navigate('/settings')} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-[#0a2540] hover:bg-slate-100 transition-colors border-2 border-slate-100" title="DefiniÃ§Ãµes de Perfil">
@@ -4036,19 +4069,27 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
+        {isInstallable && (
+          <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500">
+            <div className="flex items-center gap-3">
+              <div className="bg-[#0a2540] p-2 rounded-xl text-[#00d66f]"><Smartphone size={20} /></div>
+              <div>
+                <p className="font-black uppercase text-[11px] text-[#0a2540] tracking-tighter">Instalar App</p>
+                <p className="text-[9px] font-bold text-[#0a2540] opacity-80 uppercase">Acesso rÃ¡pido no ecrÃ£</p>
+              </div>
+            </div>
+            <button onClick={installApp} className="bg-[#0a2540] text-white px-5 py-3 rounded-2xl font-black uppercase text-[9px] tracking-widest active:scale-95 transition-all">Instalar</button>
+          </div>
+        )}
+
         <BannerCarousel />
 
-        <button 
-          onClick={openLeaflet}
-          disabled={activeLeaflets.length === 0}
-          className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${activeLeaflets.length > 0 ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'}`}
-        >
+        <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${activeLeaflets.length > 0 ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'}`}>
           {activeLeaflets.length > 0 && (
              <div className="absolute -top-3 -right-3 bg-red-500 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center font-black uppercase tracking-widest text-[9px] border-4 border-[#0a2540] animate-pulse rotate-12 shadow-xl z-20">
                <Star size={12} fill="currentColor" className="mb-0.5" /> Novo
              </div>
           )}
-          
           <div className="flex items-center gap-4 relative z-10">
             <div className="bg-[#0a2540] p-3 rounded-2xl"><Sparkles size={32} className="text-[#00d66f]" /></div>
             <div className="text-left">
@@ -4064,12 +4105,14 @@ const UserDashboard: React.FC = () => {
                 CartÃ£o Digital
             </div>
             <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
-                <QRCodeSVG value={currentUser.nif || ""} size={120} />
+                {/* QR CODE AGORA MOSTRA O NUMERO DO CARTÃƒO */}
+                <QRCodeSVG value={displayCardNumber} size={120} />
             </div>
             <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este cÃ³digo na loja</p>
                 <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
-                    {currentUser.nif?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
+                    {/* APRESENTA O NÃšMERO DE CARTÃƒO FORMATADO */}
+                    {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>
             
@@ -4136,25 +4179,18 @@ const UserDashboard: React.FC = () => {
             </div>
           </button>
         )}
-
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
-        <button 
-          onClick={() => setShowContactModal(true)} 
-          className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all"
-        >
+        <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all">
             <Mail size={16} className="text-[#00d66f]" /> Entrar em Contacto
         </button>
-
         <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] mt-4"><ShieldCheck size={14} /> Termos e Privacidade</button>
         <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700"><LogOut size={14} /> Sair da Conta</button>
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
       </footer>
 
-      {selectedTxForFeedback && (
-        <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />
-      )}
+      {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
 
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
@@ -4192,6 +4228,80 @@ const UserDashboard: React.FC = () => {
 };
 
 export default UserDashboard;
+
+
+==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\hooks\usePWAInstall.ts
+==================================================
+import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
+
+export const usePWAInstall = () => {
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+
+  useEffect(() => {
+    // Deteta se Ã© iPhone/iPad
+    const userAgent = window.navigator.userAgent.toLowerCase();
+    const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
+    setIsIOS(isIosDevice);
+
+    // Verifica se jÃ¡ estÃ¡ instalada (a correr como app)
+    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+      setIsInstalled(true);
+      return;
+    }
+
+    // Se for iOS e nÃ£o estiver instalada, consideramos "instalÃ¡vel" via partilha
+    if (isIosDevice && !window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstallable(true);
+    }
+
+    // Ouve o evento do Android/Chrome para instalar
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    const handleAppInstalled = () => {
+      setIsInstallable(false);
+      setIsInstalled(true);
+      setDeferredPrompt(null);
+      toast.success("App instalada com sucesso!");
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('appinstalled', handleAppInstalled);
+
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+      window.removeEventListener('appinstalled', handleAppInstalled);
+    };
+  }, []);
+
+  const installApp = async () => {
+    if (isIOS) {
+      alert("No iPhone/iPad:\n\n1. Toque no Ã­cone de Partilhar (quadrado com uma seta para cima) no fundo do ecrÃ£.\n2. Escolha a opÃ§Ã£o 'Adicionar ao ecrÃ£ principal'.");
+      return false;
+    }
+
+    if (!deferredPrompt) return false;
+    
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    
+    if (outcome === 'accepted') {
+      setIsInstallable(false);
+    }
+    setDeferredPrompt(null);
+    return outcome === 'accepted';
+  };
+
+  return { isInstallable, isInstalled, installApp };
+};
 
 
 ==================================================
@@ -4839,12 +4949,13 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\index.css
 ==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\index.tsx
 ==================================================
-// src/index.tsx
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { StoreProvider } from './store/StoreProvider';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
+import reportWebVitals from './reportWebVitals';
 
 const root = ReactDOM.createRoot(
   document.getElementById('root') as HTMLElement
@@ -4857,6 +4968,14 @@ root.render(
     </StoreProvider>
   </React.StrictMode>
 );
+
+// Ativa o Progressive Web App (PWA) para permitir a instalaÃ§Ã£o no telemÃ³vel
+// sem precisares de publicar na Google Play Store ou Apple App Store.
+// (Isto vai ler o ficheiro serviceWorkerRegistration.ts que criaste)
+serviceWorkerRegistration.register();
+
+// MediÃ§Ã£o de performance da aplicaÃ§Ã£o (padrÃ£o do React)
+reportWebVitals();
 
 
 ==================================================
@@ -4883,6 +5002,92 @@ const reportWebVitals = (onPerfEntry?: ReportHandler) => {
 };
 
 export default reportWebVitals;
+
+
+==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\serviceWorkerRegistration.ts
+==================================================
+const isLocalhost = Boolean(
+  window.location.hostname === 'localhost' ||
+    window.location.hostname === '[::1]' ||
+    window.location.hostname.match(
+      /^127(?:\.(?:25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)){3}$/
+    )
+);
+
+export function register(config?: any) {
+  if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
+    const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
+    if (publicUrl.origin !== window.location.origin) return;
+
+    window.addEventListener('load', () => {
+      const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+
+      if (isLocalhost) {
+        checkValidServiceWorker(swUrl, config);
+        navigator.serviceWorker.ready.then(() => {
+          console.log('App a correr via Service Worker (Cache Ativa)');
+        });
+      } else {
+        registerValidSW(swUrl, config);
+      }
+    });
+  }
+}
+
+function registerValidSW(swUrl: string, config?: any) {
+  navigator.serviceWorker
+    .register(swUrl)
+    .then((registration) => {
+      registration.onupdatefound = () => {
+        const installingWorker = registration.installing;
+        if (installingWorker == null) return;
+        installingWorker.onstatechange = () => {
+          if (installingWorker.state === 'installed') {
+            if (navigator.serviceWorker.controller) {
+              console.log('Novo conteÃºdo disponÃ­vel. Feche e abra a app.');
+            } else {
+              console.log('App pronta para funcionar offline.');
+            }
+          }
+        };
+      };
+    })
+    .catch((error) => {
+      console.error('Erro ao registar o Service Worker:', error);
+    });
+}
+
+function checkValidServiceWorker(swUrl: string, config?: any) {
+  fetch(swUrl, { headers: { 'Service-Worker': 'script' } })
+    .then((response) => {
+      const contentType = response.headers.get('content-type');
+      if (response.status === 404 || (contentType != null && contentType.indexOf('javascript') === -1)) {
+        navigator.serviceWorker.ready.then((registration) => {
+          registration.unregister().then(() => {
+            window.location.reload();
+          });
+        });
+      } else {
+        registerValidSW(swUrl, config);
+      }
+    })
+    .catch(() => {
+      console.log('Sem internet. App a correr em modo offline.');
+    });
+}
+
+export function unregister() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready
+      .then((registration) => {
+        registration.unregister();
+      })
+      .catch((error) => {
+        console.error(error.message);
+      });
+  }
+}
 
 
 ==================================================

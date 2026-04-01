@@ -1,68 +1,99 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
+// 1. VARIÁVEIS GLOBAIS
+// Capturam o evento mal o site abre (ex: na página de Login), 
+// para não se perder quando o utilizador navega para os Dashboards.
+let globalDeferredPrompt: any = null;
+let globalIsInstallable = false;
+const listeners: Set<() => void> = new Set();
+
+const notifyListeners = () => listeners.forEach(fn => fn());
+
+// 2. ESCUTA GLOBAL DO EVENTO
+if (typeof window !== 'undefined') {
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Previne que o Chrome mostre o mini-aviso nativo imediatamente
+    e.preventDefault();
+    // Guarda o evento para usarmos no nosso botão
+    globalDeferredPrompt = e;
+    globalIsInstallable = true;
+    notifyListeners();
+  });
+
+  window.addEventListener('appinstalled', () => {
+    globalDeferredPrompt = null;
+    globalIsInstallable = false;
+    notifyListeners();
+    toast.success("App instalada com sucesso!");
+  });
+}
+
+// 3. O HOOK QUE OS DASHBOARDS CONSOMEM
 export const usePWAInstall = () => {
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
-  const [isInstallable, setIsInstallable] = useState(false);
+  const [isInstallable, setIsInstallable] = useState(globalIsInstallable);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
 
   useEffect(() => {
-    // Deteta se é iPhone/iPad
+    // Função para atualizar o botão nos Dashboards se o estado global mudar
+    const updateState = () => setIsInstallable(globalIsInstallable);
+    listeners.add(updateState);
+
+    // Deteta se é dispositivo Apple (iOS)
     const userAgent = window.navigator.userAgent.toLowerCase();
     const isIosDevice = /iphone|ipad|ipod/.test(userAgent);
     setIsIOS(isIosDevice);
 
-    // Verifica se já está instalada (a correr como app)
-    if (window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true) {
+    // Verifica se a app JÁ ESTÁ a correr como App Instalada (Standalone)
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    if (isStandalone) {
       setIsInstalled(true);
-      return;
-    }
-
-    // Se for iOS e não estiver instalada, consideramos "instalável" via partilha
-    if (isIosDevice && !window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstallable(true);
-    }
-
-    // Ouve o evento do Android/Chrome para instalar
-    const handleBeforeInstallPrompt = (e: Event) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-      setIsInstallable(true);
-    };
-
-    const handleAppInstalled = () => {
       setIsInstallable(false);
-      setIsInstalled(true);
-      setDeferredPrompt(null);
-      toast.success("App instalada com sucesso!");
-    };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    window.addEventListener('appinstalled', handleAppInstalled);
+    } else if (isIosDevice) {
+      // No iOS a Apple não suporta o 'beforeinstallprompt'. 
+      // Por isso, se for iOS e não estiver instalada, forçamos o botão a aparecer.
+      setIsInstallable(true);
+    } else {
+      // Sincroniza com a variável global para Android/Chrome/PC
+      setIsInstallable(globalIsInstallable);
+    }
 
     return () => {
-      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-      window.removeEventListener('appinstalled', handleAppInstalled);
+      listeners.delete(updateState);
     };
   }, []);
 
   const installApp = async () => {
     if (isIOS) {
-      alert("No iPhone/iPad:\n\n1. Toque no ícone de Partilhar (quadrado com uma seta para cima) no fundo do ecrã.\n2. Escolha a opção 'Adicionar ao ecrã principal'.");
+      // A Apple não permite instalação automática por botão. 
+      // Temos de mostrar as instruções nativas.
+      alert("Para instalar no iPhone/iPad:\n\n1. Toque no ícone de Partilhar (quadrado com uma seta para cima) no fundo do ecrã.\n2. Escolha a opção 'Adicionar ao ecrã principal' (Add to Home Screen).");
       return false;
     }
 
-    if (!deferredPrompt) return false;
-    
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    
-    if (outcome === 'accepted') {
-      setIsInstallable(false);
+    if (!globalDeferredPrompt) {
+      alert("A instalação não está disponível neste momento. Tente abrir o site no Google Chrome ou verifique se já a tem instalada nas suas Aplicações.");
+      return false;
     }
-    setDeferredPrompt(null);
-    return outcome === 'accepted';
+    
+    try {
+      // Dispara o prompt de instalação do Google Chrome / Android
+      globalDeferredPrompt.prompt();
+      const { outcome } = await globalDeferredPrompt.userChoice;
+      
+      if (outcome === 'accepted') {
+        globalIsInstallable = false;
+        setIsInstallable(false);
+        globalDeferredPrompt = null;
+        notifyListeners();
+      }
+      return outcome === 'accepted';
+    } catch (error) {
+      console.error("Erro no prompt de instalação:", error);
+      return false;
+    }
   };
 
   return { isInstallable, isInstalled, installApp };
