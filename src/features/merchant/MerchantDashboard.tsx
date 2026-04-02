@@ -4,12 +4,14 @@ import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, Smartphone, AlertTriangle, CheckCircle2 } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
 import MerchantSettings from './components/MerchantSettings';
+import MerchantMarketing from './components/MerchantMarketing'; 
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const MerchantDashboard: React.FC = () => {
@@ -18,7 +20,7 @@ const MerchantDashboard: React.FC = () => {
   
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history' | 'marketing'>('terminal');
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -103,9 +105,9 @@ const MerchantDashboard: React.FC = () => {
         amount: pendingAction.val,
         type: pendingAction.type,
         documentNumber: documentNumber,
-        clientName: foundClient.name, // Adicionado para BI e Excel
-        clientCardNumber: foundClient.customerNumber, // Adicionado
-        clientBirthDate: foundClient.birthDate // Adicionado
+        clientName: foundClient.name,
+        clientCardNumber: foundClient.customerNumber,
+        clientBirthDate: foundClient.birthDate
       });
       setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
@@ -131,6 +133,22 @@ const MerchantDashboard: React.FC = () => {
     setEditingInvoiceId(null);
   };
 
+  const exportHistoryToExcel = () => {
+    const data = transactions.slice(0, 60).map(t => ({
+      "Data e Hora": t.createdAt?.toDate().toLocaleString() || "Recente",
+      "Cartão do Cliente": t.clientCardNumber || t.clientNif || "---",
+      "Nome do Cliente": t.clientName || "---",
+      "Tipo": t.type === 'earn' ? 'Atribuição' : 'Desconto',
+      "Valor (€)": t.type === 'earn' ? t.cashbackAmount : t.amount,
+      "Nº Fatura": t.documentNumber || "---"
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Histórico");
+    XLSX.writeFile(wb, "Historico_60_Movimentos.xlsx");
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -144,6 +162,7 @@ const MerchantDashboard: React.FC = () => {
         <nav className="flex flex-wrap justify-center gap-2 bg-white/5 p-2 rounded-2xl backdrop-blur-md">
           <button onClick={() => setView('terminal')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><LayoutDashboard size={16} /> Terminal</button>
           <button onClick={() => setView('history')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'history' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><History size={16} /> Histórico</button>
+          <button onClick={() => setView('marketing')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Megaphone size={16} /> Publicidade</button>
           <button onClick={() => setView('bi')} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BarChart3 size={16} /> Business Intelligence</button>
           <button onClick={() => setView("settings")} className={`flex items-center gap-2 px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === "settings" ? "bg-[#00d66f] text-[#0f172a]" : "text-white hover:bg-white/10"}`}><Settings size={16} /> Definições</button>
           <button onClick={async () => { await logout(); navigate('/login'); }} className="p-3 text-red-400 hover:bg-red-500/10 rounded-xl transition-all"><LogOut size={20} /></button>
@@ -186,7 +205,13 @@ const MerchantDashboard: React.FC = () => {
 
         {view === 'history' && (
             <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] animate-in fade-in">
-                <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Últimos Movimentos (60 dias)</h3>
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
+                  <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540]">Últimos Movimentos (60 dias)</h3>
+                  <button onClick={exportHistoryToExcel} className="bg-[#0a2540] text-[#00d66f] px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all flex items-center gap-2">
+                    <Download size={16} /> Excel (60 Movimentos)
+                  </button>
+                </div>
+                
                 <div className="overflow-x-auto">
                     <table className="w-full text-left min-w-[700px]">
                         <thead>
@@ -247,6 +272,7 @@ const MerchantDashboard: React.FC = () => {
             </div>
         )}
 
+        {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || 'Loja'} />}
         {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 

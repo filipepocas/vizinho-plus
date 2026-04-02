@@ -10,6 +10,7 @@ import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 const RegisterPage: React.FC = () => {
   const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -33,6 +34,12 @@ const RegisterPage: React.FC = () => {
       toast.error("TENS DE ACEITAR OS TERMOS E PRIVACIDADE.");
       return;
     }
+    
+    if (formData.password !== confirmPassword) {
+      toast.error("AS PASSWORDS NÃO COINCIDEM.");
+      return;
+    }
+
     setLoading(true);
 
     if (formData.zipCode.length !== 8) {
@@ -135,9 +142,15 @@ const RegisterPage: React.FC = () => {
             <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Password</label>
-            <input type="password" minLength={6} required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Password</label>
+              <input type="password" minLength={6} required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Confirmar</label>
+              <input type="password" minLength={6} required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+            </div>
           </div>
 
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">

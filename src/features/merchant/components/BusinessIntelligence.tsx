@@ -94,7 +94,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return months;
   }, [transactions]);
 
-  // NOVOS CÁLCULOS: TOP 10 CLIENTES (Últimos 12 Meses)
+  // TOP 20 CLIENTES (Últimos 12 Meses)
   const topClients = useMemo(() => {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
@@ -121,8 +121,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     const allClientsArr = Object.values(clientMap);
     
     return {
-      byVolume: [...allClientsArr].sort((a, b) => b.volume - a.volume).slice(0, 10),
-      byVisits: [...allClientsArr].sort((a, b) => b.visits - a.visits).slice(0, 10)
+      byVolume: [...allClientsArr].sort((a, b) => b.volume - a.volume).slice(0, 20),
+      byVisits: [...allClientsArr].sort((a, b) => b.visits - a.visits).slice(0, 20)
     };
   }, [transactions]);
 
@@ -281,11 +281,11 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
           </div>
         </div>
 
-        {/* NOVAS TABELAS DE MELHORES CLIENTES (ÚLTIMOS 12 MESES) */}
+        {/* TABELAS TOP 20 CLIENTES */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f]">
               <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
-                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Trophy size={16} className="text-[#00d66f]" /></div> Top 10 Clientes - Maior Volume (12 Meses)
+                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Trophy size={16} className="text-[#00d66f]" /></div> Top 20 Clientes - Maior Volume (12 Meses)
               </h3>
               <div className="overflow-x-auto">
                  <table className="w-full text-left">
@@ -315,7 +315,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540]">
               <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
-                <div className="bg-blue-50 p-2 rounded-xl"><Users size={16} className="text-blue-500" /></div> Top 10 Clientes - Mais Frequentes (12 Meses)
+                <div className="bg-blue-50 p-2 rounded-xl"><Users size={16} className="text-blue-500" /></div> Top 20 Clientes - Mais Frequentes (12 Meses)
               </h3>
               <div className="overflow-x-auto">
                  <table className="w-full text-left">
@@ -343,7 +343,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
               </div>
            </div>
         </div>
-
     </div>
   );
 };

@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 export interface FirestoreTimestamp {
   seconds: number;
   nanoseconds: number;
@@ -62,7 +60,7 @@ export interface User {
   nif?: string;
   phone?: string; 
   customerNumber?: string;
-  birthDate?: string; // NOVO
+  birthDate?: string; 
   wallet?: {
     available: number;
     pending: number;
@@ -95,9 +93,9 @@ export interface TransactionCore {
 export interface TransactionCreate extends TransactionCore {
   cashbackAmount?: number;
   cashbackPercent?: number;
-  clientName?: string; // NOVO
-  clientCardNumber?: string; // NOVO
-  clientBirthDate?: string; // NOVO
+  clientName?: string; 
+  clientCardNumber?: string; 
+  clientBirthDate?: string; 
 }
 
 export interface Transaction extends TransactionCore {
@@ -108,9 +106,9 @@ export interface Transaction extends TransactionCore {
   createdAt: FirestoreTimestamp;
   maturedAt?: FirestoreTimestamp;
   clientNif?: string;
-  clientName?: string; // NOVO
-  clientCardNumber?: string; // NOVO
-  clientBirthDate?: string; // NOVO
+  clientName?: string; 
+  clientCardNumber?: string; 
+  clientBirthDate?: string; 
 }
 
 export interface MerchantRequest {
@@ -145,5 +143,33 @@ export interface AppNotification {
   message: string;
   targetType: 'all' | 'email' | 'zipCode' | 'birthDate';
   targetValue: string;
+  createdAt: FirestoreTimestamp;
+}
+
+export interface LeafletCampaign {
+  id?: string;
+  title: string;
+  limitDate: FirestoreTimestamp;
+  distributionDate: FirestoreTimestamp;
+  createdAt: FirestoreTimestamp;
+}
+
+export interface MarketingRequest {
+  id?: string;
+  merchantId: string;
+  merchantName: string;
+  type: 'banner' | 'leaflet';
+  status: 'pending' | 'approved' | 'rejected';
+  text?: string;
+  imageUrl?: string;
+  requestedDate?: string;
+  leafletCampaignId?: string;
+  leafletCampaignTitle?: string;
+  spaceType?: string;
+  description?: string;
+  sellPrice?: string;
+  unit?: string;
+  promoPrice?: string;
+  promoType?: string;
   createdAt: FirestoreTimestamp;
 }

@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText, Bell, ImagePlay } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -13,16 +13,13 @@ import AdminMerchantRequests from './AdminMerchantRequests';
 import AdminSettings from './AdminSettings';
 import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
-import BannerManager from './BannerManager';
-import AdminLeaflets from './AdminLeaflets';
 import AdminNotifications from './AdminNotifications';
-import AdminMediaGenerator from './AdminMediaGenerator';
+import AdminComms from './AdminComms';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  // Adicionado 'generator' à lista de vistas
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'notifications' | 'settings' | 'generator'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'notifications' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -74,10 +71,8 @@ const AdminDashboard: React.FC = () => {
                 { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
-                { id: 'generator', label: 'Estúdio Mídia', icon: ImagePlay }, // ADICIONADO AQUI
+                { id: 'comms', label: 'Comunicações Pub', icon: Megaphone },
                 { id: 'notifications', label: 'Avisos App', icon: Bell }, 
-                { id: 'banners', label: 'Banners', icon: ImageIcon },
-                { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
               ].map(item => (
                 <button 
@@ -104,11 +99,9 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
-        {currentView === 'generator' && <AdminMediaGenerator />} {/* ADICIONADO AQUI */}
+        {currentView === 'comms' && <AdminComms />}
         {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}
-        {currentView === 'banners' && <BannerManager />}
-        {currentView === 'leaflets' && <AdminLeaflets />}
         {currentView === 'settings' && <AdminSettings />}
       </main>
 
