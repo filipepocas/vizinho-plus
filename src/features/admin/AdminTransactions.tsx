@@ -5,10 +5,11 @@ import * as XLSX from 'xlsx';
 
 interface AdminTransactionsProps {
   transactions: Transaction[];
-  users: UserProfile[];
+  clients: UserProfile[];
+  merchants: UserProfile[];
 }
 
-const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) => {
+const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, clients, merchants }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -21,7 +22,7 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
 
   const filteredTransactions = transactions.filter(t => {
     const q = searchQuery.toLowerCase();
-    const matchText = (t.clientNif || '').includes(q) || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q);
+    const matchText = (t.clientNif || '').includes(q) || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q) || (t.clientName || '').toLowerCase().includes(q);
     const txDate = parseDate(t.createdAt);
     let matchStart = !startDate || txDate >= new Date(startDate);
     let matchEnd = !endDate || txDate <= new Date(endDate + 'T23:59:59');
@@ -29,31 +30,39 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
   });
 
   const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredTransactions.map(t => ({
-      Data: parseDate(t.createdAt).toLocaleString(),
-      Parceiro: t.merchantName,
-      NIF: t.clientNif,
-      "Fatura Original": t.amount,
-      "Valor Movimentado": t.cashbackAmount,
-      Tipo: t.type === 'earn' ? 'Atribuição' : 'Desconto',
-      Status: t.status
-    })));
+    const ws = XLSX.utils.json_to_sheet(filteredTransactions.map(t => {
+      // Procurar dados originais nos arrays passados, caso a transação seja antiga e não tenha gravado no momento
+      const c = clients.find(cl => cl.id === t.clientId);
+      const m = merchants.find(me => me.id === t.merchantId);
+
+      return {
+        Data: parseDate(t.createdAt).toLocaleString(),
+        "Nome do Comerciante": t.merchantName || m?.shopName || m?.name || '---',
+        "NIF do Comerciante": m?.nif || '---',
+        "Nome do Cliente": t.clientName || c?.name || '---',
+        "Email do Cliente": c?.email || '---',
+        "Nº Cartão Cliente": t.clientCardNumber || c?.customerNumber || '---',
+        "NIF do Cliente": t.clientNif || c?.nif || '---',
+        "Fatura Original": t.amount,
+        "Valor Movimentado (Cashback)": t.cashbackAmount,
+        Tipo: t.type === 'earn' ? 'Atribuição' : 'Desconto',
+        Status: t.status === 'cancelled' ? 'Anulado' : 'Aprovado'
+      };
+    }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Transacoes");
+    XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
     XLSX.writeFile(wb, "Auditoria_VizinhoPlus.xlsx");
   };
 
   return (
     <div className="space-y-6 md:space-y-10 w-full">
       
-      {/* FILTROS RESPONSIVOS */}
       <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-4 xl:gap-6">
         <div className="relative w-full">
-          {/* CORREÇÃO FEITA AQUI: Apenas um className */}
           <Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-slate-300 md:w-6 md:h-6" size={20} />
           <input 
             type="text" 
-            placeholder="PROCURAR LOJA, NIF OU DOC..." 
+            placeholder="PROCURAR LOJA, NOME CLIENTE, NIF OU DOC..." 
             className="w-full p-4 md:p-6 pl-12 md:pl-16 bg-slate-50 border-4 border-slate-100 rounded-[20px] md:rounded-[30px] outline-none focus:border-[#0a2540] font-black text-[10px] md:text-xs uppercase tracking-widest shadow-inner" 
             value={searchQuery} 
             onChange={(e) => setSearchQuery(e.target.value)} 
@@ -74,15 +83,14 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
         </div>
       </div>
 
-      {/* TABELA COM SCROLL HORIZONTAL (MOBILE FRIENDLY) */}
       <div className="bg-white rounded-[25px] md:rounded-[40px] border-4 border-[#0a2540] shadow-lg md:shadow-xl overflow-hidden w-full">
         <div className="overflow-x-auto w-full">
           <table className="w-full text-left min-w-[700px]">
             <thead className="bg-[#0a2540] text-white">
               <tr>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] whitespace-nowrap">Registo</th>
-                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em]">Parceiro</th>
-                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Cliente ID</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em]">Parceiro / Cliente</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Docs</th>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-right">Fatura</th>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Status</th>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-right">Movimento</th>
@@ -92,8 +100,14 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
               {filteredTransactions.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                   <td className="p-5 md:p-8 text-[10px] md:text-xs font-bold text-slate-500 whitespace-nowrap">{parseDate(t.createdAt).toLocaleDateString()}</td>
-                  <td className="p-5 md:p-8 font-black uppercase italic text-xs md:text-sm text-[#0a2540]">{t.merchantName}</td>
-                  <td className="p-5 md:p-8 font-mono text-[10px] md:text-xs font-bold text-center text-slate-400">{t.clientNif || '---'}</td>
+                  <td className="p-5 md:p-8">
+                     <p className="font-black uppercase italic text-xs md:text-sm text-[#0a2540] truncate max-w-[200px]">{t.merchantName}</p>
+                     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase truncate max-w-[200px]">{t.clientName || 'Cliente Desconhecido'}</p>
+                  </td>
+                  <td className="p-5 md:p-8 text-center">
+                     <p className="font-mono text-[10px] md:text-xs font-bold text-slate-500">{t.clientCardNumber || t.clientNif || 'S/ Doc'}</p>
+                     <p className="text-[9px] font-black uppercase text-[#00d66f] mt-1">{t.documentNumber}</p>
+                  </td>
                   <td className="p-5 md:p-8 text-right text-slate-500 font-black text-sm md:text-lg whitespace-nowrap">{t.amount.toFixed(2)} €</td>
                   <td className="p-5 md:p-8 text-center">
                     <span className={`px-3 md:px-5 py-2 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest border-2 whitespace-nowrap ${

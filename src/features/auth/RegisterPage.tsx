@@ -23,7 +23,6 @@ const RegisterPage: React.FC = () => {
     setFormData({ ...formData, zipCode: val });
   };
 
-  // Função para gerar número de cliente único com 9 dígitos (Ex: 123456789)
   const generateCustomerNumber = () => {
     return Math.floor(100000000 + Math.random() * 900000000).toString();
   };
@@ -42,18 +41,16 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
-    // Se o NIF foi preenchido, validamos o seu formato (9 dígitos)
-    if (formData.nif.trim() !== '' && formData.nif.trim().length !== 9) {
+    const cleanNif = formData.nif.trim();
+    if (cleanNif !== '' && cleanNif.length !== 9) {
       toast.error("NIF INVÁLIDO (TEM DE TER 9 DÍGITOS)");
       setLoading(false);
       return;
     }
 
     try {
-      // Se o utilizador preencheu o NIF, verificamos se já existe
-      if (formData.nif.trim() !== '') {
-        const nifExists = await checkNifExists(formData.nif);
-        console.log('NIF exists check:', nifExists, 'for NIF:', formData.nif);
+      if (cleanNif !== '') {
+        const nifExists = await checkNifExists(cleanNif);
         if (nifExists) {
           toast.error("ESTE NIF JÁ ESTÁ REGISTADO.");
           setLoading(false);
@@ -62,18 +59,17 @@ const RegisterPage: React.FC = () => {
       }
 
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      
       const newCustomerNumber = generateCustomerNumber();
 
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
-        nif: formData.nif.trim(), // Pode ir vazio
-        customerNumber: newCustomerNumber, // NOVO: Número de Cartão
+        nif: cleanNif, 
+        customerNumber: newCustomerNumber, 
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
-        birthDate: formData.birthDate, // NOVO: Data de Nascimento (Opcional)
+        birthDate: formData.birthDate, 
         role: 'client',
         status: 'active',
         wallet: { available: 0, pending: 0 },
@@ -81,13 +77,10 @@ const RegisterPage: React.FC = () => {
       });
 
       toast.success("BEM-VINDO VIZINHO!");
-      
       if (isInstallable) {
         try { await installApp(); } catch (error) { console.log("Instalação adiada"); }
       }
-
       navigate('/dashboard');
-      
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
@@ -117,7 +110,6 @@ const RegisterPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              {/* NIF AGORA É OPCIONAL */}
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
               <input type="text" maxLength={9} value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
             </div>

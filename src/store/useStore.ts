@@ -16,7 +16,7 @@ interface StoreState {
   resetPassword: (email: string) => Promise<void>;
   addTransaction: (transaction: TransactionCreate) => Promise<string | undefined>;
   cancelTransaction: (transactionId: string) => Promise<void>;
-  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>; // NOVO
+  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>; 
   subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
@@ -48,6 +48,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   checkNifExists: async (nif: string) => {
+    if (!nif || nif.trim() === '') return false;
     const q = query(collection(db, 'users'), where('nif', '==', nif), limit(1));
     const snap = await getDocs(q);
     return !snap.empty;
@@ -73,8 +74,11 @@ export const useStore = create<StoreState>((set, get) => ({
         type: tx.type,
         status: 'available',
         createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber || "", // Aproveita o campo mas permite vazio inicial
-        documentNumber: tx.documentNumber || "" // Garante que o docNumber vai pro firestore
+        clientNif: tx.documentNumber || "", 
+        documentNumber: tx.documentNumber || "",
+        clientName: tx.clientName || "Desconhecido", // NOVO
+        clientCardNumber: tx.clientCardNumber || "---", // NOVO
+        clientBirthDate: tx.clientBirthDate || "" // NOVO
       });
 
       const userRef = doc(db, 'users', tx.clientId);
@@ -82,7 +86,7 @@ export const useStore = create<StoreState>((set, get) => ({
         batch.update(userRef, {
           [`wallet.available`]: increment(cashback),
           [`storeWallets.${currentUser.id}.available`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name // Garante o nome
+          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name
         });
       } else {
         batch.update(userRef, {
@@ -92,11 +96,10 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       await batch.commit();
       toast.success("MOVIMENTO REGISTADO!");
-      return newTxRef.id; // Retorna o ID para podermos editar a fatura a seguir
+      return newTxRef.id;
     } catch (e) { toast.error("ERRO NO REGISTO."); }
   },
 
-  // NOVA FUNÇÃO: Atualizar Fatura
   updateTransactionDocument: async (transactionId, documentNumber) => {
     try {
         const txRef = doc(db, 'transactions', transactionId);
@@ -135,8 +138,8 @@ export const useStore = create<StoreState>((set, get) => ({
   subscribeToTransactions: (role, id) => {
     if (!id && role !== 'admin') return () => {};
     const q = role === 'admin' 
-      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(100))
-      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(50));
+      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))
+      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
     
     return onSnapshot(q, (snap) => {
       set({ transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)) });

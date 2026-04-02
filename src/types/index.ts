@@ -62,6 +62,7 @@ export interface User {
   nif?: string;
   phone?: string; 
   customerNumber?: string;
+  birthDate?: string; // NOVO
   wallet?: {
     available: number;
     pending: number;
@@ -94,6 +95,9 @@ export interface TransactionCore {
 export interface TransactionCreate extends TransactionCore {
   cashbackAmount?: number;
   cashbackPercent?: number;
+  clientName?: string; // NOVO
+  clientCardNumber?: string; // NOVO
+  clientBirthDate?: string; // NOVO
 }
 
 export interface Transaction extends TransactionCore {
@@ -104,6 +108,9 @@ export interface Transaction extends TransactionCore {
   createdAt: FirestoreTimestamp;
   maturedAt?: FirestoreTimestamp;
   clientNif?: string;
+  clientName?: string; // NOVO
+  clientCardNumber?: string; // NOVO
+  clientBirthDate?: string; // NOVO
 }
 
 export interface MerchantRequest {
@@ -128,6 +135,15 @@ export interface Leaflet {
   startDate: FirestoreTimestamp;
   endDate: FirestoreTimestamp;
   isActive: boolean;
-  targetZipCodes?: string[]; // NOVO
+  targetZipCodes?: string[];
+  createdAt: FirestoreTimestamp;
+}
+
+export interface AppNotification {
+  id?: string;
+  title: string;
+  message: string;
+  targetType: 'all' | 'email' | 'zipCode' | 'birthDate';
+  targetValue: string;
   createdAt: FirestoreTimestamp;
 }

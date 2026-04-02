@@ -1,16 +1,17 @@
 import React, { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { User as UserProfile } from '../../types/index';
+import { User as UserProfile, Transaction } from '../../types/index';
 import { Search, Users, Mail, Locate, Download, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
 interface AdminUsersProps {
   users: UserProfile[];
+  transactions: Transaction[];
 }
 
-const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
+const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredUsers = users.filter(u => {
@@ -34,15 +35,53 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
   };
 
   const exportToExcel = () => {
-    const dataToExport = filteredUsers.map(u => ({
-      Nome: u.name || '---',
-      Email: u.email || '---',
-      Telefone: u.phone || '---', // NOVO: Exportação Telefone
-      NIF: u.nif || '---',
-      "Código Postal": u.zipCode || '---',
-      "Data Adesão": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
-      Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
-    }));
+    const dataToExport = filteredUsers.map(u => {
+      // Filtrar as transações apenas deste utilizador (do tipo 'earn' - compras válidas)
+      const userTxs = transactions.filter(t => t.clientId === u.id && t.type === 'earn' && t.status !== 'cancelled');
+      
+      // Calcular estatísticas por loja
+      const shopStats: Record<string, { name: string, volume: number, visits: number }> = {};
+      userTxs.forEach(t => {
+        if (!shopStats[t.merchantId]) {
+          shopStats[t.merchantId] = { name: t.merchantName, volume: 0, visits: 0 };
+        }
+        shopStats[t.merchantId].volume += t.amount;
+        shopStats[t.merchantId].visits += 1;
+      });
+
+      // Encontrar a Top Loja por Volume
+      let topVolumeShop = "N/D";
+      let maxVolume = 0;
+      
+      // Encontrar a Top Loja por Visitas
+      let topVisitsShop = "N/D";
+      let maxVisits = 0;
+
+      Object.values(shopStats).forEach(shop => {
+        if (shop.volume > maxVolume) {
+          maxVolume = shop.volume;
+          topVolumeShop = shop.name;
+        }
+        if (shop.visits > maxVisits) {
+          maxVisits = shop.visits;
+          topVisitsShop = shop.name;
+        }
+      });
+
+      return {
+        Nome: u.name || '---',
+        Email: u.email || '---',
+        Telefone: u.phone || '---',
+        "Data de Nascimento": u.birthDate || '---',
+        NIF: u.nif || '---',
+        "Cartão Nº": u.customerNumber || '---',
+        "Código Postal": u.zipCode || '---',
+        "Data Adesão": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
+        "Loja (Mais Visitas)": topVisitsShop,
+        "Loja (Maior Volume)": topVolumeShop,
+        Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
@@ -71,7 +110,7 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
             </div>
             <div className="overflow-hidden">
                 <h3 className="font-black text-lg uppercase italic tracking-tighter text-[#0a2540] leading-none truncate">{u.name}</h3>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif || u.customerNumber || 'Sem Doc'}</span>
             </div>
             </div>
 

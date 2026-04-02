@@ -2,9 +2,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Transaction, User as UserProfile, Leaflet } from '../../types';
+import { Transaction, User as UserProfile, Leaflet, AppNotification } from '../../types';
 
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
@@ -12,7 +12,7 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
@@ -33,7 +33,9 @@ const UserDashboard: React.FC = () => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
-  // Fallback: Se o cliente for antigo e não tiver customerNumber, usa o NIF no cartão
+  // NOVO: Notificações In-App
+  const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
+
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
   useEffect(() => {
@@ -78,6 +80,47 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser]);
 
+  // NOVO: Escuta as notificações In-App gratuitas (Apenas últimas 24 horas)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Queremos notificações criadas no máximo há 24h para não mostrar coisas antigas
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    
+    return onSnapshot(q, (snap) => {
+       const docs = snap.docs.map(d => ({id: d.id, ...d.data()} as AppNotification));
+       
+       for (let notif of docs) {
+         if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
+         
+         // Verificar se o utilizador já fechou esta notificação nesta sessão (memória local do browser)
+         const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
+         if (dismissed) continue;
+
+         let matches = false;
+         if (notif.targetType === 'all') matches = true;
+         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue.toLowerCase()) matches = true;
+         else if (notif.targetType === 'zipCode' && currentUser.zipCode?.startsWith(notif.targetValue)) matches = true;
+         else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
+
+         if (matches) {
+            setAppNotification(notif);
+            break; // Mostra só a mais recente válida
+         }
+       }
+    });
+  }, [currentUser]);
+
+  const dismissNotification = () => {
+    if (appNotification?.id) {
+       sessionStorage.setItem(`notif_${appNotification.id}`, "true");
+    }
+    setAppNotification(null);
+  };
+
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
   }, [transactions, evaluatedIds]);
@@ -120,7 +163,6 @@ const UserDashboard: React.FC = () => {
           <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none mb-1">
             {currentUser.name}
           </h1>
-          {/* SE O CLIENTE TEM NIF, MOSTRA AQUI DEBAIXO DO NOME */}
           {currentUser.nif && (
             <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 bg-slate-50 w-fit px-2 py-1 rounded-md border border-slate-100">
                <IdCard size={12} /> NIF: {currentUser.nif}
@@ -137,6 +179,19 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
+        {/* NOVO: AVISO IN-APP (Notificações Push Free) */}
+        {appNotification && (
+           <div className="bg-white border-4 border-[#0a2540] rounded-[30px] p-6 shadow-[8px_8px_0px_#00d66f] flex items-start gap-4 animate-in slide-in-from-top-10 relative">
+               <div className="bg-blue-50 text-blue-500 p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
+               <div className="flex-1">
+                   <h4 className="text-lg font-black uppercase italic text-[#0a2540] leading-none mb-2">{appNotification.title}</h4>
+                   <p className="text-xs font-bold text-slate-500">{appNotification.message}</p>
+                   <button onClick={dismissNotification} className="mt-4 bg-[#0a2540] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">Compreendido</button>
+               </div>
+               <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-300 hover:text-[#0a2540]"><X size={16} /></button>
+           </div>
+        )}
+
         {isInstallable && (
           <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500">
             <div className="flex items-center gap-3">
@@ -173,13 +228,11 @@ const UserDashboard: React.FC = () => {
                 Cartão Digital
             </div>
             <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
-                {/* QR CODE AGORA MOSTRA O NUMERO DO CARTÃO */}
                 <QRCodeSVG value={displayCardNumber} size={120} />
             </div>
             <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este código na loja</p>
                 <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
-                    {/* APRESENTA O NÚMERO DE CARTÃO FORMATADO */}
                     {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>

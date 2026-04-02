@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText, Bell } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -15,11 +15,12 @@ import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
 import BannerManager from './BannerManager';
 import AdminLeaflets from './AdminLeaflets';
+import AdminNotifications from './AdminNotifications';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'notifications' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -27,13 +28,14 @@ const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
+    // Aumentámos o limite para permitir exportações mais ricas no Excel (Top Lojas, etc)
+    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
     const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
     
-    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(200));
+    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
     const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
-    const qClients = query(collection(db, 'users'), where('role', '==', 'client'), limit(1000));
+    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
     const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
     return () => { unsubTx(); unsubMerchants(); unsubClients(); };
@@ -43,8 +45,6 @@ const AdminDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col overflow-x-hidden">
       <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[40px] md:rounded-b-[50px] border-b-[8px] md:border-b-[10px] border-[#00d66f] shadow-2xl z-20">
         <div className="max-w-7xl mx-auto">
-          
-          {/* TOPO: TÍTULO E BOTÕES */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-4 md:gap-5">
               <div className="bg-[#00d66f] p-3 md:p-4 rounded-[20px] md:rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
@@ -66,7 +66,6 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* MENU DESLIZANTE PARA MOBILE (SCROLL HORIZONTAL) */}
           <div className="mt-8 -mx-6 px-6 md:mx-0 md:px-0">
             <nav className="flex overflow-x-auto gap-2 bg-black/20 p-2 md:rounded-[25px] border-y md:border border-white/5 scrollbar-hide pb-2">
               {[
@@ -74,6 +73,7 @@ const AdminDashboard: React.FC = () => {
                 { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
+                { id: 'notifications', label: 'Avisos App', icon: Bell }, // NOVO MENU
                 { id: 'banners', label: 'Banners', icon: ImageIcon },
                 { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
@@ -95,13 +95,14 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'overview' && (
           <div className="bg-white rounded-[30px] md:rounded-[50px] border-4 border-[#0a2540] p-6 md:p-10 shadow-[8px_8px_0px_#0a2540] md:shadow-[15px_15px_0px_#0a2540] w-full overflow-hidden">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 md:mb-10">Auditoria de Transações</h2>
-              <AdminTransactions transactions={globalTransactions} users={[]} />
+              <AdminTransactions transactions={globalTransactions} clients={globalClients} merchants={globalMerchants} />
           </div>
         )}
         
         {currentView === 'requests' && <AdminMerchantRequests />}
-        {currentView === 'users' && <AdminUsers users={globalClients} />}
+        {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
+        {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'banners' && <BannerManager />}
         {currentView === 'leaflets' && <AdminLeaflets />}

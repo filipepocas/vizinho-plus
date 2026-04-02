@@ -2114,7 +2114,7 @@ import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', password: '', zipCode: '' });
+  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -2147,10 +2147,18 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
+    // Se o NIF foi preenchido, validamos o seu formato (9 dÃ­gitos)
+    if (formData.nif.trim() !== '' && formData.nif.trim().length !== 9) {
+      toast.error("NIF INVÃLIDO (TEM DE TER 9 DÃGITOS)");
+      setLoading(false);
+      return;
+    }
+
     try {
       // Se o utilizador preencheu o NIF, verificamos se jÃ¡ existe
       if (formData.nif.trim() !== '') {
         const nifExists = await checkNifExists(formData.nif);
+        console.log('NIF exists check:', nifExists, 'for NIF:', formData.nif);
         if (nifExists) {
           toast.error("ESTE NIF JÃ ESTÃ REGISTADO.");
           setLoading(false);
@@ -2170,6 +2178,7 @@ const RegisterPage: React.FC = () => {
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
+        birthDate: formData.birthDate, // NOVO: Data de Nascimento (Opcional)
         role: 'client',
         status: 'active',
         wallet: { available: 0, pending: 0 },
@@ -2232,6 +2241,11 @@ const RegisterPage: React.FC = () => {
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">TelemÃ³vel <span className="text-[8px]">(Opcional)</span></label>
               <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Nascimento <span className="text-[8px]">(Opcional)</span></label>
+            <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
           <div className="space-y-1">
@@ -5135,33 +5149,29 @@ import '@testing-library/jest-dom';
 FILE: C:\Users\Filipepocas\vizinho-plus\public\index.html
 ==================================================
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-PT">
 <head>
     <meta charset="utf-8" />
     <link rel="icon" href="%PUBLIC_URL%/favicon.ico" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0" />
-    <meta name="theme-color" content="#1C305C" />
+    
+    <!-- Cor do topo do telemÃ³vel combinada com o teu CSS (--vplus-blue) -->
+    <meta name="theme-color" content="#0a2540" /> 
+    
+    <!-- ConfiguraÃ§Ãµes para iOS (Apple) -->
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Vizinho+">
     <link rel="apple-touch-icon" href="%PUBLIC_URL%/logo192.png">
     
     <title>Vizinho+ | Cashback Local</title>
+    
+    <!-- Link para o ficheiro que controla a instalaÃ§Ã£o no telemÃ³vel -->
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
 </head>
   <body>
-    <noscript>You need to enable JavaScript to run this app.</noscript>
+    <noscript>Precisas de ativar o JavaScript para correr esta aplicaÃ§Ã£o.</noscript>
     <div id="root"></div>
-    <!--
-      This HTML file is a template.
-      If you open it directly in the browser, you will see an empty page.
-
-      You can add webfonts, meta tags, or analytics to this file.
-      The build step will place the bundled scripts into the <body> tag.
-
-      To begin the development, run `npm start` or `yarn start`.
-      To create a production bundle, use `npm run build` or `yarn build`.
-    -->
   </body>
 </html>
 

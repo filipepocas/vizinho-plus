@@ -46,18 +46,15 @@ const MerchantDashboard: React.FC = () => {
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
 
-  // PESQUISA ATUALIZADA: Tenta o Nº de Cartão (customerNumber) PRIMEIRO, se não encontrar, tenta o NIF.
   useEffect(() => {
     const search = async () => {
       const cleanInput = cardNumber.replace(/\s/g, '');
       if (cleanInput.length === 9) {
         setIsSearching(true);
         try {
-          // 1. Tenta pesquisar pelo Número do Cartão
           let q = query(collection(db, 'users'), where('customerNumber', '==', cleanInput), where('role', '==', 'client'));
           let snap = await getDocs(q);
           
-          // 2. Se não encontrou pelo cartão, tenta pelo NIF
           if (snap.empty) {
             q = query(collection(db, 'users'), where('nif', '==', cleanInput), where('role', '==', 'client'));
             snap = await getDocs(q);
@@ -105,7 +102,10 @@ const MerchantDashboard: React.FC = () => {
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
         amount: pendingAction.val,
         type: pendingAction.type,
-        documentNumber: documentNumber
+        documentNumber: documentNumber,
+        clientName: foundClient.name, // Adicionado para BI e Excel
+        clientCardNumber: foundClient.customerNumber, // Adicionado
+        clientBirthDate: foundClient.birthDate // Adicionado
       });
       setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
@@ -188,12 +188,13 @@ const MerchantDashboard: React.FC = () => {
             <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] animate-in fade-in">
                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Últimos Movimentos (60 dias)</h3>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px]">
+                    <table className="w-full text-left min-w-[700px]">
                         <thead>
                             <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                                 <th className="p-4 rounded-l-2xl">Data</th>
+                                <th className="p-4">Cliente (Nome / Cartão)</th>
                                 <th className="p-4">Tipo</th>
-                                <th className="p-4">Valor Base</th>
+                                <th className="p-4">Fatura Base</th>
                                 <th className="p-4">Movimento</th>
                                 <th className="p-4 rounded-r-2xl text-center">Nº Fatura / Recibo</th>
                             </tr>
@@ -202,6 +203,10 @@ const MerchantDashboard: React.FC = () => {
                             {transactions.map(t => (
                                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="p-4 text-xs font-bold text-slate-600">{t.createdAt?.toDate ? t.createdAt.toDate().toLocaleString() : 'Recente'}</td>
+                                    <td className="p-4">
+                                        <p className="font-black uppercase text-xs text-[#0a2540]">{t.clientName || 'Cliente'}</p>
+                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{t.clientCardNumber || t.clientNif || '---'}</p>
+                                    </td>
                                     <td className="p-4 text-[10px] font-black uppercase tracking-widest">
                                         <span className={`px-2 py-1 rounded-md ${t.type === 'earn' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                                             {t.type === 'earn' ? 'Atribuição' : 'Desconto'}
@@ -234,7 +239,7 @@ const MerchantDashboard: React.FC = () => {
                                 </tr>
                             ))}
                             {transactions.length === 0 && (
-                                <tr><td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-bold uppercase">Nenhum movimento recente.</td></tr>
+                                <tr><td colSpan={6} className="p-8 text-center text-slate-400 text-xs font-bold uppercase">Nenhum movimento recente.</td></tr>
                             )}
                         </tbody>
                     </table>
