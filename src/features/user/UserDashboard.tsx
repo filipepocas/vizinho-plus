@@ -12,9 +12,11 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard, Bell } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard, Bell, Volume2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
+// Importação da função de pedir permissão de notificações
+import { requestNotificationPermission } from '../../utils/notifications';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
@@ -32,8 +34,6 @@ const UserDashboard: React.FC = () => {
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
-
-  // NOVO: Notificações In-App
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
@@ -80,11 +80,8 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser]);
 
-  // NOVO: Escuta as notificações In-App gratuitas (Apenas últimas 24 horas)
   useEffect(() => {
     if (!currentUser) return;
-
-    // Queremos notificações criadas no máximo há 24h para não mostrar coisas antigas
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
 
@@ -95,8 +92,6 @@ const UserDashboard: React.FC = () => {
        
        for (let notif of docs) {
          if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
-         
-         // Verificar se o utilizador já fechou esta notificação nesta sessão (memória local do browser)
          const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
          if (dismissed) continue;
 
@@ -108,7 +103,7 @@ const UserDashboard: React.FC = () => {
 
          if (matches) {
             setAppNotification(notif);
-            break; // Mostra só a mais recente válida
+            break; 
          }
        }
     });
@@ -179,7 +174,6 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
-        {/* NOVO: AVISO IN-APP (Notificações Push Free) */}
         {appNotification && (
            <div className="bg-white border-4 border-[#0a2540] rounded-[30px] p-6 shadow-[8px_8px_0px_#00d66f] flex items-start gap-4 animate-in slide-in-from-top-10 relative">
                <div className="bg-blue-50 text-blue-500 p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
@@ -192,18 +186,21 @@ const UserDashboard: React.FC = () => {
            </div>
         )}
 
-        {isInstallable && (
-          <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500">
-            <div className="flex items-center gap-3">
-              <div className="bg-[#0a2540] p-2 rounded-xl text-[#00d66f]"><Smartphone size={20} /></div>
-              <div>
-                <p className="font-black uppercase text-[11px] text-[#0a2540] tracking-tighter">Instalar App</p>
-                <p className="text-[9px] font-bold text-[#0a2540] opacity-80 uppercase">Acesso rápido no ecrã</p>
-              </div>
-            </div>
-            <button onClick={installApp} className="bg-[#0a2540] text-white px-5 py-3 rounded-2xl font-black uppercase text-[9px] tracking-widest active:scale-95 transition-all">Instalar</button>
-          </div>
-        )}
+        <div className="grid grid-cols-2 gap-4">
+          {/* BOTÃO 1: Instalar App */}
+          {isInstallable && (
+            <button onClick={installApp} className="bg-[#0a2540] text-[#00d66f] border-4 border-[#00d66f] rounded-[25px] p-4 flex flex-col items-center justify-center gap-2 shadow-[4px_4px_0px_#00d66f] active:scale-95 transition-all text-center">
+              <Smartphone size={24} />
+              <p className="font-black uppercase text-[9px] tracking-widest leading-tight">Instalar<br/>App (Ecrã)</p>
+            </button>
+          )}
+
+          {/* BOTÃO 2: Ativar Alertas no Telemóvel */}
+          <button onClick={() => requestNotificationPermission(currentUser.id)} className={`border-4 rounded-[25px] p-4 flex flex-col items-center justify-center gap-2 active:scale-95 transition-all text-center shadow-sm ${isInstallable ? '' : 'col-span-2'} bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100`}>
+            <Volume2 size={24} />
+            <p className="font-black uppercase text-[9px] tracking-widest leading-tight">Ativar Alertas<br/>(Telemóvel)</p>
+          </button>
+        </div>
 
         <BannerCarousel />
 

@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText, Bell } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText, Bell, ImagePlay } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -16,11 +16,13 @@ import MerchantModal from './MerchantModal';
 import BannerManager from './BannerManager';
 import AdminLeaflets from './AdminLeaflets';
 import AdminNotifications from './AdminNotifications';
+import AdminMediaGenerator from './AdminMediaGenerator';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'notifications' | 'settings'>('overview');
+  // Adicionado 'generator' à lista de vistas
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'notifications' | 'settings' | 'generator'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -28,7 +30,6 @@ const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    // Aumentámos o limite para permitir exportações mais ricas no Excel (Top Lojas, etc)
     const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
     const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
     
@@ -73,7 +74,8 @@ const AdminDashboard: React.FC = () => {
                 { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
-                { id: 'notifications', label: 'Avisos App', icon: Bell }, // NOVO MENU
+                { id: 'generator', label: 'Estúdio Mídia', icon: ImagePlay }, // ADICIONADO AQUI
+                { id: 'notifications', label: 'Avisos App', icon: Bell }, 
                 { id: 'banners', label: 'Banners', icon: ImageIcon },
                 { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
@@ -102,6 +104,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
+        {currentView === 'generator' && <AdminMediaGenerator />} {/* ADICIONADO AQUI */}
         {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'banners' && <BannerManager />}

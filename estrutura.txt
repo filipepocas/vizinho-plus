@@ -414,7 +414,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, Image as ImageIcon, CheckSquare, FileText, Bell } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -426,11 +426,12 @@ import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
 import BannerManager from './BannerManager';
 import AdminLeaflets from './AdminLeaflets';
+import AdminNotifications from './AdminNotifications';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'banners' | 'leaflets' | 'notifications' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -438,13 +439,14 @@ const AdminDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
+    // AumentÃ¡mos o limite para permitir exportaÃ§Ãµes mais ricas no Excel (Top Lojas, etc)
+    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
     const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
     
-    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'), limit(200));
+    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
     const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
-    const qClients = query(collection(db, 'users'), where('role', '==', 'client'), limit(1000));
+    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
     const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
     return () => { unsubTx(); unsubMerchants(); unsubClients(); };
@@ -454,8 +456,6 @@ const AdminDashboard: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] flex flex-col overflow-x-hidden">
       <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[40px] md:rounded-b-[50px] border-b-[8px] md:border-b-[10px] border-[#00d66f] shadow-2xl z-20">
         <div className="max-w-7xl mx-auto">
-          
-          {/* TOPO: TÃTULO E BOTÃ•ES */}
           <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
             <div className="flex items-center gap-4 md:gap-5">
               <div className="bg-[#00d66f] p-3 md:p-4 rounded-[20px] md:rounded-[25px] text-[#0a2540] shadow-[4px_4px_0px_#ffffff]">
@@ -477,7 +477,6 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* MENU DESLIZANTE PARA MOBILE (SCROLL HORIZONTAL) */}
           <div className="mt-8 -mx-6 px-6 md:mx-0 md:px-0">
             <nav className="flex overflow-x-auto gap-2 bg-black/20 p-2 md:rounded-[25px] border-y md:border border-white/5 scrollbar-hide pb-2">
               {[
@@ -485,6 +484,7 @@ const AdminDashboard: React.FC = () => {
                 { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
+                { id: 'notifications', label: 'Avisos App', icon: Bell }, // NOVO MENU
                 { id: 'banners', label: 'Banners', icon: ImageIcon },
                 { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
@@ -506,13 +506,14 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'overview' && (
           <div className="bg-white rounded-[30px] md:rounded-[50px] border-4 border-[#0a2540] p-6 md:p-10 shadow-[8px_8px_0px_#0a2540] md:shadow-[15px_15px_0px_#0a2540] w-full overflow-hidden">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 md:mb-10">Auditoria de TransaÃ§Ãµes</h2>
-              <AdminTransactions transactions={globalTransactions} users={[]} />
+              <AdminTransactions transactions={globalTransactions} clients={globalClients} merchants={globalMerchants} />
           </div>
         )}
         
         {currentView === 'requests' && <AdminMerchantRequests />}
-        {currentView === 'users' && <AdminUsers users={globalClients} />}
+        {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
+        {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'banners' && <BannerManager />}
         {currentView === 'leaflets' && <AdminLeaflets />}
@@ -977,6 +978,160 @@ export default AdminMerchants;
 
 
 ==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminNotifications.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { db } from '../../config/firebase';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { Bell, Send, Trash2, Calendar, AlertCircle, Loader2 } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { AppNotification } from '../../types';
+
+const AdminNotifications: React.FC = () => {
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [loading, setLoading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    title: '',
+    message: '',
+    targetType: 'all' as 'all' | 'email' | 'zipCode' | 'birthDate',
+    targetValue: ''
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setNotifications(snap.docs.map(d => ({ id: d.id, ...d.data() } as AppNotification)));
+    });
+  }, []);
+
+  const handleSend = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.title || !formData.message) {
+      toast.error("Preencha o tÃ­tulo e a mensagem.");
+      return;
+    }
+    if (formData.targetType !== 'all' && !formData.targetValue) {
+      toast.error("Preencha o valor do filtro (Ex: email ou cÃ³digo postal).");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await addDoc(collection(db, 'notifications'), {
+        title: formData.title,
+        message: formData.message,
+        targetType: formData.targetType,
+        targetValue: formData.targetValue.trim(),
+        createdAt: serverTimestamp()
+      });
+      toast.success("Comunicado enviado para a App!");
+      setFormData({ title: '', message: '', targetType: 'all', targetValue: '' });
+    } catch (err) {
+      toast.error("Erro ao enviar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Apagar este comunicado?")) return;
+    await deleteDoc(doc(db, 'notifications', id));
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500">
+      <form onSubmit={handleSend} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
+        <div className="flex items-center gap-3 mb-8">
+          <div className="bg-[#00d66f] p-3 rounded-2xl text-[#0a2540]">
+            <Bell size={24} strokeWidth={3} />
+          </div>
+          <div>
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Avisos na App (Push Free)</h3>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Aparece quando o cliente abre a App</p>
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">TÃ­tulo do Aviso</label>
+              <input type="text" placeholder="EX: FELIZ ANIVERSÃRIO!" className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Mensagem Curta</label>
+              <textarea placeholder="Escreva a mensagem..." className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-sm outline-none focus:border-[#0a2540] resize-none h-32" value={formData.message} onChange={e => setFormData({...formData, message: e.target.value})}></textarea>
+            </div>
+          </div>
+          
+          <div className="space-y-6">
+            <div>
+              <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Para quem enviar?</label>
+              <select className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.targetType} onChange={e => setFormData({...formData, targetType: e.target.value as any})}>
+                <option value="all">TODOS OS VIZINHOS (GLOBAL)</option>
+                <option value="zipCode">POR CÃ“DIGO POSTAL (EX: 4000)</option>
+                <option value="birthDate">POR DATA DE NASCIMENTO</option>
+                <option value="email">UM CLIENTE ESPECÃFICO (EMAIL)</option>
+              </select>
+            </div>
+
+            {formData.targetType !== 'all' && (
+              <div className="animate-in fade-in">
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">
+                  {formData.targetType === 'zipCode' && "Inserir os 4 dÃ­gitos iniciais (Ex: 4000)"}
+                  {formData.targetType === 'birthDate' && "Inserir data no formato YYYY-MM-DD"}
+                  {formData.targetType === 'email' && "Inserir E-mail exato do Cliente"}
+                </label>
+                <input type={formData.targetType === 'birthDate' ? 'date' : 'text'} className="w-full p-5 bg-white border-4 border-[#00d66f] rounded-3xl font-black text-xs outline-none" value={formData.targetValue} onChange={e => setFormData({...formData, targetValue: e.target.value})} />
+              </div>
+            )}
+          </div>
+        </div>
+
+        <button disabled={loading} className="mt-10 w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
+          {loading ? <Loader2 className="animate-spin" /> : <Send size={24} strokeWidth={3} />} Enviar para a App Agora
+        </button>
+      </form>
+
+      <div className="space-y-4">
+        <h3 className="text-sm font-black uppercase tracking-widest text-slate-400 ml-2">HistÃ³rico de Avisos Emitidos</h3>
+        {notifications.map(n => (
+            <div key={n.id} className="bg-white border-4 border-[#0a2540] rounded-[30px] p-6 flex justify-between items-center gap-4">
+              <div className="flex gap-4 items-start">
+                  <div className="bg-blue-50 p-3 rounded-2xl text-blue-500"><Bell size={20} /></div>
+                  <div>
+                      <h4 className="font-black uppercase text-[#0a2540] text-lg leading-none mb-2">{n.title}</h4>
+                      <p className="text-xs text-slate-500 font-medium mb-3">{n.message}</p>
+                      <div className="flex gap-2">
+                          <span className="text-[8px] font-black uppercase bg-slate-100 px-2 py-1 rounded-md text-slate-500">
+                             Alvo: {n.targetType === 'all' ? 'Todos' : `${n.targetType}: ${n.targetValue}`}
+                          </span>
+                          <span className="text-[8px] font-black uppercase bg-slate-100 px-2 py-1 rounded-md text-slate-500">
+                             Enviado a: {n.createdAt?.toDate().toLocaleDateString()}
+                          </span>
+                      </div>
+                  </div>
+              </div>
+              <button onClick={() => handleDelete(n.id!)} className="bg-red-50 text-red-500 p-4 rounded-2xl hover:bg-red-500 hover:text-white transition-colors">
+                  <Trash2 size={20} />
+              </button>
+            </div>
+        ))}
+        {notifications.length === 0 && (
+           <div className="text-center py-10 bg-slate-50 rounded-[30px] border-4 border-dashed border-slate-200">
+               <AlertCircle className="mx-auto text-slate-300 mb-2" size={32} />
+               <p className="font-black text-[10px] uppercase text-slate-400 tracking-widest">Nenhum aviso emitido</p>
+           </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AdminNotifications;
+
+
+==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminSettings.tsx
 ==================================================
 import React, { useState, useEffect } from 'react';
@@ -1144,10 +1299,11 @@ import * as XLSX from 'xlsx';
 
 interface AdminTransactionsProps {
   transactions: Transaction[];
-  users: UserProfile[];
+  clients: UserProfile[];
+  merchants: UserProfile[];
 }
 
-const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) => {
+const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, clients, merchants }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
@@ -1160,7 +1316,7 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
 
   const filteredTransactions = transactions.filter(t => {
     const q = searchQuery.toLowerCase();
-    const matchText = (t.clientNif || '').includes(q) || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q);
+    const matchText = (t.clientNif || '').includes(q) || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q) || (t.clientName || '').toLowerCase().includes(q);
     const txDate = parseDate(t.createdAt);
     let matchStart = !startDate || txDate >= new Date(startDate);
     let matchEnd = !endDate || txDate <= new Date(endDate + 'T23:59:59');
@@ -1168,31 +1324,39 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
   });
 
   const exportToExcel = () => {
-    const ws = XLSX.utils.json_to_sheet(filteredTransactions.map(t => ({
-      Data: parseDate(t.createdAt).toLocaleString(),
-      Parceiro: t.merchantName,
-      NIF: t.clientNif,
-      "Fatura Original": t.amount,
-      "Valor Movimentado": t.cashbackAmount,
-      Tipo: t.type === 'earn' ? 'AtribuiÃ§Ã£o' : 'Desconto',
-      Status: t.status
-    })));
+    const ws = XLSX.utils.json_to_sheet(filteredTransactions.map(t => {
+      // Procurar dados originais nos arrays passados, caso a transaÃ§Ã£o seja antiga e nÃ£o tenha gravado no momento
+      const c = clients.find(cl => cl.id === t.clientId);
+      const m = merchants.find(me => me.id === t.merchantId);
+
+      return {
+        Data: parseDate(t.createdAt).toLocaleString(),
+        "Nome do Comerciante": t.merchantName || m?.shopName || m?.name || '---',
+        "NIF do Comerciante": m?.nif || '---',
+        "Nome do Cliente": t.clientName || c?.name || '---',
+        "Email do Cliente": c?.email || '---',
+        "NÂº CartÃ£o Cliente": t.clientCardNumber || c?.customerNumber || '---',
+        "NIF do Cliente": t.clientNif || c?.nif || '---',
+        "Fatura Original": t.amount,
+        "Valor Movimentado (Cashback)": t.cashbackAmount,
+        Tipo: t.type === 'earn' ? 'AtribuiÃ§Ã£o' : 'Desconto',
+        Status: t.status === 'cancelled' ? 'Anulado' : 'Aprovado'
+      };
+    }));
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Transacoes");
+    XLSX.utils.book_append_sheet(wb, ws, "Auditoria");
     XLSX.writeFile(wb, "Auditoria_VizinhoPlus.xlsx");
   };
 
   return (
     <div className="space-y-6 md:space-y-10 w-full">
       
-      {/* FILTROS RESPONSIVOS */}
       <div className="flex flex-col xl:flex-row items-stretch xl:items-center gap-4 xl:gap-6">
         <div className="relative w-full">
-          {/* CORREÃ‡ÃƒO FEITA AQUI: Apenas um className */}
           <Search className="absolute left-5 md:left-6 top-1/2 -translate-y-1/2 text-slate-300 md:w-6 md:h-6" size={20} />
           <input 
             type="text" 
-            placeholder="PROCURAR LOJA, NIF OU DOC..." 
+            placeholder="PROCURAR LOJA, NOME CLIENTE, NIF OU DOC..." 
             className="w-full p-4 md:p-6 pl-12 md:pl-16 bg-slate-50 border-4 border-slate-100 rounded-[20px] md:rounded-[30px] outline-none focus:border-[#0a2540] font-black text-[10px] md:text-xs uppercase tracking-widest shadow-inner" 
             value={searchQuery} 
             onChange={(e) => setSearchQuery(e.target.value)} 
@@ -1213,15 +1377,14 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
         </div>
       </div>
 
-      {/* TABELA COM SCROLL HORIZONTAL (MOBILE FRIENDLY) */}
       <div className="bg-white rounded-[25px] md:rounded-[40px] border-4 border-[#0a2540] shadow-lg md:shadow-xl overflow-hidden w-full">
         <div className="overflow-x-auto w-full">
           <table className="w-full text-left min-w-[700px]">
             <thead className="bg-[#0a2540] text-white">
               <tr>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] whitespace-nowrap">Registo</th>
-                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em]">Parceiro</th>
-                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Cliente ID</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em]">Parceiro / Cliente</th>
+                <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Docs</th>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-right">Fatura</th>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-center">Status</th>
                 <th className="p-5 md:p-8 text-[9px] md:text-[11px] font-black uppercase tracking-[0.2em] text-right">Movimento</th>
@@ -1231,8 +1394,14 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions }) =
               {filteredTransactions.map((t) => (
                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                   <td className="p-5 md:p-8 text-[10px] md:text-xs font-bold text-slate-500 whitespace-nowrap">{parseDate(t.createdAt).toLocaleDateString()}</td>
-                  <td className="p-5 md:p-8 font-black uppercase italic text-xs md:text-sm text-[#0a2540]">{t.merchantName}</td>
-                  <td className="p-5 md:p-8 font-mono text-[10px] md:text-xs font-bold text-center text-slate-400">{t.clientNif || '---'}</td>
+                  <td className="p-5 md:p-8">
+                     <p className="font-black uppercase italic text-xs md:text-sm text-[#0a2540] truncate max-w-[200px]">{t.merchantName}</p>
+                     <p className="text-[10px] font-bold text-slate-400 mt-1 uppercase truncate max-w-[200px]">{t.clientName || 'Cliente Desconhecido'}</p>
+                  </td>
+                  <td className="p-5 md:p-8 text-center">
+                     <p className="font-mono text-[10px] md:text-xs font-bold text-slate-500">{t.clientCardNumber || t.clientNif || 'S/ Doc'}</p>
+                     <p className="text-[9px] font-black uppercase text-[#00d66f] mt-1">{t.documentNumber}</p>
+                  </td>
                   <td className="p-5 md:p-8 text-right text-slate-500 font-black text-sm md:text-lg whitespace-nowrap">{t.amount.toFixed(2)} â‚¬</td>
                   <td className="p-5 md:p-8 text-center">
                     <span className={`px-3 md:px-5 py-2 rounded-full text-[8px] md:text-[9px] font-black uppercase tracking-widest border-2 whitespace-nowrap ${
@@ -1268,16 +1437,17 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminUsers.tsx
 import React, { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { User as UserProfile } from '../../types/index';
+import { User as UserProfile, Transaction } from '../../types/index';
 import { Search, Users, Mail, Locate, Download, Phone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
 interface AdminUsersProps {
   users: UserProfile[];
+  transactions: Transaction[];
 }
 
-const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
+const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredUsers = users.filter(u => {
@@ -1301,15 +1471,53 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
   };
 
   const exportToExcel = () => {
-    const dataToExport = filteredUsers.map(u => ({
-      Nome: u.name || '---',
-      Email: u.email || '---',
-      Telefone: u.phone || '---', // NOVO: ExportaÃ§Ã£o Telefone
-      NIF: u.nif || '---',
-      "CÃ³digo Postal": u.zipCode || '---',
-      "Data AdesÃ£o": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
-      Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
-    }));
+    const dataToExport = filteredUsers.map(u => {
+      // Filtrar as transaÃ§Ãµes apenas deste utilizador (do tipo 'earn' - compras vÃ¡lidas)
+      const userTxs = transactions.filter(t => t.clientId === u.id && t.type === 'earn' && t.status !== 'cancelled');
+      
+      // Calcular estatÃ­sticas por loja
+      const shopStats: Record<string, { name: string, volume: number, visits: number }> = {};
+      userTxs.forEach(t => {
+        if (!shopStats[t.merchantId]) {
+          shopStats[t.merchantId] = { name: t.merchantName, volume: 0, visits: 0 };
+        }
+        shopStats[t.merchantId].volume += t.amount;
+        shopStats[t.merchantId].visits += 1;
+      });
+
+      // Encontrar a Top Loja por Volume
+      let topVolumeShop = "N/D";
+      let maxVolume = 0;
+      
+      // Encontrar a Top Loja por Visitas
+      let topVisitsShop = "N/D";
+      let maxVisits = 0;
+
+      Object.values(shopStats).forEach(shop => {
+        if (shop.volume > maxVolume) {
+          maxVolume = shop.volume;
+          topVolumeShop = shop.name;
+        }
+        if (shop.visits > maxVisits) {
+          maxVisits = shop.visits;
+          topVisitsShop = shop.name;
+        }
+      });
+
+      return {
+        Nome: u.name || '---',
+        Email: u.email || '---',
+        Telefone: u.phone || '---',
+        "Data de Nascimento": u.birthDate || '---',
+        NIF: u.nif || '---',
+        "CartÃ£o NÂº": u.customerNumber || '---',
+        "CÃ³digo Postal": u.zipCode || '---',
+        "Data AdesÃ£o": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
+        "Loja (Mais Visitas)": topVisitsShop,
+        "Loja (Maior Volume)": topVolumeShop,
+        Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
@@ -1338,7 +1546,7 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users }) => {
             </div>
             <div className="overflow-hidden">
                 <h3 className="font-black text-lg uppercase italic tracking-tighter text-[#0a2540] leading-none truncate">{u.name}</h3>
-                <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif}</span>
+                <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif || u.customerNumber || 'Sem Doc'}</span>
             </div>
             </div>
 
@@ -2128,7 +2336,6 @@ const RegisterPage: React.FC = () => {
     setFormData({ ...formData, zipCode: val });
   };
 
-  // FunÃ§Ã£o para gerar nÃºmero de cliente Ãºnico com 9 dÃ­gitos (Ex: 123456789)
   const generateCustomerNumber = () => {
     return Math.floor(100000000 + Math.random() * 900000000).toString();
   };
@@ -2147,18 +2354,16 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
-    // Se o NIF foi preenchido, validamos o seu formato (9 dÃ­gitos)
-    if (formData.nif.trim() !== '' && formData.nif.trim().length !== 9) {
+    const cleanNif = formData.nif.trim();
+    if (cleanNif !== '' && cleanNif.length !== 9) {
       toast.error("NIF INVÃLIDO (TEM DE TER 9 DÃGITOS)");
       setLoading(false);
       return;
     }
 
     try {
-      // Se o utilizador preencheu o NIF, verificamos se jÃ¡ existe
-      if (formData.nif.trim() !== '') {
-        const nifExists = await checkNifExists(formData.nif);
-        console.log('NIF exists check:', nifExists, 'for NIF:', formData.nif);
+      if (cleanNif !== '') {
+        const nifExists = await checkNifExists(cleanNif);
         if (nifExists) {
           toast.error("ESTE NIF JÃ ESTÃ REGISTADO.");
           setLoading(false);
@@ -2167,18 +2372,17 @@ const RegisterPage: React.FC = () => {
       }
 
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      
       const newCustomerNumber = generateCustomerNumber();
 
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
-        nif: formData.nif.trim(), // Pode ir vazio
-        customerNumber: newCustomerNumber, // NOVO: NÃºmero de CartÃ£o
+        nif: cleanNif, 
+        customerNumber: newCustomerNumber, 
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
         email: formData.email.toLowerCase().trim(),
-        birthDate: formData.birthDate, // NOVO: Data de Nascimento (Opcional)
+        birthDate: formData.birthDate, 
         role: 'client',
         status: 'active',
         wallet: { available: 0, pending: 0 },
@@ -2186,13 +2390,10 @@ const RegisterPage: React.FC = () => {
       });
 
       toast.success("BEM-VINDO VIZINHO!");
-      
       if (isInstallable) {
         try { await installApp(); } catch (error) { console.log("InstalaÃ§Ã£o adiada"); }
       }
-
       navigate('/dashboard');
-      
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÃ ESTÃ REGISTADO.");
@@ -2222,7 +2423,6 @@ const RegisterPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              {/* NIF AGORA Ã‰ OPCIONAL */}
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
               <input type="text" maxLength={9} value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
             </div>
@@ -2284,7 +2484,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { Transaction, Feedback } from '../../../types';
-import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle } from 'lucide-react';
+import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy } from 'lucide-react';
 
 interface BIProps {
   merchantId: string;
@@ -2376,21 +2576,51 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return months;
   }, [transactions]);
 
+  // NOVOS CÃLCULOS: TOP 10 CLIENTES (Ãšltimos 12 Meses)
+  const topClients = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const clientMap: Record<string, { name: string, card: string, birth: string, volume: number, visits: number }> = {};
+
+    transactions.forEach(t => {
+      const date = parseDate(t.createdAt);
+      if (date > oneYearAgo && t.type === 'earn' && t.status !== 'cancelled') {
+        if (!clientMap[t.clientId]) {
+          clientMap[t.clientId] = {
+            name: t.clientName || 'Desconhecido',
+            card: t.clientCardNumber || t.clientNif || '---',
+            birth: t.clientBirthDate || 'N/D',
+            volume: 0,
+            visits: 0
+          };
+        }
+        clientMap[t.clientId].volume += Number(t.amount);
+        clientMap[t.clientId].visits += 1;
+      }
+    });
+
+    const allClientsArr = Object.values(clientMap);
+    
+    return {
+      byVolume: [...allClientsArr].sort((a, b) => b.volume - a.volume).slice(0, 10),
+      byVisits: [...allClientsArr].sort((a, b) => b.visits - a.visits).slice(0, 10)
+    };
+  }, [transactions]);
+
   const cashbackStats = useMemo(() => {
     let emitted = 0, used = 0, available = 0;
     
     transactions.forEach(t => {
       if (t.status === 'cancelled') return;
-      
       if (t.type === 'earn') {
         emitted += t.cashbackAmount;
-        available += t.cashbackAmount; // Fica logo disponÃ­vel
+        available += t.cashbackAmount; 
       } else if (t.type === 'redeem') {
-        used += t.amount; // amount na transaÃ§Ã£o redeem Ã© o valor do desconto!
+        used += t.amount;
         available -= t.amount;
       }
     });
-    
     return { emitted, used, available: Math.max(0, available) };
   }, [transactions]);
 
@@ -2406,131 +2636,195 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   }, [feedbacks]);
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6 animate-in fade-in duration-700">
-      
-      <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
-        <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
-          <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
-        </h3>
-        
-        <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
-          {dayStats.map((d, i) => {
-            const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
-            const heightPercentage = (d.volume / maxVol) * 100;
+    <div className="space-y-6 animate-in fade-in duration-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
+              <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
+            </h3>
             
-            return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
-                <div className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" style={{ height: `${heightPercentage}%`, minHeight: d.volume > 0 ? '8px' : '2px' }}>
-                    {d.volume > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">{formatCurrency(d.volume)}</div>}
-                </div>
-                <span className="text-[8px] font-black uppercase text-slate-400">{d.day}</span>
-              </div>
-            );
-          })}
-        </div>
-        
-        <div className="space-y-3 pt-6 border-t-2 border-slate-100">
-          <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center mb-2">Horas de Ponta (12M)</p>
-          <div className="grid grid-cols-2 gap-2">
-              {dayStats.filter(d => d.count > 0).slice(0, 4).map((d, i) => (
-                <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold uppercase border border-slate-100">
-                  <span className="text-slate-500">{d.day}</span>
-                  <span className="text-[#0a2540] flex items-center gap-1"><Clock size={10} className="text-[#00d66f]"/> {d.peakHour}</span>
-                </div>
-              ))}
-          </div>
-        </div>
-      </div>
-
-      <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col">
-        <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
-          <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
-        </h3>
-        <div className="space-y-6 mt-auto">
-          {monthStats.map((m, i) => {
-              const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
-              return (
-                <div key={i} className="space-y-2">
-                  <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
-                    <span className="text-slate-500">{m.label}</span>
-                    <span className="text-[#0a2540] italic">{formatCurrency(m.volume)}</span>
+            <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
+              {dayStats.map((d, i) => {
+                const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
+                const heightPercentage = (d.volume / maxVol) * 100;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
+                    <div className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" style={{ height: `${heightPercentage}%`, minHeight: d.volume > 0 ? '8px' : '2px' }}>
+                        {d.volume > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">{formatCurrency(d.volume)}</div>}
+                    </div>
+                    <span className="text-[8px] font-black uppercase text-slate-400">{d.day}</span>
                   </div>
-                  <div className="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
-                    <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
-                  </div>
-                </div>
-              );
-          })}
-        </div>
-      </div>
-
-      <div className="bg-[#0a2540] p-8 rounded-[40px] text-white shadow-2xl flex flex-col relative overflow-hidden border-4 border-[#0a2540]">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wallet size={120} /></div>
-        <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
-          <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Wallet size={16} /></div> GestÃ£o de Saldo
-        </h3>
-        
-        <div className="space-y-8 flex-grow relative z-10 mt-auto">
-          <div className="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
-            <p className="text-[8px] font-black uppercase text-white/40 tracking-widest mb-2">Responsabilidade Total</p>
-            <span className="text-3xl font-black text-[#00d66f] italic tracking-tighter block">{formatCurrency(cashbackStats.available)}</span>
-          </div>
-
-          <div className="space-y-4 pt-6 border-t border-white/10">
-            <div className="flex justify-between items-end">
-              <div>
-                  <p className="text-[8px] font-black uppercase text-white/30 tracking-widest mb-1">Total Emitido</p>
-                  <span className="text-lg font-black text-white italic">{formatCurrency(cashbackStats.emitted)}</span>
-              </div>
-              <div className="text-right">
-                  <p className="text-[8px] font-black uppercase text-white/30 tracking-widest mb-1">JÃ¡ Descontado</p>
-                  <span className="text-sm font-bold text-red-400">-{formatCurrency(cashbackStats.used)}</span>
+                );
+              })}
+            </div>
+            
+            <div className="space-y-3 pt-6 border-t-2 border-slate-100">
+              <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center mb-2">Horas de Ponta (12M)</p>
+              <div className="grid grid-cols-2 gap-2">
+                  {dayStats.filter(d => d.count > 0).slice(0, 4).map((d, i) => (
+                    <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold uppercase border border-slate-100">
+                      <span className="text-slate-500">{d.day}</span>
+                      <span className="text-[#0a2540] flex items-center gap-1"><Clock size={10} className="text-[#00d66f]"/> {d.peakHour}</span>
+                    </div>
+                  ))}
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col h-[480px]">
-        <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6 shrink-0">
-          <div className="bg-amber-100 p-2 rounded-xl"><Star size={16} className="text-amber-500 fill-amber-500" /></div> SatisfaÃ§Ã£o
-        </h3>
-        
-        <div className="grid grid-cols-2 gap-4 mb-6 shrink-0">
-          <div className="bg-slate-50 p-4 rounded-3xl text-center border-2 border-slate-100 shadow-inner">
-            <p className="text-3xl font-black text-[#0a2540] italic tracking-tighter">{feedbackStats.avg}</p>
-            <p className="text-[7px] font-black uppercase text-slate-400 tracking-widest mt-1">Global ({feedbackStats.count})</p>
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col">
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
+              <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
+            </h3>
+            <div className="space-y-6 mt-auto">
+              {monthStats.map((m, i) => {
+                  const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
+                  return (
+                    <div key={i} className="space-y-2">
+                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                        <span className="text-slate-500">{m.label}</span>
+                        <span className="text-[#0a2540] italic">{formatCurrency(m.volume)}</span>
+                      </div>
+                      <div className="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                        <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
+                      </div>
+                    </div>
+                  );
+              })}
+            </div>
           </div>
-          <div className="bg-green-50 p-4 rounded-3xl text-center border-2 border-green-200 shadow-inner">
-            <p className="text-3xl font-black text-[#00d66f] italic tracking-tighter">{feedbackStats.promoters}%</p>
-            <p className="text-[7px] font-black uppercase text-green-700 tracking-widest mt-1">Promotores</p>
-          </div>
-        </div>
-        
-        <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
-          <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">Ãšltimos ComentÃ¡rios</p>
-          
-          {loadingFeedbacks ? (
-              <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
-          ) : feedbacks.length > 0 ? (
-              feedbacks.map((f, i) => (
-                <div key={i} className="p-4 bg-slate-50 rounded-2xl border-l-4 border-[#00d66f] group hover:bg-slate-100 transition-colors">
-                  <div className="flex gap-0.5 mb-2">
-                    {[...Array(5)].map((_, si) => (
-                        <Star key={si} size={10} fill={si < f.rating ? "#0a2540" : "none"} className={si < f.rating ? "text-[#0a2540]" : "text-slate-300"} />
-                    ))}
-                  </div>
-                  <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">"{f.comment || 'Sem comentÃ¡rio adicional.'}"</p>
-                </div>
-              ))
-          ) : (
-              <div className="text-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                  <AlertCircle size={20} className="mx-auto text-slate-300 mb-2" />
-                  <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Sem AvaliaÃ§Ãµes</p>
+
+          <div className="bg-[#0a2540] p-8 rounded-[40px] text-white shadow-2xl flex flex-col relative overflow-hidden border-4 border-[#0a2540]">
+            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wallet size={120} /></div>
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
+              <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Wallet size={16} /></div> GestÃ£o de Saldo
+            </h3>
+            
+            <div className="space-y-8 flex-grow relative z-10 mt-auto">
+              <div className="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest mb-2">Responsabilidade Total</p>
+                <span className="text-3xl font-black text-[#00d66f] italic tracking-tighter block">{formatCurrency(cashbackStats.available)}</span>
               </div>
-          )}
+
+              <div className="space-y-4 pt-6 border-t border-white/10">
+                <div className="flex justify-between items-end">
+                  <div>
+                      <p className="text-[8px] font-black uppercase text-white/30 tracking-widest mb-1">Total Emitido</p>
+                      <span className="text-lg font-black text-white italic">{formatCurrency(cashbackStats.emitted)}</span>
+                  </div>
+                  <div className="text-right">
+                      <p className="text-[8px] font-black uppercase text-white/30 tracking-widest mb-1">JÃ¡ Descontado</p>
+                      <span className="text-sm font-bold text-red-400">-{formatCurrency(cashbackStats.used)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col h-[480px]">
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6 shrink-0">
+              <div className="bg-amber-100 p-2 rounded-xl"><Star size={16} className="text-amber-500 fill-amber-500" /></div> SatisfaÃ§Ã£o
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6 shrink-0">
+              <div className="bg-slate-50 p-4 rounded-3xl text-center border-2 border-slate-100 shadow-inner">
+                <p className="text-3xl font-black text-[#0a2540] italic tracking-tighter">{feedbackStats.avg}</p>
+                <p className="text-[7px] font-black uppercase text-slate-400 tracking-widest mt-1">Global ({feedbackStats.count})</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-3xl text-center border-2 border-green-200 shadow-inner">
+                <p className="text-3xl font-black text-[#00d66f] italic tracking-tighter">{feedbackStats.promoters}%</p>
+                <p className="text-[7px] font-black uppercase text-green-700 tracking-widest mt-1">Promotores</p>
+              </div>
+            </div>
+            
+            <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
+              <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">Ãšltimos ComentÃ¡rios</p>
+              
+              {loadingFeedbacks ? (
+                  <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
+              ) : feedbacks.length > 0 ? (
+                  feedbacks.map((f, i) => (
+                    <div key={i} className="p-4 bg-slate-50 rounded-2xl border-l-4 border-[#00d66f] group hover:bg-slate-100 transition-colors">
+                      <div className="flex gap-0.5 mb-2">
+                        {[...Array(5)].map((_, si) => (
+                            <Star key={si} size={10} fill={si < f.rating ? "#0a2540" : "none"} className={si < f.rating ? "text-[#0a2540]" : "text-slate-300"} />
+                        ))}
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">"{f.comment || 'Sem comentÃ¡rio adicional.'}"</p>
+                    </div>
+                  ))
+              ) : (
+                  <div className="text-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                      <AlertCircle size={20} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Sem AvaliaÃ§Ãµes</p>
+                  </div>
+              )}
+            </div>
+          </div>
         </div>
-      </div>
+
+        {/* NOVAS TABELAS DE MELHORES CLIENTES (ÃšLTIMOS 12 MESES) */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f]">
+              <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
+                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Trophy size={16} className="text-[#00d66f]" /></div> Top 10 Clientes - Maior Volume (12 Meses)
+              </h3>
+              <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                    <thead>
+                       <tr className="border-b-2 border-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                          <th className="pb-3">Cliente</th>
+                          <th className="pb-3 text-center">Nascimento</th>
+                          <th className="pb-3 text-right">Volume</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                       {topClients.byVolume.map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                             <td className="py-4">
+                                <p className="font-black text-xs uppercase text-[#0a2540]">{c.name}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-0.5">{c.card}</p>
+                             </td>
+                             <td className="py-4 text-center text-[10px] font-bold text-slate-500">{c.birth}</td>
+                             <td className="py-4 text-right font-black text-[#00d66f]">{formatCurrency(c.volume)}</td>
+                          </tr>
+                       ))}
+                       {topClients.byVolume.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado.</td></tr>}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
+
+           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540]">
+              <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
+                <div className="bg-blue-50 p-2 rounded-xl"><Users size={16} className="text-blue-500" /></div> Top 10 Clientes - Mais Frequentes (12 Meses)
+              </h3>
+              <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                    <thead>
+                       <tr className="border-b-2 border-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                          <th className="pb-3">Cliente</th>
+                          <th className="pb-3 text-center">Nascimento</th>
+                          <th className="pb-3 text-right">Visitas</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                       {topClients.byVisits.map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                             <td className="py-4">
+                                <p className="font-black text-xs uppercase text-[#0a2540]">{c.name}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-0.5">{c.card}</p>
+                             </td>
+                             <td className="py-4 text-center text-[10px] font-bold text-slate-500">{c.birth}</td>
+                             <td className="py-4 text-right font-black text-blue-500">{c.visits}x</td>
+                          </tr>
+                       ))}
+                       {topClients.byVisits.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado.</td></tr>}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
+        </div>
 
     </div>
   );
@@ -2903,18 +3197,15 @@ const MerchantDashboard: React.FC = () => {
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
 
-  // PESQUISA ATUALIZADA: Tenta o NÂº de CartÃ£o (customerNumber) PRIMEIRO, se nÃ£o encontrar, tenta o NIF.
   useEffect(() => {
     const search = async () => {
       const cleanInput = cardNumber.replace(/\s/g, '');
       if (cleanInput.length === 9) {
         setIsSearching(true);
         try {
-          // 1. Tenta pesquisar pelo NÃºmero do CartÃ£o
           let q = query(collection(db, 'users'), where('customerNumber', '==', cleanInput), where('role', '==', 'client'));
           let snap = await getDocs(q);
           
-          // 2. Se nÃ£o encontrou pelo cartÃ£o, tenta pelo NIF
           if (snap.empty) {
             q = query(collection(db, 'users'), where('nif', '==', cleanInput), where('role', '==', 'client'));
             snap = await getDocs(q);
@@ -2962,7 +3253,10 @@ const MerchantDashboard: React.FC = () => {
         merchantName: currentUser.shopName || currentUser.name || 'Loja Parceira',
         amount: pendingAction.val,
         type: pendingAction.type,
-        documentNumber: documentNumber
+        documentNumber: documentNumber,
+        clientName: foundClient.name, // Adicionado para BI e Excel
+        clientCardNumber: foundClient.customerNumber, // Adicionado
+        clientBirthDate: foundClient.birthDate // Adicionado
       });
       setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
@@ -3045,12 +3339,13 @@ const MerchantDashboard: React.FC = () => {
             <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] animate-in fade-in">
                 <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Ãšltimos Movimentos (60 dias)</h3>
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left min-w-[600px]">
+                    <table className="w-full text-left min-w-[700px]">
                         <thead>
                             <tr className="bg-slate-50 text-[10px] font-black uppercase tracking-widest text-slate-400">
                                 <th className="p-4 rounded-l-2xl">Data</th>
+                                <th className="p-4">Cliente (Nome / CartÃ£o)</th>
                                 <th className="p-4">Tipo</th>
-                                <th className="p-4">Valor Base</th>
+                                <th className="p-4">Fatura Base</th>
                                 <th className="p-4">Movimento</th>
                                 <th className="p-4 rounded-r-2xl text-center">NÂº Fatura / Recibo</th>
                             </tr>
@@ -3059,6 +3354,10 @@ const MerchantDashboard: React.FC = () => {
                             {transactions.map(t => (
                                 <tr key={t.id} className="hover:bg-slate-50 transition-colors">
                                     <td className="p-4 text-xs font-bold text-slate-600">{t.createdAt?.toDate ? t.createdAt.toDate().toLocaleString() : 'Recente'}</td>
+                                    <td className="p-4">
+                                        <p className="font-black uppercase text-xs text-[#0a2540]">{t.clientName || 'Cliente'}</p>
+                                        <p className="text-[10px] text-slate-400 font-mono mt-0.5">{t.clientCardNumber || t.clientNif || '---'}</p>
+                                    </td>
                                     <td className="p-4 text-[10px] font-black uppercase tracking-widest">
                                         <span className={`px-2 py-1 rounded-md ${t.type === 'earn' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
                                             {t.type === 'earn' ? 'AtribuiÃ§Ã£o' : 'Desconto'}
@@ -3091,7 +3390,7 @@ const MerchantDashboard: React.FC = () => {
                                 </tr>
                             ))}
                             {transactions.length === 0 && (
-                                <tr><td colSpan={5} className="p-8 text-center text-slate-400 text-xs font-bold uppercase">Nenhum movimento recente.</td></tr>
+                                <tr><td colSpan={6} className="p-8 text-center text-slate-400 text-xs font-bold uppercase">Nenhum movimento recente.</td></tr>
                             )}
                         </tbody>
                     </table>
@@ -3948,9 +4247,9 @@ import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { QRCodeSVG } from 'qrcode.react';
-import { collection, query, where, getDocs, doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Transaction, User as UserProfile, Leaflet } from '../../types';
+import { Transaction, User as UserProfile, Leaflet, AppNotification } from '../../types';
 
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
@@ -3958,7 +4257,7 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 
@@ -3979,7 +4278,9 @@ const UserDashboard: React.FC = () => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
-  // Fallback: Se o cliente for antigo e nÃ£o tiver customerNumber, usa o NIF no cartÃ£o
+  // NOVO: NotificaÃ§Ãµes In-App
+  const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
+
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
   useEffect(() => {
@@ -4024,6 +4325,47 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser]);
 
+  // NOVO: Escuta as notificaÃ§Ãµes In-App gratuitas (Apenas Ãºltimas 24 horas)
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // Queremos notificaÃ§Ãµes criadas no mÃ¡ximo hÃ¡ 24h para nÃ£o mostrar coisas antigas
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    
+    return onSnapshot(q, (snap) => {
+       const docs = snap.docs.map(d => ({id: d.id, ...d.data()} as AppNotification));
+       
+       for (let notif of docs) {
+         if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
+         
+         // Verificar se o utilizador jÃ¡ fechou esta notificaÃ§Ã£o nesta sessÃ£o (memÃ³ria local do browser)
+         const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
+         if (dismissed) continue;
+
+         let matches = false;
+         if (notif.targetType === 'all') matches = true;
+         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue.toLowerCase()) matches = true;
+         else if (notif.targetType === 'zipCode' && currentUser.zipCode?.startsWith(notif.targetValue)) matches = true;
+         else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
+
+         if (matches) {
+            setAppNotification(notif);
+            break; // Mostra sÃ³ a mais recente vÃ¡lida
+         }
+       }
+    });
+  }, [currentUser]);
+
+  const dismissNotification = () => {
+    if (appNotification?.id) {
+       sessionStorage.setItem(`notif_${appNotification.id}`, "true");
+    }
+    setAppNotification(null);
+  };
+
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
   }, [transactions, evaluatedIds]);
@@ -4066,7 +4408,6 @@ const UserDashboard: React.FC = () => {
           <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none mb-1">
             {currentUser.name}
           </h1>
-          {/* SE O CLIENTE TEM NIF, MOSTRA AQUI DEBAIXO DO NOME */}
           {currentUser.nif && (
             <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 bg-slate-50 w-fit px-2 py-1 rounded-md border border-slate-100">
                <IdCard size={12} /> NIF: {currentUser.nif}
@@ -4083,6 +4424,19 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
         
+        {/* NOVO: AVISO IN-APP (NotificaÃ§Ãµes Push Free) */}
+        {appNotification && (
+           <div className="bg-white border-4 border-[#0a2540] rounded-[30px] p-6 shadow-[8px_8px_0px_#00d66f] flex items-start gap-4 animate-in slide-in-from-top-10 relative">
+               <div className="bg-blue-50 text-blue-500 p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
+               <div className="flex-1">
+                   <h4 className="text-lg font-black uppercase italic text-[#0a2540] leading-none mb-2">{appNotification.title}</h4>
+                   <p className="text-xs font-bold text-slate-500">{appNotification.message}</p>
+                   <button onClick={dismissNotification} className="mt-4 bg-[#0a2540] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">Compreendido</button>
+               </div>
+               <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-300 hover:text-[#0a2540]"><X size={16} /></button>
+           </div>
+        )}
+
         {isInstallable && (
           <div className="bg-[#00d66f] border-4 border-[#0a2540] rounded-[30px] p-4 flex items-center justify-between shadow-[6px_6px_0px_#0a2540] animate-in fade-in zoom-in duration-500">
             <div className="flex items-center gap-3">
@@ -4119,13 +4473,11 @@ const UserDashboard: React.FC = () => {
                 CartÃ£o Digital
             </div>
             <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
-                {/* QR CODE AGORA MOSTRA O NUMERO DO CARTÃƒO */}
                 <QRCodeSVG value={displayCardNumber} size={120} />
             </div>
             <div className="text-center">
                 <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este cÃ³digo na loja</p>
                 <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
-                    {/* APRESENTA O NÃšMERO DE CARTÃƒO FORMATADO */}
                     {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
                 </h3>
             </div>
@@ -4389,7 +4741,7 @@ interface StoreState {
   resetPassword: (email: string) => Promise<void>;
   addTransaction: (transaction: TransactionCreate) => Promise<string | undefined>;
   cancelTransaction: (transactionId: string) => Promise<void>;
-  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>; // NOVO
+  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>; 
   subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
@@ -4421,6 +4773,7 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   checkNifExists: async (nif: string) => {
+    if (!nif || nif.trim() === '') return false;
     const q = query(collection(db, 'users'), where('nif', '==', nif), limit(1));
     const snap = await getDocs(q);
     return !snap.empty;
@@ -4446,8 +4799,11 @@ export const useStore = create<StoreState>((set, get) => ({
         type: tx.type,
         status: 'available',
         createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber || "", // Aproveita o campo mas permite vazio inicial
-        documentNumber: tx.documentNumber || "" // Garante que o docNumber vai pro firestore
+        clientNif: tx.documentNumber || "", 
+        documentNumber: tx.documentNumber || "",
+        clientName: tx.clientName || "Desconhecido", // NOVO
+        clientCardNumber: tx.clientCardNumber || "---", // NOVO
+        clientBirthDate: tx.clientBirthDate || "" // NOVO
       });
 
       const userRef = doc(db, 'users', tx.clientId);
@@ -4455,7 +4811,7 @@ export const useStore = create<StoreState>((set, get) => ({
         batch.update(userRef, {
           [`wallet.available`]: increment(cashback),
           [`storeWallets.${currentUser.id}.available`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name // Garante o nome
+          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name
         });
       } else {
         batch.update(userRef, {
@@ -4465,11 +4821,10 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       await batch.commit();
       toast.success("MOVIMENTO REGISTADO!");
-      return newTxRef.id; // Retorna o ID para podermos editar a fatura a seguir
+      return newTxRef.id;
     } catch (e) { toast.error("ERRO NO REGISTO."); }
   },
 
-  // NOVA FUNÃ‡ÃƒO: Atualizar Fatura
   updateTransactionDocument: async (transactionId, documentNumber) => {
     try {
         const txRef = doc(db, 'transactions', transactionId);
@@ -4508,8 +4863,8 @@ export const useStore = create<StoreState>((set, get) => ({
   subscribeToTransactions: (role, id) => {
     if (!id && role !== 'admin') return () => {};
     const q = role === 'admin' 
-      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(100))
-      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(50));
+      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))
+      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
     
     return onSnapshot(q, (snap) => {
       set({ transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)) });
@@ -4622,6 +4977,7 @@ export interface User {
   nif?: string;
   phone?: string; 
   customerNumber?: string;
+  birthDate?: string; // NOVO
   wallet?: {
     available: number;
     pending: number;
@@ -4654,6 +5010,9 @@ export interface TransactionCore {
 export interface TransactionCreate extends TransactionCore {
   cashbackAmount?: number;
   cashbackPercent?: number;
+  clientName?: string; // NOVO
+  clientCardNumber?: string; // NOVO
+  clientBirthDate?: string; // NOVO
 }
 
 export interface Transaction extends TransactionCore {
@@ -4664,6 +5023,9 @@ export interface Transaction extends TransactionCore {
   createdAt: FirestoreTimestamp;
   maturedAt?: FirestoreTimestamp;
   clientNif?: string;
+  clientName?: string; // NOVO
+  clientCardNumber?: string; // NOVO
+  clientBirthDate?: string; // NOVO
 }
 
 export interface MerchantRequest {
@@ -4688,7 +5050,16 @@ export interface Leaflet {
   startDate: FirestoreTimestamp;
   endDate: FirestoreTimestamp;
   isActive: boolean;
-  targetZipCodes?: string[]; // NOVO
+  targetZipCodes?: string[];
+  createdAt: FirestoreTimestamp;
+}
+
+export interface AppNotification {
+  id?: string;
+  title: string;
+  message: string;
+  targetType: 'all' | 'email' | 'zipCode' | 'birthDate';
+  targetValue: string;
   createdAt: FirestoreTimestamp;
 }
 
