@@ -12,19 +12,14 @@ firebase.initializeApp({
   measurementId: "G-K6L8YEY5L3"
 });
 
-// Inicializa a app em segundo plano
-firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// O que fazer quando a notificação chega e a app está fechada
 messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Notificação recebida em segundo plano.', payload);
-  
-  const notificationTitle = payload.notification.title || 'Novo Aviso Vizinho+';
+  console.log('[firebase-messaging-sw.js] Mensagem recebida em background ', payload);
+  const notificationTitle = payload.notification.title;
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/logo192.png',
-    badge: '/logo192.png'
+    icon: '/logo192.png'
   };
 
   self.registration.showNotification(notificationTitle, notificationOptions);

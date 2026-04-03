@@ -411,8 +411,8 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminComms.tsx
 ==================================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, addDoc, query, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
-import { Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp, orderBy, getDoc, setDoc } from 'firebase/firestore';
+import { Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Save, Euro } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest } from '../../types';
 
@@ -421,6 +421,17 @@ const AdminComms: React.FC = () => {
   const [requests, setRequests] = useState<MarketingRequest[]>([]);
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
 
+  const [prices, setPrices] = useState({
+    banner: '',
+    leaflet_capa_destaque: '',
+    leaflet_capa_normal: '',
+    leaflet_contracapa: '',
+    leaflet_interior_full: '',
+    leaflet_interior_1_2: '',
+    leaflet_interior_1_4: ''
+  });
+  const [savingPrices, setSavingPrices] = useState(false);
+
   useEffect(() => {
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('createdAt', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign))));
@@ -428,11 +439,23 @@ const AdminComms: React.FC = () => {
     const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'));
     const unsubReq = onSnapshot(qReq, (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest))));
 
+    const fetchPrices = async () => {
+      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (docSnap.exists()) setPrices(docSnap.data() as any);
+    };
+    fetchPrices();
+
     return () => { unsubCam(); unsubReq(); };
   }, []);
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!form.limitDate || !form.distDate) {
+        toast.error("Por favor, preenche ambas as datas.");
+        return;
+    }
+
     try {
         await addDoc(collection(db, 'leaflet_campaigns'), {
             title: form.title,
@@ -440,9 +463,12 @@ const AdminComms: React.FC = () => {
             distributionDate: Timestamp.fromDate(new Date(form.distDate)),
             createdAt: serverTimestamp()
         });
-        toast.success("Campanha criada!");
+        toast.success("Campanha criada com sucesso!");
         setForm({title:'', limitDate:'', distDate:''});
-    } catch(err) { toast.error("Erro ao criar."); }
+    } catch(err: any) { 
+        console.error("Erro Firebase:", err);
+        toast.error(`Erro ao criar: ${err.message || 'Verifica as permissÃµes.'}`); 
+    }
   };
 
   const handleUpdateStatus = async (id: string, status: string) => {
@@ -457,16 +483,56 @@ const AdminComms: React.FC = () => {
       await deleteDoc(doc(db, 'marketing_requests', id));
   };
 
+  const handleSavePrices = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setSavingPrices(true);
+      try {
+          await setDoc(doc(db, 'system', 'marketing_prices'), prices);
+          toast.success("PreÃ§os atualizados para os Lojistas!");
+      } catch (err) {
+          toast.error("Erro ao atualizar preÃ§os.");
+      } finally {
+          setSavingPrices(false);
+      }
+  };
+
   return (
     <div className="space-y-12 animate-in fade-in duration-500">
         
-        {/* CRIAR FOLHETO */}
+        <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-[30px] flex items-center gap-4">
+            <AlertCircle className="text-blue-500 shrink-0" size={32} />
+            <div>
+                <h4 className="font-black uppercase text-blue-900 text-sm">DimensÃµes para Banners (App e Lojistas)</h4>
+                <p className="text-xs font-bold text-blue-700">O formato ideal para carregamento de Banners Ã© de <b className="text-blue-900">1000px de largura por 500px de altura</b> (Formato Paisagem / Retangular).</p>
+            </div>
+        </div>
+
+        <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2"><Euro className="inline mr-3 text-amber-500"/> Definir PreÃ§os (VisÃ­vel Lojistas)</h3>
+            <p className="text-xs font-bold text-slate-400 mb-6">Podes escrever o preÃ§o, duraÃ§Ã£o ou notas (Ex: "50â‚¬ / Semana"). Se deixares em branco, o lojista verÃ¡ "PreÃ§o sob consulta".</p>
+            
+            <form onSubmit={handleSavePrices} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Banner Rotativo (App)</label><input type="text" placeholder="Ex: 10â‚¬ / Dia" value={prices.banner} onChange={e=>setPrices({...prices, banner: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto: Capa (Destaque)</label><input type="text" placeholder="Ex: 150â‚¬ / EdiÃ§Ã£o" value={prices.leaflet_capa_destaque} onChange={e=>setPrices({...prices, leaflet_capa_destaque: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto: Capa (Normal)</label><input type="text" placeholder="Ex: 80â‚¬ / EdiÃ§Ã£o" value={prices.leaflet_capa_normal} onChange={e=>setPrices({...prices, leaflet_capa_normal: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto: Contracapa</label><input type="text" placeholder="Ex: 100â‚¬ / EdiÃ§Ã£o" value={prices.leaflet_contracapa} onChange={e=>setPrices({...prices, leaflet_contracapa: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Interior: PÃ¡g Inteira</label><input type="text" placeholder="Ex: 60â‚¬ / EdiÃ§Ã£o" value={prices.leaflet_interior_full} onChange={e=>setPrices({...prices, leaflet_interior_full: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Interior: 1/2 PÃ¡gina</label><input type="text" placeholder="Ex: 35â‚¬ / EdiÃ§Ã£o" value={prices.leaflet_interior_1_2} onChange={e=>setPrices({...prices, leaflet_interior_1_2: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Interior: 1/4 PÃ¡gina</label><input type="text" placeholder="Ex: 20â‚¬ / EdiÃ§Ã£o" value={prices.leaflet_interior_1_4} onChange={e=>setPrices({...prices, leaflet_interior_1_4: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                
+                <div className="md:col-span-2 flex items-end">
+                    <button type="submit" disabled={savingPrices} className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all flex items-center justify-center gap-2"><Save size={16}/> Guardar PreÃ§Ã¡rio</button>
+                </div>
+            </form>
+        </div>
+
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6"><Megaphone className="inline mr-3 text-[#00d66f]"/> 1. PrevisÃ£o de Folhetos</h3>
             <form onSubmit={handleCreateCampaign} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Nome da EdiÃ§Ã£o</label><input required type="text" value={form.title} onChange={e=>setForm({...form, title: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Limite de InscriÃ§Ã£o</label><input required type="date" value={form.limitDate} onChange={e=>setForm({...form, limitDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <button type="submit" className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]"><Plus size={16}/> Adicionar</button>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Limite InscriÃ§Ã£o Lojistas</label><input required type="date" value={form.limitDate} onChange={e=>setForm({...form, limitDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Data Prevista DistribuiÃ§Ã£o</label><input required type="date" value={form.distDate} onChange={e=>setForm({...form, distDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                <button type="submit" className="w-full md:col-span-4 bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.01] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540] mt-2"><Plus size={20}/> Criar Nova EdiÃ§Ã£o</button>
             </form>
 
             <div className="mt-6 flex flex-wrap gap-4">
@@ -474,13 +540,13 @@ const AdminComms: React.FC = () => {
                     <div key={c.id} className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200">
                         <p className="font-black uppercase text-[#0a2540] text-sm">{c.title}</p>
                         <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Limite: {c.limitDate.toDate().toLocaleDateString()}</p>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase">DistribuiÃ§Ã£o: {c.distributionDate.toDate().toLocaleDateString()}</p>
                         <button onClick={() => deleteDoc(doc(db, 'leaflet_campaigns', c.id!))} className="mt-2 text-red-500 text-[10px] font-black uppercase">Apagar Folheto</button>
                     </div>
                 ))}
             </div>
         </div>
 
-        {/* PEDIDOS DAS LOJAS */}
         <div>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">2. Pedidos das Lojas Pendentes</h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -494,24 +560,32 @@ const AdminComms: React.FC = () => {
                             <button onClick={() => handleDeleteRequest(r.id!)} className="text-red-400 hover:text-red-600"><Trash2 size={20}/></button>
                         </div>
                         
-                        <div className="space-y-2 mb-6 text-xs font-bold text-slate-600">
-                            {r.type === 'banner' ? (
-                                <>
-                                    <p><b>Data:</b> {r.requestedDate}</p>
-                                    <p><b>Texto:</b> {r.text}</p>
-                                    {r.imageUrl && <img src={r.imageUrl} className="h-20 object-contain mt-2 border-2 rounded-lg" alt="Banner"/>}
-                                </>
-                            ) : (
-                                <>
-                                    <p><b>Folheto:</b> {r.leafletCampaignTitle}</p>
-                                    <p><b>EspaÃ§o:</b> {r.spaceType}</p>
-                                    <p><b>Produto:</b> {r.description}</p>
-                                    <p><b>PreÃ§os:</b> {r.sellPrice} / {r.unit} (Promo: {r.promoPrice || 'N/A'} - {r.promoType || 'N/A'})</p>
-                                </>
+                        <div className="flex flex-col md:flex-row gap-4 mb-6">
+                            <div className="flex-1 space-y-2 text-xs font-bold text-slate-600">
+                                {r.type === 'banner' ? (
+                                    <>
+                                        <p><b>Datas:</b> {r.requestedDate}</p>
+                                        <p><b>Texto:</b> {r.text}</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p><b>Folheto:</b> {r.leafletCampaignTitle}</p>
+                                        <p><b>EspaÃ§o:</b> {r.spaceType?.replace(/_/g, ' ')}</p>
+                                        <p><b>Produto:</b> {r.description}</p>
+                                        <p><b>PreÃ§os:</b> {r.sellPrice} / {r.unit} {r.promoPrice && `(Promo: ${r.promoPrice} - ${r.promoType})`}</p>
+                                    </>
+                                )}
+                            </div>
+                            
+                            {/* MOSTRAR A IMAGEM NO ADMIN (PARA FOLHETOS E BANNERS) */}
+                            {r.imageUrl && (
+                                <div className="w-full md:w-24 h-24 shrink-0 rounded-2xl border-4 border-slate-100 overflow-hidden">
+                                    <img src={r.imageUrl} className="w-full h-full object-cover" alt="Preview"/>
+                                </div>
                             )}
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 border-t-2 border-slate-100 pt-4">
                             {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px]"><CheckCircle2 className="inline mr-1" size={14}/> Aprovar</button>}
                             {r.status !== 'rejected' && <button onClick={() => handleUpdateStatus(r.id!, 'rejected')} className="flex-1 bg-red-100 text-red-700 p-3 rounded-xl font-black uppercase text-[10px]"><XCircle className="inline mr-1" size={14}/> Rejeitar</button>}
                         </div>
@@ -535,7 +609,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -547,11 +621,13 @@ import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
 import AdminNotifications from './AdminNotifications';
 import AdminComms from './AdminComms';
+import AdminVantagens from './AdminVantagens'; // NOVO IMPORT
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'notifications' | 'settings'>('overview');
+  // NOVO: Adicionado 'vantagens' ao state de views
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'notifications' | 'vantagens' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -604,6 +680,7 @@ const AdminDashboard: React.FC = () => {
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
                 { id: 'comms', label: 'ComunicaÃ§Ãµes Pub', icon: Megaphone },
+                { id: 'vantagens', label: 'Vantagens VIP', icon: Crown }, // NOVO BOTÃƒO
                 { id: 'notifications', label: 'Avisos App', icon: Bell }, 
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
               ].map(item => (
@@ -632,6 +709,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'comms' && <AdminComms />}
+        {currentView === 'vantagens' && <AdminVantagens />} {/* NOVO COMPONENTE */}
         {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'settings' && <AdminSettings />}
@@ -2040,6 +2118,165 @@ export default AdminUsers;
 
 
 ==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\AdminVantagens.tsx
+==================================================
+import React, { useState, useEffect } from 'react';
+import { db } from '../../config/firebase';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { Crown, Image as ImageIcon, Plus, Trash2, MapPin, Globe, Loader2, Tag, ExternalLink } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Vantagem } from '../../types';
+
+const AdminVantagens: React.FC = () => {
+  const [vantagens, setVantagens] = useState<Vantagem[]>([]);
+  const [uploading, setUploading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    partnerName: '',
+    category: '',
+    address: '',
+    zipCode: '',
+    websiteUrl: '',
+    description: '',
+    imageBase64: ''
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setVantagens(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vantagem)));
+    });
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        // Comprime a imagem para poupar espaÃ§o
+        if (width > 800) {
+          height = Math.round((height * 800) / width);
+          width = 800;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        setFormData(prev => ({ ...prev, imageBase64: compressedBase64 }));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.imageBase64 || !formData.partnerName || !formData.description) {
+      toast.error("Preencha os campos obrigatÃ³rios (Nome, DescriÃ§Ã£o e Imagem).");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await addDoc(collection(db, 'vantagens'), {
+        ...formData,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success("Vantagem publicada com sucesso!");
+      setFormData({ partnerName: '', category: '', address: '', zipCode: '', websiteUrl: '', description: '', imageBase64: '' });
+      
+      const fileInput = document.getElementById('vantagemImageInput') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error) {
+      toast.error("Erro ao publicar. Tenta novamente.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Eliminar este parceiro das vantagens exclusivas?")) return;
+    try {
+      await deleteDoc(doc(db, 'vantagens', id));
+      toast.success("Vantagem removida.");
+    } catch (error) {
+      toast.error("Erro ao eliminar.");
+    }
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500">
+      
+      {/* LINK PARTILHÃVEL */}
+      <div className="bg-amber-50 border-4 border-amber-200 p-8 rounded-[40px] flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+              <h3 className="text-xl font-black uppercase italic tracking-tighter text-amber-900 mb-2 flex items-center gap-2">
+                  <Crown size={24} className="text-amber-500"/> PÃ¡gina PÃºblica VIP
+              </h3>
+              <p className="text-sm font-bold text-amber-800">Copia o link abaixo e partilha nas redes sociais para atrair clientes.</p>
+          </div>
+          <a href={`${window.location.origin}/vantagens`} target="_blank" rel="noreferrer" className="bg-amber-500 text-white px-8 py-4 rounded-3xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-amber-600 transition-all flex items-center gap-2 text-center">
+              Aceder Ã  PÃ¡gina <ExternalLink size={18} />
+          </a>
+      </div>
+
+      <form onSubmit={handleUpload} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+        <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Adicionar Novo Parceiro VIP</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div><label className="text-[10px] font-black uppercase text-slate-400">Nome do Parceiro</label><input required type="text" value={formData.partnerName} onChange={e=>setFormData({...formData, partnerName: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"/></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400">Categoria da Oferta (Ex: SaÃºde, Lazer)</label><div className="relative"><Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input required type="text" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]"/></div></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400">Morada (Opcional)</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="text" value={formData.address} onChange={e=>setFormData({...formData, address: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs outline-none focus:border-[#0a2540]"/></div></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400">CÃ³d. Postal (4 Primeiros DÃ­gitos)</label><input type="text" maxLength={4} placeholder="Ex: 4000" value={formData.zipCode} onChange={e=>setFormData({...formData, zipCode: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"/></div>
+            <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Website / Link (Opcional)</label><div className="relative"><Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="url" placeholder="https://..." value={formData.websiteUrl} onChange={e=>setFormData({...formData, websiteUrl: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs outline-none focus:border-[#0a2540]"/></div></div>
+            <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Texto Explicativo das Vantagens</label><textarea required value={formData.description} onChange={e=>setFormData({...formData, description: e.target.value})} placeholder="Descreva as vantagens exclusivas para os membros Vizinho+..." className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-sm outline-none focus:border-[#0a2540] min-h-[100px] resize-none"></textarea></div>
+            <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Fotografia / Logotipo</label><div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20}/><input id="vantagemImageInput" required type="file" accept="image/*" onChange={handleFileChange} className="w-full pl-12 p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-xs"/></div></div>
+        </div>
+
+        <button disabled={uploading} className="mt-8 w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
+          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Publicar Vantagem
+        </button>
+      </form>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {vantagens.map(v => (
+          <div key={v.id} className="bg-white border-4 border-slate-100 rounded-[40px] overflow-hidden relative shadow-md flex flex-col hover:border-[#00d66f] transition-colors">
+            <div className="h-48 bg-slate-100 flex items-center justify-center overflow-hidden">
+                <img src={v.imageBase64} className="w-full h-full object-cover" alt="Partner" />
+            </div>
+            <div className="p-6 flex flex-col flex-grow">
+                <div className="flex justify-between items-start mb-2">
+                    <p className="font-black text-lg uppercase italic text-[#0a2540] leading-tight">{v.partnerName}</p>
+                    <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">{v.category}</span>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4"><MapPin size={10} className="inline mr-1"/> {v.zipCode ? `CP: ${v.zipCode}` : 'Global'}</p>
+                <p className="text-xs font-bold text-slate-600 mb-6 flex-grow whitespace-pre-wrap">{v.description}</p>
+                
+                <button onClick={() => handleDelete(v.id!)} className="w-full py-4 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[10px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 mt-auto">
+                    <Trash2 size={16} /> Eliminar
+                </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default AdminVantagens;
+
+
+==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\features\admin\BannerManager.tsx
 ==================================================
 import React, { useState, useEffect } from 'react';
@@ -2485,7 +2722,7 @@ const ForgotPassword: React.FC = () => {
             <div className="bg-green-50 p-6 rounded-3xl border-4 border-green-100 flex flex-col items-center gap-3">
               <CheckCircle2 size={40} className="text-green-500" />
               <p className="font-black uppercase text-xs text-green-600">Email Enviado!</p>
-              <p className="text-sm font-bold text-slate-500 leading-relaxed">Verifica a tua caixa de entrada e segue as instruÃ§Ãµes para criar uma nova password.</p>
+              <p className="text-sm font-bold text-slate-500 leading-relaxed">Verifica a tua caixa de entrada <span className="text-red-500">(e a pasta de SPAM/Lixo EletrÃ³nico)</span> e segue as instruÃ§Ãµes para criar uma nova password.</p>
             </div>
             <Link to="/login" className="block w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest transition-all">Ir para o Login</Link>
           </div>
@@ -2767,20 +3004,23 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
+import { requestNotificationPermission } from '../../utils/notifications';
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { checkNifExists } = useStore();
   
   const { isInstallable, installApp } = usePWAInstall();
+
+  // Estados para a fase de "PÃ³s-Registo"
+  const [setupStep, setSetupStep] = useState(false);
+  const [registeredUserId, setRegisteredUserId] = useState('');
 
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, '');
@@ -2812,30 +3052,14 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
-    const cleanNif = formData.nif.trim();
-    if (cleanNif !== '' && cleanNif.length !== 9) {
-      toast.error("NIF INVÃLIDO (TEM DE TER 9 DÃGITOS)");
-      setLoading(false);
-      return;
-    }
-
     try {
-      if (cleanNif !== '') {
-        const nifExists = await checkNifExists(cleanNif);
-        if (nifExists) {
-          toast.error("ESTE NIF JÃ ESTÃ REGISTADO.");
-          setLoading(false);
-          return;
-        }
-      }
-
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
       const newCustomerNumber = generateCustomerNumber();
 
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
-        nif: cleanNif, 
+        nif: '', // Fica vazio para ser preenchido nas definiÃ§Ãµes pelo utilizador
         customerNumber: newCustomerNumber, 
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
@@ -2847,11 +3071,9 @@ const RegisterPage: React.FC = () => {
         createdAt: serverTimestamp()
       });
 
-      toast.success("BEM-VINDO VIZINHO!");
-      if (isInstallable) {
-        try { await installApp(); } catch (error) { console.log("InstalaÃ§Ã£o adiada"); }
-      }
-      navigate('/dashboard');
+      setRegisteredUserId(userCredential.user.uid);
+      setSetupStep(true); // Abre a nova janela final
+      toast.success("CONTA CRIADA COM SUCESSO!");
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÃ ESTÃ REGISTADO.");
@@ -2863,6 +3085,37 @@ const RegisterPage: React.FC = () => {
     }
   };
 
+  // ECRÃƒ PÃ“S REGISTO (PARA NOTIFICAÃ‡Ã•ES E APP)
+  if (setupStep) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
+        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 text-center animate-in zoom-in">
+            <div className="bg-[#00d66f] w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-[#0a2540]">
+              <CheckCircle2 size={40} className="text-[#0a2540]" />
+            </div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Bem-vindo(a)!</h2>
+            <p className="text-sm font-bold text-slate-500 mb-8">A tua conta foi criada. Para tirar o mÃ¡ximo partido do Vizinho+, ativa jÃ¡ as opÃ§Ãµes abaixo:</p>
+            
+            <div className="space-y-4 mb-8">
+                {isInstallable && (
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg">
+                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar AplicaÃ§Ã£o (EcrÃ£)
+                    </button>
+                )}
+                <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-blue-50 border-2 border-blue-200 text-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-sm">
+                    <Volume2 size={24} /> Permitir Alertas (TelemÃ³vel)
+                </button>
+            </div>
+
+            <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                Concluir e Entrar <ArrowRight size={20} />
+            </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ECRÃƒ NORMAL DE REGISTO
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
       <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
@@ -2881,8 +3134,8 @@ const RegisterPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
-              <input type="text" maxLength={9} value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data Nasc. <span className="text-[8px]">(Opcional)</span></label>
+              <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">CÃ³d. Postal</label>
@@ -2899,11 +3152,6 @@ const RegisterPage: React.FC = () => {
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">TelemÃ³vel <span className="text-[8px]">(Opcional)</span></label>
               <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Nascimento <span className="text-[8px]">(Opcional)</span></label>
-            <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -3301,7 +3549,7 @@ FILE: C:\Users\Filipepocas\vizinho-plus\src\features\merchant\components\Merchan
 ==================================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc } from 'firebase/firestore';
 import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest } from '../../../types';
@@ -3316,12 +3564,22 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
   const [myRequests, setMyRequests] = useState<MarketingRequest[]>([]);
+  
+  // Tabela de PreÃ§os do Admin
+  const [prices, setPrices] = useState<any>({});
 
-  const [bannerForm, setBannerForm] = useState({ text: '', date: '', imageBase64: '' });
-  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'interior', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '' });
+  const [bannerForm, setBannerForm] = useState({ text: '', startDate: '', endDate: '', imageBase64: '' });
+  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
 
   useEffect(() => {
-    // Campanhas ativas (dentro do prazo)
+    // Carrega preÃ§os
+    const fetchPrices = async () => {
+      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (docSnap.exists()) setPrices(docSnap.data());
+    };
+    fetchPrices();
+
+    // Campanhas ativas
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => {
         const now = new Date();
@@ -3347,7 +3605,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     return () => { unsubCam(); unsubReq(); };
   }, [merchantId]);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
@@ -3355,14 +3613,33 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     reader.readAsDataURL(file);
   };
 
+  const handleLeafletImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string})) };
+    reader.readAsDataURL(file);
+  };
+
+  const getPriceText = (key: string) => {
+      return prices[key] ? `(${prices[key]})` : '(PreÃ§o sob consulta)';
+  };
+
   const submitBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    const reqDate = new Date(bannerForm.date);
+    
+    const reqStartDate = new Date(bannerForm.startDate);
+    const reqEndDate = new Date(bannerForm.endDate);
     const minDate = new Date();
     minDate.setHours(minDate.getHours() + 48);
 
-    if (reqDate < minDate) {
+    if (reqStartDate < minDate) {
         toast.error("O pedido de banner tem de ser feito com 48h de antecedÃªncia.");
+        return;
+    }
+
+    if (reqEndDate <= reqStartDate) {
+        toast.error("A data de fim tem de ser posterior Ã  data de inÃ­cio.");
         return;
     }
 
@@ -3370,18 +3647,29 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     try {
         await addDoc(collection(db, 'marketing_requests'), {
             merchantId, merchantName, type: 'banner', status: 'pending',
-            text: bannerForm.text, imageUrl: bannerForm.imageBase64, requestedDate: bannerForm.date,
+            text: bannerForm.text, 
+            imageUrl: bannerForm.imageBase64, 
+            requestedDate: `InÃ­cio: ${bannerForm.startDate} | Fim: ${bannerForm.endDate}`, 
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de Banner enviado com sucesso!");
-        setBannerForm({text:'', date:'', imageBase64:''});
+        setBannerForm({text:'', startDate:'', endDate:'', imageBase64:''});
+        
+        const fileInput = document.getElementById('bannerImageInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+        
         setActiveTab('history');
-    } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
+    } catch(err) { 
+        toast.error("Erro ao enviar pedido."); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const submitLeaflet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leafletForm.campaignId) { toast.error("Selecione um folheto previsto."); return; }
+    if (!leafletForm.imageBase64) { toast.error("Por favor, adicione a imagem do produto."); return; }
 
     const camp = campaigns.find(c => c.id === leafletForm.campaignId);
 
@@ -3389,23 +3677,36 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     try {
         await addDoc(collection(db, 'marketing_requests'), {
             merchantId, merchantName, type: 'leaflet', status: 'pending',
-            leafletCampaignId: leafletForm.campaignId, leafletCampaignTitle: camp?.title,
-            spaceType: leafletForm.spaceType, description: leafletForm.description,
-            sellPrice: leafletForm.sellPrice, unit: leafletForm.unit,
-            promoPrice: leafletForm.promoPrice, promoType: leafletForm.promoType,
+            leafletCampaignId: leafletForm.campaignId, 
+            leafletCampaignTitle: camp?.title,
+            spaceType: leafletForm.spaceType, 
+            description: leafletForm.description,
+            sellPrice: leafletForm.sellPrice, 
+            unit: leafletForm.unit,
+            promoPrice: leafletForm.promoPrice, 
+            promoType: leafletForm.promoType,
+            imageUrl: leafletForm.imageBase64, // Imagem enviada para o folheto
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de espaÃ§o no Folheto enviado com sucesso!");
-        setLeafletForm({campaignId: '', spaceType: 'interior', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: ''});
+        setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: ''});
+        
+        const fileInput = document.getElementById('leafletImageInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+
         setActiveTab('history');
-    } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
+    } catch(err) { 
+        toast.error("Erro ao enviar pedido."); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   return (
     <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] animate-in fade-in">
         <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Pedir Publicidade</h3>
         
-        <div className="flex gap-4 mb-8 overflow-x-auto pb-2">
+        <div className="flex gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
             <button onClick={() => setActiveTab('banner')} className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all whitespace-nowrap border-4 ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-[#00d66f]'}`}>
                <ImageIcon size={16} className="inline mr-2"/> Pedir Banner
             </button>
@@ -3418,13 +3719,27 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         </div>
 
         {activeTab === 'banner' && (
-            <form onSubmit={submitBanner} className="space-y-6">
+            <form onSubmit={submitBanner} className="space-y-6 animate-in fade-in">
                 <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 mb-6">
-                    <p className="text-blue-800 text-xs font-bold uppercase tracking-widest"><Calendar size={14} className="inline mr-2"/> Os banners devem ser pedidos com 48h de antecedÃªncia.</p>
+                    <p className="text-blue-800 text-xs font-bold uppercase tracking-widest flex items-center gap-2"><Calendar size={14}/> Banners rotativos na App {getPriceText('banner')}</p>
+                    <p className="text-[10px] mt-2 text-blue-600 font-bold">Os banners devem ter preferencialmente 1000px(largura) x 500px(altura) e pedidos com 48h de antecedÃªncia.</p>
                 </div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Texto para o Banner</label><input required type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Data de InÃ­cio Pretendida</label><input required type="date" value={bannerForm.date} onChange={e=>setBannerForm({...bannerForm, date: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem (Opcional)</label><input type="file" accept="image/*" onChange={handleImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400">Data de InÃ­cio</label>
+                        <input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400">Data de Fim</label>
+                        <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                    </div>
+                </div>
+
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner</label><input id="bannerImageInput" required type="file" accept="image/*" onChange={handleBannerImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
                 </button>
@@ -3432,7 +3747,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         )}
 
         {activeTab === 'leaflet' && (
-            <form onSubmit={submitLeaflet} className="space-y-6">
+            <form onSubmit={submitLeaflet} className="space-y-6 animate-in fade-in">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-400">Selecione o Folheto</label>
                     <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
@@ -3441,11 +3756,14 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     </select>
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400">EspaÃ§o Pretendido</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400">EspaÃ§o Pretendido (Selecione o tamanho/local)</label>
                     <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
-                        <option value="capa_normal">Capa (Tamanho Normal)</option>
-                        <option value="capa_destaque">Capa (Destaque Principal)</option>
-                        <option value="interior">PÃ¡ginas Interiores</option>
+                        <option value="leaflet_capa_destaque">Capa Principal - Destaque {getPriceText('leaflet_capa_destaque')}</option>
+                        <option value="leaflet_capa_normal">Capa - Tamanho Normal {getPriceText('leaflet_capa_normal')}</option>
+                        <option value="leaflet_contracapa">Contracapa - Parte Traseira {getPriceText('leaflet_contracapa')}</option>
+                        <option value="leaflet_interior_full">Interior - PÃ¡gina Inteira {getPriceText('leaflet_interior_full')}</option>
+                        <option value="leaflet_interior_1_2">Interior - 1/2 (Meia PÃ¡gina) {getPriceText('leaflet_interior_1_2')}</option>
+                        <option value="leaflet_interior_1_4">Interior - 1/4 (Quarto de PÃ¡gina) {getPriceText('leaflet_interior_1_4')}</option>
                     </select>
                 </div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400">DescriÃ§Ã£o do Produto</label><input required type="text" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
@@ -3457,6 +3775,10 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     <div><label className="text-[10px] font-black uppercase text-slate-400">PreÃ§o Promocional (â‚¬ - Opcional)</label><input type="text" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                     <div><label className="text-[10px] font-black uppercase text-slate-400">Tipo Campanha (Ex: L3P2)</label><input type="text" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                 </div>
+                
+                {/* NOVO CAMPO: Imagem do Produto no Folheto */}
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Produto</label><input id="leafletImageInput" required type="file" accept="image/*" onChange={handleLeafletImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
                 </button>
@@ -3464,19 +3786,53 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         )}
 
         {activeTab === 'history' && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-in fade-in">
                 {myRequests.map(r => (
-                    <div key={r.id} className="p-6 border-4 border-slate-100 rounded-3xl flex justify-between items-center">
-                        <div>
-                            <p className="font-black uppercase text-[#0a2540]">{r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}</p>
-                            <p className="text-xs font-bold text-slate-500 mt-1">{r.createdAt?.toDate().toLocaleDateString()}</p>
+                    <div key={r.id} className="p-6 border-4 border-slate-100 rounded-[30px] flex flex-col md:flex-row justify-between items-start gap-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <div className="flex-1 w-full">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <p className="font-black uppercase text-[#0a2540] text-lg leading-none">
+                                        {r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}
+                                    </p>
+                                    <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase mt-2">Enviado a: {r.createdAt?.toDate().toLocaleDateString()}</p>
+                                </div>
+                                <span className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    {r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Rejeitado' : 'Em AnÃ¡lise'}
+                                </span>
+                            </div>
+                            
+                            <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 text-[11px] font-bold text-slate-500 space-y-2">
+                                {r.type === 'banner' ? (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Datas:</span> <span className="text-[#0a2540]">{r.requestedDate}</span></p>
+                                        {r.text && <p className="flex justify-between"><span className="text-slate-400 uppercase">Texto:</span> <span className="text-[#0a2540]">{r.text}</span></p>}
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Produto:</span> <span className="text-[#0a2540]">{r.description}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">EspaÃ§o:</span> <span className="text-[#0a2540]">{r.spaceType?.replace(/_/g, ' ')}</span></p>
+                                        <p className="flex justify-between"><span className="text-slate-400 uppercase">PreÃ§o Venda:</span> <span className="text-[#0a2540]">{r.sellPrice} / {r.unit}</span></p>
+                                        {r.promoPrice && <p className="flex justify-between"><span className="text-slate-400 uppercase">PromoÃ§Ã£o:</span> <span className="text-blue-500">{r.promoPrice} ({r.promoType})</span></p>}
+                                    </>
+                                )}
+                            </div>
                         </div>
-                        <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Rejeitado' : 'Em AnÃ¡lise'}
-                        </span>
+                        
+                        {/* Mostra a imagem anexada ao pedido em ambos os formatos */}
+                        {r.imageUrl ? (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-slate-100 overflow-hidden flex items-center justify-center p-2 shadow-sm">
+                                <img src={r.imageUrl} className="w-full h-full object-contain" alt="Preview da Campanha" />
+                            </div>
+                        ) : (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300">
+                                <ImageIcon size={24} />
+                                <span className="text-[8px] font-black uppercase mt-2">S/ Imagem</span>
+                            </div>
+                        )}
                     </div>
                 ))}
-                {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-3xl">Sem pedidos efetuados.</p>}
+                {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-[30px]">Sem pedidos efetuados.</p>}
             </div>
         )}
     </div>
@@ -4394,7 +4750,7 @@ const LandingPage: React.FC = () => {
           </h1>
           <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed">
             A plataforma de fidelizaÃ§Ã£o que une os vizinhos e fortalece a economia local. 
-            Acumule cashback real em todas as lojas do seu bairro.
+            Acumule cashback real em todas as lojas aderentes.
           </p>
         </div>
 
@@ -4601,6 +4957,139 @@ const TermsPage: React.FC = () => {
 };
 
 export default TermsPage;
+
+
+==================================================
+FILE: C:\Users\Filipepocas\vizinho-plus\src\features\public\VantagensPage.tsx
+==================================================
+import React, { useState, useEffect, useMemo } from 'react';
+import { db } from '../../config/firebase';
+import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { Crown, MapPin, Globe, Star, Search } from 'lucide-react';
+import { Vantagem } from '../../types';
+
+const VantagensPage: React.FC = () => {
+  const [vantagens, setVantagens] = useState<Vantagem[]>([]);
+  const [searchZip, setSearchZip] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('all');
+
+  const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
+
+  useEffect(() => {
+    const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setVantagens(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vantagem)));
+    });
+    return () => unsubscribe();
+  }, []);
+
+  const categories = useMemo(() => {
+    const cats = new Set(vantagens.map(v => v.category).filter(Boolean));
+    return ['all', ...Array.from(cats)];
+  }, [vantagens]);
+
+  const filtered = useMemo(() => {
+    return vantagens.filter(v => {
+      const matchZip = !searchZip || (v.zipCode || '').startsWith(searchZip);
+      const matchCat = selectedCategory === 'all' || v.category === selectedCategory;
+      return matchZip && matchCat;
+    });
+  }, [vantagens, searchZip, selectedCategory]);
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540] pb-24">
+      
+      {/* NAVEGAÃ‡ÃƒO */}
+      <nav className="bg-[#0a2540] py-6 px-8 rounded-b-[40px] shadow-2xl border-b-8 border-amber-500">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+            <img src={logoPath} alt="Vizinho+" className="h-12 w-auto object-contain" />
+            <div className="flex items-center gap-3 bg-amber-500/20 px-6 py-3 rounded-full border border-amber-500/30">
+                <Crown className="text-amber-400" size={20} />
+                <span className="text-amber-400 font-black uppercase text-xs tracking-widest">Acesso VIP</span>
+            </div>
+        </div>
+      </nav>
+
+      <main className="max-w-6xl mx-auto px-6 pt-12">
+        
+        <div className="text-center mb-12 animate-in fade-in zoom-in duration-700">
+          <h1 className="text-4xl md:text-5xl font-black text-[#0a2540] leading-tight tracking-tighter uppercase italic mb-4">
+            Vantagens <span className="text-amber-500">Exclusivas</span>
+          </h1>
+          <p className="text-slate-500 font-bold max-w-2xl mx-auto">
+            BenefÃ­cios, descontos e ofertas especiais reservadas apenas para membros da comunidade Vizinho+. Apresente o seu CartÃ£o Digital na loja para usufruir.
+          </p>
+        </div>
+
+        {/* FILTROS */}
+        <div className="bg-white p-6 md:p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] mb-12 flex flex-col md:flex-row gap-4 relative z-20">
+            <div className="flex-1 relative">
+                <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20}/>
+                <input 
+                    type="text" maxLength={4} placeholder="FILTRAR POR CÃ“DIGO POSTAL (4 DÃGITOS)" 
+                    value={searchZip} onChange={e=>setSearchZip(e.target.value.replace(/\D/g, ''))}
+                    className="w-full pl-14 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-amber-500 transition-all"
+                />
+            </div>
+            <select 
+                value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)}
+                className="md:w-1/3 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-amber-500 transition-all appearance-none"
+            >
+                <option value="all">TODAS AS CATEGORIAS</option>
+                {categories.filter(c => c !== 'all').map(c => (
+                    <option key={c} value={c}>{c.toUpperCase()}</option>
+                ))}
+            </select>
+        </div>
+
+        {/* GRID DE PARCEIROS VIP */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+            {filtered.map(v => (
+                <div key={v.id} className="bg-white rounded-[40px] overflow-hidden border-4 border-slate-100 shadow-xl flex flex-col hover:border-amber-500 hover:-translate-y-2 transition-all duration-300 group">
+                    <div className="h-56 relative bg-slate-100 overflow-hidden">
+                        <img src={v.imageBase64} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={v.partnerName} />
+                        <div className="absolute top-4 right-4 bg-amber-500 text-white px-4 py-2 rounded-full font-black uppercase text-[10px] tracking-widest shadow-lg flex items-center gap-1 border-2 border-white">
+                            <Star size={12} fill="currentColor" /> {v.category}
+                        </div>
+                    </div>
+                    
+                    <div className="p-8 flex flex-col flex-grow">
+                        <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 leading-none">{v.partnerName}</h3>
+                        
+                        <div className="space-y-3 mb-6">
+                            {(v.address || v.zipCode) && (
+                                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-start gap-2">
+                                    <MapPin size={14} className="text-amber-500 shrink-0" /> {v.address} {v.zipCode && `(${v.zipCode})`}
+                                </p>
+                            )}
+                            {v.websiteUrl && (
+                                <a href={v.websiteUrl} target="_blank" rel="noreferrer" className="text-[10px] font-bold text-blue-500 hover:text-blue-700 uppercase tracking-widest flex items-center gap-2 w-fit">
+                                    <Globe size={14} /> Visitar Website
+                                </a>
+                            )}
+                        </div>
+
+                        <div className="bg-amber-50 p-6 rounded-3xl border-2 border-amber-100 mt-auto">
+                            <p className="text-xs font-bold text-amber-900 leading-relaxed whitespace-pre-wrap">{v.description}</p>
+                        </div>
+                    </div>
+                </div>
+            ))}
+            
+            {filtered.length === 0 && (
+                <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-200">
+                    <Crown size={48} className="mx-auto text-slate-200 mb-4" />
+                    <p className="font-black uppercase tracking-widest text-xs text-slate-400">Nenhum parceiro VIP encontrado nesta pesquisa.</p>
+                </div>
+            )}
+        </div>
+
+      </main>
+    </div>
+  );
+};
+
+export default VantagensPage;
 
 
 ==================================================
@@ -5765,6 +6254,19 @@ export interface MarketingRequest {
   createdAt: FirestoreTimestamp;
 }
 
+// NOVO TIPO: Vantagens VIP
+export interface Vantagem {
+  id?: string;
+  partnerName: string;
+  category: string;
+  address: string;
+  zipCode: string;
+  websiteUrl: string;
+  description: string;
+  imageBase64: string;
+  createdAt: FirestoreTimestamp;
+}
+
 
 ==================================================
 FILE: C:\Users\Filipepocas\vizinho-plus\src\utils\notifications.ts
@@ -5927,6 +6429,7 @@ import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
 import TermsPage from './features/public/TermsPage'; 
+import VantagensPage from './features/public/VantagensPage'; // NOVO IMPORT
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
@@ -5963,13 +6466,11 @@ const SettingsWrapper = () => {
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
 
-  // 1. Inicializa o Auth UMA VEZ
   useEffect(() => {
     const unsub = initializeAuth();
     return () => unsub();
-  }, []); // Sem dependÃªncias para nÃ£o repetir
+  }, []); 
 
-  // 2. Subscreve transaÃ§Ãµes APENAS quando o user ID estÃ¡ estÃ¡vel
   useEffect(() => {
     if (currentUser?.id) {
       const unsub = subscribeToTransactions(currentUser.role, currentUser.id);
@@ -5984,6 +6485,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsPage />} />
+          <Route path="/vantagens" element={<VantagensPage />} /> {/* NOVA ROTA */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
