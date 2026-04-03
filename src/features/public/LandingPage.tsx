@@ -41,7 +41,7 @@ const LandingPage: React.FC = () => {
           </h1>
           <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed">
             A plataforma de fidelização que une os vizinhos e fortalece a economia local. 
-            Acumule cashback real em todas as lojas do seu bairro.
+            Acumule cashback real em todas as lojas aderentes.
           </p>
         </div>
 
