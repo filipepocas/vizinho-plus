@@ -19,9 +19,8 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   // Tabela de Preços do Admin
   const [prices, setPrices] = useState<any>({});
 
-  // CORREÇÃO: Adicionada a endDate ao estado do Banner
   const [bannerForm, setBannerForm] = useState({ text: '', startDate: '', endDate: '', imageBase64: '' });
-  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '' });
+  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
 
   useEffect(() => {
     // Carrega preços
@@ -57,11 +56,19 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     return () => { unsubCam(); unsubReq(); };
   }, [merchantId]);
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => { setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string})) };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLeafletImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string})) };
     reader.readAsDataURL(file);
   };
 
@@ -72,7 +79,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   const submitBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validações de Datas
     const reqStartDate = new Date(bannerForm.startDate);
     const reqEndDate = new Date(bannerForm.endDate);
     const minDate = new Date();
@@ -94,12 +100,15 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
             merchantId, merchantName, type: 'banner', status: 'pending',
             text: bannerForm.text, 
             imageUrl: bannerForm.imageBase64, 
-            // Guarda as datas formatadas para o Admin ver facilmente sem ter que alterar o painel de Admin
             requestedDate: `Início: ${bannerForm.startDate} | Fim: ${bannerForm.endDate}`, 
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de Banner enviado com sucesso!");
         setBannerForm({text:'', startDate:'', endDate:'', imageBase64:''});
+        
+        const fileInput = document.getElementById('bannerImageInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+        
         setActiveTab('history');
     } catch(err) { 
         toast.error("Erro ao enviar pedido."); 
@@ -111,6 +120,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   const submitLeaflet = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!leafletForm.campaignId) { toast.error("Selecione um folheto previsto."); return; }
+    if (!leafletForm.imageBase64) { toast.error("Por favor, adicione a imagem do produto."); return; }
 
     const camp = campaigns.find(c => c.id === leafletForm.campaignId);
 
@@ -118,23 +128,36 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     try {
         await addDoc(collection(db, 'marketing_requests'), {
             merchantId, merchantName, type: 'leaflet', status: 'pending',
-            leafletCampaignId: leafletForm.campaignId, leafletCampaignTitle: camp?.title,
-            spaceType: leafletForm.spaceType, description: leafletForm.description,
-            sellPrice: leafletForm.sellPrice, unit: leafletForm.unit,
-            promoPrice: leafletForm.promoPrice, promoType: leafletForm.promoType,
+            leafletCampaignId: leafletForm.campaignId, 
+            leafletCampaignTitle: camp?.title,
+            spaceType: leafletForm.spaceType, 
+            description: leafletForm.description,
+            sellPrice: leafletForm.sellPrice, 
+            unit: leafletForm.unit,
+            promoPrice: leafletForm.promoPrice, 
+            promoType: leafletForm.promoType,
+            imageUrl: leafletForm.imageBase64, // Imagem enviada para o folheto
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de espaço no Folheto enviado com sucesso!");
-        setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: ''});
+        setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: ''});
+        
+        const fileInput = document.getElementById('leafletImageInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+
         setActiveTab('history');
-    } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
+    } catch(err) { 
+        toast.error("Erro ao enviar pedido."); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   return (
     <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] animate-in fade-in">
         <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Pedir Publicidade</h3>
         
-        <div className="flex gap-4 mb-8 overflow-x-auto pb-2">
+        <div className="flex gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
             <button onClick={() => setActiveTab('banner')} className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all whitespace-nowrap border-4 ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-[#00d66f]'}`}>
                <ImageIcon size={16} className="inline mr-2"/> Pedir Banner
             </button>
@@ -147,7 +170,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         </div>
 
         {activeTab === 'banner' && (
-            <form onSubmit={submitBanner} className="space-y-6">
+            <form onSubmit={submitBanner} className="space-y-6 animate-in fade-in">
                 <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 mb-6">
                     <p className="text-blue-800 text-xs font-bold uppercase tracking-widest flex items-center gap-2"><Calendar size={14}/> Banners rotativos na App {getPriceText('banner')}</p>
                     <p className="text-[10px] mt-2 text-blue-600 font-bold">Os banners devem ter preferencialmente 1000px(largura) x 500px(altura) e pedidos com 48h de antecedência.</p>
@@ -166,7 +189,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     </div>
                 </div>
 
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner</label><input required type="file" accept="image/*" onChange={handleImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner</label><input id="bannerImageInput" required type="file" accept="image/*" onChange={handleBannerImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
                 
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
@@ -175,7 +198,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         )}
 
         {activeTab === 'leaflet' && (
-            <form onSubmit={submitLeaflet} className="space-y-6">
+            <form onSubmit={submitLeaflet} className="space-y-6 animate-in fade-in">
                 <div>
                     <label className="text-[10px] font-black uppercase text-slate-400">Selecione o Folheto</label>
                     <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
@@ -203,6 +226,10 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     <div><label className="text-[10px] font-black uppercase text-slate-400">Preço Promocional (€ - Opcional)</label><input type="text" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                     <div><label className="text-[10px] font-black uppercase text-slate-400">Tipo Campanha (Ex: L3P2)</label><input type="text" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                 </div>
+                
+                {/* NOVO CAMPO: Imagem do Produto no Folheto */}
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Produto</label><input id="leafletImageInput" required type="file" accept="image/*" onChange={handleLeafletImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
                 </button>
@@ -210,20 +237,53 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         )}
 
         {activeTab === 'history' && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-in fade-in">
                 {myRequests.map(r => (
-                    <div key={r.id} className="p-6 border-4 border-slate-100 rounded-3xl flex justify-between items-center">
-                        <div>
-                            <p className="font-black uppercase text-[#0a2540] text-sm">{r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}</p>
-                            {/* Mostra a data do pedido formatada */}
-                            <p className="text-xs font-bold text-slate-500 mt-1">{r.requestedDate || r.createdAt?.toDate().toLocaleDateString()}</p>
+                    <div key={r.id} className="p-6 border-4 border-slate-100 rounded-[30px] flex flex-col md:flex-row justify-between items-start gap-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <div className="flex-1 w-full">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <p className="font-black uppercase text-[#0a2540] text-lg leading-none">
+                                        {r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}
+                                    </p>
+                                    <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase mt-2">Enviado a: {r.createdAt?.toDate().toLocaleDateString()}</p>
+                                </div>
+                                <span className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    {r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Rejeitado' : 'Em Análise'}
+                                </span>
+                            </div>
+                            
+                            <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 text-[11px] font-bold text-slate-500 space-y-2">
+                                {r.type === 'banner' ? (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Datas:</span> <span className="text-[#0a2540]">{r.requestedDate}</span></p>
+                                        {r.text && <p className="flex justify-between"><span className="text-slate-400 uppercase">Texto:</span> <span className="text-[#0a2540]">{r.text}</span></p>}
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Produto:</span> <span className="text-[#0a2540]">{r.description}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Espaço:</span> <span className="text-[#0a2540]">{r.spaceType?.replace(/_/g, ' ')}</span></p>
+                                        <p className="flex justify-between"><span className="text-slate-400 uppercase">Preço Venda:</span> <span className="text-[#0a2540]">{r.sellPrice} / {r.unit}</span></p>
+                                        {r.promoPrice && <p className="flex justify-between"><span className="text-slate-400 uppercase">Promoção:</span> <span className="text-blue-500">{r.promoPrice} ({r.promoType})</span></p>}
+                                    </>
+                                )}
+                            </div>
                         </div>
-                        <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
-                            {r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Rejeitado' : 'Em Análise'}
-                        </span>
+                        
+                        {/* Mostra a imagem anexada ao pedido em ambos os formatos */}
+                        {r.imageUrl ? (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-slate-100 overflow-hidden flex items-center justify-center p-2 shadow-sm">
+                                <img src={r.imageUrl} className="w-full h-full object-contain" alt="Preview da Campanha" />
+                            </div>
+                        ) : (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300">
+                                <ImageIcon size={24} />
+                                <span className="text-[8px] font-black uppercase mt-2">S/ Imagem</span>
+                            </div>
+                        )}
                     </div>
                 ))}
-                {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-3xl">Sem pedidos efetuados.</p>}
+                {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-[30px]">Sem pedidos efetuados.</p>}
             </div>
         )}
     </div>

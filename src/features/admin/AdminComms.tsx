@@ -10,7 +10,6 @@ const AdminComms: React.FC = () => {
   const [requests, setRequests] = useState<MarketingRequest[]>([]);
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
 
-  // Estado para Tabela de Preços
   const [prices, setPrices] = useState({
     banner: '',
     leaflet_capa_destaque: '',
@@ -29,7 +28,6 @@ const AdminComms: React.FC = () => {
     const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'));
     const unsubReq = onSnapshot(qReq, (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest))));
 
-    // Carregar Preços
     const fetchPrices = async () => {
       const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (docSnap.exists()) setPrices(docSnap.data() as any);
@@ -90,7 +88,6 @@ const AdminComms: React.FC = () => {
   return (
     <div className="space-y-12 animate-in fade-in duration-500">
         
-        {/* AVISO DIMENSÕES BANNER */}
         <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-[30px] flex items-center gap-4">
             <AlertCircle className="text-blue-500 shrink-0" size={32} />
             <div>
@@ -99,7 +96,6 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-        {/* TABELA DE PREÇOS */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2"><Euro className="inline mr-3 text-amber-500"/> Definir Preços (Visível Lojistas)</h3>
             <p className="text-xs font-bold text-slate-400 mb-6">Podes escrever o preço, duração ou notas (Ex: "50€ / Semana"). Se deixares em branco, o lojista verá "Preço sob consulta".</p>
@@ -119,7 +115,6 @@ const AdminComms: React.FC = () => {
             </form>
         </div>
 
-        {/* CRIAR FOLHETO */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6"><Megaphone className="inline mr-3 text-[#00d66f]"/> 1. Previsão de Folhetos</h3>
             <form onSubmit={handleCreateCampaign} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
@@ -141,7 +136,6 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-        {/* PEDIDOS DAS LOJAS */}
         <div>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">2. Pedidos das Lojas Pendentes</h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -155,24 +149,32 @@ const AdminComms: React.FC = () => {
                             <button onClick={() => handleDeleteRequest(r.id!)} className="text-red-400 hover:text-red-600"><Trash2 size={20}/></button>
                         </div>
                         
-                        <div className="space-y-2 mb-6 text-xs font-bold text-slate-600">
-                            {r.type === 'banner' ? (
-                                <>
-                                    <p><b>Data:</b> {r.requestedDate}</p>
-                                    <p><b>Texto:</b> {r.text}</p>
-                                    {r.imageUrl && <img src={r.imageUrl} className="h-20 object-contain mt-2 border-2 rounded-lg" alt="Banner"/>}
-                                </>
-                            ) : (
-                                <>
-                                    <p><b>Folheto:</b> {r.leafletCampaignTitle}</p>
-                                    <p><b>Espaço:</b> {r.spaceType?.replace(/_/g, ' ')}</p>
-                                    <p><b>Produto:</b> {r.description}</p>
-                                    <p><b>Preços:</b> {r.sellPrice} / {r.unit} (Promo: {r.promoPrice || 'N/A'} - {r.promoType || 'N/A'})</p>
-                                </>
+                        <div className="flex flex-col md:flex-row gap-4 mb-6">
+                            <div className="flex-1 space-y-2 text-xs font-bold text-slate-600">
+                                {r.type === 'banner' ? (
+                                    <>
+                                        <p><b>Datas:</b> {r.requestedDate}</p>
+                                        <p><b>Texto:</b> {r.text}</p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p><b>Folheto:</b> {r.leafletCampaignTitle}</p>
+                                        <p><b>Espaço:</b> {r.spaceType?.replace(/_/g, ' ')}</p>
+                                        <p><b>Produto:</b> {r.description}</p>
+                                        <p><b>Preços:</b> {r.sellPrice} / {r.unit} {r.promoPrice && `(Promo: ${r.promoPrice} - ${r.promoType})`}</p>
+                                    </>
+                                )}
+                            </div>
+                            
+                            {/* MOSTRAR A IMAGEM NO ADMIN (PARA FOLHETOS E BANNERS) */}
+                            {r.imageUrl && (
+                                <div className="w-full md:w-24 h-24 shrink-0 rounded-2xl border-4 border-slate-100 overflow-hidden">
+                                    <img src={r.imageUrl} className="w-full h-full object-cover" alt="Preview"/>
+                                </div>
                             )}
                         </div>
 
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 border-t-2 border-slate-100 pt-4">
                             {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px]"><CheckCircle2 className="inline mr-1" size={14}/> Aprovar</button>}
                             {r.status !== 'rejected' && <button onClick={() => handleUpdateStatus(r.id!, 'rejected')} className="flex-1 bg-red-100 text-red-700 p-3 rounded-xl font-black uppercase text-[10px]"><XCircle className="inline mr-1" size={14}/> Rejeitar</button>}
                         </div>
