@@ -173,3 +173,16 @@ export interface MarketingRequest {
   promoType?: string;
   createdAt: FirestoreTimestamp;
 }
+
+// NOVO TIPO: Vantagens VIP
+export interface Vantagem {
+  id?: string;
+  partnerName: string;
+  category: string;
+  address: string;
+  zipCode: string;
+  websiteUrl: string;
+  description: string;
+  imageBase64: string;
+  createdAt: FirestoreTimestamp;
+}

@@ -8,6 +8,7 @@ import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
 import TermsPage from './features/public/TermsPage'; 
+import VantagensPage from './features/public/VantagensPage'; // NOVO IMPORT
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
@@ -44,13 +45,11 @@ const SettingsWrapper = () => {
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
 
-  // 1. Inicializa o Auth UMA VEZ
   useEffect(() => {
     const unsub = initializeAuth();
     return () => unsub();
-  }, []); // Sem dependências para não repetir
+  }, []); 
 
-  // 2. Subscreve transações APENAS quando o user ID está estável
   useEffect(() => {
     if (currentUser?.id) {
       const unsub = subscribeToTransactions(currentUser.role, currentUser.id);
@@ -65,6 +64,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsPage />} />
+          <Route path="/vantagens" element={<VantagensPage />} /> {/* NOVA ROTA */}
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
