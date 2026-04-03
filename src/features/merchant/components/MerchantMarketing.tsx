@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc } from 'firebase/firestore';
 import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Calendar } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest } from '../../../types';
@@ -15,12 +15,22 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
   const [myRequests, setMyRequests] = useState<MarketingRequest[]>([]);
+  
+  // Tabela de Preços do Admin
+  const [prices, setPrices] = useState<any>({});
 
   const [bannerForm, setBannerForm] = useState({ text: '', date: '', imageBase64: '' });
-  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'interior', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '' });
+  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '' });
 
   useEffect(() => {
-    // Campanhas ativas (dentro do prazo)
+    // Carrega preços
+    const fetchPrices = async () => {
+      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (docSnap.exists()) setPrices(docSnap.data());
+    };
+    fetchPrices();
+
+    // Campanhas ativas
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => {
         const now = new Date();
@@ -52,6 +62,10 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     const reader = new FileReader();
     reader.onload = (ev) => { setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string})) };
     reader.readAsDataURL(file);
+  };
+
+  const getPriceText = (key: string) => {
+      return prices[key] ? `(${prices[key]})` : '(Preço sob consulta)';
   };
 
   const submitBanner = async (e: React.FormEvent) => {
@@ -95,7 +109,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de espaço no Folheto enviado com sucesso!");
-        setLeafletForm({campaignId: '', spaceType: 'interior', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: ''});
+        setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: ''});
         setActiveTab('history');
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
   };
@@ -119,11 +133,12 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         {activeTab === 'banner' && (
             <form onSubmit={submitBanner} className="space-y-6">
                 <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 mb-6">
-                    <p className="text-blue-800 text-xs font-bold uppercase tracking-widest"><Calendar size={14} className="inline mr-2"/> Os banners devem ser pedidos com 48h de antecedência.</p>
+                    <p className="text-blue-800 text-xs font-bold uppercase tracking-widest flex items-center gap-2"><Calendar size={14}/> Banners rotativos na App {getPriceText('banner')}</p>
+                    <p className="text-[10px] mt-2 text-blue-600 font-bold">Os banners devem ter preferencialmente 1000px(largura) x 500px(altura) e pedidos com 48h de antecedência.</p>
                 </div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Texto para o Banner</label><input required type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Data de Início Pretendida</label><input required type="date" value={bannerForm.date} onChange={e=>setBannerForm({...bannerForm, date: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem (Opcional)</label><input type="file" accept="image/*" onChange={handleImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner</label><input required type="file" accept="image/*" onChange={handleImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
                 </button>
@@ -140,11 +155,14 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     </select>
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400">Espaço Pretendido</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400">Espaço Pretendido (Selecione o tamanho/local)</label>
                     <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
-                        <option value="capa_normal">Capa (Tamanho Normal)</option>
-                        <option value="capa_destaque">Capa (Destaque Principal)</option>
-                        <option value="interior">Páginas Interiores</option>
+                        <option value="leaflet_capa_destaque">Capa Principal - Destaque {getPriceText('leaflet_capa_destaque')}</option>
+                        <option value="leaflet_capa_normal">Capa - Tamanho Normal {getPriceText('leaflet_capa_normal')}</option>
+                        <option value="leaflet_contracapa">Contracapa - Parte Traseira {getPriceText('leaflet_contracapa')}</option>
+                        <option value="leaflet_interior_full">Interior - Página Inteira {getPriceText('leaflet_interior_full')}</option>
+                        <option value="leaflet_interior_1_2">Interior - 1/2 (Meia Página) {getPriceText('leaflet_interior_1_2')}</option>
+                        <option value="leaflet_interior_1_4">Interior - 1/4 (Quarto de Página) {getPriceText('leaflet_interior_1_4')}</option>
                     </select>
                 </div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Descrição do Produto</label><input required type="text" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
@@ -167,7 +185,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                 {myRequests.map(r => (
                     <div key={r.id} className="p-6 border-4 border-slate-100 rounded-3xl flex justify-between items-center">
                         <div>
-                            <p className="font-black uppercase text-[#0a2540]">{r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}</p>
+                            <p className="font-black uppercase text-[#0a2540] text-sm">{r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}</p>
                             <p className="text-xs font-bold text-slate-500 mt-1">{r.createdAt?.toDate().toLocaleDateString()}</p>
                         </div>
                         <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>

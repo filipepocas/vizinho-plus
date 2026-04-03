@@ -3,20 +3,23 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight } from 'lucide-react';
-import { useStore } from '../../store/useStore';
+import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
+import { requestNotificationPermission } from '../../utils/notifications';
 
 const RegisterPage: React.FC = () => {
-  const [formData, setFormData] = useState({ name: '', nif: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
-  const { checkNifExists } = useStore();
   
   const { isInstallable, installApp } = usePWAInstall();
+
+  // Estados para a fase de "Pós-Registo"
+  const [setupStep, setSetupStep] = useState(false);
+  const [registeredUserId, setRegisteredUserId] = useState('');
 
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, '');
@@ -48,30 +51,14 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
-    const cleanNif = formData.nif.trim();
-    if (cleanNif !== '' && cleanNif.length !== 9) {
-      toast.error("NIF INVÁLIDO (TEM DE TER 9 DÍGITOS)");
-      setLoading(false);
-      return;
-    }
-
     try {
-      if (cleanNif !== '') {
-        const nifExists = await checkNifExists(cleanNif);
-        if (nifExists) {
-          toast.error("ESTE NIF JÁ ESTÁ REGISTADO.");
-          setLoading(false);
-          return;
-        }
-      }
-
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
       const newCustomerNumber = generateCustomerNumber();
 
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         name: formData.name.trim(),
-        nif: cleanNif, 
+        nif: '', // Fica vazio para ser preenchido nas definições pelo utilizador
         customerNumber: newCustomerNumber, 
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
@@ -83,11 +70,9 @@ const RegisterPage: React.FC = () => {
         createdAt: serverTimestamp()
       });
 
-      toast.success("BEM-VINDO VIZINHO!");
-      if (isInstallable) {
-        try { await installApp(); } catch (error) { console.log("Instalação adiada"); }
-      }
-      navigate('/dashboard');
+      setRegisteredUserId(userCredential.user.uid);
+      setSetupStep(true); // Abre a nova janela final
+      toast.success("CONTA CRIADA COM SUCESSO!");
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
@@ -99,6 +84,37 @@ const RegisterPage: React.FC = () => {
     }
   };
 
+  // ECRÃ PÓS REGISTO (PARA NOTIFICAÇÕES E APP)
+  if (setupStep) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
+        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 text-center animate-in zoom-in">
+            <div className="bg-[#00d66f] w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-[#0a2540]">
+              <CheckCircle2 size={40} className="text-[#0a2540]" />
+            </div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Bem-vindo(a)!</h2>
+            <p className="text-sm font-bold text-slate-500 mb-8">A tua conta foi criada. Para tirar o máximo partido do Vizinho+, ativa já as opções abaixo:</p>
+            
+            <div className="space-y-4 mb-8">
+                {isInstallable && (
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg">
+                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar Aplicação (Ecrã)
+                    </button>
+                )}
+                <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-blue-50 border-2 border-blue-200 text-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-sm">
+                    <Volume2 size={24} /> Permitir Alertas (Telemóvel)
+                </button>
+            </div>
+
+            <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                Concluir e Entrar <ArrowRight size={20} />
+            </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ECRÃ NORMAL DE REGISTO
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
       <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
@@ -117,8 +133,8 @@ const RegisterPage: React.FC = () => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
-              <input type="text" maxLength={9} value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data Nasc. <span className="text-[8px]">(Opcional)</span></label>
+              <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Cód. Postal</label>
@@ -135,11 +151,6 @@ const RegisterPage: React.FC = () => {
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel <span className="text-[8px]">(Opcional)</span></label>
               <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Nascimento <span className="text-[8px]">(Opcional)</span></label>
-            <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
           <div className="grid grid-cols-2 gap-4">

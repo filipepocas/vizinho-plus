@@ -41,7 +41,7 @@ const ForgotPassword: React.FC = () => {
             <div className="bg-green-50 p-6 rounded-3xl border-4 border-green-100 flex flex-col items-center gap-3">
               <CheckCircle2 size={40} className="text-green-500" />
               <p className="font-black uppercase text-xs text-green-600">Email Enviado!</p>
-              <p className="text-sm font-bold text-slate-500 leading-relaxed">Verifica a tua caixa de entrada e segue as instruções para criar uma nova password.</p>
+              <p className="text-sm font-bold text-slate-500 leading-relaxed">Verifica a tua caixa de entrada <span className="text-red-500">(e a pasta de SPAM/Lixo Eletrónico)</span> e segue as instruções para criar uma nova password.</p>
             </div>
             <Link to="/login" className="block w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest transition-all">Ir para o Login</Link>
           </div>

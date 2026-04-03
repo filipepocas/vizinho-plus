@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, addDoc, query, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
-import { Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, Timestamp, orderBy, getDoc, setDoc } from 'firebase/firestore';
+import { Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, Save, Euro } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest } from '../../types';
 
@@ -10,12 +10,31 @@ const AdminComms: React.FC = () => {
   const [requests, setRequests] = useState<MarketingRequest[]>([]);
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
 
+  // NOVO: Estado para Tabela de Preços
+  const [prices, setPrices] = useState({
+    banner: '',
+    leaflet_capa_destaque: '',
+    leaflet_capa_normal: '',
+    leaflet_contracapa: '',
+    leaflet_interior_full: '',
+    leaflet_interior_1_2: '',
+    leaflet_interior_1_4: ''
+  });
+  const [savingPrices, setSavingPrices] = useState(false);
+
   useEffect(() => {
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('createdAt', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign))));
 
     const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'));
     const unsubReq = onSnapshot(qReq, (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest))));
+
+    // Carregar Preços
+    const fetchPrices = async () => {
+      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (docSnap.exists()) setPrices(docSnap.data() as any);
+    };
+    fetchPrices();
 
     return () => { unsubCam(); unsubReq(); };
   }, []);
@@ -31,7 +50,7 @@ const AdminComms: React.FC = () => {
         });
         toast.success("Campanha criada!");
         setForm({title:'', limitDate:'', distDate:''});
-    } catch(err) { toast.error("Erro ao criar."); }
+    } catch(err) { toast.error("Erro ao criar. Verifica as regras Firebase."); }
   };
 
   const handleUpdateStatus = async (id: string, status: string) => {
@@ -46,15 +65,57 @@ const AdminComms: React.FC = () => {
       await deleteDoc(doc(db, 'marketing_requests', id));
   };
 
+  const handleSavePrices = async (e: React.FormEvent) => {
+      e.preventDefault();
+      setSavingPrices(true);
+      try {
+          await setDoc(doc(db, 'system', 'marketing_prices'), prices);
+          toast.success("Preços atualizados para os Lojistas!");
+      } catch (err) {
+          toast.error("Erro ao atualizar preços.");
+      } finally {
+          setSavingPrices(false);
+      }
+  };
+
   return (
     <div className="space-y-12 animate-in fade-in duration-500">
         
+        {/* AVISO DIMENSÕES BANNER */}
+        <div className="bg-blue-50 border-2 border-blue-200 p-6 rounded-[30px] flex items-center gap-4">
+            <AlertCircle className="text-blue-500 shrink-0" size={32} />
+            <div>
+                <h4 className="font-black uppercase text-blue-900 text-sm">Dimensões para Banners (App e Lojistas)</h4>
+                <p className="text-xs font-bold text-blue-700">O formato ideal para carregamento de Banners é de <b className="text-blue-900">1000px de largura por 500px de altura</b> (Formato Paisagem / Retangular).</p>
+            </div>
+        </div>
+
+        {/* TABELA DE PREÇOS */}
+        <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2"><Euro className="inline mr-3 text-amber-500"/> Definir Preços (Visível Lojistas)</h3>
+            <p className="text-xs font-bold text-slate-400 mb-6">Podes escrever o preço, duração ou notas (Ex: "50€ / Semana"). Se deixares em branco, o lojista verá "Preço sob consulta".</p>
+            
+            <form onSubmit={handleSavePrices} className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Banner Rotativo (App)</label><input type="text" placeholder="Ex: 10€ / Dia" value={prices.banner} onChange={e=>setPrices({...prices, banner: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto: Capa (Destaque)</label><input type="text" placeholder="Ex: 150€ / Edição" value={prices.leaflet_capa_destaque} onChange={e=>setPrices({...prices, leaflet_capa_destaque: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto: Capa (Normal)</label><input type="text" placeholder="Ex: 80€ / Edição" value={prices.leaflet_capa_normal} onChange={e=>setPrices({...prices, leaflet_capa_normal: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto: Contracapa</label><input type="text" placeholder="Ex: 100€ / Edição" value={prices.leaflet_contracapa} onChange={e=>setPrices({...prices, leaflet_contracapa: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Interior: Pág Inteira</label><input type="text" placeholder="Ex: 60€ / Edição" value={prices.leaflet_interior_full} onChange={e=>setPrices({...prices, leaflet_interior_full: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Interior: 1/2 Página</label><input type="text" placeholder="Ex: 35€ / Edição" value={prices.leaflet_interior_1_2} onChange={e=>setPrices({...prices, leaflet_interior_1_2: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Interior: 1/4 Página</label><input type="text" placeholder="Ex: 20€ / Edição" value={prices.leaflet_interior_1_4} onChange={e=>setPrices({...prices, leaflet_interior_1_4: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"/></div>
+                
+                <div className="md:col-span-2 flex items-end">
+                    <button type="submit" disabled={savingPrices} className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all flex items-center justify-center gap-2"><Save size={16}/> Guardar Preçário</button>
+                </div>
+            </form>
+        </div>
+
         {/* CRIAR FOLHETO */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6"><Megaphone className="inline mr-3 text-[#00d66f]"/> 1. Previsão de Folhetos</h3>
             <form onSubmit={handleCreateCampaign} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Nome da Edição</label><input required type="text" value={form.title} onChange={e=>setForm({...form, title: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Limite de Inscrição</label><input required type="date" value={form.limitDate} onChange={e=>setForm({...form, limitDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Limite Inscrição Lojistas</label><input required type="date" value={form.limitDate} onChange={e=>setForm({...form, limitDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                 <button type="submit" className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]"><Plus size={16}/> Adicionar</button>
             </form>
 
@@ -93,7 +154,7 @@ const AdminComms: React.FC = () => {
                             ) : (
                                 <>
                                     <p><b>Folheto:</b> {r.leafletCampaignTitle}</p>
-                                    <p><b>Espaço:</b> {r.spaceType}</p>
+                                    <p><b>Espaço:</b> {r.spaceType?.replace(/_/g, ' ')}</p>
                                     <p><b>Produto:</b> {r.description}</p>
                                     <p><b>Preços:</b> {r.sellPrice} / {r.unit} (Promo: {r.promoPrice || 'N/A'} - {r.promoType || 'N/A'})</p>
                                 </>
