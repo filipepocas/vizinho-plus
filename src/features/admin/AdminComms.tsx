@@ -10,7 +10,7 @@ const AdminComms: React.FC = () => {
   const [requests, setRequests] = useState<MarketingRequest[]>([]);
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
 
-  // NOVO: Estado para Tabela de Preços
+  // Estado para Tabela de Preços
   const [prices, setPrices] = useState({
     banner: '',
     leaflet_capa_destaque: '',
@@ -41,6 +41,12 @@ const AdminComms: React.FC = () => {
 
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    if (!form.limitDate || !form.distDate) {
+        toast.error("Por favor, preenche ambas as datas.");
+        return;
+    }
+
     try {
         await addDoc(collection(db, 'leaflet_campaigns'), {
             title: form.title,
@@ -48,9 +54,12 @@ const AdminComms: React.FC = () => {
             distributionDate: Timestamp.fromDate(new Date(form.distDate)),
             createdAt: serverTimestamp()
         });
-        toast.success("Campanha criada!");
+        toast.success("Campanha criada com sucesso!");
         setForm({title:'', limitDate:'', distDate:''});
-    } catch(err) { toast.error("Erro ao criar. Verifica as regras Firebase."); }
+    } catch(err: any) { 
+        console.error("Erro Firebase:", err);
+        toast.error(`Erro ao criar: ${err.message || 'Verifica as permissões.'}`); 
+    }
   };
 
   const handleUpdateStatus = async (id: string, status: string) => {
@@ -116,7 +125,8 @@ const AdminComms: React.FC = () => {
             <form onSubmit={handleCreateCampaign} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                 <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Nome da Edição</label><input required type="text" value={form.title} onChange={e=>setForm({...form, title: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Limite Inscrição Lojistas</label><input required type="date" value={form.limitDate} onChange={e=>setForm({...form, limitDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <button type="submit" className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]"><Plus size={16}/> Adicionar</button>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Data Prevista Distribuição</label><input required type="date" value={form.distDate} onChange={e=>setForm({...form, distDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                <button type="submit" className="w-full md:col-span-4 bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.01] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540] mt-2"><Plus size={20}/> Criar Nova Edição</button>
             </form>
 
             <div className="mt-6 flex flex-wrap gap-4">
@@ -124,6 +134,7 @@ const AdminComms: React.FC = () => {
                     <div key={c.id} className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-200">
                         <p className="font-black uppercase text-[#0a2540] text-sm">{c.title}</p>
                         <p className="text-[9px] font-bold text-slate-500 uppercase mt-1">Limite: {c.limitDate.toDate().toLocaleDateString()}</p>
+                        <p className="text-[9px] font-bold text-slate-500 uppercase">Distribuição: {c.distributionDate.toDate().toLocaleDateString()}</p>
                         <button onClick={() => deleteDoc(doc(db, 'leaflet_campaigns', c.id!))} className="mt-2 text-red-500 text-[10px] font-black uppercase">Apagar Folheto</button>
                     </div>
                 ))}
