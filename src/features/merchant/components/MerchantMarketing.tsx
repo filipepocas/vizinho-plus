@@ -19,7 +19,8 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   // Tabela de Preços do Admin
   const [prices, setPrices] = useState<any>({});
 
-  const [bannerForm, setBannerForm] = useState({ text: '', date: '', imageBase64: '' });
+  // CORREÇÃO: Adicionada a endDate ao estado do Banner
+  const [bannerForm, setBannerForm] = useState({ text: '', startDate: '', endDate: '', imageBase64: '' });
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '' });
 
   useEffect(() => {
@@ -70,12 +71,20 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
 
   const submitBanner = async (e: React.FormEvent) => {
     e.preventDefault();
-    const reqDate = new Date(bannerForm.date);
+    
+    // Validações de Datas
+    const reqStartDate = new Date(bannerForm.startDate);
+    const reqEndDate = new Date(bannerForm.endDate);
     const minDate = new Date();
     minDate.setHours(minDate.getHours() + 48);
 
-    if (reqDate < minDate) {
+    if (reqStartDate < minDate) {
         toast.error("O pedido de banner tem de ser feito com 48h de antecedência.");
+        return;
+    }
+
+    if (reqEndDate <= reqStartDate) {
+        toast.error("A data de fim tem de ser posterior à data de início.");
         return;
     }
 
@@ -83,13 +92,20 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
     try {
         await addDoc(collection(db, 'marketing_requests'), {
             merchantId, merchantName, type: 'banner', status: 'pending',
-            text: bannerForm.text, imageUrl: bannerForm.imageBase64, requestedDate: bannerForm.date,
+            text: bannerForm.text, 
+            imageUrl: bannerForm.imageBase64, 
+            // Guarda as datas formatadas para o Admin ver facilmente sem ter que alterar o painel de Admin
+            requestedDate: `Início: ${bannerForm.startDate} | Fim: ${bannerForm.endDate}`, 
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de Banner enviado com sucesso!");
-        setBannerForm({text:'', date:'', imageBase64:''});
+        setBannerForm({text:'', startDate:'', endDate:'', imageBase64:''});
         setActiveTab('history');
-    } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
+    } catch(err) { 
+        toast.error("Erro ao enviar pedido."); 
+    } finally { 
+        setLoading(false); 
+    }
   };
 
   const submitLeaflet = async (e: React.FormEvent) => {
@@ -136,9 +152,22 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     <p className="text-blue-800 text-xs font-bold uppercase tracking-widest flex items-center gap-2"><Calendar size={14}/> Banners rotativos na App {getPriceText('banner')}</p>
                     <p className="text-[10px] mt-2 text-blue-600 font-bold">Os banners devem ter preferencialmente 1000px(largura) x 500px(altura) e pedidos com 48h de antecedência.</p>
                 </div>
+                
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Data de Início Pretendida</label><input required type="date" value={bannerForm.date} onChange={e=>setBannerForm({...bannerForm, date: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400">Data de Início</label>
+                        <input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                    </div>
+                    <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400">Data de Fim</label>
+                        <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                    </div>
+                </div>
+
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner</label><input required type="file" accept="image/*" onChange={handleImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
                 </button>
@@ -186,7 +215,8 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     <div key={r.id} className="p-6 border-4 border-slate-100 rounded-3xl flex justify-between items-center">
                         <div>
                             <p className="font-black uppercase text-[#0a2540] text-sm">{r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}</p>
-                            <p className="text-xs font-bold text-slate-500 mt-1">{r.createdAt?.toDate().toLocaleDateString()}</p>
+                            {/* Mostra a data do pedido formatada */}
+                            <p className="text-xs font-bold text-slate-500 mt-1">{r.requestedDate || r.createdAt?.toDate().toLocaleDateString()}</p>
                         </div>
                         <span className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                             {r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Rejeitado' : 'Em Análise'}
