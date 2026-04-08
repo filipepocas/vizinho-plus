@@ -1,52 +1,54 @@
-import { getToken } from "firebase/messaging";
-import { messaging, db } from "../config/firebase";
-import { doc, updateDoc, arrayUnion } from "firebase/firestore";
+import OneSignal from 'react-onesignal';
+import { db } from "../config/firebase";
+import { doc, updateDoc } from "firebase/firestore";
 import toast from 'react-hot-toast';
 
 export const requestNotificationPermission = async (userId: string) => {
-  if (!('Notification' in window)) {
-    toast.error("O teu telemóvel ou navegador não suporta notificações.");
-    return false;
-  }
+  // 1. Detetar dispositivos iOS (Apple)
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
-  if (!messaging) {
-    toast.error("O serviço de mensagens do Firebase não arrancou.");
+  // A Apple continua a obrigar que a app esteja instalada no ecrã principal para receber Push
+  if (isIOS && !isStandalone) {
+    toast.error(
+      "Atenção iOS: No iPhone/iPad, tens de INSTALAR a App primeiro (Partilhar > Adicionar ao Ecrã) para ativar as notificações!", 
+      { duration: 8000 }
+    );
     return false;
   }
 
   try {
-    const permission = await Notification.requestPermission();
+    // 2. Mostra a janela pop-up bonita do OneSignal a pedir permissão
+    await OneSignal.Slidedown.promptPush();
+
+    // 3. Verifica se o cliente aceitou
+    const hasPermission = OneSignal.Notifications.permission;
     
-    if (permission === "granted") {
-      
-      // A CHAVE COMPLETA E CORRETA (JÁ INSERIDA AQUI)
-      const vapidKey = "BNR7hvtZ9CIKHDFKZOqRmfrzGbwG_owhrWo7NfpCGaWS1MdAknrvt_w_kspYaOYN2sKBXveQ-pO0l8NF5W3kF4I";
+    if (hasPermission) {
+      // Faz "Login" do utilizador no OneSignal. Isto permite-te ir ao Painel do OneSignal 
+      // e enviar uma mensagem direta para este "userId" específico!
+      await OneSignal.login(userId);
 
-      // Regista o ficheiro de fundo
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // Pega no ID do telemóvel
+      const subscriptionId = OneSignal.User.PushSubscription.id;
 
-      // Pede o token de segurança à Google com a chave verdadeira
-      const token = await getToken(messaging, { 
-        vapidKey: vapidKey,
-        serviceWorkerRegistration: registration 
-      });
-      
-      if (token) {
+      if (subscriptionId) {
+        // Grava na Base de Dados (opcional agora, mas útil para ter registo)
         const userRef = doc(db, "users", userId);
-        await updateDoc(userRef, { fcmTokens: arrayUnion(token) });
-        toast.success("Alertas Ativados com sucesso! Vais receber avisos.", { duration: 5000 });
-        return true;
-      } else {
-        toast.error("A Google não devolveu nenhum token de segurança.");
-        return false;
+        await updateDoc(userRef, { 
+           oneSignalId: subscriptionId 
+        });
       }
+
+      toast.success("Alertas Ativados com sucesso! Vais receber avisos.", { duration: 5000 });
+      return true;
     } else {
-      toast.error("Permissão recusada. Não vais receber alertas.");
+      toast.error("Permissão recusada. Se mudares de ideias, ativa no cadeado lá em cima.", { duration: 6000 });
       return false;
     }
   } catch (error: any) {
-    console.error("ERRO COMPLETO:", error);
-    toast.error(`ERRO FIREBASE: ${error.message || error.code || 'Erro Desconhecido'}`, { duration: 10000 });
+    console.error("ERRO ONESIGNAL:", error);
+    toast.error("Erro ao configurar as notificações. Tenta novamente.", { duration: 5000 });
     return false;
   }
 };

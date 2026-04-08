@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { Bell, Send, Trash2, Calendar, AlertCircle, Loader2, Smartphone } from 'lucide-react';
+import { Bell, Send, Trash2, AlertCircle, Loader2, Smartphone, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AppNotification } from '../../types';
 
@@ -43,7 +43,7 @@ const AdminNotifications: React.FC = () => {
         targetValue: formData.targetValue.trim(),
         createdAt: serverTimestamp()
       });
-      toast.success("Comunicado enviado para a App!");
+      toast.success("Comunicado interno enviado para a App!");
       setFormData({ title: '', message: '', targetType: 'all', targetValue: '' });
     } catch (err) {
       toast.error("Erro ao enviar.");
@@ -60,21 +60,24 @@ const AdminNotifications: React.FC = () => {
   return (
     <div className="space-y-10 animate-in fade-in duration-500">
       
-      {/* MANUAL FIREBASE PUSH */}
-      <div className="bg-blue-50 border-4 border-blue-200 p-8 rounded-[40px] shadow-sm">
-          <h3 className="text-xl font-black uppercase italic tracking-tighter text-blue-900 mb-4 flex items-center gap-3">
-              <Smartphone size={24} className="text-blue-500"/> Enviar Push Notifications (Telemóvel)
-          </h3>
-          <p className="text-sm font-bold text-blue-800 mb-4">Para enviar um alerta que toca no telemóvel dos clientes (mesmo com a app fechada), segue estes passos:</p>
-          <div className="bg-white p-6 rounded-2xl text-xs font-bold text-slate-600 space-y-2 border-2 border-blue-100">
-              <p>1 - Acedes a <a href="https://console.firebase.google.com" target="_blank" rel="noreferrer" className="text-blue-500 underline">console.firebase.google.com</a></p>
-              <p>2 - Abres o teu projeto Vizinho+.</p>
-              <p>3 - No menu do lado esquerdo, procuras por <b>Engage (Envolvimento) -&gt; Messaging</b>.</p>
-              <p>4 - Clicas em <b>New Campaign (Nova Campanha)</b> e escolhes <b>Notifications (Notificações Firebase)</b>.</p>
-              <p>5 - Escreves o Título ("Promoção de Páscoa") e a Mensagem ("Ganhe 10% de cashback hoje!").</p>
-              <p>6 - Escolhes o teu público (ex: Todos os utilizadores da tua App Web).</p>
-              <p>7 - Clicas em <b>Publish (Publicar)</b>.</p>
+      {/* MANUAL ONESIGNAL PUSH */}
+      <div className="bg-blue-50 border-4 border-blue-200 p-8 rounded-[40px] shadow-sm flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+              <h3 className="text-xl font-black uppercase italic tracking-tighter text-blue-900 mb-4 flex items-center gap-3">
+                  <Smartphone size={24} className="text-blue-500"/> Enviar Push Notifications (OneSignal)
+              </h3>
+              <p className="text-sm font-bold text-blue-800 mb-4">Para enviar um alerta real que toca e vibra no telemóvel dos clientes (mesmo com a app fechada):</p>
+              <div className="bg-white p-6 rounded-2xl text-xs font-bold text-slate-600 space-y-2 border-2 border-blue-100">
+                  <p>1 - Acede a <b className="text-blue-500">onesignal.com</b> e entra na tua conta.</p>
+                  <p>2 - Abre a tua app "Vizinho+".</p>
+                  <p>3 - Clica no botão azul <b>"New Message"</b> e escolhe <b>"Push"</b>.</p>
+                  <p>4 - Escreve o Título, a Mensagem e até podes colocar imagens.</p>
+                  <p>5 - Escolhe enviar para "Subscribed Users" (Todos) e clica em <b>"Send Message"</b>.</p>
+              </div>
           </div>
+          <a href="https://onesignal.com" target="_blank" rel="noreferrer" className="bg-blue-600 text-white px-8 py-4 rounded-3xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2 text-center whitespace-nowrap">
+              Abrir OneSignal <ExternalLink size={18} />
+          </a>
       </div>
 
       <form onSubmit={handleSend} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
@@ -83,7 +86,7 @@ const AdminNotifications: React.FC = () => {
             <Bell size={24} strokeWidth={3} />
           </div>
           <div>
-            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Avisos na App (Push Free)</h3>
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Avisos Internos (Pop-up na App)</h3>
             <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Aparece APENAS quando o cliente ABRE a App</p>
           </div>
         </div>

@@ -2,13 +2,14 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { Toaster } from 'react-hot-toast'; 
+import OneSignal from 'react-onesignal';
 
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
 import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
 import TermsPage from './features/public/TermsPage'; 
-import VantagensPage from './features/public/VantagensPage'; // NOVO IMPORT
+import VantagensPage from './features/public/VantagensPage'; 
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
@@ -45,6 +46,36 @@ const SettingsWrapper = () => {
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
 
+  // INICIALIZAR O ONESIGNAL
+  useEffect(() => {
+    OneSignal.init({
+      appId: "bb9c97f7-38c8-4902-8abe-f7c21e5984be",
+      allowLocalhostAsSecureOrigin: true,
+      notifyButton: {
+        enable: false,
+        prenotify: false,
+        showCredit: false,
+        text: {
+          'tip.state.unsubscribed': 'Subscrever',
+          'tip.state.subscribed': 'Subscrito',
+          'tip.state.blocked': 'Bloqueado',
+          'message.prenotify': 'Clique para subscrever',
+          'message.action.subscribing': 'A subscrever...',
+          'message.action.subscribed': 'Obrigado!',
+          'message.action.resubscribed': 'Subscrito',
+          'message.action.unsubscribed': 'Removido',
+          'dialog.main.title': 'Notificações',
+          'dialog.main.button.subscribe': 'OK',
+          'dialog.main.button.unsubscribe': 'Sair',
+          'dialog.blocked.title': 'Notificações Bloqueadas',
+          'dialog.blocked.message': 'Siga as instruções para desbloquear as notificações.'
+        }
+      },
+    }).catch(err => {
+      console.error("Erro ao inicializar OneSignal:", err);
+    });
+  }, []);
+
   useEffect(() => {
     const unsub = initializeAuth();
     return () => unsub();
@@ -64,7 +95,7 @@ function App() {
         <Routes>
           <Route path="/" element={<LandingPage />} />
           <Route path="/terms" element={<TermsPage />} />
-          <Route path="/vantagens" element={<VantagensPage />} /> {/* NOVA ROTA */}
+          <Route path="/vantagens" element={<VantagensPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
