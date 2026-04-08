@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2 } from 'lucide-react';
+import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -93,22 +93,33 @@ const RegisterPage: React.FC = () => {
               <CheckCircle2 size={40} className="text-[#0a2540]" />
             </div>
             <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Bem-vindo(a)!</h2>
-            <p className="text-sm font-bold text-slate-500 mb-8">A tua conta foi criada. Para tirar o máximo partido do Vizinho+, ativa já as opções abaixo:</p>
             
+            <div className="bg-amber-50 border-2 border-amber-200 p-5 rounded-3xl mb-6 mt-4 text-left shadow-inner">
+               <div className="flex items-center gap-2 mb-2 text-amber-600">
+                  <AlertTriangle size={20} strokeWidth={3} />
+                  <h3 className="font-black uppercase text-[10px] tracking-widest">Passo Muito Importante</h3>
+               </div>
+               <p className="text-xs font-bold text-amber-900 leading-relaxed">
+                 Para ter acesso a <strong>todas as vantagens VIP</strong> e receber os avisos de dinheiro ganho na hora (mesmo com o telemóvel bloqueado ou a app fechada), é <strong>fundamental</strong> que instale a aplicação e permita os alertas.
+               </p>
+            </div>
+
             <div className="space-y-4 mb-8">
                 {isInstallable && (
-                    <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg">
-                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar Aplicação (Ecrã)
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg border-2 border-[#0a2540]">
+                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar App (Obrigatório)
                     </button>
                 )}
-                <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-blue-50 border-2 border-blue-200 text-blue-600 p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-sm">
-                    <Volume2 size={24} /> Permitir Alertas (Telemóvel)
+                <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-[4px_4px_0px_#0a2540]">
+                    <Volume2 size={24} /> Permitir Alertas no Ecrã
                 </button>
             </div>
 
-            <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
-                Concluir e Entrar <ArrowRight size={20} />
-            </button>
+            <div className="border-t-2 border-slate-100 pt-6 mt-4">
+              <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                  Já fiz isto, quero entrar <ArrowRight size={20} />
+              </button>
+            </div>
         </div>
       </div>
     );

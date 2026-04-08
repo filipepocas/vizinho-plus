@@ -52,16 +52,21 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
         <div className="space-y-10 relative z-10">
           
           <div className="space-y-4">
-            {/* TEXTO ATUALIZADO AQUI */}
             <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
               <Search size={16} /> Identificar Cliente (Nº Cartão ou NIF)
             </label>
-            <div className="flex gap-4">
+            <div className="flex flex-col sm:flex-row gap-4">
               <input 
                 type="text" inputMode="numeric" value={cardNumber} onChange={handleNifChange} placeholder="000 000 000" 
-                className={`flex-grow p-6 bg-slate-50 border-4 rounded-3xl text-3xl font-black text-[#0a2540] outline-none transition-all shadow-inner tracking-widest ${isNifValid ? 'border-[#00d66f] bg-green-50/30' : 'border-slate-100 focus:border-[#0a2540]'}`}
+                className={`flex-grow p-6 bg-slate-50 border-4 rounded-3xl text-3xl font-black text-[#0a2540] outline-none transition-all shadow-inner tracking-widest text-center sm:text-left ${isNifValid ? 'border-[#00d66f] bg-green-50/30' : 'border-slate-100 focus:border-[#0a2540]'}`}
               />
-              <button onClick={onOpenScanner} className="bg-[#0a2540] px-8 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-[6px_6px_0px_0px_#00d66f] border-2 border-[#00d66f] active:translate-y-1 active:shadow-none"><Camera size={32} /></button>
+              <button 
+                onClick={onOpenScanner} 
+                className="bg-[#0a2540] px-6 py-4 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-[6px_6px_0px_0px_#00d66f] border-2 border-[#00d66f] active:translate-y-1 active:shadow-none flex items-center justify-center gap-3 whitespace-nowrap"
+              >
+                <Camera size={28} />
+                <span className="font-black uppercase text-xs tracking-widest">Ler QR Code</span>
+              </button>
             </div>
           </div>
 
