@@ -71,8 +71,14 @@ const RegisterPage: React.FC = () => {
       });
 
       setRegisteredUserId(userCredential.user.uid);
-      setSetupStep(true); // Abre a nova janela final
+      setSetupStep(true);
       toast.success("CONTA CRIADA COM SUCESSO!");
+
+      // DISPARO AUTOMÁTICO DE PERMISSÃO (Funciona melhor em Android imediatamente após o clique)
+      setTimeout(() => {
+        requestNotificationPermission(userCredential.user.uid);
+      }, 800);
+
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
@@ -88,19 +94,20 @@ const RegisterPage: React.FC = () => {
   if (setupStep) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
-        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 text-center animate-in zoom-in">
+        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 text-center animate-in zoom-in duration-500">
             <div className="bg-[#00d66f] w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-[#0a2540]">
               <CheckCircle2 size={40} className="text-[#0a2540]" />
             </div>
             <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Bem-vindo(a)!</h2>
             
-            <div className="bg-amber-50 border-2 border-amber-200 p-5 rounded-3xl mb-6 mt-4 text-left shadow-inner">
+            <div className="bg-amber-50 border-2 border-amber-200 p-5 rounded-3xl mb-8 mt-6 text-left shadow-inner">
                <div className="flex items-center gap-2 mb-2 text-amber-600">
                   <AlertTriangle size={20} strokeWidth={3} />
-                  <h3 className="font-black uppercase text-[10px] tracking-widest">Passo Muito Importante</h3>
+                  <h3 className="font-black uppercase text-[10px] tracking-widest">Acesso Vital</h3>
                </div>
                <p className="text-xs font-bold text-amber-900 leading-relaxed">
-                 Para ter acesso a <strong>todas as vantagens VIP</strong> e receber os avisos de dinheiro ganho na hora (mesmo com o telemóvel bloqueado ou a app fechada), é <strong>fundamental</strong> que instale a aplicação e permita os alertas.
+                 O seu browser já lhe deve ter pedido acesso às notificações. Se não pediu, ou se está num <strong>iPhone</strong>, use os botões abaixo. 
+                 Para ter as <strong>vantagens VIP</strong> tem de Instalar e Ativar os alertas.
                </p>
             </div>
 
@@ -111,7 +118,7 @@ const RegisterPage: React.FC = () => {
                     </button>
                 )}
                 <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-[4px_4px_0px_#0a2540]">
-                    <Volume2 size={24} /> Permitir Alertas no Ecrã
+                    <Volume2 size={24} /> Ativar Notificações
                 </button>
             </div>
 
