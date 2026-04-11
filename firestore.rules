@@ -4,7 +4,7 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isSuperAdmin() {
       return isSignedIn() && request.auth.token.email != null
-        && request.auth.token.email.toLowerCase() == 'rochap.filipe@gmail.com';
+        && request.auth.token.email.lower() == 'rochap.filipe@gmail.com';
     }
     function isAdmin() {
       // Nota: sem Admin SDK/custom claims, a única garantia forte aqui é o Super Admin.

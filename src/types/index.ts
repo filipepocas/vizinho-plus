@@ -14,12 +14,16 @@ export interface User {
   birthDate?: string;
   cashbackPercent?: number;
   shopName?: string;
+  responsibleName?: string;
   freguesia?: string;
   category?: string;
   address?: string;
   storeWallets?: Record<string, { available: number; pending: number }>;
-  // Nova propriedade adicionada para os equipamentos
-  devices?: any[]; 
+  devices?: any[];
+  wallet?: {
+    available: number;
+    pending: number;
+  };
 }
 
 export interface Transaction {
@@ -34,15 +38,28 @@ export interface Transaction {
   clientName?: string;
   clientCardNumber?: string;
   clientNif?: string;
-  cashbackAmount?: number;
+  cashbackAmount: number; 
   documentNumber?: string;
+  clientBirthDate?: string;
+}
+
+export interface TransactionCreate {
+  clientId: string;
+  merchantId: string;
+  merchantName: string;
+  amount: number;
+  type: 'earn' | 'redeem' | 'cancel';
+  documentNumber?: string;
+  clientName?: string;
+  clientCardNumber?: string;
+  clientBirthDate?: string;
 }
 
 export interface MarketingRequest {
   id?: string;
   merchantId: string;
   merchantName: string;
-  // Nova opção de notificação adicionada
+  shopName?: string;
   type: 'banner' | 'leaflet' | 'push_notification'; 
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
@@ -56,17 +73,90 @@ export interface MarketingRequest {
   unit?: string;
   promoPrice?: string;
   promoType?: string;
-  // Novos campos para a notificação Push
   targetCriteria?: string;
   targetValue?: string;
   targetCount?: number;
   cost?: number;
 }
 
-export interface LeafletCampaign {
+export interface Leaflet {
   id?: string;
   title: string;
-  limitDate: any;
-  distributionDate: any;
   createdAt?: any;
+  startDate?: any;
+  endDate?: any;
+  leafletUrl?: string;
+  isActive?: boolean;
+  targetZipCodes?: string[];
+  limitDate?: any;
+  distributionDate?: any;
+}
+
+export type LeafletCampaign = Leaflet;
+
+export interface MerchantRequest {
+  id?: string;
+  shopName: string;
+  responsibleName: string;
+  nif: string;
+  email: string;
+  phone: string;
+  category: string;
+  freguesia: string;
+  zipCode: string;
+  cashbackPercent: string | number;
+  pass?: string;
+  password?: string;
+  status?: string;
+  createdAt?: any;
+}
+
+export interface AppNotification {
+  id?: string;
+  title: string;
+  message: string;
+  targetType?: string;
+  targetValue: string; 
+  createdAt?: any;
+  sent?: boolean;
+  type?: string;
+  icon?: string;
+}
+
+export interface SystemConfig {
+  id?: string;
+  globalServiceFee: number;
+  maturationHours: number;
+  minRedeemAmount: number;
+  platformStatus: string;
+  supportEmail: string;
+  vantagensUrl: string;
+  updatedAt?: any;
+  appVersion?: string;
+}
+
+// INTERFACE VANTAGEM TOTALMENTE CORRIGIDA
+export interface Vantagem {
+  id: string;
+  title: string;
+  description: string;
+  partnerName: string;    // Adicionado
+  category: string;       // Adicionado
+  imageBase64?: string;   // Adicionado
+  zipCode?: string;       // Adicionado
+  address?: string;       // Adicionado
+  websiteUrl?: string;    // Adicionado
+  isActive: boolean;
+  imageUrl?: string;
+  createdAt?: any;
+}
+
+export interface Feedback {
+  id: string;
+  merchantId: string;
+  clientId: string;
+  userName: string;
+  rating: number;
+  comment: string;
+  createdAt: any;
 }
