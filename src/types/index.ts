@@ -1,169 +1,54 @@
-export interface FirestoreTimestamp {
-  seconds: number;
-  nanoseconds: number;
-  toDate: () => Date;
-}
-
-export type UserRole = 'admin' | 'merchant' | 'client' | 'user';
-export type UserStatus = 'active' | 'disabled' | 'pending';
-export type TransactionType = 'earn' | 'redeem' | 'cancel' | 'subtract';
-export type TransactionStatus = 'pending' | 'available' | 'cancelled' | 'rejected';
-
-export interface Feedback {
-  id: string;
-  transactionId: string;
-  merchantId: string;
-  merchantName: string;
-  userId: string;
-  userName: string;
-  rating: number;
-  comment: string;
-  recommend: boolean | null;
-  status: 'new' | 'reviewed';
-  createdAt: FirestoreTimestamp;
-}
-
-export interface SystemConfig {
-  globalServiceFee: number;
-  maturationHours: number;
-  minRedeemAmount: number;
-  platformStatus: 'active' | 'maintenance';
-  supportEmail: string;
-  vantagensUrl: string;
-  updatedAt?: FirestoreTimestamp;
-  lastChangeBy?: string;
-  auditRef?: string;
-}
-
-export interface WalletData {
-  merchantName: string;
-  available: number;
-  pending: number;
-  lastUpdate?: FirestoreTimestamp;
-}
-
-export interface Operator {
-  id: string;
-  name: string;
-  code: string;
-}
+// src/types/index.ts
 
 export interface User {
   id: string;
-  uid?: string;
+  name: string;
   email: string;
-  role: UserRole;
-  isSuperAdmin?: boolean;
-  status: UserStatus;
-  name?: string;
-  responsibleName?: string; 
+  role: 'admin' | 'merchant' | 'client';
   nif?: string;
-  phone?: string; 
+  phone?: string;
+  zipCode?: string;
+  status?: string;
+  createdAt?: any;
   customerNumber?: string;
-  birthDate?: string; 
-  wallet?: {
-    available: number;
-    pending: number;
-  };
-  storeWallets?: { 
-    [merchantId: string]: WalletData 
-  };
-  shopName?: string;
+  birthDate?: string;
   cashbackPercent?: number;
-  pendingCashbackPercent?: number;
-  pendingCashbackEffectiveAt?: FirestoreTimestamp;
-  primaryColor?: string;
-  category?: string;
-  operators?: Operator[];
-  address?: string;
-  zipCode?: string; 
+  shopName?: string;
   freguesia?: string;
-  createdAt: FirestoreTimestamp;
+  category?: string;
+  address?: string;
+  storeWallets?: Record<string, { available: number; pending: number }>;
+  // Nova propriedade adicionada para os equipamentos
+  devices?: any[]; 
 }
 
-export interface TransactionCore {
+export interface Transaction {
+  id: string;
   clientId: string;
   merchantId: string;
   merchantName: string;
   amount: number;
-  type: TransactionType;
-  documentNumber?: string;
-}
-
-export interface TransactionCreate extends TransactionCore {
-  cashbackAmount?: number;
-  cashbackPercent?: number;
-  clientName?: string; 
-  clientCardNumber?: string; 
-  clientBirthDate?: string; 
-}
-
-export interface Transaction extends TransactionCore {
-  id: string;
-  cashbackAmount: number;
-  cashbackPercent: number;
-  status: TransactionStatus;
-  createdAt: FirestoreTimestamp;
-  maturedAt?: FirestoreTimestamp;
-  clientNif?: string;
-  clientName?: string; 
-  clientCardNumber?: string; 
-  clientBirthDate?: string; 
-}
-
-export interface MerchantRequest {
-  id?: string;
-  shopName: string;
-  responsibleName: string;
-  email: string;
-  phone: string;
-  nif: string;
-  category: string;
-  cashbackPercent?: string | number;
-  freguesia: string;
-  zipCode: string;
-  password?: string; 
+  type: 'earn' | 'redeem' | 'cancel';
+  status: string;
   createdAt: any;
-}
-
-export interface Leaflet {
-  id?: string;
-  title: string;
-  leafletUrl: string;
-  startDate: FirestoreTimestamp;
-  endDate: FirestoreTimestamp;
-  isActive: boolean;
-  targetZipCodes?: string[];
-  createdAt: FirestoreTimestamp;
-}
-
-export interface AppNotification {
-  id?: string;
-  title: string;
-  message: string;
-  targetType: 'all' | 'email' | 'zipCode' | 'birthDate';
-  targetValue: string;
-  createdAt: FirestoreTimestamp;
-}
-
-export interface LeafletCampaign {
-  id?: string;
-  title: string;
-  limitDate: FirestoreTimestamp;
-  distributionDate: FirestoreTimestamp;
-  createdAt: FirestoreTimestamp;
+  clientName?: string;
+  clientCardNumber?: string;
+  clientNif?: string;
+  cashbackAmount?: number;
+  documentNumber?: string;
 }
 
 export interface MarketingRequest {
   id?: string;
   merchantId: string;
   merchantName: string;
-  type: 'banner' | 'leaflet';
+  // Nova opção de notificação adicionada
+  type: 'banner' | 'leaflet' | 'push_notification'; 
   status: 'pending' | 'approved' | 'rejected';
+  createdAt: any;
   text?: string;
   imageUrl?: string;
   requestedDate?: string;
-  leafletCampaignId?: string;
   leafletCampaignTitle?: string;
   spaceType?: string;
   description?: string;
@@ -171,18 +56,17 @@ export interface MarketingRequest {
   unit?: string;
   promoPrice?: string;
   promoType?: string;
-  createdAt: FirestoreTimestamp;
+  // Novos campos para a notificação Push
+  targetCriteria?: string;
+  targetValue?: string;
+  targetCount?: number;
+  cost?: number;
 }
 
-// NOVO TIPO: Vantagens VIP
-export interface Vantagem {
+export interface LeafletCampaign {
   id?: string;
-  partnerName: string;
-  category: string;
-  address: string;
-  zipCode: string;
-  websiteUrl: string;
-  description: string;
-  imageBase64: string;
-  createdAt: FirestoreTimestamp;
+  title: string;
+  limitDate: any;
+  distributionDate: any;
+  createdAt?: any;
 }

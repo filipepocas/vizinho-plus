@@ -1,11 +1,15 @@
+// src/features/auth/LoginPage.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2, Store, X, User, Phone, MapPin, Hash, Tag, Percent } from 'lucide-react';
+import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2, Store, X, User, Phone, MapPin, Hash, Tag, Percent, CheckCircle2, AlertTriangle, Smartphone, Volume2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
 import toast from 'react-hot-toast';
+import { registerDeviceInFirebase, requestNotificationPermission } from '../../utils/notifications';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 const MERCH_CATEGORIES = [
   "Restauração & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
@@ -29,14 +33,20 @@ const LoginPage: React.FC = () => {
   });
   const [submittingMerchant, setSubmittingMerchant] = useState(false);
 
+  // Novos Estados para o Controlo Pós-Login
+  const { isInstallable, installApp } = usePWAInstall();
+  const [setupStep, setSetupStep] = useState(false);
+  const [loggedInUserId, setLoggedInUserId] = useState('');
+
   const { currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
 
+  // Apenas redireciona se não estivermos presos no "setupStep"
   useEffect(() => {
-    if (isInitialized && currentUser) {
+    if (isInitialized && currentUser && !setupStep && !localLoading) {
       navigate('/dashboard', { replace: true });
     }
-  }, [currentUser, isInitialized, navigate]);
+  }, [currentUser, isInitialized, navigate, setupStep, localLoading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +55,21 @@ const LoginPage: React.FC = () => {
     setError('');
     
     try {
-      await signInWithEmailAndPassword(auth, email.trim(), password);
+      const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+      
+      // Regista o Equipamento (Máx 2, Limpa aos 45 dias)
+      await registerDeviceInFirebase(cred.user.uid);
+      setLoggedInUserId(cred.user.uid);
+
+      // Verifica se a permissão nativa de notificações está concedida
+      const nativePermission = 'Notification' in window && Notification.permission === 'granted';
+      
+      if (isInstallable || !nativePermission) {
+        setSetupStep(true);
+        setLocalLoading(false);
+      } else {
+        // Deixa o useEffect atuar naturalmente e navegar
+      }
     } catch (err: any) {
       setLocalLoading(false);
       setError('Email ou password incorretos.');
@@ -75,6 +99,47 @@ const LoginPage: React.FC = () => {
       setSubmittingMerchant(false);
     }
   };
+
+  // ECRÃ OBRIGATÓRIO SE A APP NÃO ESTIVER INSTALADA OU SEM NOTIFICAÇÕES
+  if (setupStep) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
+        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 text-center animate-in zoom-in duration-500">
+            <div className="bg-[#00d66f] w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-[#0a2540]">
+              <CheckCircle2 size={40} className="text-[#0a2540]" />
+            </div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Quase lá!</h2>
+            
+            <div className="bg-amber-50 border-2 border-amber-200 p-5 rounded-3xl mb-8 mt-6 text-left shadow-inner">
+               <div className="flex items-center gap-2 mb-2 text-amber-600">
+                  <AlertTriangle size={20} strokeWidth={3} />
+                  <h3 className="font-black uppercase text-[10px] tracking-widest">Ação Necessária</h3>
+               </div>
+               <p className="text-xs font-bold text-amber-900 leading-relaxed">
+                 Detetámos que este telemóvel não tem a APP instalada ou as Notificações ativas. Para usares a tua conta, por favor, conclui estes passos obrigatórios.
+               </p>
+            </div>
+
+            <div className="space-y-4 mb-8">
+                {isInstallable && (
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg border-2 border-[#0a2540]">
+                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar App (Obrigatório)
+                    </button>
+                )}
+                <button onClick={() => requestNotificationPermission(loggedInUserId)} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-[4px_4px_0px_#0a2540]">
+                    <Volume2 size={24} /> Ativar Notificações
+                </button>
+            </div>
+
+            <div className="border-t-2 border-slate-100 pt-6 mt-4">
+              <button onClick={() => navigate('/dashboard', { replace: true })} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+                  Já fiz isto, quero entrar <ArrowRight size={20} />
+              </button>
+            </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
@@ -124,6 +189,7 @@ const LoginPage: React.FC = () => {
 
       {showMerchantModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+          {/* O RESTO DO TEU CÓDIGO DO MODAL DE COMERCIANTES FICOU INTACTO ABAIXO */}
           <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-8">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">

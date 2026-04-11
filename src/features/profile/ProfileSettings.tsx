@@ -1,12 +1,16 @@
+// src/features/profile/ProfileSettings.tsx
+
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { db, auth } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { deleteUser } from 'firebase/auth';
+import OneSignal from 'react-onesignal';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
-  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, IdCard 
+  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, IdCard, Bell, BellOff 
 } from 'lucide-react';
+import { toggleNotifications } from '../../utils/notifications';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentUser, deleteUserWithHistory, logout } = useStore();
@@ -15,6 +19,11 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [saved, setSaved] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [rgpdDeleted, setRgpdDeleted] = useState(false);
+
+  // Estado das notificações deste telemóvel
+  const [notificationsEnabled, setNotificationsEnabled] = useState(
+    'Notification' in window ? Notification.permission === 'granted' : false
+  );
 
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
@@ -44,6 +53,24 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
+  const handleToggleNotifications = async () => {
+    if (!currentUser?.id) return;
+
+    if (notificationsEnabled) {
+       const confirm1 = window.confirm("Atenção: Desativar as notificações NÃO é recomendável. Vais perder o acesso a ofertas exclusivas, avisos de saldo e campanhas urgentes.\n\nTens a certeza que queres desativar?");
+       if (confirm1) {
+          const confirm2 = window.confirm("Última confirmação: As notificações serão desligadas NESTE telemóvel. Continuar?");
+          if (confirm2) {
+              await toggleNotifications(currentUser.id, false);
+              setNotificationsEnabled(false);
+          }
+       }
+    } else {
+       const success = await toggleNotifications(currentUser.id, true);
+       if (success) setNotificationsEnabled(true);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!currentUser?.id) return;
 
@@ -59,6 +86,9 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           const userId = currentUser.id;
           const roleToDelete = currentUser.role === 'merchant' ? 'merchant' : 'client';
           
+          // Desconecta e remove as notificações do OneSignal primeiro
+          try { await OneSignal.logout(); } catch (e) { console.warn("OneSignal logout error", e); }
+
           // 1. Apaga primeiro todos os dados na Base de Dados (Transações, Saldo, Perfil)
           await deleteUserWithHistory(userId, roleToDelete);
           
@@ -174,6 +204,26 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* NOVA SECÇÃO: CONTROLO DE EQUIPAMENTO E NOTIFICAÇÕES */}
+          <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-2 rounded-xl ${notificationsEnabled ? 'bg-[#00d66f]/20 text-[#00d66f]' : 'bg-red-100 text-red-500'}`}>
+                {notificationsEnabled ? <Bell size={20} strokeWidth={3} /> : <BellOff size={20} strokeWidth={3} />}
+              </div>
+              <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Este Equipamento</h3>
+            </div>
+            
+            <p className="text-[10px] text-slate-500 font-bold uppercase leading-relaxed mb-4">
+              {notificationsEnabled 
+                ? "Este telemóvel/browser está a receber as notificações oficiais do Vizinho+." 
+                : "As notificações estão desligadas neste equipamento."}
+            </p>
+
+            <button type="button" onClick={handleToggleNotifications} className={`w-full py-4 rounded-2xl border-2 font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all ${notificationsEnabled ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-[#00d66f] border-[#00d66f] text-[#0a2540] hover:scale-105 shadow-lg'}`}>
+               {notificationsEnabled ? "Desativar Notificações (Não Recomendado)" : "Ativar Notificações"}
+            </button>
           </div>
 
           {currentUser?.role === 'merchant' && (
