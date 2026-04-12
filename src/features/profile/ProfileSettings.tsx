@@ -1,11 +1,8 @@
-// src/features/profile/ProfileSettings.tsx
-
 import React, { useState } from 'react';
 import { useStore } from '../../store/useStore';
 import { db, auth } from '../../config/firebase';
 import { doc, updateDoc } from 'firebase/firestore';
 import { deleteUser } from 'firebase/auth';
-import OneSignal from 'react-onesignal';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
   ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, IdCard, Bell, BellOff 
@@ -20,7 +17,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [rgpdDeleted, setRgpdDeleted] = useState(false);
 
-  // Estado das notificações deste telemóvel
   const [notificationsEnabled, setNotificationsEnabled] = useState(
     'Notification' in window ? Notification.permission === 'granted' : false
   );
@@ -38,7 +34,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser?.id) return;
-
     setLoading(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
@@ -55,29 +50,26 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 
   const handleToggleNotifications = async () => {
     if (!currentUser?.id) return;
-
     if (notificationsEnabled) {
-       const confirm1 = window.confirm("Atenção: Desativar as notificações NÃO é recomendável. Vais perder o acesso a ofertas exclusivas, avisos de saldo e campanhas urgentes.\n\nTens a certeza que queres desativar?");
-       if (confirm1) {
-          const confirm2 = window.confirm("Última confirmação: As notificações serão desligadas NESTE telemóvel. Continuar?");
-          if (confirm2) {
-              await toggleNotifications(currentUser.id, false);
-              setNotificationsEnabled(false);
-          }
-       }
+      const confirm1 = window.confirm("Atenção: Desativar as notificações NÃO é recomendável. Vais perder o acesso a ofertas exclusivas, avisos de saldo e campanhas urgentes.\n\nTens a certeza que queres desativar?");
+      if (confirm1) {
+        const confirm2 = window.confirm("Última confirmação: As notificações serão desligadas NESTE telemóvel. Continuar?");
+        if (confirm2) {
+          await toggleNotifications(currentUser.id, false);
+          setNotificationsEnabled(false);
+        }
+      }
     } else {
-       const success = await toggleNotifications(currentUser.id, true);
-       if (success) setNotificationsEnabled(true);
+      const success = await toggleNotifications(currentUser.id, true);
+      if (success) setNotificationsEnabled(true);
     }
   };
 
   const handleDeleteAccount = async () => {
     if (!currentUser?.id) return;
-
     const confirmFirst = window.confirm(
       "Tens a certeza que queres eliminar a tua conta?\n\nEsta ação irá apagar permanentemente o teu perfil e todo o teu histórico de saldos. Não poderás recuperar estes dados."
     );
-
     if (confirmFirst) {
       const confirmSecond = window.confirm("ÚLTIMO AVISO: Todos os teus dados serão destruídos agora sem possibilidade de recuperação. Confirmas?");
       if (confirmSecond) {
@@ -86,26 +78,19 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           const userId = currentUser.id;
           const roleToDelete = currentUser.role === 'merchant' ? 'merchant' : 'client';
           
-          // Desconecta e remove as notificações do OneSignal primeiro
-          try { await OneSignal.logout(); } catch (e) { console.warn("OneSignal logout error", e); }
-
-          // 1. Apaga primeiro todos os dados na Base de Dados (Transações, Saldo, Perfil)
           await deleteUserWithHistory(userId, roleToDelete);
           
-          // 2. Apaga a conta central de Autenticação do Firebase
           if (auth.currentUser) {
             await deleteUser(auth.currentUser);
           }
           
-          // 3. Mostra Ecrã RGPD de Confirmação
           setRgpdDeleted(true);
-
         } catch (error: any) {
           console.error("Erro ao eliminar conta:", error);
           if (error.code === 'auth/requires-recent-login') {
-             alert("Por motivos de segurança exigidos pelo sistema, precisas de ter feito login recentemente para destruir a conta. Por favor, sai da aplicação, entra novamente com a tua password e repete o processo.");
+            alert("Por motivos de segurança exigidos pelo sistema, precisas de ter feito login recentemente para destruir a conta. Por favor, sai da aplicação, entra novamente com a tua password e repete o processo.");
           } else {
-             alert("Ocorreu um erro no servidor. A sessão será encerrada.");
+            alert("Ocorreu um erro no servidor. A sessão será encerrada.");
           }
           await logout();
         } finally {
@@ -115,28 +100,25 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  // ECRÃ DE CONFIRMAÇÃO DE DIREITO AO ESQUECIMENTO (RGPD)
   if (rgpdDeleted) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
         <div className="bg-white p-10 md:p-14 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] max-w-lg text-center animate-in zoom-in duration-500">
-           <div className="bg-[#00d66f] w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 border-4 border-[#0a2540] rotate-3">
-              <ShieldCheck size={48} className="text-[#0a2540]" />
-           </div>
-           <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4">Direito ao Esquecimento</h2>
-           
-           <div className="bg-slate-50 border-2 border-slate-100 p-6 rounded-3xl mb-8">
-              <p className="text-sm font-bold text-slate-500 leading-relaxed">
-                A sua conta foi <strong>eliminada com sucesso</strong>. Ao abrigo do Regulamento Geral de Proteção de Dados (RGPD), confirmamos que todos os seus dados pessoais, informações de contacto, saldos acumulados e histórico de movimentos foram apagados permanentemente e esquecidos pelos nossos servidores.
-              </p>
-           </div>
-           
-           <button 
-             onClick={async () => { await logout(); onBack(); }}
-             className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all border-b-8 border-black/20"
-           >
-             Sair em Segurança
-           </button>
+          <div className="bg-[#00d66f] w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 border-4 border-[#0a2540] rotate-3">
+            <ShieldCheck size={48} className="text-[#0a2540]" />
+          </div>
+          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4">Direito ao Esquecimento</h2>
+          <div className="bg-slate-50 border-2 border-slate-100 p-6 rounded-3xl mb-8">
+            <p className="text-sm font-bold text-slate-500 leading-relaxed">
+              A sua conta foi <strong>eliminada com sucesso</strong>. Ao abrigo do Regulamento Geral de Proteção de Dados (RGPD), confirmamos que todos os seus dados pessoais, informações de contacto, saldos acumulados e histórico de movimentos foram apagados permanentemente e esquecidos pelos nossos servidores.
+            </p>
+          </div>
+          <button 
+            onClick={async () => { await logout(); onBack(); }}
+            className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all border-b-8 border-black/20"
+          >
+            Sair em Segurança
+          </button>
         </div>
       </div>
     );
@@ -178,6 +160,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
               <div className="bg-slate-100 p-2 rounded-xl"><UserIcon className="text-[#0f172a]" size={20} strokeWidth={3} /></div>
               <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados Pessoais</h3>
             </div>
+
             <div className="space-y-5">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome Completo</label>
@@ -196,6 +179,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                   <input type="tel" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white" />
                 </div>
               </div>
+
               <div className="space-y-2 opacity-60">
                 <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email (Apenas Leitura)</label>
                 <div className="relative">
@@ -206,7 +190,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </div>
           </div>
 
-          {/* NOVA SECÇÃO: CONTROLO DE EQUIPAMENTO E NOTIFICAÇÕES */}
           <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
             <div className="flex items-center gap-3 mb-4">
               <div className={`p-2 rounded-xl ${notificationsEnabled ? 'bg-[#00d66f]/20 text-[#00d66f]' : 'bg-red-100 text-red-500'}`}>
@@ -222,7 +205,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             </p>
 
             <button type="button" onClick={handleToggleNotifications} className={`w-full py-4 rounded-2xl border-2 font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all ${notificationsEnabled ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-[#00d66f] border-[#00d66f] text-[#0a2540] hover:scale-105 shadow-lg'}`}>
-               {notificationsEnabled ? "Desativar Notificações (Não Recomendado)" : "Ativar Notificações"}
+              {notificationsEnabled ? "Desativar Notificações (Não Recomendado)" : "Ativar Notificações"}
             </button>
           </div>
 
@@ -232,6 +215,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <div className="bg-slate-100 p-2 rounded-xl"><MapPin className="text-[#0f172a]" size={20} strokeWidth={3} /></div>
                 <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados da Loja</h3>
               </div>
+
               <div className="space-y-5">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoria / Ramo</label>
@@ -240,10 +224,12 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                     <input type="text" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f]" />
                   </div>
                 </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Morada Comercial</label>
                   <input type="text" value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f]" />
                 </div>
+
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Cód. Postal</label>
@@ -269,6 +255,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <h4 className="text-[10px] font-black uppercase tracking-[0.2em]">Zona Crítica</h4>
               </div>
               <p className="text-[9px] text-red-400 font-bold uppercase mb-6 leading-relaxed">Ao eliminar a conta, perderás permanentemente o acesso ao teu saldo e histórico.</p>
+              
               <button type="button" onClick={handleDeleteAccount} disabled={isDeleting} className="w-full py-4 rounded-2xl bg-white border-2 border-red-200 text-red-500 font-black uppercase text-[10px] tracking-widest hover:bg-red-500 hover:text-white flex items-center justify-center gap-3">
                 {isDeleting ? <><RefreshCw size={14} className="animate-spin" /> Destruindo dados...</> : <><Trash2 size={14} /> Eliminar Conta Permanentemente</>}
               </button>

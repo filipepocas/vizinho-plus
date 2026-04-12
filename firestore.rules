@@ -1,146 +1,88 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+    
     function isSignedIn() { return request.auth != null; }
     function isSuperAdmin() {
       return isSignedIn() && request.auth.token.email != null
         && request.auth.token.email.lower() == 'rochap.filipe@gmail.com';
     }
     function isAdmin() {
-      // Nota: sem Admin SDK/custom claims, a única garantia forte aqui é o Super Admin.
-      // Permitimos também admins "normais" com role=admin no seu próprio doc, mas isso depende de regras de escrita seguras.
       return isSuperAdmin() ||
-        (isSignedIn()
-          && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-          && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+        (isSignedIn() 
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
     }
 
-    function hasOnlyKeys(data, keys) {
-      return data.keys().hasOnly(keys);
-    }
-
-    function isZipCode(value) {
-      return value is string && value.matches('^\\\\d{4}-\\\\d{3}$');
-    }
-
-    // USERS
+    // USERS: Permite a leitura a utilizadores autenticados (para os lojistas verem clientes e vice-versa)
     match /users/{userId} {
-      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == userId);
-
-      // Cliente cria o próprio perfil
-      allow create: if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.role in ['client', 'user']
-        && request.resource.data.email is string
-        && request.resource.data.nif is string
-        && request.resource.data.nif.matches('^\\\\d{9}$')
-        && isZipCode(request.resource.data.zipCode)
-        && request.resource.data.status in ['active', 'pending']
-        && request.resource.data.createdAt == request.time;
-
-      // SuperAdmin cria merchants/admins
-      allow create: if isSuperAdmin()
-        && request.resource.data.role in ['merchant', 'admin']
-        && request.resource.data.email is string
-        && request.resource.data.nif is string
-        && request.resource.data.nif.matches('^\\\\d{9}$')
-        && isZipCode(request.resource.data.zipCode)
-        && request.resource.data.status == 'active'
-        && request.resource.data.createdAt == request.time;
-
-      // Atualizações: o próprio utilizador pode alterar apenas campos de perfil não críticos
-      allow update: if isSignedIn() && request.auth.uid == userId
-        && !('role' in request.resource.data.diff(resource.data).changedKeys())
-        && !('wallet' in request.resource.data.diff(resource.data).changedKeys())
-        && !('storeWallets' in request.resource.data.diff(resource.data).changedKeys())
-        && !('status' in request.resource.data.diff(resource.data).changedKeys());
-
-      // Admin pode suspender/reativar e alterar campos de gestão
-      allow update: if isAdmin();
-
-      allow delete: if isSuperAdmin();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.auth.uid == userId;
+      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
     }
 
-    // TRANSACTIONS
+    // TRANSAÇÕES
     match /transactions/{txId} {
-      allow read: if isSignedIn() && (
-        isAdmin()
-        || (resource.data.clientId == request.auth.uid)
-        || (resource.data.merchantId == request.auth.uid)
-      );
-
-      // Criar transação: apenas merchant autenticado, e só com campos permitidos
-      allow create: if isSignedIn()
-        && request.resource.data.merchantId == request.auth.uid
-        && request.resource.data.clientId is string
-        && request.resource.data.merchantName is string
-        && request.resource.data.amount is number
-        && request.resource.data.cashbackAmount is number
-        && request.resource.data.cashbackPercent is number
-        && request.resource.data.type in ['earn', 'redeem', 'cancel', 'subtract']
-        && request.resource.data.status in ['pending', 'available', 'cancelled']
-        && request.resource.data.createdAt == request.time
-        && hasOnlyKeys(request.resource.data, [
-          'clientId',
-          'merchantId',
-          'merchantName',
-          'amount',
-          'cashbackAmount',
-          'cashbackPercent',
-          'documentNumber',
-          'type',
-          'status',
-          'createdAt',
-          'maturedAt'
-        ]);
-
-      // Atualização: regras específicas para maturação e cancelamento
-      allow update: if isSignedIn() && (
-        // Maturação: o próprio cliente pode marcar pending->available após 48h
-        (
-          resource.data.clientId == request.auth.uid
-          && resource.data.type == 'earn'
-          && resource.data.status == 'pending'
-          && request.resource.data.status == 'available'
-          && request.time > resource.data.createdAt + duration.value(48, 'h')
-        )
-        ||
-        // Merchant ou Admin pode cancelar (ou admin ajustar)
-        (
-          (resource.data.merchantId == request.auth.uid || isAdmin())
-          && request.resource.data.status == 'cancelled'
-        )
-        ||
-        // Admin pode gerir
-        isAdmin()
-      );
-
-      allow delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() && (request.auth.uid == resource.data.clientId || isAdmin());
     }
 
     // FEEDBACKS
     match /feedbacks/{feedbackId} {
-      allow read: if isSignedIn() && (isAdmin() || request.auth.uid == resource.data.userId || request.auth.uid == resource.data.merchantId);
-
-      // Criar: apenas o próprio utilizador, ligado a uma transação dele
-      allow create: if isSignedIn()
-        && request.resource.data.userId == request.auth.uid
-        && request.resource.data.transactionId is string
-        && request.resource.data.merchantId is string
-        && request.resource.data.rating is int
-        && request.resource.data.rating >= 1
-        && request.resource.data.rating <= 5;
-
-      // Atualizar status: apenas admin
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update, delete: if isAdmin();
     }
 
-    // SYSTEM CONFIG
+    // CONFIGURAÇÕES DO SISTEMA
     match /system/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // PEDIDOS DE LOJISTAS (Registo)
+    match /merchant_requests/{docId} {
+      allow create: if true; // Qualquer pessoa pode pedir para ser lojista
+      allow read, update, delete: if isAdmin();
+    }
+
+    // PEDIDOS DE MARKETING (Banners / Folhetos do Lojista)
+    match /marketing_requests/{docId} {
+      allow create, read: if isSignedIn();
+      allow update, delete: if isAdmin();
+    }
+
+    // CAMPANHAS DE FOLHETOS E BANNERS
+    match /leaflet_campaigns/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    match /banners/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+    match /leaflets/{docId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+    }
+
+    // VANTAGENS VIP (Página Pública e App)
+    match /vantagens/{docId} {
+      allow read: if true; // Tem de ser público para a Landing Page
+      allow write: if isAdmin();
+    }
+
+    // NOTIFICAÇÕES (FCM)
+    match /notifications/{docId} {
+      allow read, write: if isSignedIn();
+    }
+
+    // MENSAGENS ADMIN -> LOJISTAS
+    match /merchant_messages/{docId} {
+      allow read, write: if isSignedIn();
+    }
   }
 }
-

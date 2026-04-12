@@ -1,8 +1,7 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { Toaster } from 'react-hot-toast'; 
-import OneSignal from 'react-onesignal';
 
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
@@ -38,43 +37,8 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
-const SettingsWrapper = () => {
-  const navigate = useNavigate();
-  return <ProfileSettings onBack={() => navigate(-1)} />;
-};
-
 function App() {
   const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
-
-  // INICIALIZAR O ONESIGNAL
-  useEffect(() => {
-    OneSignal.init({
-      appId: "bb9c97f7-38c8-4902-8abe-f7c21e5984be",
-      allowLocalhostAsSecureOrigin: true,
-      notifyButton: {
-        enable: false,
-        prenotify: false,
-        showCredit: false,
-        text: {
-          'tip.state.unsubscribed': 'Subscrever',
-          'tip.state.subscribed': 'Subscrito',
-          'tip.state.blocked': 'Bloqueado',
-          'message.prenotify': 'Clique para subscrever',
-          'message.action.subscribing': 'A subscrever...',
-          'message.action.subscribed': 'Obrigado!',
-          'message.action.resubscribed': 'Subscrito',
-          'message.action.unsubscribed': 'Removido',
-          'dialog.main.title': 'Notificações',
-          'dialog.main.button.subscribe': 'OK',
-          'dialog.main.button.unsubscribe': 'Sair',
-          'dialog.blocked.title': 'Notificações Bloqueadas',
-          'dialog.blocked.message': 'Siga as instruções para desbloquear as notificações.'
-        }
-      },
-    }).catch(err => {
-      console.error("Erro ao inicializar OneSignal:", err);
-    });
-  }, []);
 
   useEffect(() => {
     const unsub = initializeAuth();
@@ -103,7 +67,7 @@ function App() {
           <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/merchant" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
           <Route path="/client" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><SettingsWrapper /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><ProfileSettings onBack={() => window.history.back()} /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
