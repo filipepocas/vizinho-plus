@@ -1,4 +1,4 @@
-// src/features/dashboard/components/UserExplore.tsx
+// src/features/user/components/UserExplore.tsx
 
 import React, { useState, useMemo } from 'react';
 import { Search, MapPin, Navigation, Percent } from 'lucide-react';
@@ -24,29 +24,31 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
     return allMerchants.filter(m => {
       const nameToSearch = (m.shopName || m.name || '').toLowerCase();
       const locationToSearch = (m.freguesia || '').toLowerCase();
-      const searchTerm = searchName.toLowerCase();
+      const searchTerm = searchName.toLowerCase().trim();
       
-      const matchName = nameToSearch.includes(searchTerm) || locationToSearch.includes(searchTerm);
-      const matchZip = (m.zipCode || '').startsWith(searchZip);
+      const matchName = searchTerm === '' || nameToSearch.includes(searchTerm) || locationToSearch.includes(searchTerm);
+      
+      // Filtro de Código Postal mais flexível (limpa hífens e espaços)
+      const cleanSearchZip = searchZip.replace(/\D/g, '');
+      const cleanMerchZip = (m.zipCode || '').replace(/\D/g, '');
+      const matchZip = cleanSearchZip === '' || cleanMerchZip.startsWith(cleanSearchZip);
+      
       const matchCat = selectedCategory === 'all' || m.category === selectedCategory;
       
       return matchName && matchZip && matchCat;
     });
   }, [allMerchants, searchName, searchZip, selectedCategory]);
 
-  // CORREÇÃO DO LINK DO GOOGLE MAPS
+  // CORREÇÃO DO LINK DO GOOGLE MAPS: Mais direto e eficiente
   const openInMaps = (m: UserProfile) => {
     const storeName = m.shopName || m.name || '';
-    const address = m.address || '';
-    const city = m.freguesia || m.city || '';
+    const city = m.freguesia || '';
     
-    // Criamos uma query limpa para o Maps
-    const fullAddress = `${storeName}, ${address}, ${city}`.trim();
-    const encodedQuery = encodeURIComponent(fullAddress);
+    // Usamos o Nome da Loja + Cidade para uma busca certeira no Maps
+    const searchQuery = `${storeName}, ${city}, Portugal`.trim();
+    const encodedQuery = encodeURIComponent(searchQuery);
     
-    // URL universal do Google Maps
     const mapsUrl = `https://www.google.com/maps/search/?api=1&query=${encodedQuery}`;
-    
     window.open(mapsUrl, '_blank');
   };
 
@@ -97,7 +99,7 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
                 <div className="bg-[#0a2540] p-4 rounded-2xl text-[#00d66f] group-hover:scale-110 transition-transform">
                   <MapPin size={24} />
                 </div>
-                <div>
+                <div className="flex-1">
                   <span className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest">{m.category || 'Comércio'}</span>
                   <h4 className="text-lg font-black text-[#0a2540] uppercase tracking-tighter leading-none mb-1">
                     {m.shopName || m.name}
@@ -120,7 +122,7 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
                 title="Abrir no Google Maps"
               >
                 <Navigation size={20} fill="currentColor" />
-                <span className="sm:hidden font-black uppercase text-[10px]">Ver Localização</span>
+                <span className="font-black uppercase text-[10px]">Ver no Mapa</span>
               </button>
             </div>
           ))

@@ -19,8 +19,6 @@ import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
 
-const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
-
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser } = useStore();
   const navigate = useNavigate();
@@ -45,9 +43,15 @@ const UserDashboard: React.FC = () => {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
         if (configSnap.exists()) setSysConfig(configSnap.data() as any);
         
-        const merchantsSnap = await getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active')));
+        // Melhorada a consulta de comerciantes
+        const q = query(
+          collection(db, 'users'), 
+          where('role', '==', 'merchant'), 
+          where('status', '==', 'active')
+        );
+        const merchantsSnap = await getDocs(q);
         setAllMerchants(merchantsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as UserProfile[]);
-      } catch (err) { console.error(err); }
+      } catch (err) { console.error("Erro ao carregar comerciantes:", err); }
     };
     fetchData();
   }, []);
@@ -98,7 +102,7 @@ const UserDashboard: React.FC = () => {
 
          let matches = false;
          if (notif.targetType === 'all') matches = true;
-         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue.toLowerCase()) matches = true;
+         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue?.toLowerCase()) matches = true;
          else if (notif.targetType === 'zipCode' && currentUser.zipCode?.startsWith(notif.targetValue)) matches = true;
          else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
 
@@ -153,13 +157,19 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
-      {/* HEADER INTEGRADO COM O BANNER (Full-width no topo) */}
       <div className="relative">
         <BannerCarousel />
         
-        {/* Camada de sobreposição para o Logotipo e User Actions */}
-        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent z-10">
-          <img src={logoPath} alt="V+" className="h-10 w-auto brightness-0 invert" />
+        {/* LOGOTIPO CORRIGIDO: Removido filtros que o podiam ocultar e garantido o caminho absoluto */}
+        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/70 to-transparent z-50">
+          <div className="bg-white/10 backdrop-blur-sm p-2 rounded-2xl border border-white/20">
+            <img 
+              src="/logo-vizinho.png" 
+              alt="Vizinho+" 
+              className="h-10 w-auto object-contain" 
+              onError={(e) => { (e.target as any).src = '/logo192.png' }} // Fallback se o ficheiro falhar
+            />
+          </div>
           <div className="flex gap-3">
              <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
                 <Settings size={20} />
@@ -173,7 +183,7 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
         
-        {/* CARTÃO DE IDENTIFICAÇÃO (Estilo Moderno e Sério) */}
+        {/* CARTÃO DE IDENTIFICAÇÃO */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden">
           <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
             <div>
@@ -206,7 +216,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* NOTIFICAÇÃO EM DESTAQUE */}
         {appNotification && (
            <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
                <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
@@ -219,7 +228,6 @@ const UserDashboard: React.FC = () => {
            </div>
         )}
 
-        {/* BOTÕES DE ACÇÃO RÁPIDA (Grid Mais Limpa) */}
         <div className="grid grid-cols-2 gap-4">
            <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
               <Wallet size={18} /> O meu Saldo
@@ -233,7 +241,6 @@ const UserDashboard: React.FC = () => {
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
 
-        {/* FOLHETO / OPORTUNIDADES (Estilo Sério) */}
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
            <div className="flex items-center">
               <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
@@ -247,14 +254,12 @@ const UserDashboard: React.FC = () => {
            </div>
         </button>
 
-        {/* ÁREA DE EXPLORAÇÃO */}
         <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`w-full p-6 rounded-2xl border-2 font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-md hover:bg-slate-50'}`}>
           {view === 'explore' ? 'Fechar Pesquisa' : 'Ver Todas as Lojas Parceiras'}
         </button>
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
-        {/* PWA & NOTIFICAÇÕES (Cards de Suporte) */}
         <div className="grid grid-cols-2 gap-4">
           {isInstallable && (
             <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 active:border-b-0 transition-all">
@@ -268,7 +273,6 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* VANTAGENS EXCLUSIVAS (Se disponível) */}
         {sysConfig.vantagensUrl && (
           <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
@@ -298,7 +302,6 @@ const UserDashboard: React.FC = () => {
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Versão Profissional</p>
       </footer>
 
-      {/* MODAL DE CONTACTO E FEEDBACK MANTIDOS IGUAIS */}
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
 
       {showContactModal && (
