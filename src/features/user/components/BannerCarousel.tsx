@@ -1,3 +1,5 @@
+// src/features/user/components/BannerCarousel.tsx
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -20,12 +22,10 @@ const BannerCarousel: React.FC = () => {
       const valid = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter((b: any) => {
-          // Verifica se está na data
           const start = b.startDate.toDate();
           const end = b.endDate.toDate();
           const isTimeValid = now >= start && now <= end;
           
-          // Verifica Código Postal com operador de segurança
           const hasTargetZips = b.targetZipCodes && b.targetZipCodes.length > 0;
           const isZipValid = !hasTargetZips || (userZipBase && b.targetZipCodes?.includes(userZipBase));
 
@@ -43,31 +43,36 @@ const BannerCarousel: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeBanners]);
 
-  if (activeBanners.length === 0) return null;
+  if (activeBanners.length === 0) {
+    // Caso não haja banners, mantemos um fundo sólido para não quebrar o layout do Header
+    return <div className="w-full h-64 bg-[#0a2540]" />;
+  }
 
   return (
-    <div className="relative w-full h-44 md:h-56 rounded-[40px] overflow-hidden border-4 border-[#0a2540] shadow-[10px_10px_0px_#00d66f] bg-[#0a2540] mb-8">
+    <div className="relative w-full h-[280px] md:h-[350px] overflow-hidden bg-[#0a2540]">
       <AnimatePresence mode="wait">
         <motion.img
           key={activeBanners[currentIndex].id}
           src={activeBanners[currentIndex].imageUrl}
-          initial={{ opacity: 0, scale: 1.1 }}
-          animate={{ opacity: 1, scale: 1 }}
-          exit={{ opacity: 0, scale: 0.95 }}
-          transition={{ duration: 0.8, ease: "anticipate" }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 1, ease: "linear" }}
           className="absolute inset-0 w-full h-full object-cover"
         />
       </AnimatePresence>
 
-      <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent pointer-events-none" />
+      {/* Overlay para garantir leitura do logotipo e botões que ficam por cima */}
+      <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/20 pointer-events-none" />
 
+      {/* Indicadores de página (Dots) - Estilo mais fino e elegante */}
       {activeBanners.length > 1 && (
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 flex gap-3">
+        <div className="absolute bottom-12 right-6 flex gap-2">
           {activeBanners.map((_, idx) => (
             <div 
               key={idx} 
-              className={`h-2 rounded-full transition-all duration-500 border-2 border-[#0a2540] ${
-                idx === currentIndex ? 'w-8 bg-[#00d66f]' : 'w-2 bg-white/50'
+              className={`h-1.5 rounded-full transition-all duration-500 ${
+                idx === currentIndex ? 'w-6 bg-[#00d66f]' : 'w-1.5 bg-white/40'
               }`}
             />
           ))}

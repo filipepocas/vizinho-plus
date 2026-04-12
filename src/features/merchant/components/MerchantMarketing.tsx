@@ -1,7 +1,9 @@
+// src/features/merchant/components/MerchantMarketing.tsx
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc } from 'firebase/firestore';
-import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Calendar } from 'lucide-react';
+import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Calendar, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest } from '../../../types';
 
@@ -171,9 +173,16 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
 
         {activeTab === 'banner' && (
             <form onSubmit={submitBanner} className="space-y-6 animate-in fade-in">
-                <div className="bg-blue-50 p-6 rounded-3xl border-2 border-blue-100 mb-6">
-                    <p className="text-blue-800 text-xs font-bold uppercase tracking-widest flex items-center gap-2"><Calendar size={14}/> Banners rotativos na App {getPriceText('banner')}</p>
-                    <p className="text-[10px] mt-2 text-blue-600 font-bold">Os banners devem ter preferencialmente 1000px(largura) x 500px(altura) e pedidos com 48h de antecedência.</p>
+                <div className="bg-[#f0f7ff] p-6 rounded-[32px] border-2 border-blue-100 mb-6">
+                    <p className="text-[#0a2540] text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-3">
+                        <AlertCircle size={16} className="text-blue-500"/> Guia de Design Profissional {getPriceText('banner')}
+                    </p>
+                    <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-tight">
+                        <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Resolução Ideal: <span className="text-[#0a2540]">1920 x 1080 px</span> (Proporção 16:9)</li>
+                        <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Conteúdo Seguro: <span className="text-[#0a2540]">Manter textos e produtos no CENTRO da imagem</span></li>
+                        <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Margens: Evite detalhes importantes nos 80px superiores e 40px inferiores</li>
+                        <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Formato: Máximo 200KB (.jpg ou .webp)</li>
+                    </ul>
                 </div>
                 
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
@@ -189,7 +198,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     </div>
                 </div>
 
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner</label><input id="bannerImageInput" required type="file" accept="image/*" onChange={handleBannerImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner (16:9)</label><input id="bannerImageInput" required type="file" accept="image/*" onChange={handleBannerImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
                 
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                     {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido

@@ -1,3 +1,5 @@
+// src/features/user/UserDashboard.tsx
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
@@ -12,10 +14,9 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard, Bell, Volume2 } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, Sparkles, X, AlertCircle, Copy, CheckCircle2, Smartphone, IdCard, Bell, Volume2, User as UserIcon } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
-// Importação da função de pedir permissão de notificações
 import { requestNotificationPermission } from '../../utils/notifications';
 
 const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
@@ -151,191 +152,174 @@ const UserDashboard: React.FC = () => {
   if (!currentUser) return null;
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-32">
-      <header className="bg-white px-8 pt-10 pb-6 flex justify-between items-start shadow-sm">
-        <div>
-          <p className="text-slate-400 text-[10px] font-black uppercase tracking-[0.2em]">Bem-vindo,</p>
-          <h1 className="text-2xl font-black text-[#0a2540] italic uppercase tracking-tighter leading-none mb-1">
-            {currentUser.name}
-          </h1>
-          {currentUser.nif && (
-            <div className="flex items-center gap-1 text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1 bg-slate-50 w-fit px-2 py-1 rounded-md border border-slate-100">
-               <IdCard size={12} /> NIF: {currentUser.nif}
-            </div>
-          )}
-        </div>
-        <div className="flex items-center gap-4">
-            <button onClick={() => navigate('/settings')} className="bg-slate-50 p-3 rounded-2xl text-slate-400 hover:text-[#0a2540] hover:bg-slate-100 transition-colors border-2 border-slate-100" title="Definições de Perfil">
-                <Settings size={20} />
-            </button>
-            <img src={logoPath} alt="V+" className="h-8 w-auto hidden sm:block" />
-        </div>
-      </header>
-
-      <main className="max-w-2xl mx-auto px-6 space-y-6 mt-6">
+    <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
+      {/* HEADER INTEGRADO COM O BANNER (Full-width no topo) */}
+      <div className="relative">
+        <BannerCarousel />
         
-        {appNotification && (
-           <div className="bg-white border-4 border-[#0a2540] rounded-[30px] p-6 shadow-[8px_8px_0px_#00d66f] flex items-start gap-4 animate-in slide-in-from-top-10 relative">
-               <div className="bg-blue-50 text-blue-500 p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
-               <div className="flex-1">
-                   <h4 className="text-lg font-black uppercase italic text-[#0a2540] leading-none mb-2">{appNotification.title}</h4>
-                   <p className="text-xs font-bold text-slate-500">{appNotification.message}</p>
-                   <button onClick={dismissNotification} className="mt-4 bg-[#0a2540] text-white px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all">Compreendido</button>
+        {/* Camada de sobreposição para o Logotipo e User Actions */}
+        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/60 to-transparent z-10">
+          <img src={logoPath} alt="V+" className="h-10 w-auto brightness-0 invert" />
+          <div className="flex gap-3">
+             <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
+                <Settings size={20} />
+             </button>
+             <button onClick={handleLogout} className="bg-red-500/80 backdrop-blur-md p-3 rounded-full text-white border border-red-400/30 hover:bg-red-600 transition-all">
+                <LogOut size={20} />
+             </button>
+          </div>
+        </div>
+      </div>
+
+      <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
+        
+        {/* CARTÃO DE IDENTIFICAÇÃO (Estilo Moderno e Sério) */}
+        <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden">
+          <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+            <div>
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Cliente Vizinho+</p>
+              <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">
+                {currentUser.name}
+              </h1>
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-widest">Saldo Atual</span>
+              <span className="text-2xl font-black text-[#00d66f] italic">
+                {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}
+              </span>
+            </div>
+          </div>
+
+          <div className="p-8 flex flex-col items-center gap-6">
+            <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
+               <QRCodeSVG value={displayCardNumber} size={150} />
+            </div>
+            <div className="text-center">
+               <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">
+                  {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
+               </h3>
+               <div className="flex items-center justify-center gap-2 mt-2">
+                 <IdCard size={14} className="text-slate-400" />
+                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Apresente para ganhar cashback</span>
                </div>
-               <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-300 hover:text-[#0a2540]"><X size={16} /></button>
+            </div>
+          </div>
+        </div>
+
+        {/* NOTIFICAÇÃO EM DESTAQUE */}
+        {appNotification && (
+           <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
+               <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
+               <div className="flex-1">
+                   <h4 className="text-lg font-black uppercase italic text-white leading-none mb-2">{appNotification.title}</h4>
+                   <p className="text-xs font-bold text-slate-300">{appNotification.message}</p>
+                   <button onClick={dismissNotification} className="mt-4 bg-[#00d66f] text-[#0a2540] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">Fechar</button>
+               </div>
+               <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={16} /></button>
            </div>
         )}
 
+        {/* BOTÕES DE ACÇÃO RÁPIDA (Grid Mais Limpa) */}
         <div className="grid grid-cols-2 gap-4">
-          {/* BOTÃO 1: Instalar App */}
-          {isInstallable && (
-            <button onClick={installApp} className="bg-[#0a2540] text-[#00d66f] border-4 border-[#00d66f] rounded-[25px] p-4 flex flex-col items-center justify-center gap-2 shadow-[4px_4px_0px_#00d66f] active:scale-95 transition-all text-center">
-              <Smartphone size={24} />
-              <p className="font-black uppercase text-[9px] tracking-widest leading-tight">Instalar<br/>App (Ecrã)</p>
-            </button>
-          )}
-
-          {/* BOTÃO 2: Ativar Alertas no Telemóvel */}
-          <button onClick={() => requestNotificationPermission(currentUser.id)} className={`border-4 rounded-[25px] p-4 flex flex-col items-center justify-center gap-2 active:scale-95 transition-all text-center shadow-sm ${isInstallable ? '' : 'col-span-2'} bg-blue-50 border-blue-200 text-blue-600 hover:bg-blue-100`}>
-            <Volume2 size={24} />
-            <p className="font-black uppercase text-[9px] tracking-widest leading-tight">Ativar Alertas<br/>(Telemóvel)</p>
-          </button>
-        </div>
-
-        <BannerCarousel />
-
-        <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl transition-all group border-4 border-[#0a2540] flex justify-between items-center ${activeLeaflets.length > 0 ? 'bg-[#00d66f] hover:scale-[1.02] active:scale-95 cursor-pointer' : 'bg-slate-200 border-slate-300 opacity-60 cursor-not-allowed'}`}>
-          {activeLeaflets.length > 0 && (
-             <div className="absolute -top-3 -right-3 bg-red-500 text-white w-14 h-14 rounded-full flex flex-col items-center justify-center font-black uppercase tracking-widest text-[9px] border-4 border-[#0a2540] animate-pulse rotate-12 shadow-xl z-20">
-               <Star size={12} fill="currentColor" className="mb-0.5" /> Novo
-             </div>
-          )}
-          <div className="flex items-center gap-4 relative z-10">
-            <div className="bg-[#0a2540] p-3 rounded-2xl"><Sparkles size={32} className="text-[#00d66f]" /></div>
-            <div className="text-left">
-              <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter text-[#0a2540]">Grandes Oportunidades</h4>
-              <p className="text-[10px] font-black uppercase tracking-widest text-[#0a2540] opacity-70 mt-1">{activeLeaflets.length > 0 ? 'Toca para ver folheto' : 'Sem folhetos ativos no momento'}</p>
-            </div>
-          </div>
-          {activeLeaflets.length > 0 && <ExternalLink size={20} className="text-[#0a2540] opacity-50 relative z-10" />}
-        </button>
-
-        <div className="bg-white rounded-[40px] border-4 border-[#0a2540] p-6 shadow-[12px_12px_0px_#00d66f] flex flex-col items-center gap-4 relative overflow-hidden">
-            <div className="absolute top-0 right-0 bg-[#0a2540] text-white px-4 py-1 rounded-bl-2xl font-black text-[8px] uppercase tracking-widest">
-                Cartão Digital
-            </div>
-            <div className="bg-slate-50 p-4 rounded-3xl border-2 border-slate-100 mt-4">
-                <QRCodeSVG value={displayCardNumber} size={120} />
-            </div>
-            <div className="text-center">
-                <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Apresente este código na loja</p>
-                <h3 className="text-xl font-mono font-bold tracking-[0.3em] text-[#0a2540]">
-                    {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
-                </h3>
-            </div>
-            
-            <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mt-2 w-full text-center">
-                <p className="text-[8px] font-black text-slate-400 uppercase tracking-widest leading-relaxed flex items-center justify-center gap-2">
-                  <AlertCircle size={12} className="text-slate-400 shrink-0" />
-                  <span>Reserva-se ao comerciante o direito de não aplicar cashback em produtos específicos.</span>
-                </p>
-            </div>
-        </div>
-
-        <div className="bg-[#0a2540] rounded-[40px] p-8 text-white shadow-2xl relative overflow-hidden">
-          <div className="relative z-10 space-y-6">
-            <div>
-              <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#00d66f] mb-1">Saldo Disponível</p>
-              <h2 className="text-5xl font-black italic tracking-tighter text-[#00d66f]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}</h2>
-            </div>
-            <div className="pt-4 border-t border-white/10 flex justify-between">
-              <div>
-                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Em Processamento</p>
-                <p className="text-sm font-bold text-white/80">+{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.pending)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest">Total Ganho</p>
-                <p className="text-sm font-bold text-white">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.total)}</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] -rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}>
-            <Wallet size={32} />
-            <span className="text-[9px] font-black uppercase tracking-widest">O meu Saldo</span>
-          </button>
-          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex flex-col items-center gap-3 p-6 rounded-[35px] border-4 transition-all relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540] rotate-2' : 'bg-white border-slate-100 text-slate-400'}`}>
-            {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border-4 border-[#f8fafc] animate-bounce">{pendingEvaluations.length}</span>}
-            <MessageSquare size={32} />
-            <span className="text-[9px] font-black uppercase tracking-widest">Avaliar Lojas</span>
-          </button>
+           <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
+              <Wallet size={18} /> O meu Saldo
+           </button>
+           <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
+              {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">{pendingEvaluations.length}</span>}
+              <MessageSquare size={18} /> Avaliar Lojas
+           </button>
         </div>
 
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
-        
-        <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`w-full p-6 rounded-[30px] border-4 font-black uppercase italic tracking-tighter flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-[6px_6px_0px_#0a2540] active:translate-y-1 active:shadow-none'}`}>
-          {view === 'explore' ? 'Fechar Pesquisa' : 'Ver Lojas Parceiras'}
+
+        {/* FOLHETO / OPORTUNIDADES (Estilo Sério) */}
+        <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
+           <div className="flex items-center">
+              <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
+                <Sparkles size={32} className="text-[#00d66f]" />
+              </div>
+              <div className="p-6 text-left flex-1">
+                <h4 className="text-lg font-black uppercase italic leading-none text-[#0a2540]">Oportunidades da Semana</h4>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{activeLeaflets.length > 0 ? 'Clique para abrir o folheto digital' : 'Não existem folhetos ativos'}</p>
+              </div>
+              {activeLeaflets.length > 0 && <div className="pr-6"><ExternalLink size={20} className="text-[#0a2540] opacity-30" /></div>}
+           </div>
+        </button>
+
+        {/* ÁREA DE EXPLORAÇÃO */}
+        <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`w-full p-6 rounded-2xl border-2 font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-md hover:bg-slate-50'}`}>
+          {view === 'explore' ? 'Fechar Pesquisa' : 'Ver Todas as Lojas Parceiras'}
         </button>
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
+        {/* PWA & NOTIFICAÇÕES (Cards de Suporte) */}
+        <div className="grid grid-cols-2 gap-4">
+          {isInstallable && (
+            <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 active:border-b-0 transition-all">
+              <Smartphone size={20} className="text-[#00d66f]" />
+              <span className="font-black uppercase text-[9px] tracking-widest text-left">Instalar no<br/>Ecrã Principal</span>
+            </button>
+          )}
+          <button onClick={() => requestNotificationPermission(currentUser.id)} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'col-span-2'}`}>
+            <Volume2 size={20} className="text-[#00d66f]" />
+            <span className="font-black uppercase text-[9px] tracking-widest text-left">Ativar Alertas<br/>de Saldo</span>
+          </button>
+        </div>
+
+        {/* VANTAGENS EXCLUSIVAS (Se disponível) */}
         {sysConfig.vantagensUrl && (
-          <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-[35px] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all group" style={{background: 'linear-gradient(135deg, #bf953f 0%, #fcf6ba 45%, #b38728 50%, #fcf6ba 55%, #aa771c 100%)', border: '4px solid #aa771c'}}>
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+          <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             <div className="flex items-center justify-between relative z-10">
               <div className="flex items-center gap-4">
-                <div className="bg-black/20 p-3 rounded-2xl"><Star size={32} className="text-white fill-white" /></div>
+                <div className="bg-[#bf953f] p-3 rounded-2xl"><Star size={24} className="text-white fill-white" /></div>
                 <div className="text-left">
-                  <h4 className="text-xl font-black uppercase italic leading-none tracking-tighter text-[#5c4414]">Vantagens Exclusivas</h4>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-[#5c4414] opacity-80">Acesso VIP Vizinho+</p>
+                  <h4 className="text-lg font-black uppercase italic leading-none tracking-tighter text-[#bf953f]">Vantagens VIP</h4>
+                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Exclusivo para membros Vizinho+</p>
                 </div>
               </div>
-              <ExternalLink size={24} className="text-[#5c4414]" />
+              <ExternalLink size={20} className="text-[#bf953f]" />
             </div>
           </button>
         )}
       </main>
 
-      <footer className="py-12 flex flex-col items-center gap-4 border-t-2 border-slate-100 mt-10">
-        <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 bg-white px-8 py-4 rounded-3xl border-4 border-slate-100 shadow-sm text-[#0a2540] font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] transition-all">
-            <Mail size={16} className="text-[#00d66f]" /> Entrar em Contacto
-        </button>
-        <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] hover:text-[#0a2540] mt-4"><ShieldCheck size={14} /> Termos e Privacidade</button>
-        <button onClick={handleLogout} className="flex items-center gap-2 text-red-500 font-black uppercase text-[10px] tracking-[0.3em] hover:text-red-700"><LogOut size={14} /> Sair da Conta</button>
-        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest mt-4">Vizinho+ &copy; 2026</p>
+      <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white">
+        <div className="flex gap-4">
+          <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
+              <Mail size={16} /> Contacto
+          </button>
+          <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
+              <ShieldCheck size={16} /> Privacidade
+          </button>
+        </div>
+        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Versão Profissional</p>
       </footer>
 
+      {/* MODAL DE CONTACTO E FEEDBACK MANTIDOS IGUAIS */}
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
 
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
-                <Mail className="text-[#00d66f]" size={24} />
-                <h2 className="font-black uppercase italic tracking-tighter text-xl">Apoio ao Cliente</h2>
+                <Mail className="text-[#00d66f]" size={20} />
+                <h2 className="font-black uppercase italic tracking-tighter text-lg">Apoio ao Cliente</h2>
               </div>
-              <button onClick={() => setShowContactModal(false)} className="hover:rotate-90 transition-transform"><X size={24} /></button>
+              <button onClick={() => setShowContactModal(false)}><X size={20} /></button>
             </div>
             <div className="p-8 space-y-6 text-center">
-              <p className="text-sm font-bold text-slate-500 leading-relaxed">
-                A nossa equipa está pronta para ajudar. Como prefere entrar em contacto?
-              </p>
+              <p className="text-sm font-bold text-slate-500">Equipa pronta a ajudar.</p>
               <div className="space-y-3">
-                <button onClick={handleOpenEmailApp} className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase text-xs tracking-widest shadow-lg border-2 border-[#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-3">
-                  <ExternalLink size={18} /> Abrir a Minha App de Email
+                <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3">
+                  Abrir App de Email
                 </button>
-                <button onClick={handleCopyEmail} className={`w-full p-5 rounded-2xl font-black uppercase text-xs tracking-widest border-4 transition-all flex items-center justify-center gap-3 ${emailCopied ? 'bg-green-100 text-green-600 border-green-200' : 'bg-slate-50 text-slate-500 border-slate-100 hover:bg-slate-100 hover:text-[#0a2540]'}`}>
-                  {emailCopied ? <CheckCircle2 size={18} /> : <Copy size={18} />} 
-                  {emailCopied ? 'E-mail Copiado!' : 'Copiar o E-mail'}
+                <button onClick={handleCopyEmail} className="w-full p-4 rounded-xl font-black uppercase text-[10px] tracking-widest border-2 border-slate-100 hover:bg-slate-50 transition-all">
+                  {emailCopied ? 'Copiado!' : 'Copiar Email'}
                 </button>
-              </div>
-              <div className="pt-4 border-t-2 border-slate-100">
-                <p className="text-[10px] font-black uppercase text-slate-300 tracking-widest">O nosso email direto:</p>
-                <p className="text-sm font-bold text-[#0a2540] mt-1">{sysConfig.supportEmail}</p>
               </div>
             </div>
           </div>
