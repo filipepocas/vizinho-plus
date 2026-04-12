@@ -18,6 +18,8 @@ export interface User {
   freguesia?: string;
   category?: string;
   address?: string;
+  city?: string; // Adicionado para corrigir erro no UserExplore.tsx
+  fcmTokens?: string[]; // Adicionado para corrigir erro no MerchantDashboard.tsx
   storeWallets?: Record<string, { available: number; pending: number }>;
   devices?: any[];
   wallet?: {
@@ -140,12 +142,12 @@ export interface Vantagem {
   id: string;
   title: string;
   description: string;
-  partnerName: string;    // Adicionado
-  category: string;       // Adicionado
-  imageBase64?: string;   // Adicionado
-  zipCode?: string;       // Adicionado
-  address?: string;       // Adicionado
-  websiteUrl?: string;    // Adicionado
+  partnerName: string;
+  category: string;
+  imageBase64?: string;
+  zipCode?: string;
+  address?: string;
+  websiteUrl?: string;
   isActive: boolean;
   imageUrl?: string;
   createdAt?: any;

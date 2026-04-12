@@ -6,7 +6,7 @@ import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, 
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
-import { LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download, MessageSquare, BellRing, Send } from 'lucide-react';
+import { LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download, MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 
@@ -15,7 +15,7 @@ import QRScannerModal from './components/QRScannerModal';
 import BusinessIntelligence from './components/BusinessIntelligence';
 import MerchantSettings from './components/MerchantSettings';
 import MerchantMarketing from './components/MerchantMarketing'; 
-import { usePWAInstall } from '../../hooks/usePWAInstall'; 
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, transactions, addTransaction, updateTransactionDocument, subscribeToTransactions, logout } = useStore();
@@ -27,7 +27,6 @@ const MerchantDashboard: React.FC = () => {
   
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
-
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
@@ -37,20 +36,27 @@ const MerchantDashboard: React.FC = () => {
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
-
   const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
   const [postInvoiceNum, setPostInvoiceNum] = useState('');
   const [editingInvoiceId, setEditingInvoiceId] = useState<string | null>(null);
   const [editingInvoiceVal, setEditingInvoiceVal] = useState('');
-
+  
   const [pushPrices, setPushPrices] = useState({ cost: 0.05, min: 5.00 });
-  const [pushForm, setPushForm] = useState({ text: '', targetCriteria: 'all', targetValue: '' });
+  
+  // ESTADO DO FORMULÁRIO DE PUSH ATUALIZADO (Firebase Cloud Messaging)
+  const [pushForm, setPushForm] = useState({ 
+    title: '',
+    text: '', 
+    targetCriteria: 'all' as 'all' | 'multiple_zip' | 'multiple_emails' | 'birthDate', 
+    targetValue: '',
+    scheduledAt: ''
+  });
   const [pushSimulation, setPushSimulation] = useState<{ count: number, cost: number } | null>(null);
   const [simulating, setSimulating] = useState(false);
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
-
+  
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
     const percent = currentUser?.cashbackPercent || 0;
@@ -104,62 +110,82 @@ const MerchantDashboard: React.FC = () => {
     }
   }, [currentUser?.id, subscribeToTransactions]);
 
+  // LOGICA DE SIMULAÇÃO E CÁLCULO DE CUSTOS
   const simulatePushCampaign = async () => {
-    if(!pushForm.text.trim()) return toast.error("Escreve a mensagem da notificação primeiro.");
+    if(!pushForm.title.trim() || !pushForm.text.trim()) return toast.error("Preencha o título e a mensagem.");
+    
+    // VALIDAÇÃO DE DATA (Mínimo 2 horas)
+    if(!pushForm.scheduledAt) return toast.error("Escolhe a data e hora de envio.");
+    const schedDate = new Date(pushForm.scheduledAt);
+    const now = new Date();
+    const diffHours = (schedDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+    
+    if(diffHours < 2) return toast.error("O agendamento deve ser feito com pelo menos 2 horas de antecedência.");
+
     setSimulating(true);
     try {
         const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
         const snap = await getDocs(qClients);
         let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile));
 
-        clients = clients.filter(c => c.devices && c.devices.length > 0);
+        // Filtro base: apenas clientes com token de dispositivo (FCM)
+        clients = clients.filter(c => c.fcmTokens && c.fcmTokens.length > 0);
 
-        if (pushForm.targetCriteria === 'cp') {
-            clients = clients.filter(c => c.zipCode && c.zipCode.startsWith(pushForm.targetValue));
-        } else if (pushForm.targetCriteria === 'top') {
-            const myClientIds = new Set(transactions.map(t => t.clientId));
-            clients = clients.filter(c => myClientIds.has(c.id));
-        } else if (pushForm.targetCriteria === 'birthday') {
-            const currentMonth = new Date().getMonth() + 1;
-            clients = clients.filter(c => {
-               if(!c.birthDate) return false;
-               const month = parseInt(c.birthDate.split('-')[1]);
-               return month === currentMonth;
-            });
+        if (pushForm.targetCriteria === 'multiple_zip') {
+            const zips = pushForm.targetValue.split(',').map(z => z.trim());
+            clients = clients.filter(c => zips.some(z => (c.zipCode || '').startsWith(z)));
+        } else if (pushForm.targetCriteria === 'multiple_emails') {
+            const emails = pushForm.targetValue.toLowerCase().split(',').map(e => e.trim());
+            clients = clients.filter(c => emails.includes((c.email || '').toLowerCase()));
+        } else if (pushForm.targetCriteria === 'birthDate') {
+            // Verifica dia e mês
+            const target = pushForm.targetValue; // Esperado DD-MM
+            clients = clients.filter(c => c.birthDate?.includes(target));
         }
 
         const count = clients.length;
         let cost = count * pushPrices.cost;
         if (cost > 0 && cost < pushPrices.min) cost = pushPrices.min;
         if (count === 0) cost = 0;
-
+        
         setPushSimulation({ count, cost });
-    } catch(e) { toast.error("Erro ao simular."); } 
-    finally { setSimulating(false); }
+    } catch(e) { 
+      toast.error("Erro ao simular alcance."); 
+    } finally { 
+      setSimulating(false); 
+    }
   };
 
   const submitPushRequest = async () => {
      if(!pushSimulation) return;
      try {
-         await addDoc(collection(db, 'marketing_requests'), {
-            merchantId: currentUser?.id,
-            merchantName: currentUser?.shopName || currentUser?.name,
-            type: 'push_notification',
-            text: pushForm.text,
-            targetCriteria: pushForm.targetCriteria,
+         await addDoc(collection(db, 'notifications'), {
+            senderId: currentUser?.id,
+            senderName: currentUser?.shopName || currentUser?.name,
+            type: 'merchant_request',
+            title: pushForm.title,
+            message: pushForm.text,
+            targetType: pushForm.targetCriteria,
             targetValue: pushForm.targetValue,
             targetCount: pushSimulation.count,
             cost: pushSimulation.cost,
+            scheduledFor: new Date(pushForm.scheduledAt),
             status: 'pending',
             createdAt: serverTimestamp()
          });
-         toast.success("Pedido de Campanha Enviado!");
-         setPushForm({ text: '', targetCriteria: 'all', targetValue: '' });
-         setPushSimulation(null);
-     } catch(e) { toast.error("Erro ao enviar pedido."); }
+         
+         toast.success("Pedido enviado para aprovação do Admin!");
+         handleCancelPush(); // Limpa tudo após sucesso
+     } catch(e) { 
+       toast.error("Erro ao enviar pedido."); 
+     }
   };
 
-  // ERRO CORRIGIDO AQUI: val: valToProcess
+  const handleCancelPush = () => {
+    setPushForm({ title: '', text: '', targetCriteria: 'all', targetValue: '', scheduledAt: '' });
+    setPushSimulation(null);
+  };
+
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const invoiceVal = parseFloat(amount);
     if (!currentUser || !foundClient || isNaN(invoiceVal) || invoiceVal <= 0) return alert("Preencha o valor da nova compra.");
@@ -196,7 +222,6 @@ const MerchantDashboard: React.FC = () => {
       "Valor (€)": t.type === 'earn' ? (t.cashbackAmount || 0) : t.amount,
       "Nº Fatura": t.documentNumber || "---"
     }));
-
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Histórico");
@@ -249,61 +274,85 @@ const MerchantDashboard: React.FC = () => {
               <div className="flex items-center gap-4 mb-8">
                   <div className="bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl"><Send size={32} /></div>
                   <div>
-                      <h3 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Alertas Diretos</h3>
-                      <p className="text-xs font-bold text-slate-400 uppercase mt-1">Acorda o telemóvel dos clientes da tua zona.</p>
+                      <h3 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Alertas Cloud Messaging</h3>
+                      <p className="text-xs font-bold text-slate-400 uppercase mt-1">Notificações push que despertam o telemóvel dos clientes.</p>
                   </div>
               </div>
 
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-12">
                   <div className="space-y-6">
                       <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Texto da Notificação</label>
-                          <textarea rows={3} maxLength={100} placeholder="Ex: Hoje temos 10% Extra Cashback em todo o peixe fresco!" value={pushForm.text} onChange={e => { setPushForm({...pushForm, text: e.target.value}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:border-[#00d66f] resize-none" />
+                          <label className="text-[10px] font-black uppercase text-slate-400 ml-2 italic">1. Título e Mensagem</label>
+                          <input type="text" placeholder="Título (Ex: Promoção de Verão)" value={pushForm.title} onChange={e => { setPushForm({...pushForm, title: e.target.value}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-xs font-black uppercase outline-none focus:border-[#00d66f] mb-3" />
+                          <textarea rows={3} maxLength={100} placeholder="Mensagem curta (Ex: 10% Extra Cashback hoje!)" value={pushForm.text} onChange={e => { setPushForm({...pushForm, text: e.target.value}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:border-[#00d66f] resize-none" />
                           <p className="text-[9px] text-right text-slate-400 font-bold">{pushForm.text.length} / 100 caracteres</p>
                       </div>
 
-                      <div className="space-y-2">
-                          <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Público-Alvo na App</label>
-                          <select value={pushForm.targetCriteria} onChange={e => { setPushForm({...pushForm, targetCriteria: e.target.value, targetValue: ''}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-xs font-black uppercase outline-none focus:border-[#00d66f] appearance-none">
-                              <option value="all">Todos os Clientes Registados na BD</option>
-                              <option value="top">Os Meus Clientes (Histórico de Compras)</option>
-                              <option value="cp">Por Código Postal (Público Geral)</option>
-                              <option value="birthday">Aniversariantes do Mês (Público Geral)</option>
-                          </select>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 italic">2. Data e Hora (Mín. 2h de antecedência)</label>
+                            <div className="relative">
+                                <Clock className="absolute left-4 top-1/2 -translate-y-1/2 text-[#00d66f]" size={16} />
+                                <input type="datetime-local" value={pushForm.scheduledAt} onChange={e => { setPushForm({...pushForm, scheduledAt: e.target.value}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 pl-12 text-[10px] font-black uppercase outline-none focus:border-[#00d66f]" />
+                            </div>
+                        </div>
+
+                        <div className="space-y-2">
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2 italic">3. Filtro de Destinatários</label>
+                            <select value={pushForm.targetCriteria} onChange={e => { setPushForm({...pushForm, targetCriteria: e.target.value as any, targetValue: ''}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] appearance-none">
+                                <option value="all">Todos com App Instalada</option>
+                                <option value="multiple_zip">Vários Códigos Postais</option>
+                                <option value="multiple_emails">Vários E-mails</option>
+                                <option value="birthDate">Aniversariantes (Dia/Mês)</option>
+                            </select>
+                        </div>
                       </div>
 
-                      {pushForm.targetCriteria === 'cp' && (
+                      {pushForm.targetCriteria !== 'all' && (
                           <div className="space-y-2 animate-in slide-in-from-top-2">
-                              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Qual o Código Postal? (Ex: 4000 ou 4000-123)</label>
-                              <input type="text" value={pushForm.targetValue} onChange={e => { setPushForm({...pushForm, targetValue: e.target.value}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:border-[#00d66f]" />
+                              <label className="text-[10px] font-black uppercase text-slate-400 ml-2 italic">
+                                {pushForm.targetCriteria === 'multiple_zip' && "Insira CP4 separados por vírgula (Ex: 4000, 4450)"}
+                                {pushForm.targetCriteria === 'multiple_emails' && "Insira e-mails completos por vírgula"}
+                                {pushForm.targetCriteria === 'birthDate' && "Insira o Dia-Mês (Ex: 15-03 para 15 de Março)"}
+                              </label>
+                              <input type="text" value={pushForm.targetValue} onChange={e => { setPushForm({...pushForm, targetValue: e.target.value}); setPushSimulation(null); }} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl p-4 text-sm font-bold outline-none focus:border-[#00d66f] uppercase" />
                           </div>
                       )}
 
                       <button onClick={simulatePushCampaign} disabled={simulating} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg border-b-4 border-black/20">
-                          {simulating ? 'A calcular...' : 'Simular Alcance e Custo'}
+                          {simulating ? 'A analisar base de dados...' : 'Simular Alcance e Custo'}
                       </button>
                   </div>
 
                   {pushSimulation !== null && (
-                      <div className="bg-slate-50 border-4 border-slate-100 rounded-[30px] p-8 flex flex-col justify-center animate-in zoom-in-95">
-                          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center mb-6">Orçamento do Pedido</h4>
+                      <div className="bg-slate-50 border-4 border-[#0a2540] rounded-[30px] p-8 flex flex-col justify-center animate-in zoom-in-95 relative overflow-hidden">
+                          <div className="absolute top-0 right-0 bg-[#00d66f] text-[#0a2540] px-4 py-1 font-black text-[9px] uppercase tracking-widest shadow-md">Orçamento Cloud</div>
                           
-                          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border-2 border-slate-100 mb-4">
-                              <span className="text-xs font-bold text-slate-500 uppercase">Clientes Alcançados</span>
-                              <span className="text-xl font-black text-[#0a2540]">{pushSimulation.count}</span>
-                          </div>
-                          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border-2 border-slate-100 mb-6">
-                              <span className="text-xs font-bold text-slate-500 uppercase">Custo Estimado</span>
-                              <span className="text-xl font-black text-[#00d66f]">{formatCurrency(pushSimulation.cost)}</span>
+                          <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest text-center mb-6">Resumo do Pedido</h4>
+                          
+                          <div className="space-y-3">
+                              <div className="flex justify-between items-center bg-white p-4 rounded-2xl border-2 border-slate-100">
+                                  <span className="text-xs font-bold text-slate-500 uppercase">Alcance Real (App Instalada)</span>
+                                  <span className="text-xl font-black text-[#0a2540]">{pushSimulation.count} <span className="text-[10px] text-slate-400">Pessoas</span></span>
+                              </div>
+                              <div className="flex justify-between items-center bg-white p-4 rounded-2xl border-2 border-slate-100">
+                                  <span className="text-xs font-bold text-slate-500 uppercase">Investimento Total</span>
+                                  <span className="text-xl font-black text-[#00d66f]">{formatCurrency(pushSimulation.cost)}</span>
+                              </div>
+                              <div className="flex justify-between items-center bg-[#0a2540] p-4 rounded-2xl text-white">
+                                  <span className="text-[9px] font-black uppercase text-[#00d66f]">Data de Envio:</span>
+                                  <span className="text-xs font-black">{new Date(pushForm.scheduledAt).toLocaleString()}</span>
+                              </div>
                           </div>
                           
-                          <p className="text-[9px] font-bold text-slate-400 text-center mb-6 leading-relaxed">
-                              *O custo base é de {formatCurrency(pushPrices.cost)} por cliente atingido (com telemóvel ativo). Serviço mínimo de {formatCurrency(pushPrices.min)}.
+                          <p className="text-[9px] font-bold text-slate-400 text-center mt-6 leading-relaxed uppercase">
+                              *O envio está sujeito a aprovação manual da administração. <br/>
+                              Ao confirmar, autoriza o débito do valor após o envio.
                           </p>
 
-                          <div className="flex gap-4">
-                              <button onClick={() => setPushSimulation(null)} className="flex-1 py-4 bg-white border-2 border-slate-200 text-slate-500 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-100">Corrigir</button>
-                              <button onClick={submitPushRequest} disabled={pushSimulation.count === 0} className="flex-1 py-4 bg-[#00d66f] border-b-4 border-[#0a2540]/20 text-[#0a2540] rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-lg hover:scale-105 transition-all disabled:opacity-50 disabled:grayscale">Avançar</button>
+                          <div className="flex gap-4 mt-8">
+                              <button onClick={handleCancelPush} className="flex-1 py-4 bg-white border-4 border-[#0a2540] text-[#0a2540] rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-50 hover:text-red-500 hover:border-red-500 transition-all">Cancelar Tudo</button>
+                              <button onClick={submitPushRequest} disabled={pushSimulation.count === 0} className="flex-1 py-4 bg-[#00d66f] border-4 border-[#0a2540] text-[#0a2540] rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] active:shadow-none active:translate-y-1 transition-all disabled:opacity-50">Enviar para Admin</button>
                           </div>
                       </div>
                   )}
@@ -352,11 +401,7 @@ const MerchantDashboard: React.FC = () => {
                                     <td className="p-4">
                                         {editingInvoiceId === t.id ? (
                                             <div className="flex gap-2">
-                                                <input 
-                                                    type="text" value={editingInvoiceVal} onChange={e=>setEditingInvoiceVal(e.target.value.toUpperCase())}
-                                                    className="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-1 text-xs font-bold outline-none focus:border-[#00d66f]" 
-                                                    placeholder="Nº Fatura"
-                                                />
+                                                <input type="text" value={editingInvoiceVal} onChange={e=>setEditingInvoiceVal(e.target.value.toUpperCase())} className="w-full bg-white border-2 border-slate-200 rounded-lg px-3 py-1 text-xs font-bold outline-none focus:border-[#00d66f]" placeholder="Nº Fatura" />
                                                 <button onClick={() => { if (editingInvoiceVal.trim()) { updateTransactionDocument(t.id, editingInvoiceVal); setEditingInvoiceId(null); } }} className="bg-[#0a2540] text-[#00d66f] px-3 rounded-lg"><Save size={14}/></button>
                                                 <button onClick={() => setEditingInvoiceId(null)} className="bg-slate-100 text-slate-500 px-3 rounded-lg"><X size={14}/></button>
                                             </div>
@@ -368,7 +413,7 @@ const MerchantDashboard: React.FC = () => {
                                                 <button onClick={() => { setEditingInvoiceId(t.id); setEditingInvoiceVal(t.documentNumber || ''); }} className="text-slate-400 hover:text-[#00d66f] transition-colors"><Settings size={14}/></button>
                                             </div>
                                         )}
-                                    </td>
+                                      </td>
                                 </tr>
                             ))}
                             {transactions.length === 0 && (
@@ -427,7 +472,7 @@ const MerchantDashboard: React.FC = () => {
               <button onClick={handleConfirm} className="py-4 bg-[#0a2540] rounded-2xl font-black uppercase text-[10px] text-[#00d66f] shadow-lg">Confirmar</button>
             </div>
           </div>
-        </div>
+       </div>
       )}
 
       {postTxModal.isOpen && (
@@ -444,7 +489,7 @@ const MerchantDashboard: React.FC = () => {
                             <div className="flex gap-4 pt-4">
                                 <button onClick={() => setPostTxModal({isOpen: false, txId:'', needsInvoice: false})} className="flex-1 py-4 bg-slate-100 text-slate-500 rounded-2xl font-black uppercase text-[10px]">Fechar</button>
                                 <button onClick={savePostInvoice} disabled={!postInvoiceNum.trim()} className="flex-1 py-4 bg-[#0a2540] text-[#00d66f] rounded-2xl font-black uppercase text-[10px]">Guardar Fatura</button>
-                            </div>
+                           </div>
                         </div>
                     ) : (
                         <button onClick={() => setPostTxModal({isOpen: false, txId:'', needsInvoice: false})} className="w-full py-5 bg-[#0a2540] text-white rounded-3xl font-black uppercase tracking-widest text-[11px]">Fechar Aviso</button>

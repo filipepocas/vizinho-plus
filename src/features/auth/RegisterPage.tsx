@@ -36,6 +36,8 @@ const RegisterPage: React.FC = () => {
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validações Iniciais
     if (!acceptedTerms) {
       toast.error("TENS DE ACEITAR OS TERMOS E PRIVACIDADE.");
       return;
@@ -51,22 +53,29 @@ const RegisterPage: React.FC = () => {
       return;
     }
 
-    setLoading(true);
-
     if (formData.zipCode.length !== 8) {
       toast.error("CÓDIGO POSTAL INVÁLIDO (0000-000)");
-      setLoading(false);
       return;
     }
 
-    try {
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
-      const newCustomerNumber = generateCustomerNumber();
+    setLoading(true);
 
-      await setDoc(doc(db, 'users', userCredential.user.uid), {
-        id: userCredential.user.uid,
+    try {
+      // 1. Criar utilizador no Firebase Auth
+      const userCredential = await createUserWithEmailAndPassword(
+        auth, 
+        formData.email.trim(), 
+        formData.password
+      );
+
+      const newCustomerNumber = generateCustomerNumber();
+      const uid = userCredential.user.uid;
+
+      // 2. Criar documento do utilizador no Firestore
+      await setDoc(doc(db, 'users', uid), {
+        id: uid,
         name: formData.name.trim(),
-        nif: '', // Fica vazio para ser preenchido nas definições pelo utilizador
+        nif: '', 
         customerNumber: newCustomerNumber, 
         phone: formData.phone.trim(),
         zipCode: formData.zipCode,
@@ -78,20 +87,24 @@ const RegisterPage: React.FC = () => {
         createdAt: serverTimestamp()
       });
 
-      setRegisteredUserId(userCredential.user.uid);
+      setRegisteredUserId(uid);
       setSetupStep(true);
       toast.success("CONTA CRIADA COM SUCESSO!");
 
-      // DISPARO AUTOMÁTICO DE PERMISSÃO (Funciona melhor em Android imediatamente após o clique)
+      // Disparo de permissão de notificações
       setTimeout(() => {
-        requestNotificationPermission(userCredential.user.uid);
+        requestNotificationPermission(uid);
       }, 800);
 
     } catch (err: any) {
+      console.error("Erro detalhado no registo:", err);
+      
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
+      } else if (err.code === 'permission-denied') {
+        toast.error("ERRO DE PERMISSÃO NA BASE DE DADOS.");
       } else {
-        toast.error("ERRO AO CRIAR CONTA.");
+        toast.error("ERRO AO CRIAR CONTA. TENTE NOVAMENTE.");
       }
     } finally {
       setLoading(false);
@@ -157,7 +170,6 @@ const RegisterPage: React.FC = () => {
             <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
-          {/* NOVA LINHA: EMAIL DUPLO */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
@@ -199,8 +211,8 @@ const RegisterPage: React.FC = () => {
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
             <input type="checkbox" id="terms" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} className="mt-1 w-5 h-5 accent-[#00d66f]" />
             <label htmlFor="terms" className="text-[9px] font-bold uppercase text-slate-500 leading-tight">
-              Aceito os <Link to="/terms" className="text-[#0a2540] underline">Termos de Utilização</Link> e a 
-              <Link to="/terms" className="text-[#0a2540] underline"> Política de Privacidade</Link> do Vizinho+.
+              Aceito os <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-[#0a2540] underline">Termos de Utilização</Link> e a 
+              <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-[#0a2540] underline"> Política de Privacidade</Link> do Vizinho+.
             </label>
           </div>
 

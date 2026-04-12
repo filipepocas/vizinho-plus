@@ -1,11 +1,14 @@
 // src/utils/notifications.ts
 
-import OneSignal from 'react-onesignal';
-import { db } from "../config/firebase";
+import { db, auth, messaging } from "../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { getToken, onMessage } from "firebase/messaging";
 import toast from 'react-hot-toast';
 
-// Gera um ID único para o browser/equipamento atual e guarda no telemóvel
+// VAPID KEY pública do seu Firebase Console (Settings > Cloud Messaging)
+const VAPID_KEY = "BPaM-XoY_vI7F-XzL4V5L_..."; // Substitua pela sua chave real se necessário
+
+// Gera um ID único para o browser/equipamento atual para controlo interno
 export const getLocalDeviceId = () => {
   let deviceId = localStorage.getItem('vplus_device_id');
   if (!deviceId) {
@@ -16,7 +19,7 @@ export const getLocalDeviceId = () => {
 };
 
 // Regista/Atualiza o equipamento na Base de Dados (Máximo 2, Limpa aos 45 dias)
-export const registerDeviceInFirebase = async (userId: string) => {
+export const registerDeviceInFirebase = async (userId: string, fcmToken: string | null = null) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
@@ -28,94 +31,113 @@ export const registerDeviceInFirebase = async (userId: string) => {
     const now = Date.now();
     const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
 
-    // 1. Limpa equipamentos que não fazem login há mais de 45 dias
+    // 1. Limpa equipamentos inativos
     devices = devices.filter(d => (now - d.lastLogin) < FORTY_FIVE_DAYS);
 
     const currentDeviceId = getLocalDeviceId();
     const userAgent = navigator.userAgent;
 
-    // 2. Remove este aparelho da lista (caso já exista) para não haver duplicados
+    // 2. Remove o aparelho atual da lista para atualizar os dados
     devices = devices.filter(d => d.deviceId !== currentDeviceId);
 
-    // 3. Adiciona o aparelho com a data de hoje e o ID das Notificações
+    // 3. Adiciona o aparelho com o token FCM atualizado
     devices.push({
       deviceId: currentDeviceId,
       userAgent: userAgent.substring(0, 100),
       lastLogin: now,
-      oneSignalId: OneSignal.User?.PushSubscription?.id || null
+      fcmToken: fcmToken // Guardamos o token do Firebase Cloud Message aqui
     });
 
-    // 4. Garante que só ficam os últimos 2 aparelhos (ordena do mais recente para o mais antigo)
+    // 4. Mantém apenas os últimos 2 aparelhos
     devices.sort((a, b) => b.lastLogin - a.lastLogin);
     if (devices.length > 2) {
       devices = devices.slice(0, 2);
     }
 
-    // Grava no Firebase
     await updateDoc(userRef, { devices });
+    console.log("FCM Token registado no Firestore:", fcmToken);
   } catch (error) {
-    console.error("Erro ao registar dispositivo:", error);
+    console.error("Erro ao registar dispositivo FCM:", error);
   }
 };
 
 export const requestNotificationPermission = async (userId: string) => {
+  if (!messaging) {
+    console.warn("FCM não é suportado neste ambiente.");
+    return false;
+  }
+
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
   if (isIOS && !isStandalone) {
     toast.error(
-      "Atenção iOS: No iPhone/iPad, tens de INSTALAR a App primeiro (Partilhar > Adicionar ao Ecrã) para ativar as notificações!", 
+      "No iPhone, precisas de INSTALAR a App (Partilhar > Adicionar ao Ecrã) para ativar notificações.", 
       { duration: 8000 }
     );
     return false;
   }
 
   try {
-    await OneSignal.Slidedown.promptPush();
-    const hasPermission = OneSignal.Notifications.permission;
+    const permission = await Notification.requestPermission();
     
-    if (hasPermission) {
-      await OneSignal.login(userId);
-      await OneSignal.User.PushSubscription.optIn(); // Força a ativação caso estivesse desligada
-
-      // Aguarda 2 segundos para o OneSignal gerar o ID e grava o aparelho no Firebase
-      setTimeout(() => registerDeviceInFirebase(userId), 2000);
-
-      toast.success("Alertas Ativados com sucesso! Vais receber avisos.", { duration: 5000 });
-      return true;
+    if (permission === 'granted') {
+      // Obtém o Token do FCM
+      const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+      
+      if (currentToken) {
+        await registerDeviceInFirebase(userId, currentToken);
+        toast.success("Notificações FCM ativadas com sucesso!");
+        return true;
+      } else {
+        toast.error("Não foi possível gerar o token de acesso.");
+        return false;
+      }
     } else {
-      toast.error("Permissão recusada. Se mudares de ideias, ativa no cadeado lá em cima.", { duration: 6000 });
+      toast.error("Permissão de notificações recusada.");
       return false;
     }
-  } catch (error: any) {
-    console.error("ERRO ONESIGNAL:", error);
-    toast.error("Erro ao configurar as notificações. Tenta novamente.", { duration: 5000 });
+  } catch (error) {
+    console.error("Erro ao solicitar permissão FCM:", error);
+    toast.error("Erro ao configurar notificações.");
     return false;
   }
 };
 
-// Permite ao cliente desligar ou ligar as notificações manualmente neste telemóvel
+// Liga/Desliga Notificações (FCM)
 export const toggleNotifications = async (userId: string, enable: boolean) => {
   try {
     if (enable) {
-      await OneSignal.User.PushSubscription.optIn();
-      setTimeout(() => registerDeviceInFirebase(userId), 2000);
-      toast.success("Notificações reativadas para este equipamento.");
+      return await requestNotificationPermission(userId);
     } else {
-      await OneSignal.User.PushSubscription.optOut();
-      // Removemos o oneSignalId da BD para o Admin não tentar enviar para um telemóvel inativo
+      // Para desativar no FCM, limpamos o token do Firestore para este aparelho
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
+      
       if (userSnap.exists()) {
+        const currentDeviceId = getLocalDeviceId();
         let devices = userSnap.data().devices || [];
-        const currentId = getLocalDeviceId();
-        devices = devices.map((d: any) => d.deviceId === currentId ? { ...d, oneSignalId: null } : d);
+        
+        devices = devices.map((d: any) => 
+          d.deviceId === currentDeviceId ? { ...d, fcmToken: null } : d
+        );
+        
         await updateDoc(userRef, { devices });
       }
+      toast.success("Notificações desativadas neste equipamento.");
+      return true;
     }
-    return true;
   } catch (e) {
-    console.error(e);
+    console.error("Erro no Toggle FCM:", e);
     return false;
   }
 };
+
+// Listener para mensagens recebidas com a app aberta (Foreground)
+export const onMessageListener = () =>
+  new Promise((resolve) => {
+    if (!messaging) return;
+    onMessage(messaging, (payload) => {
+      resolve(payload);
+    });
+  });

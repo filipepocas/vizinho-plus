@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
+import { signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';
 import { LogIn, Mail, Lock, AlertCircle, ArrowRight, Loader2, Store, X, User, Phone, MapPin, Hash, Tag, Percent, CheckCircle2, AlertTriangle, Smartphone, Volume2 } from 'lucide-react';
 import { useStore } from '../../store/useStore';
@@ -33,7 +33,6 @@ const LoginPage: React.FC = () => {
   });
   const [submittingMerchant, setSubmittingMerchant] = useState(false);
 
-  // Novos Estados para o Controlo Pós-Login
   const { isInstallable, installApp } = usePWAInstall();
   const [setupStep, setSetupStep] = useState(false);
   const [loggedInUserId, setLoggedInUserId] = useState('');
@@ -41,36 +40,51 @@ const LoginPage: React.FC = () => {
   const { currentUser, isInitialized } = useStore();
   const navigate = useNavigate();
 
-  // Apenas redireciona se não estivermos presos no "setupStep"
+  // Detetar se já está a correr como App Instalada
+  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
+
   useEffect(() => {
+    // Se o user já está logado e inicializado, e não está no fluxo de setup
     if (isInitialized && currentUser && !setupStep && !localLoading) {
-      navigate('/dashboard', { replace: true });
+      // Pequeno delay para garantir que o Firestore carregou os dados do user no Store
+      const timer = setTimeout(() => {
+        navigate('/dashboard', { replace: true });
+      }, 500);
+      return () => clearTimeout(timer);
     }
   }, [currentUser, isInitialized, navigate, setupStep, localLoading]);
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     if (localLoading) return;
+    
     setLocalLoading(true);
     setError('');
     
     try {
+      // Forçar persistência local para PWAs
+      await setPersistence(auth, browserLocalPersistence);
+      
       const cred = await signInWithEmailAndPassword(auth, email.trim(), password);
       
-      // Regista o Equipamento (Máx 2, Limpa aos 45 dias)
+      // Regista o Equipamento
       await registerDeviceInFirebase(cred.user.uid);
       setLoggedInUserId(cred.user.uid);
 
-      // Verifica se a permissão nativa de notificações está concedida
+      // Verifica permissões de notificação
       const nativePermission = 'Notification' in window && Notification.permission === 'granted';
       
-      if (isInstallable || !nativePermission) {
+      // Se estiver no browser e for instalável, OU não tiver notificações, mostra setup
+      // Mas se já for Standalone (App), foca apenas nas notificações
+      if ((isInstallable && !isStandalone) || !nativePermission) {
         setSetupStep(true);
         setLocalLoading(false);
       } else {
-        // Deixa o useEffect atuar naturalmente e navegar
+        // Redirecionamento direto de segurança
+        window.location.href = '/dashboard';
       }
     } catch (err: any) {
+      console.error("Erro Login:", err);
       setLocalLoading(false);
       setError('Email ou password incorretos.');
     }
@@ -100,7 +114,6 @@ const LoginPage: React.FC = () => {
     }
   };
 
-  // ECRÃ OBRIGATÓRIO SE A APP NÃO ESTIVER INSTALADA OU SEM NOTIFICAÇÕES
   if (setupStep) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
@@ -116,12 +129,12 @@ const LoginPage: React.FC = () => {
                   <h3 className="font-black uppercase text-[10px] tracking-widest">Ação Necessária</h3>
                </div>
                <p className="text-xs font-bold text-amber-900 leading-relaxed">
-                 Detetámos que este telemóvel não tem a APP instalada ou as Notificações ativas. Para usares a tua conta, por favor, conclui estes passos obrigatórios.
+                 Detetámos que este telemóvel ainda não tem a APP instalada ou as Notificações ativas. Para usares a tua conta com segurança, conclui estes passos.
                </p>
             </div>
 
             <div className="space-y-4 mb-8">
-                {isInstallable && (
+                {isInstallable && !isStandalone && (
                     <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg border-2 border-[#0a2540]">
                         <Smartphone size={24} className="text-[#00d66f]" /> Instalar App (Obrigatório)
                     </button>
@@ -132,7 +145,7 @@ const LoginPage: React.FC = () => {
             </div>
 
             <div className="border-t-2 border-slate-100 pt-6 mt-4">
-              <button onClick={() => navigate('/dashboard', { replace: true })} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+              <button onClick={() => window.location.href = '/dashboard'} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
                   Já fiz isto, quero entrar <ArrowRight size={20} />
               </button>
             </div>
@@ -183,13 +196,12 @@ const LoginPage: React.FC = () => {
             <Link to="/register" className="text-[#00d66f] hover:text-[#00b05b] bg-[#00d66f]/10 px-6 py-3 rounded-xl w-full text-center border border-[#00d66f]/20">Criar Nova Conta (Cliente)</Link>
             <Link to="/forgot-password" className="hover:text-[#0a2540] underline">Esqueci-me da Password</Link>
             <button onClick={() => setShowMerchantModal(true)} className="hover:text-[#0a2540] underline text-blue-500">Sou Comerciante / Quero Aderir</button>
-            <Link to="/terms" className="hover:text-[#0a2540] mt-4">Termos e Condições</Link>
+            <Link to="/terms" target="_blank" rel="noopener noreferrer" className="hover:text-[#0a2540] mt-4">Termos e Condições</Link>
         </div>
       </div>
 
       {showMerchantModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
-          {/* O RESTO DO TEU CÓDIGO DO MODAL DE COMERCIANTES FICOU INTACTO ABAIXO */}
           <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-8">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">

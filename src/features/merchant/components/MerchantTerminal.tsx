@@ -1,3 +1,5 @@
+// src/features/merchant/components/MerchantTerminal.tsx
+
 import React, { useState } from 'react';
 import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
@@ -43,7 +45,15 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
 
   const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0;
-  const canProcessRedeem = !isLoading && foundClient !== null && invoiceAmount > 0 && Number(customRedeem) > 0 && Number(customRedeem) <= actualDiscountToApply;
+  
+  // Melhoria na validação do desconto
+  const redeemVal = parseFloat(customRedeem);
+  const canProcessRedeem = !isLoading && 
+                          foundClient !== null && 
+                          invoiceAmount > 0 && 
+                          !isNaN(redeemVal) && 
+                          redeemVal > 0 && 
+                          redeemVal <= (actualDiscountToApply + 0.01); // Margem para arredondamentos
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
