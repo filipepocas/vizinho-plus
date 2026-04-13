@@ -5,8 +5,8 @@ import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 import toast from 'react-hot-toast';
 
-// VAPID KEY pública do seu Firebase Console (Settings > Cloud Messaging)
-const VAPID_KEY = "BPaM-XoY_vI7F-XzL4V5L_..."; // Substitua pela sua chave real se necessário
+// ⚠️ ATENÇÃO: Substitui o valor abaixo pela tua chave real gerada no Firebase Console!
+const VAPID_KEY = "BFch8QBtlRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5s"; 
 
 // Gera um ID único para o browser/equipamento atual para controlo interno
 export const getLocalDeviceId = () => {
@@ -24,38 +24,40 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) return;
-
+    
     const userData = userSnap.data();
     let devices: any[] = userData.devices || [];
-
+    
     const now = Date.now();
     const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
-
+    
     // 1. Limpa equipamentos inativos
     devices = devices.filter(d => (now - d.lastLogin) < FORTY_FIVE_DAYS);
-
+    
     const currentDeviceId = getLocalDeviceId();
     const userAgent = navigator.userAgent;
-
+    
     // 2. Remove o aparelho atual da lista para atualizar os dados
     devices = devices.filter(d => d.deviceId !== currentDeviceId);
-
+    
     // 3. Adiciona o aparelho com o token FCM atualizado
-    devices.push({
-      deviceId: currentDeviceId,
-      userAgent: userAgent.substring(0, 100),
-      lastLogin: now,
-      fcmToken: fcmToken // Guardamos o token do Firebase Cloud Message aqui
-    });
-
+    if (fcmToken) {
+      devices.push({
+        deviceId: currentDeviceId,
+        userAgent: userAgent.substring(0, 100),
+        lastLogin: now,
+        fcmToken: fcmToken
+      });
+    }
+    
     // 4. Mantém apenas os últimos 2 aparelhos
     devices.sort((a, b) => b.lastLogin - a.lastLogin);
     if (devices.length > 2) {
       devices = devices.slice(0, 2);
     }
-
+    
     await updateDoc(userRef, { devices });
-    console.log("FCM Token registado no Firestore:", fcmToken);
+    console.log("FCM Token registado no Firestore com sucesso.");
   } catch (error) {
     console.error("Erro ao registar dispositivo FCM:", error);
   }
@@ -64,6 +66,7 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
 export const requestNotificationPermission = async (userId: string) => {
   if (!messaging) {
     console.warn("FCM não é suportado neste ambiente.");
+    toast.error("O teu navegador não suporta notificações web.");
     return false;
   }
 
@@ -82,12 +85,12 @@ export const requestNotificationPermission = async (userId: string) => {
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
-      // Obtém o Token do FCM
+      // Obtém o Token do FCM usando a tua VAPID KEY
       const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
       
       if (currentToken) {
         await registerDeviceInFirebase(userId, currentToken);
-        toast.success("Notificações FCM ativadas com sucesso!");
+        toast.success("Notificações ativadas com sucesso!");
         return true;
       } else {
         toast.error("Não foi possível gerar o token de acesso.");
@@ -99,7 +102,7 @@ export const requestNotificationPermission = async (userId: string) => {
     }
   } catch (error) {
     console.error("Erro ao solicitar permissão FCM:", error);
-    toast.error("Erro ao configurar notificações.");
+    toast.error("Erro ao configurar notificações. Verifica se a chave VAPID está correta no código.");
     return false;
   }
 };
