@@ -6,7 +6,7 @@ import { getToken, onMessage } from "firebase/messaging";
 import toast from 'react-hot-toast';
 
 // ⚠️ ATENÇÃO: Substitui o valor abaixo pela tua chave real gerada no Firebase Console!
-const VAPID_KEY = "BFch8QBtlRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5s"; 
+const VAPID_KEY = "BFch8QBtIRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIlY"; 
 
 // Gera um ID único para o browser/equipamento atual para controlo interno
 export const getLocalDeviceId = () => {
