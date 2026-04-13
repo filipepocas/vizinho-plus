@@ -17,6 +17,9 @@ export const firebaseConfig = {
   measurementId: "G-9MCBEED7FB"
 };
 
+// Chave VAPID (Substitui pelo valor que encontrares na consola do Firebase)
+export const VAPID_KEY = "BFch8QBtIRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIlY";
+
 // Inicialização segura da App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 

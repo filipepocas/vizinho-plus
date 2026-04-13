@@ -2,6 +2,8 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { Toaster } from 'react-hot-toast'; 
+import { getToken, onMessage } from 'firebase/messaging'; // Importes do Firebase Messaging
+import { messaging, VAPID_KEY } from './config/firebase'; // Nossa config
 
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
@@ -38,19 +40,55 @@ const ProtectedRoute: React.FC<{
 };
 
 function App() {
-  const { initializeAuth, subscribeToTransactions, currentUser } = useStore();
+  const { initializeAuth, subscribeToTransactions, currentUser, updateUserToken } = useStore();
 
+  // 1. Inicialização do Auth
   useEffect(() => {
     const unsub = initializeAuth();
     return () => unsub();
   }, []); 
 
+  // 2. Subscrição de Transações
   useEffect(() => {
     if (currentUser?.id) {
       const unsub = subscribeToTransactions(currentUser.role, currentUser.id);
       return () => unsub();
     }
   }, [currentUser?.id, currentUser?.role]);
+
+  // 3. Configuração de Notificações Push
+  useEffect(() => {
+    const setupNotifications = async () => {
+      // Só pedimos permissão se houver um utilizador logado e se o messaging estiver disponível
+      if (!currentUser?.id || !messaging) return;
+
+      try {
+        const permission = await Notification.requestPermission();
+        
+        if (permission === 'granted') {
+          const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+          
+          if (token) {
+            // Guarda o token no Firestore através da Store
+            await updateUserToken(currentUser.id, token);
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao configurar notificações:", error);
+      }
+    };
+
+    setupNotifications();
+
+    // Ouvir mensagens com a App aberta (Foreground)
+    if (messaging) {
+      const unsubscribeOnMessage = onMessage(messaging, (payload) => {
+        console.log('Mensagem recebida em foreground:', payload);
+        // Aqui podes adicionar um toast customizado se quiseres
+      });
+      return () => unsubscribeOnMessage();
+    }
+  }, [currentUser?.id]);
 
   return (
     <BrowserRouter>

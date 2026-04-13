@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit, updateDoc } from 'firebase/firestore';
+import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit, updateDoc, arrayUnion } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
@@ -21,6 +21,7 @@ interface StoreState {
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
+  updateUserToken: (userId: string, token: string) => Promise<void>; // NOVA FUNÇÃO
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -45,6 +46,20 @@ export const useStore = create<StoreState>((set, get) => ({
   resetPassword: async (email: string) => {
     await sendPasswordResetEmail(auth, email);
     toast.success("EMAIL DE RECUPERAÇÃO ENVIADO!");
+  },
+
+  updateUserToken: async (userId: string, token: string) => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      // Usamos arrayUnion para permitir que o utilizador receba notificações em vários aparelhos
+      await updateDoc(userRef, {
+        fcmTokens: arrayUnion(token),
+        lastTokenUpdate: serverTimestamp()
+      });
+      console.log("Token de notificação atualizado com sucesso.");
+    } catch (e) {
+      console.error("Erro ao guardar token:", e);
+    }
   },
 
   checkNifExists: async (nif: string) => {
@@ -76,9 +91,9 @@ export const useStore = create<StoreState>((set, get) => ({
         createdAt: serverTimestamp(),
         clientNif: tx.documentNumber || "", 
         documentNumber: tx.documentNumber || "",
-        clientName: tx.clientName || "Desconhecido", // NOVO
-        clientCardNumber: tx.clientCardNumber || "---", // NOVO
-        clientBirthDate: tx.clientBirthDate || "" // NOVO
+        clientName: tx.clientName || "Desconhecido",
+        clientCardNumber: tx.clientCardNumber || "---",
+        clientBirthDate: tx.clientBirthDate || ""
       });
 
       const userRef = doc(db, 'users', tx.clientId);
