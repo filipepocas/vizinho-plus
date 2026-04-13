@@ -1,14 +1,13 @@
 // src/utils/notifications.ts
 
-import { db, messaging } from "../config/firebase";
+import { db, auth, messaging } from "../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 import toast from 'react-hot-toast';
 
-// A TUA CHAVE VAPID CORRETA
+// A TUA CHAVE VAPID
 const VAPID_KEY = "BFch8QBtIRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIlY"; 
 
-// Gera um ID único para o browser/equipamento atual para controlo interno
 export const getLocalDeviceId = () => {
   let deviceId = localStorage.getItem('vplus_device_id');
   if (!deviceId) {
@@ -18,7 +17,6 @@ export const getLocalDeviceId = () => {
   return deviceId;
 };
 
-// Regista/Atualiza o equipamento na Base de Dados (Máximo 2, Limpa aos 45 dias)
 export const registerDeviceInFirebase = async (userId: string, fcmToken: string | null = null) => {
   try {
     const userRef = doc(db, 'users', userId);
@@ -31,16 +29,13 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
     const now = Date.now();
     const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
     
-    // 1. Limpa equipamentos inativos
     devices = devices.filter(d => (now - d.lastLogin) < FORTY_FIVE_DAYS);
     
     const currentDeviceId = getLocalDeviceId();
     const userAgent = navigator.userAgent;
     
-    // 2. Remove o aparelho atual da lista
     devices = devices.filter(d => d.deviceId !== currentDeviceId);
     
-    // 3. Adiciona o aparelho com o token FCM atualizado
     if (fcmToken) {
       devices.push({
         deviceId: currentDeviceId,
@@ -50,7 +45,6 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
       });
     }
     
-    // 4. Mantém apenas os últimos 2 aparelhos
     devices.sort((a, b) => b.lastLogin - a.lastLogin);
     if (devices.length > 2) {
       devices = devices.slice(0, 2);
@@ -81,16 +75,17 @@ export const requestNotificationPermission = async (userId: string) => {
   }
 
   try {
-    // Pede permissão ao utilizador
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
       
-      // CORREÇÃO CRUCIAL PARA REACT PWA:
-      // Forçamos o navegador a registar e usar o Service Worker do Firebase especificamente!
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // 1. Dizemos ao navegador onde está o ficheiro
+      await navigator.serviceWorker.register('/firebase-messaging-sw.js');
       
-      // Obtém o Token do FCM indicando explicitamente qual o Service Worker a usar
+      // 2. CORREÇÃO: Esperamos obrigatoriamente que o ficheiro fique "Ativo" e "Pronto"
+      const registration = await navigator.serviceWorker.ready;
+      
+      // 3. Agora sim, pedimos o Token ao Firebase com a garantia que o ficheiro está ativo
       const currentToken = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
@@ -99,6 +94,12 @@ export const requestNotificationPermission = async (userId: string) => {
       if (currentToken) {
         await registerDeviceInFirebase(userId, currentToken);
         toast.success("Notificações ativadas com sucesso!");
+        
+        // Redireciona automaticamente para o dashboard se estivermos no ecrã de boas vindas
+        if (window.location.pathname === '/register' || window.location.pathname === '/login') {
+           window.location.href = '/dashboard';
+        }
+        
         return true;
       } else {
         toast.error("O Firebase não devolveu nenhum token.");
@@ -110,13 +111,11 @@ export const requestNotificationPermission = async (userId: string) => {
     }
   } catch (error: any) {
     console.error("ERRO COMPLETO DO FIREBASE:", error);
-    // AGORA VAI MOSTRAR O ERRO REAL DO FIREBASE NO ECRÃ DO TELEMÓVEL!
     toast.error(`Erro Firebase: ${error.message}`, { duration: 8000 });
     return false;
   }
 };
 
-// Liga/Desliga Notificações
 export const toggleNotifications = async (userId: string, enable: boolean) => {
   try {
     if (enable) {
@@ -144,7 +143,6 @@ export const toggleNotifications = async (userId: string, enable: boolean) => {
   }
 };
 
-// Listener para mensagens recebidas com a app aberta (Foreground)
 export const onMessageListener = () =>
   new Promise((resolve) => {
     if (!messaging) return;
