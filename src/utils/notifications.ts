@@ -1,11 +1,11 @@
 // src/utils/notifications.ts
 
-import { db, auth, messaging } from "../config/firebase";
+import { db, messaging } from "../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 import toast from 'react-hot-toast';
 
-// A TUA CHAVE VAPID
+// A TUA CHAVE VAPID REAL
 const VAPID_KEY = "BFch8QBtIRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIlY"; 
 
 export const getLocalDeviceId = () => {
@@ -30,7 +30,6 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
     const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
     
     devices = devices.filter(d => (now - d.lastLogin) < FORTY_FIVE_DAYS);
-    
     const currentDeviceId = getLocalDeviceId();
     const userAgent = navigator.userAgent;
     
@@ -51,7 +50,6 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
     }
     
     await updateDoc(userRef, { devices });
-    console.log("FCM Token registado no Firestore.");
   } catch (error) {
     console.error("Erro ao registar dispositivo FCM:", error);
   }
@@ -67,10 +65,7 @@ export const requestNotificationPermission = async (userId: string) => {
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
   if (isIOS && !isStandalone) {
-    toast.error(
-      "No iPhone, precisas de INSTALAR a App (Partilhar > Adicionar ao Ecrã) para ativar notificações.", 
-      { duration: 8000 }
-    );
+    toast.error("No iPhone, precisas de INSTALAR a App (Partilhar > Adicionar ao Ecrã) para ativar notificações.", { duration: 8000 });
     return false;
   }
 
@@ -79,13 +74,17 @@ export const requestNotificationPermission = async (userId: string) => {
     
     if (permission === 'granted') {
       
-      // 1. Dizemos ao navegador onde está o ficheiro
-      await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // 🚨 TRUQUE ANTI-CACHE: Apaga todos os Service Workers antigos que estão a causar conflito
+      const registrations = await navigator.serviceWorker.getRegistrations();
+      for (let reg of registrations) {
+        await reg.unregister();
+      }
+
+      // Regista o ficheiro correto de forma isolada
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      await navigator.serviceWorker.ready; // Espera que ele acorde
       
-      // 2. CORREÇÃO: Esperamos obrigatoriamente que o ficheiro fique "Ativo" e "Pronto"
-      const registration = await navigator.serviceWorker.ready;
-      
-      // 3. Agora sim, pedimos o Token ao Firebase com a garantia que o ficheiro está ativo
+      // Pede o Token ao Firebase
       const currentToken = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
@@ -95,11 +94,10 @@ export const requestNotificationPermission = async (userId: string) => {
         await registerDeviceInFirebase(userId, currentToken);
         toast.success("Notificações ativadas com sucesso!");
         
-        // Redireciona automaticamente para o dashboard se estivermos no ecrã de boas vindas
+        // Redireciona automaticamente se estiver no ecrã de setup
         if (window.location.pathname === '/register' || window.location.pathname === '/login') {
            window.location.href = '/dashboard';
         }
-        
         return true;
       } else {
         toast.error("O Firebase não devolveu nenhum token.");
@@ -110,7 +108,7 @@ export const requestNotificationPermission = async (userId: string) => {
       return false;
     }
   } catch (error: any) {
-    console.error("ERRO COMPLETO DO FIREBASE:", error);
+    console.error("ERRO FIREBASE:", error);
     toast.error(`Erro Firebase: ${error.message}`, { duration: 8000 });
     return false;
   }
@@ -123,22 +121,16 @@ export const toggleNotifications = async (userId: string, enable: boolean) => {
     } else {
       const userRef = doc(db, 'users', userId);
       const userSnap = await getDoc(userRef);
-      
       if (userSnap.exists()) {
         const currentDeviceId = getLocalDeviceId();
         let devices = userSnap.data().devices || [];
-        
-        devices = devices.map((d: any) => 
-          d.deviceId === currentDeviceId ? { ...d, fcmToken: null } : d
-        );
-        
+        devices = devices.map((d: any) => d.deviceId === currentDeviceId ? { ...d, fcmToken: null } : d);
         await updateDoc(userRef, { devices });
       }
       toast.success("Notificações desativadas.");
       return true;
     }
   } catch (e) {
-    console.error("Erro no Toggle FCM:", e);
     return false;
   }
 };
