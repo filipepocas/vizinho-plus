@@ -91,10 +91,10 @@ const RegisterPage: React.FC = () => {
       setSetupStep(true);
       toast.success("CONTA CRIADA COM SUCESSO!");
 
-      // Disparo de permissão de notificações
+      // Disparo de permissão de notificações com delay para garantir que o SW está pronto
       setTimeout(() => {
         requestNotificationPermission(uid);
-      }, 800);
+      }, 1500);
 
     } catch (err: any) {
       console.error("Erro detalhado no registo:", err);

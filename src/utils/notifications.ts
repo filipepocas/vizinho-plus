@@ -27,9 +27,11 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
     let devices: any[] = userData.devices || [];
     
     const now = Date.now();
+    // Mantém o teu filtro original de 45 dias
     devices = devices.filter(d => (now - d.lastLogin) < (45 * 24 * 60 * 60 * 1000));
     
     const currentDeviceId = getLocalDeviceId();
+    // Remove o aparelho atual da lista para evitar duplicados ao atualizar
     devices = devices.filter(d => d.deviceId !== currentDeviceId);
     
     if (fcmToken) {
@@ -41,10 +43,12 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
       });
     }
     
+    // Mantém apenas os últimos 2 aparelhos conforme a tua regra original
     devices.sort((a, b) => b.lastLogin - a.lastLogin);
     if (devices.length > 2) devices = devices.slice(0, 2);
     
     await updateDoc(userRef, { devices });
+    console.log("Dispositivo registado no Firestore.");
   } catch (error) {
     console.error("Erro ao registar dispositivo:", error);
   }
@@ -69,10 +73,24 @@ export const requestNotificationPermission = async (userId: string) => {
     
     if (permission === 'granted') {
       
-      // Regista o Service Worker especifico para as Notificações do Firebase
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      await navigator.serviceWorker.ready; // Espera que ele esteja totalmente ativo
+      // 🚨 CORREÇÃO DEFINITIVA:
+      // Registamos o worker com um carimbo de data (?v=...) para forçar o telemóvel a ignorar a cache antiga.
+      const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?v=${Date.now()}`, {
+        scope: '/'
+      });
       
+      // ESPERA ATIVA: Garantimos que o Service Worker está "Ativado" antes de pedir o token.
+      // Isto evita o erro "no active Service Worker".
+      let sw = registration.installing || registration.waiting || registration.active;
+      if (sw && sw.state !== 'activated') {
+        await new Promise<void>((resolve) => {
+          sw?.addEventListener('statechange', (e: any) => {
+            if (e.target.state === 'activated') resolve();
+          });
+        });
+      }
+
+      // Obtém o Token do FCM ligando-o diretamente ao registo que acabámos de ativar
       const currentToken = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
@@ -82,6 +100,7 @@ export const requestNotificationPermission = async (userId: string) => {
         await registerDeviceInFirebase(userId, currentToken);
         toast.success("Notificações ativadas com sucesso!");
         
+        // Teu redirecionamento original
         if (window.location.pathname === '/register' || window.location.pathname === '/login') {
            window.location.href = '/dashboard';
         }
@@ -111,6 +130,7 @@ export const toggleNotifications = async (userId: string, enable: boolean) => {
       if (userSnap.exists()) {
         const currentDeviceId = getLocalDeviceId();
         let devices = userSnap.data().devices || [];
+        // Tua lógica original de desativação (colocar o token a null)
         devices = devices.map((d: any) => d.deviceId === currentDeviceId ? { ...d, fcmToken: null } : d);
         await updateDoc(userRef, { devices });
       }
@@ -118,6 +138,7 @@ export const toggleNotifications = async (userId: string, enable: boolean) => {
       return true;
     }
   } catch (e) {
+    console.error("Erro no toggle:", e);
     return false;
   }
 };
