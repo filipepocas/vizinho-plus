@@ -1,5 +1,23 @@
+// src/store/useStore.ts
+
 import { create } from 'zustand';
-import { collection, onSnapshot, query, orderBy, where, serverTimestamp, setDoc, doc, getDocs, writeBatch, increment, getDoc, limit, updateDoc, arrayUnion } from 'firebase/firestore';
+import { 
+  collection, 
+  onSnapshot, 
+  query, 
+  orderBy, 
+  where, 
+  serverTimestamp, 
+  setDoc, 
+  doc, 
+  getDocs, 
+  writeBatch, 
+  increment, 
+  getDoc, 
+  limit, 
+  updateDoc, 
+  arrayUnion 
+} from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile } from '../types';
@@ -16,12 +34,14 @@ interface StoreState {
   resetPassword: (email: string) => Promise<void>;
   addTransaction: (transaction: TransactionCreate) => Promise<string | undefined>;
   cancelTransaction: (transactionId: string) => Promise<void>;
-  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>; 
+  updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>;
   subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
-  updateUserToken: (userId: string, token: string) => Promise<void>; // NOVA FUNÇÃO
+  updateUserToken: (userId: string, token: string) => Promise<void>;
+  // NOVAS FUNÇÕES PARA NOTIFICAÇÕES (Ponto 1)
+  toggleNotifications: (userId: string, enabled: boolean) => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -54,11 +74,27 @@ export const useStore = create<StoreState>((set, get) => ({
       // Usamos arrayUnion para permitir que o utilizador receba notificações em vários aparelhos
       await updateDoc(userRef, {
         fcmTokens: arrayUnion(token),
-        lastTokenUpdate: serverTimestamp()
+        lastTokenUpdate: serverTimestamp(),
+        notificationsEnabled: true // Ao registar o token, assumimos ativas por defeito
       });
       console.log("Token de notificação atualizado com sucesso.");
     } catch (e) {
       console.error("Erro ao guardar token:", e);
+    }
+  },
+
+  // Implementação do Ponto 1: Ativar/Desativar Notificações
+  toggleNotifications: async (userId: string, enabled: boolean) => {
+    try {
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, {
+        notificationsEnabled: enabled,
+        notificationsUpdatedAt: serverTimestamp()
+      });
+      toast.success(enabled ? "NOTIFICAÇÕES ATIVADAS!" : "NOTIFICAÇÕES DESATIVADAS.");
+    } catch (e) {
+      console.error("Erro ao alterar estado das notificações:", e);
+      toast.error("ERRO AO ALTERAR PREFERÊNCIAS.");
     }
   },
 
@@ -76,7 +112,8 @@ export const useStore = create<StoreState>((set, get) => ({
       const batch = writeBatch(db);
       let currentCbPercent = currentUser.cashbackPercent || 0;
       const amount = Number(tx.amount);
-      const cashback = tx.type === 'earn' ? Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
+      const cashback = tx.type === 'earn' ?
+        Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
       const newTxRef = doc(collection(db, 'transactions'));
       
       batch.set(newTxRef, {
@@ -112,7 +149,9 @@ export const useStore = create<StoreState>((set, get) => ({
       await batch.commit();
       toast.success("MOVIMENTO REGISTADO!");
       return newTxRef.id;
-    } catch (e) { toast.error("ERRO NO REGISTO."); }
+    } catch (e) { 
+      toast.error("ERRO NO REGISTO.");
+    }
   },
 
   updateTransactionDocument: async (transactionId, documentNumber) => {
@@ -120,7 +159,9 @@ export const useStore = create<StoreState>((set, get) => ({
         const txRef = doc(db, 'transactions', transactionId);
         await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
         toast.success("Fatura associada com sucesso!");
-    } catch(e) { toast.error("Erro ao atualizar fatura."); }
+    } catch(e) { 
+      toast.error("Erro ao atualizar fatura.");
+    }
   },
 
   cancelTransaction: async (id) => {
@@ -147,7 +188,9 @@ export const useStore = create<StoreState>((set, get) => ({
       }
       await batch.commit();
       toast.success("ANULADO.");
-    } catch (e) { toast.error("ERRO."); }
+    } catch (e) { 
+      toast.error("ERRO.");
+    }
   },
 
   subscribeToTransactions: (role, id) => {
@@ -163,7 +206,6 @@ export const useStore = create<StoreState>((set, get) => ({
 
   initializeAuth: () => {
     let unsubProfile: (() => void) | null = null;
-
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (unsubProfile) { unsubProfile(); unsubProfile = null; }
 
@@ -182,7 +224,6 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ currentUser: null, isLoading: false, isInitialized: true });
       }
     });
-
     return () => { unsubAuth(); if (unsubProfile) unsubProfile(); };
   },
 
@@ -195,6 +236,8 @@ export const useStore = create<StoreState>((set, get) => ({
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
       toast.success("DADOS APAGADOS.");
-    } catch (e) { toast.error("ERRO."); }
+    } catch (e) { 
+      toast.error("ERRO."); 
+    }
   }
 }));
