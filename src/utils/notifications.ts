@@ -27,31 +27,26 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string 
     let devices: any[] = userData.devices || [];
     
     const now = Date.now();
-    const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
+    devices = devices.filter(d => (now - d.lastLogin) < (45 * 24 * 60 * 60 * 1000));
     
-    devices = devices.filter(d => (now - d.lastLogin) < FORTY_FIVE_DAYS);
     const currentDeviceId = getLocalDeviceId();
-    const userAgent = navigator.userAgent;
-    
     devices = devices.filter(d => d.deviceId !== currentDeviceId);
     
     if (fcmToken) {
       devices.push({
         deviceId: currentDeviceId,
-        userAgent: userAgent.substring(0, 100),
+        userAgent: navigator.userAgent.substring(0, 100),
         lastLogin: now,
         fcmToken: fcmToken
       });
     }
     
     devices.sort((a, b) => b.lastLogin - a.lastLogin);
-    if (devices.length > 2) {
-      devices = devices.slice(0, 2);
-    }
+    if (devices.length > 2) devices = devices.slice(0, 2);
     
     await updateDoc(userRef, { devices });
   } catch (error) {
-    console.error("Erro ao registar dispositivo FCM:", error);
+    console.error("Erro ao registar dispositivo:", error);
   }
 };
 
@@ -65,7 +60,7 @@ export const requestNotificationPermission = async (userId: string) => {
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
   if (isIOS && !isStandalone) {
-    toast.error("No iPhone, precisas de INSTALAR a App (Partilhar > Adicionar ao Ecrã) para ativar notificações.", { duration: 8000 });
+    toast.error("No iPhone, precisas de INSTALAR a App para ativar notificações.", { duration: 8000 });
     return false;
   }
 
@@ -74,17 +69,10 @@ export const requestNotificationPermission = async (userId: string) => {
     
     if (permission === 'granted') {
       
-      // 🚨 TRUQUE ANTI-CACHE: Apaga todos os Service Workers antigos que estão a causar conflito
-      const registrations = await navigator.serviceWorker.getRegistrations();
-      for (let reg of registrations) {
-        await reg.unregister();
-      }
-
-      // Regista o ficheiro correto de forma isolada
+      // Regista o Service Worker especifico para as Notificações do Firebase
       const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-      await navigator.serviceWorker.ready; // Espera que ele acorde
+      await navigator.serviceWorker.ready; // Espera que ele esteja totalmente ativo
       
-      // Pede o Token ao Firebase
       const currentToken = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
@@ -94,17 +82,16 @@ export const requestNotificationPermission = async (userId: string) => {
         await registerDeviceInFirebase(userId, currentToken);
         toast.success("Notificações ativadas com sucesso!");
         
-        // Redireciona automaticamente se estiver no ecrã de setup
         if (window.location.pathname === '/register' || window.location.pathname === '/login') {
            window.location.href = '/dashboard';
         }
         return true;
       } else {
-        toast.error("O Firebase não devolveu nenhum token.");
+        toast.error("O Firebase não devolveu token.");
         return false;
       }
     } else {
-      toast.error("Permissão de notificações recusada no browser.");
+      toast.error("Permissão de notificações recusada.");
       return false;
     }
   } catch (error: any) {
@@ -138,7 +125,5 @@ export const toggleNotifications = async (userId: string, enable: boolean) => {
 export const onMessageListener = () =>
   new Promise((resolve) => {
     if (!messaging) return;
-    onMessage(messaging, (payload) => {
-      resolve(payload);
-    });
+    onMessage(messaging, (payload) => resolve(payload));
   });

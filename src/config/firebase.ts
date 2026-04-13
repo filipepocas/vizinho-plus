@@ -7,7 +7,6 @@ import { getAnalytics } from 'firebase/analytics';
 import { getMessaging } from 'firebase/messaging';
 import { getStorage } from 'firebase/storage';
 
-// ⚠️ COPIAR DA CONSOLA DO FIREBASE E SUBSTITUIR TUDO AQUI!
 export const firebaseConfig = {
   apiKey: "AIzaSyAZc0WqXxax4PongdY25SIveqyTX0SgFoM",
   authDomain: "vizinho-plus.firebaseapp.com",

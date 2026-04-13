@@ -3,7 +3,6 @@
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
-// ⚠️ COPIAR DA CONSOLA DO FIREBASE E SUBSTITUIR TUDO AQUI!
 const firebaseConfig = {
   apiKey: "AIzaSyAZc0WqXxax4PongdY25SIveqyTX0SgFoM",
   authDomain: "vizinho-plus.firebaseapp.com",
@@ -14,18 +13,15 @@ const firebaseConfig = {
   measurementId: "G-9MCBEED7FB"
 };
 
-// Inicializa a app no background
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage(function(payload) {
-  console.log('[firebase-messaging-sw.js] Mensagem recebida em background ', payload);
-  
+  console.log('[firebase-messaging-sw.js] Mensagem recebida em background: ', payload);
   const notificationTitle = payload.notification?.title || 'Vizinho+';
   const notificationOptions = {
     body: payload.notification?.body || 'Nova notificação recebida!',
     icon: '/logo192.png'
   };
-
   self.registration.showNotification(notificationTitle, notificationOptions);
 });
