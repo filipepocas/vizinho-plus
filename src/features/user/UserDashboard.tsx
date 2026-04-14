@@ -31,10 +31,7 @@ const UserDashboard: React.FC = () => {
   const [emailCopied, setEmailCopied] = useState(false);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
 
-  // Estado de Loading do botão de Notificações
   const [isNotifLoading, setIsNotifLoading] = useState(false);
-  // Esconde o botão se as notificações já estiverem ativas a nível do browser
-  const hasNotificationsGranted = Notification.permission === 'granted';
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
@@ -81,6 +78,40 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      const docs = snap.docs.map(d => ({id: d.id, ...d.data()} as AppNotification));
+      for (let notif of docs) {
+        if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
+        const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
+        if (dismissed) continue;
+        
+        let matches = false;
+        if (notif.targetType === 'all') matches = true;
+        else if (notif.targetType === 'email' && currentUser.email === notif.targetValue?.toLowerCase()) matches = true;
+        else if (notif.targetType === 'zipCode' && currentUser.zipCode?.startsWith(notif.targetValue)) matches = true;
+        else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
+        
+        if (matches) {
+          setAppNotification(notif);
+          break; 
+        }
+      }
+    });
+  }, [currentUser]);
+
+  const dismissNotification = () => {
+    if (appNotification?.id) {
+      sessionStorage.setItem(`notif_${appNotification.id}`, "true");
+    }
+    setAppNotification(null);
+  };
+
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
   }, [transactions, evaluatedIds]);
@@ -120,10 +151,9 @@ const UserDashboard: React.FC = () => {
       const res = await requestNotificationPermission(currentUser!.id);
       if(res.success) {
         toast.success("Notificações ativadas com sucesso!");
-        // Dá um pequeno delay e recarrega para sumir o botão
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => window.location.reload(), 1500); // Recarrega para limpar o estado
       } else {
-        toast.error(res.error || "O seu navegador bloqueou o pedido.");
+        toast.error(res.error || "O seu navegador bloqueou o pedido.", { duration: 6000 });
       }
     } catch(err) {
       toast.error("Ocorreu um erro no sistema do seu dispositivo.");
@@ -134,6 +164,9 @@ const UserDashboard: React.FC = () => {
 
   if (!currentUser) return null;
 
+  // Verificação em tempo real se o utilizador já ativou notificações com sucesso na BD
+  const hasNotificationsInDB = currentUser.notificationsEnabled === true && currentUser.fcmTokens && currentUser.fcmTokens.length > 0;
+
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       <div className="relative">
@@ -141,11 +174,7 @@ const UserDashboard: React.FC = () => {
         
         <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/70 to-transparent z-50">
           <div className="bg-white/10 backdrop-blur-sm p-2 rounded-2xl border border-white/20">
-            <img 
-              src="/logo-vizinho.png" 
-              alt="Vizinho+" 
-              className="h-10 w-auto object-contain" 
-            />
+            <img src="/logo-vizinho.png" alt="Vizinho+" className="h-10 w-auto object-contain" />
           </div>
           <div className="flex gap-3">
             <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
@@ -194,6 +223,18 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
+        {appNotification && (
+          <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
+            <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
+            <div className="flex-1">
+              <h4 className="text-lg font-black uppercase italic text-white leading-none mb-2">{appNotification.title}</h4>
+              <p className="text-xs font-bold text-slate-300">{appNotification.message}</p>
+              <button onClick={dismissNotification} className="mt-4 bg-[#00d66f] text-[#0a2540] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">Fechar</button>
+            </div>
+            <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={16} /></button>
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
             <Wallet size={18} /> O meu Saldo
@@ -226,18 +267,20 @@ const UserDashboard: React.FC = () => {
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
-        <div className="grid grid-cols-2 gap-4">
+        {/* MOSTRA OS BOTOES CONFORME OS SUPORTES DO BROWSER E BD */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {isInstallable && (
             <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 active:border-b-0 transition-all">
               <Smartphone size={20} className="text-[#00d66f]" />
               <span className="font-black uppercase text-[9px] tracking-widest text-left">Instalar no<br/>Ecrã Principal</span>
             </button>
           )}
-          {!hasNotificationsGranted && (
-            <button onClick={enableNotifications} disabled={isNotifLoading} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'col-span-2'}`}>
-              {isNotifLoading ? <Loader2 size={20} className="animate-spin mx-auto text-[#00d66f]" /> : (
+          
+          {!hasNotificationsInDB && (
+            <button onClick={enableNotifications} disabled={isNotifLoading} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center justify-center md:justify-start gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'md:col-span-2'}`}>
+              {isNotifLoading ? <Loader2 size={20} className="animate-spin text-[#00d66f]" /> : (
                 <>
-                  <Volume2 size={20} className="text-[#00d66f]" />
+                  <Volume2 size={20} className="text-[#00d66f] shrink-0" />
                   <span className="font-black uppercase text-[9px] tracking-widest text-left">Ativar Notificações<br/>(Recomendado)</span>
                 </>
               )}
