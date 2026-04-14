@@ -10,7 +10,6 @@ import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { requestNotificationPermission } from '../../utils/notifications';
 
-// INTERFACE ADICIONADA PARA RESOLVER O ERRO NO APP.TSX
 interface RegisterPageProps {
   onBack?: () => void;
   onSuccess?: () => void;
@@ -18,15 +17,17 @@ interface RegisterPageProps {
 
 const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  
+  // ESTADO ADICIONADO PARA O PONTO 4
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  
   const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   
   const { isInstallable, installApp } = usePWAInstall();
 
-  // Estados para a fase de "Pós-Registo"
   const [setupStep, setSetupStep] = useState(false);
   const [registeredUserId, setRegisteredUserId] = useState('');
 
@@ -48,8 +49,9 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
       return;
     }
 
+    // VALIDAÇÃO DO PONTO 4: Confirmação de Email
     if (formData.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) {
-      toast.error("OS EMAILS NÃO COINCIDEM.");
+      toast.error("OS EMAILS INTRODUZIDOS NÃO COINCIDEM.");
       return;
     }
     
@@ -87,6 +89,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
         role: 'client',
         status: 'active',
         wallet: { available: 0, pending: 0 },
+        devices: [], // Inicializa array de dispositivos para o Ponto 1
         createdAt: serverTimestamp()
       });
 
@@ -96,12 +99,13 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
 
       if (onSuccess) onSuccess();
 
+      // Solicitação de notificação imediata
       setTimeout(() => {
         requestNotificationPermission(uid);
       }, 1500);
 
     } catch (err: any) {
-      console.error("Erro detalhado no registo:", err);
+      console.error("Erro no registo:", err);
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
       } else {
@@ -127,15 +131,14 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
                   <h3 className="font-black uppercase text-[10px] tracking-widest">Acesso Vital</h3>
                </div>
                <p className="text-xs font-bold text-amber-900 leading-relaxed">
-                  O seu browser já lhe deve ter pedido acesso às notificações. Se não pediu, ou se está num <strong>iPhone</strong>, use os botões abaixo. 
-                  Para ter as <strong>vantagens VIP</strong> tem de Instalar e Ativar os alertas.
+                  Para ter as <strong>vantagens VIP</strong> e receber o seu cashback, tem de Instalar a App e Ativar as notificações no botão abaixo.
                </p>
             </div>
 
             <div className="space-y-4 mb-8">
                 {isInstallable && (
                     <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg border-2 border-[#0a2540]">
-                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar App (Obrigatório)
+                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar App
                     </button>
                 )}
                 <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-[4px_4px_0px_#0a2540]">
@@ -145,7 +148,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
 
             <div className="border-t-2 border-slate-100 pt-6 mt-4">
               <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
-                  Já fiz isto, quero entrar <ArrowRight size={20} />
+                  Entrar no Painel <ArrowRight size={20} />
               </button>
             </div>
         </div>
@@ -155,7 +158,6 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 py-12 relative">
-      {/* Botão de Voltar */}
       <button 
         onClick={() => onBack ? onBack() : navigate('/login')}
         className="absolute top-8 left-8 p-4 bg-white border-4 border-slate-100 rounded-2xl text-[#0a2540] hover:border-[#00d66f] transition-all group"
@@ -177,14 +179,15 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
             <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
+          {/* EMAIL DUPLO - PONTO 4 */}
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email</label>
-              <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+              <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" placeholder="teu@email.com" />
             </div>
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Confirmar Email</label>
-              <input type="email" required value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+              <label className="text-[10px] font-black uppercase text-[#00d66f] ml-2 italic">Confirmar Email (Repetir)</label>
+              <input type="email" required value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-4 border-[#00d66f] rounded-3xl outline-none font-bold text-xs" placeholder="Repete o teu email aqui" />
             </div>
           </div>
 
@@ -201,25 +204,25 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data Nasc. <span className="text-[8px]">(Opcional)</span></label>
-              <input type="date" value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data Nasc.</label>
+              <input type="date" required value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
             </div>
             <div className="space-y-1">
               <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Cód. Postal</label>
-              <input type="text" maxLength={8} required value={formData.zipCode} onChange={handleZipCodeChange} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" />
+              <input type="text" maxLength={8} required value={formData.zipCode} onChange={handleZipCodeChange} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="0000-000" />
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel <span className="text-[8px]">(Opcional)</span></label>
-            <input type="tel" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
+            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel</label>
+            <input type="tel" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-xs" />
           </div>
 
           <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
             <input type="checkbox" id="terms" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} className="mt-1 w-5 h-5 accent-[#00d66f]" />
             <label htmlFor="terms" className="text-[9px] font-bold uppercase text-slate-500 leading-tight">
-              Aceito os <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-[#0a2540] underline">Termos de Utilização</Link> e a 
-              <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-[#0a2540] underline"> Política de Privacidade</Link> do Vizinho+.
+              Aceito os <Link to="/terms" target="_blank" className="text-[#0a2540] underline">Termos</Link> e a 
+              <Link to="/terms" target="_blank" className="text-[#0a2540] underline"> Política de Privacidade</Link>.
             </label>
           </div>
 
@@ -227,10 +230,6 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
             {loading ? 'A processar...' : 'Confirmar Registo'} <ArrowRight size={20} />
           </button>
         </form>
-
-        <div className="mt-8 text-center space-y-4">
-          <Link to="/login" className="block text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540]">Já tenho conta. Quero entrar.</Link>
-        </div>
       </div>
     </div>
   );

@@ -1,96 +1,85 @@
 // src/utils/notifications.ts
 
-import { db, messaging } from "../config/firebase";
+import { db, messaging, VAPID_KEY } from "../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
 import toast from 'react-hot-toast';
 
-// A TUA CHAVE VAPID REAL
-const VAPID_KEY = "BFch8QBtIRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIlY"; 
-
+/**
+ * PONTO 1: Gera ou recupera um ID único para este aparelho específico.
+ * Isto permite-nos saber qual dispositivo remover sem afetar os outros do mesmo email.
+ */
 export const getLocalDeviceId = () => {
   let deviceId = localStorage.getItem('vplus_device_id');
   if (!deviceId) {
-    deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+    // Cria um ID aleatório robusto
+    deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now();
     localStorage.setItem('vplus_device_id', deviceId);
   }
   return deviceId;
 };
 
-export const registerDeviceInFirebase = async (userId: string, fcmToken: string | null = null) => {
+/**
+ * PONTO 1: Lógica central de gestão de equipamentos (Máx 2 e Limpeza 45 dias)
+ */
+export const registerDeviceInFirebase = async (userId: string, fcmToken: string) => {
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
     if (!userSnap.exists()) return;
-    
+
     const userData = userSnap.data();
-    let devices: any[] = userData.devices || [];
-    
-    const now = Date.now();
-    // Mantém o teu filtro original de 45 dias
-    devices = devices.filter(d => (now - d.lastLogin) < (45 * 24 * 60 * 60 * 1000));
-    
+    let devices = userData.devices || [];
     const currentDeviceId = getLocalDeviceId();
-    // Remove o aparelho atual da lista para evitar duplicados ao atualizar
-    devices = devices.filter(d => d.deviceId !== currentDeviceId);
-    
-    if (fcmToken) {
-      devices.push({
-        deviceId: currentDeviceId,
-        userAgent: navigator.userAgent.substring(0, 100),
-        lastLogin: now,
-        fcmToken: fcmToken
-      });
+    const now = Date.now();
+    const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
+
+    // 1. LIMPEZA: Remove dispositivos que não aparecem há mais de 45 dias
+    devices = devices.filter((d: any) => (now - d.lastLogin) < FORTY_FIVE_DAYS);
+
+    // 2. ATUALIZAÇÃO: Remove este dispositivo da lista se já lá estiver (para o reinserir como mais recente)
+    devices = devices.filter((d: any) => d.deviceId !== currentDeviceId);
+
+    // 3. ADICIONA: Insere o dispositivo atual no topo
+    devices.push({
+      deviceId: currentDeviceId,
+      token: fcmToken,
+      lastLogin: now,
+      userAgent: navigator.userAgent.substring(0, 70), // Identifica se é iPhone/Android/etc
+      notificationsEnabled: true
+    });
+
+    // 4. LIMITE DE 2: Ordena por data e mantém apenas os últimos 2
+    devices.sort((a: any, b: any) => b.lastLogin - a.lastLogin);
+    if (devices.length > 2) {
+      devices = devices.slice(0, 2);
     }
+
+    // 5. SINCRONIZAÇÃO: Atualiza o array de tokens principal (fcmTokens) para o Admin poder enviar
+    const fcmTokens = devices.map((d: any) => d.token);
+
+    await updateDoc(userRef, { 
+      devices: devices,
+      fcmTokens: fcmTokens 
+    });
     
-    // Mantém apenas os últimos 2 aparelhos conforme a tua regra original
-    devices.sort((a, b) => b.lastLogin - a.lastLogin);
-    if (devices.length > 2) devices = devices.slice(0, 2);
-    
-    await updateDoc(userRef, { devices });
-    console.log("Dispositivo registado no Firestore.");
+    console.log("Equipamentos atualizados com sucesso no Firebase.");
   } catch (error) {
     console.error("Erro ao registar dispositivo:", error);
   }
 };
 
+/**
+ * Solicita permissão e regista o token no Firestore
+ */
 export const requestNotificationPermission = async (userId: string) => {
-  if (!messaging) {
-    toast.error("O teu navegador não suporta notificações web.");
-    return false;
-  }
-
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
-
-  if (isIOS && !isStandalone) {
-    toast.error("No iPhone, precisas de INSTALAR a App para ativar notificações.", { duration: 8000 });
-    return false;
-  }
+  if (!messaging) return false;
 
   try {
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
-      
-      // 🚨 CORREÇÃO DEFINITIVA:
-      // Registamos o worker com um carimbo de data (?v=...) para forçar o telemóvel a ignorar a cache antiga.
-      const registration = await navigator.serviceWorker.register(`/firebase-messaging-sw.js?v=${Date.now()}`, {
-        scope: '/'
-      });
-      
-      // ESPERA ATIVA: Garantimos que o Service Worker está "Ativado" antes de pedir o token.
-      // Isto evita o erro "no active Service Worker".
-      let sw = registration.installing || registration.waiting || registration.active;
-      if (sw && sw.state !== 'activated') {
-        await new Promise<void>((resolve) => {
-          sw?.addEventListener('statechange', (e: any) => {
-            if (e.target.state === 'activated') resolve();
-          });
-        });
-      }
-
-      // Obtém o Token do FCM ligando-o diretamente ao registo que acabámos de ativar
+      const registration = await navigator.serviceWorker.ready;
       const currentToken = await getToken(messaging, { 
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration 
@@ -98,47 +87,43 @@ export const requestNotificationPermission = async (userId: string) => {
       
       if (currentToken) {
         await registerDeviceInFirebase(userId, currentToken);
-        toast.success("Notificações ativadas com sucesso!");
-        
-        // Teu redirecionamento original
-        if (window.location.pathname === '/register' || window.location.pathname === '/login') {
-           window.location.href = '/dashboard';
-        }
         return true;
-      } else {
-        toast.error("O Firebase não devolveu token.");
-        return false;
       }
     } else {
-      toast.error("Permissão de notificações recusada.");
+      toast.error("Precisas de autorizar as notificações para receber cashback.");
       return false;
     }
-  } catch (error: any) {
-    console.error("ERRO FIREBASE:", error);
-    toast.error(`Erro Firebase: ${error.message}`, { duration: 8000 });
+  } catch (error) {
+    console.error("Erro ao configurar notificações:", error);
     return false;
   }
 };
 
-export const toggleNotifications = async (userId: string, enable: boolean) => {
+/**
+ * PONTO 1: Função para o cliente desativar notificações apenas de UM aparelho específico
+ */
+export const removeCurrentDeviceNotification = async (userId: string) => {
   try {
-    if (enable) {
-      return await requestNotificationPermission(userId);
-    } else {
-      const userRef = doc(db, 'users', userId);
-      const userSnap = await getDoc(userRef);
-      if (userSnap.exists()) {
-        const currentDeviceId = getLocalDeviceId();
-        let devices = userSnap.data().devices || [];
-        // Tua lógica original de desativação (colocar o token a null)
-        devices = devices.map((d: any) => d.deviceId === currentDeviceId ? { ...d, fcmToken: null } : d);
-        await updateDoc(userRef, { devices });
-      }
-      toast.success("Notificações desativadas.");
+    const currentDeviceId = getLocalDeviceId();
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+
+    if (userSnap.exists()) {
+      let devices = userSnap.data().devices || [];
+      // Remove o dispositivo atual da lista
+      devices = devices.filter((d: any) => d.deviceId !== currentDeviceId);
+      
+      const fcmTokens = devices.map((d: any) => d.token);
+
+      await updateDoc(userRef, { 
+        devices: devices,
+        fcmTokens: fcmTokens
+      });
       return true;
     }
+    return false;
   } catch (e) {
-    console.error("Erro no toggle:", e);
+    console.error(e);
     return false;
   }
 };

@@ -1,13 +1,16 @@
-import React, { useState } from 'react';
+// src/features/profile/ProfileSettings.tsx
+
+import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { db, auth } from '../../config/firebase';
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { deleteUser } from 'firebase/auth';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
-  ShieldCheck, CheckCircle2, Trash2, AlertTriangle, RefreshCw, Mail, IdCard, Bell, BellOff 
+  ShieldCheck, Trash2, AlertTriangle, RefreshCw, Mail, IdCard, Bell, BellOff 
 } from 'lucide-react';
-import { toggleNotifications } from '../../utils/notifications';
+import { getLocalDeviceId, removeCurrentDeviceNotification } from '../../utils/notifications';
+import toast from 'react-hot-toast';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentUser, deleteUserWithHistory, logout } = useStore();
@@ -17,9 +20,8 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [rgpdDeleted, setRgpdDeleted] = useState(false);
 
-  const [notificationsEnabled, setNotificationsEnabled] = useState(
-    'Notification' in window ? Notification.permission === 'granted' : false
-  );
+  // Estado para verificar se este dispositivo específico tem notificações ativas
+  const [isThisDeviceLinked, setIsThisDeviceLinked] = useState(false);
 
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
@@ -31,233 +33,174 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     nif: currentUser?.nif || '' 
   });
 
+  useEffect(() => {
+    const checkDevice = async () => {
+      if (!currentUser?.id) return;
+      const deviceId = getLocalDeviceId();
+      const userSnap = await getDoc(doc(db, 'users', currentUser.id));
+      if (userSnap.exists()) {
+        const devices = userSnap.data().devices || [];
+        setIsThisDeviceLinked(devices.some((d: any) => d.deviceId === deviceId));
+      }
+    };
+    checkDevice();
+  }, [currentUser]);
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser?.id) return;
+
     setLoading(true);
     try {
       const userRef = doc(db, 'users', currentUser.id);
       await updateDoc(userRef, formData);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
+      toast.success("PERFIL ATUALIZADO!");
     } catch (error) {
-      console.error("Erro ao atualizar perfil:", error);
-      alert("Erro ao guardar alterações.");
+      toast.error("ERRO AO GUARDAR.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleNotifications = async () => {
+  // PONTO 1: Eliminar notificações deste equipamento com validação dupla
+  const handleDisableNotifications = async () => {
     if (!currentUser?.id) return;
-    if (notificationsEnabled) {
-      const confirm1 = window.confirm("Atenção: Desativar as notificações NÃO é recomendável. Vais perder o acesso a ofertas exclusivas, avisos de saldo e campanhas urgentes.\n\nTens a certeza que queres desativar?");
-      if (confirm1) {
-        const confirm2 = window.confirm("Última confirmação: As notificações serão desligadas NESTE telemóvel. Continuar?");
-        if (confirm2) {
-          await toggleNotifications(currentUser.id, false);
-          setNotificationsEnabled(false);
+
+    // 1ª Validação e Aviso
+    const confirm1 = window.confirm(
+      "ATENÇÃO: Não é recomendável desativar as notificações. \n\nSem elas, não receberás confirmações de cashback em tempo real nem ofertas exclusivas. Desejas continuar?"
+    );
+
+    if (confirm1) {
+      // 2ª Validação
+      const confirm2 = window.confirm(
+        "CONFIRMAÇÃO FINAL: Tens a certeza que queres desligar os alertas NESTE equipamento?"
+      );
+
+      if (confirm2) {
+        setLoading(true);
+        const success = await removeCurrentDeviceNotification(currentUser.id);
+        if (success) {
+          setIsThisDeviceLinked(false);
+          toast.success("Alertas desativados neste aparelho.");
         }
+        setLoading(false);
       }
-    } else {
-      const success = await toggleNotifications(currentUser.id, true);
-      if (success) setNotificationsEnabled(true);
     }
   };
 
+  // PONTO 2: Eliminar conta (Cliente ou Merchant)
   const handleDeleteAccount = async () => {
     if (!currentUser?.id) return;
-    const confirmFirst = window.confirm(
-      "Tens a certeza que queres eliminar a tua conta?\n\nEsta ação irá apagar permanentemente o teu perfil e todo o teu histórico de saldos. Não poderás recuperar estes dados."
-    );
-    if (confirmFirst) {
-      const confirmSecond = window.confirm("ÚLTIMO AVISO: Todos os teus dados serão destruídos agora sem possibilidade de recuperação. Confirmas?");
-      if (confirmSecond) {
-        setIsDeleting(true);
-        try {
-          const userId = currentUser.id;
-          const roleToDelete = currentUser.role === 'merchant' ? 'merchant' : 'client';
-          
-          await deleteUserWithHistory(userId, roleToDelete);
-          
-          if (auth.currentUser) {
-            await deleteUser(auth.currentUser);
-          }
-          
-          setRgpdDeleted(true);
-        } catch (error: any) {
-          console.error("Erro ao eliminar conta:", error);
-          if (error.code === 'auth/requires-recent-login') {
-            alert("Por motivos de segurança exigidos pelo sistema, precisas de ter feito login recentemente para destruir a conta. Por favor, sai da aplicação, entra novamente com a tua password e repete o processo.");
-          } else {
-            alert("Ocorreu um erro no servidor. A sessão será encerrada.");
-          }
-          await logout();
-        } finally {
-          setIsDeleting(false);
+
+    const confirm1 = window.confirm("Desejas eliminar a tua conta permanentemente? Esta ação não pode ser desfeita.");
+    if (!confirm1) return;
+
+    const confirm2 = window.confirm("ÚLTIMO AVISO: Todos os teus dados, saldos e histórico serão apagados do Firebase agora. Confirmas?");
+    if (confirm2) {
+      setIsDeleting(true);
+      try {
+        const userId = currentUser.id;
+        const role = currentUser.role as 'client' | 'merchant';
+        
+        // 1. Apaga tudo da base de dados (Firestore)
+        await deleteUserWithHistory(userId, role);
+        
+        // 2. Apaga o utilizador do sistema de autenticação
+        const user = auth.currentUser;
+        if (user) {
+          await deleteUser(user);
         }
+        
+        setRgpdDeleted(true);
+      } catch (error: any) {
+        if (error.code === 'auth/requires-recent-login') {
+          alert("Por segurança, precisas de fazer login novamente antes de eliminar a conta.");
+        } else {
+          toast.error("Erro ao eliminar conta.");
+        }
+        console.error(error);
+      } finally {
+        setIsDeleting(false);
       }
     }
   };
 
   if (rgpdDeleted) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
-        <div className="bg-white p-10 md:p-14 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] max-w-lg text-center animate-in zoom-in duration-500">
-          <div className="bg-[#00d66f] w-24 h-24 rounded-3xl flex items-center justify-center mx-auto mb-8 border-4 border-[#0a2540] rotate-3">
-            <ShieldCheck size={48} className="text-[#0a2540]" />
-          </div>
-          <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4">Direito ao Esquecimento</h2>
-          <div className="bg-slate-50 border-2 border-slate-100 p-6 rounded-3xl mb-8">
-            <p className="text-sm font-bold text-slate-500 leading-relaxed">
-              A sua conta foi <strong>eliminada com sucesso</strong>. Ao abrigo do Regulamento Geral de Proteção de Dados (RGPD), confirmamos que todos os seus dados pessoais, informações de contacto, saldos acumulados e histórico de movimentos foram apagados permanentemente e esquecidos pelos nossos servidores.
-            </p>
-          </div>
-          <button 
-            onClick={async () => { await logout(); onBack(); }}
-            className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all border-b-8 border-black/20"
-          >
-            Sair em Segurança
-          </button>
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 text-center">
+        <div className="bg-white p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl max-w-sm animate-in zoom-in">
+           <ShieldCheck size={60} className="text-[#00d66f] mx-auto mb-6" />
+           <h2 className="text-2xl font-black uppercase text-[#0a2540] mb-4">Direito ao Esquecimento</h2>
+           <p className="text-sm text-slate-500 font-bold mb-8">A tua conta e todos os teus dados foram eliminados permanentemente dos nossos servidores.</p>
+           <button onClick={() => window.location.href = '/'} className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase">Sair</button>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#f8fafc] font-sans pb-20 text-[#0f172a]">
-      <header className="bg-[#0f172a] px-6 py-10 text-white rounded-b-[40px] shadow-2xl mb-12 border-b-8 border-[#00d66f]">
-        <div className="max-w-5xl mx-auto flex items-center gap-6">
-          <button onClick={onBack} className="bg-[#00d66f] text-[#0f172a] p-3 rounded-2xl shadow-[4px_4px_0px_#ffffff] active:scale-95 transition-all">
-            <ArrowLeft size={24} strokeWidth={3} />
-          </button>
-          <div>
-            <h1 className="text-2xl font-black italic tracking-tighter uppercase leading-none">Configurações</h1>
-            <p className="text-[#00d66f] text-[9px] font-black uppercase tracking-[0.2em] mt-1">Gere a tua identidade na rede</p>
-          </div>
-        </div>
+    <div className="min-h-screen bg-[#f8fafc] pb-20">
+      <header className="bg-[#0a2540] p-6 text-white flex items-center gap-4 border-b-8 border-[#00d66f]">
+        <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full"><ArrowLeft /></button>
+        <h1 className="text-xl font-black uppercase italic">Configurações</h1>
       </header>
 
-      <main className="max-w-xl mx-auto px-6">
+      <main className="max-w-xl mx-auto p-6 space-y-6">
         <form onSubmit={handleSave} className="space-y-6">
           
-          {currentUser?.role === 'client' && (
-            <div className="bg-[#00d66f] p-6 rounded-[30px] border-4 border-[#0a2540] shadow-[6px_6px_0px_#0a2540] flex items-center justify-between">
-              <div>
-                <p className="text-[10px] font-black uppercase text-[#0a2540] opacity-80 tracking-widest mb-1">O Teu Cartão Digital Vizinho+</p>
-                <p className="text-2xl font-mono font-black text-[#0a2540] tracking-[0.2em]">
-                  {currentUser.customerNumber?.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3') || 'Sem Cartão'}
-                </p>
-              </div>
-              <div className="bg-[#0a2540] p-3 rounded-2xl text-[#00d66f]">
-                <IdCard size={24} />
-              </div>
+          {/* SECÇÃO DISPOSITIVO (PONTO 1) */}
+          <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+               <div className="flex items-center gap-3">
+                  {isThisDeviceLinked ? <Bell className="text-[#00d66f]" /> : <BellOff className="text-slate-300" />}
+                  <h3 className="font-black uppercase text-xs text-[#0a2540]">Alertas neste aparelho</h3>
+               </div>
+               {isThisDeviceLinked ? (
+                 <button type="button" onClick={handleDisableNotifications} className="text-[10px] font-black text-red-500 uppercase underline">Desativar</button>
+               ) : (
+                 <span className="text-[10px] font-black text-slate-400 uppercase">Inativo</span>
+               )}
             </div>
-          )}
-
-          <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
-            <div className="flex items-center gap-3 mb-8">
-              <div className="bg-slate-100 p-2 rounded-xl"><UserIcon className="text-[#0f172a]" size={20} strokeWidth={3} /></div>
-              <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados Pessoais</h3>
-            </div>
-
-            <div className="space-y-5">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Nome Completo</label>
-                <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f] focus:bg-white" required />
-              </div>
-              
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">NIF <span className="text-[8px]">(Opcional)</span></label>
-                <input type="text" maxLength={9} value={formData.nif} onChange={(e) => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} placeholder="Ainda não inseriu o NIF" className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white" />
-              </div>
-
-              <div className="space-y-2">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Telemóvel</label>
-                <div className="relative">
-                  <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input type="tel" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black outline-none focus:border-[#00d66f] focus:bg-white" />
-                </div>
-              </div>
-
-              <div className="space-y-2 opacity-60">
-                <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Email (Apenas Leitura)</label>
-                <div className="relative">
-                  <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                  <input type="email" value={currentUser?.email || ''} disabled className="w-full bg-slate-100 border-4 border-slate-200 rounded-2xl pl-12 pr-5 py-4 text-sm font-bold cursor-not-allowed" />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
-            <div className="flex items-center gap-3 mb-4">
-              <div className={`p-2 rounded-xl ${notificationsEnabled ? 'bg-[#00d66f]/20 text-[#00d66f]' : 'bg-red-100 text-red-500'}`}>
-                {notificationsEnabled ? <Bell size={20} strokeWidth={3} /> : <BellOff size={20} strokeWidth={3} />}
-              </div>
-              <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Este Equipamento</h3>
-            </div>
-            
-            <p className="text-[10px] text-slate-500 font-bold uppercase leading-relaxed mb-4">
-              {notificationsEnabled 
-                ? "Este telemóvel/browser está a receber as notificações oficiais do Vizinho+." 
-                : "As notificações estão desligadas neste equipamento."}
+            <p className="text-[10px] text-slate-400 font-bold leading-tight">
+               {isThisDeviceLinked 
+                 ? "Este telemóvel está configurado para receber notificações Cloud Messaging." 
+                 : "As notificações estão desligadas. Faz login novamente para ativar."}
             </p>
-
-            <button type="button" onClick={handleToggleNotifications} className={`w-full py-4 rounded-2xl border-2 font-black uppercase text-[10px] tracking-widest flex items-center justify-center gap-2 transition-all ${notificationsEnabled ? 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50' : 'bg-[#00d66f] border-[#00d66f] text-[#0a2540] hover:scale-105 shadow-lg'}`}>
-              {notificationsEnabled ? "Desativar Notificações (Não Recomendado)" : "Ativar Notificações"}
-            </button>
           </div>
 
-          {currentUser?.role === 'merchant' && (
-            <div className="bg-white p-8 rounded-[40px] shadow-xl border-4 border-[#0f172a]">
-              <div className="flex items-center gap-3 mb-8">
-                <div className="bg-slate-100 p-2 rounded-xl"><MapPin className="text-[#0f172a]" size={20} strokeWidth={3} /></div>
-                <h3 className="font-black text-[#0f172a] uppercase text-xs tracking-widest">Dados da Loja</h3>
-              </div>
-
-              <div className="space-y-5">
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Categoria / Ramo</label>
-                  <div className="relative">
-                    <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-                    <input type="text" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl pl-12 pr-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f]" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Morada Comercial</label>
-                  <input type="text" value={formData.address} onChange={(e) => setFormData({...formData, address: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f]" />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Cód. Postal</label>
-                    <input type="text" value={formData.zipCode} onChange={(e) => setFormData({...formData, zipCode: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black outline-none focus:border-[#00d66f]" />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Freguesia</label>
-                    <input type="text" value={formData.freguesia} onChange={(e) => setFormData({...formData, freguesia: e.target.value})} className="w-full bg-slate-50 border-4 border-slate-100 rounded-2xl px-5 py-4 text-sm font-black uppercase outline-none focus:border-[#00d66f]" />
-                  </div>
-                </div>
+          {/* DADOS PESSOAIS */}
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border-2 border-slate-100">
+            <div className="flex items-center gap-3 mb-6">
+              <UserIcon className="text-[#0a2540]" size={20} />
+              <h3 className="font-black text-[#0a2540] uppercase text-xs">Dados de Perfil</h3>
+            </div>
+            <div className="space-y-4">
+              <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Nome Completo" className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold" required />
+              <input type="text" maxLength={9} value={formData.nif} onChange={(e) => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} placeholder="NIF (Para faturas)" className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold" />
+              <input type="tel" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} placeholder="Telemóvel" className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold" />
+              <div className="flex items-center gap-3 p-4 bg-slate-100 rounded-2xl opacity-60 cursor-not-allowed">
+                <Mail size={18} />
+                <span className="text-sm font-bold">{currentUser?.email}</span>
               </div>
             </div>
-          )}
+          </div>
 
-          <button type="submit" disabled={loading || isDeleting} className={`w-full py-6 rounded-[30px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center justify-center gap-3 transition-all ${saved ? 'bg-[#00d66f] text-[#0f172a]' : 'bg-[#0f172a] text-white hover:bg-black'}`}>
-            {loading ? <RefreshCw size={24} className="animate-spin text-[#00d66f]" /> : saved ? <><CheckCircle2 size={24} strokeWidth={3} /> Sucesso!</> : <><Save size={24} strokeWidth={3} /> Guardar Alterações</>}
+          <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase flex items-center justify-center gap-3 shadow-lg">
+            {loading ? <RefreshCw className="animate-spin" /> : <><Save /> Guardar Alterações</>}
           </button>
 
-          <div className="pt-12 mt-8 border-t-4 border-slate-100">
-            <div className="bg-red-50 p-6 rounded-[35px] border-2 border-red-100">
+          {/* ZONA DE PERIGO (PONTO 2) */}
+          <div className="pt-10">
+            <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-100">
               <div className="flex items-center gap-2 mb-4 text-red-600">
-                <AlertTriangle size={18} strokeWidth={3} />
-                <h4 className="text-[10px] font-black uppercase tracking-[0.2em]">Zona Crítica</h4>
+                <AlertTriangle size={20} />
+                <h4 className="text-xs font-black uppercase">Zona de Perigo</h4>
               </div>
-              <p className="text-[9px] text-red-400 font-bold uppercase mb-6 leading-relaxed">Ao eliminar a conta, perderás permanentemente o acesso ao teu saldo e histórico.</p>
-              
-              <button type="button" onClick={handleDeleteAccount} disabled={isDeleting} className="w-full py-4 rounded-2xl bg-white border-2 border-red-200 text-red-500 font-black uppercase text-[10px] tracking-widest hover:bg-red-500 hover:text-white flex items-center justify-center gap-3">
-                {isDeleting ? <><RefreshCw size={14} className="animate-spin" /> Destruindo dados...</> : <><Trash2 size={14} /> Eliminar Conta Permanentemente</>}
+              <button type="button" onClick={handleDeleteAccount} disabled={isDeleting} className="w-full py-4 bg-white border-2 border-red-200 text-red-500 font-black uppercase text-[10px] rounded-2xl hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
+                {isDeleting ? <RefreshCw className="animate-spin" /> : <Trash2 size={16} />} Eliminar Conta Permanentemente
               </button>
             </div>
           </div>
