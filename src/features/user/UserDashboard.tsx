@@ -10,7 +10,7 @@ import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, CheckCircle2, Smartphone, IdCard, Bell, Volume2, User as UserIcon } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, CheckCircle2, Smartphone, IdCard, Bell, Volume2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -31,6 +31,11 @@ const UserDashboard: React.FC = () => {
   const [emailCopied, setEmailCopied] = useState(false);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
 
+  // Estado de Loading do botão de Notificações
+  const [isNotifLoading, setIsNotifLoading] = useState(false);
+  // Esconde o botão se as notificações já estiverem ativas a nível do browser
+  const hasNotificationsGranted = Notification.permission === 'granted';
+
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
   useEffect(() => {
@@ -39,14 +44,10 @@ const UserDashboard: React.FC = () => {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
         if (configSnap.exists()) setSysConfig(configSnap.data() as any);
 
-        const q = query(
-          collection(db, 'users'), 
-          where('role', '==', 'merchant'), 
-          where('status', '==', 'active')
-        );
+        const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
         const merchantsSnap = await getDocs(q);
         setAllMerchants(merchantsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as UserProfile[]);
-      } catch (err) { console.error("Erro ao carregar comerciantes:", err); }
+      } catch (err) {}
     };
     fetchData();
   }, []);
@@ -80,40 +81,6 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser]);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    
-    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      const docs = snap.docs.map(d => ({id: d.id, ...d.data()} as AppNotification));
-      for (let notif of docs) {
-        if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
-        const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
-        if (dismissed) continue;
-        
-        let matches = false;
-        if (notif.targetType === 'all') matches = true;
-        else if (notif.targetType === 'email' && currentUser.email === notif.targetValue?.toLowerCase()) matches = true;
-        else if (notif.targetType === 'zipCode' && currentUser.zipCode?.startsWith(notif.targetValue)) matches = true;
-        else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
-        
-        if (matches) {
-          setAppNotification(notif);
-          break; 
-        }
-      }
-    });
-  }, [currentUser]);
-
-  const dismissNotification = () => {
-    if (appNotification?.id) {
-      sessionStorage.setItem(`notif_${appNotification.id}`, "true");
-    }
-    setAppNotification(null);
-  };
-
   const pendingEvaluations = useMemo(() => {
     return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
   }, [transactions, evaluatedIds]);
@@ -146,12 +113,22 @@ const UserDashboard: React.FC = () => {
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
+  // Botão com tratamento de Erros explícitos do Navegador
   const enableNotifications = async () => {
-    const res = await requestNotificationPermission(currentUser!.id);
-    if(res.success) {
-      toast.success("Notificações ativadas com sucesso!");
-    } else {
-      toast.error(res.error || "Erro ao ativar notificações.");
+    setIsNotifLoading(true);
+    try {
+      const res = await requestNotificationPermission(currentUser!.id);
+      if(res.success) {
+        toast.success("Notificações ativadas com sucesso!");
+        // Dá um pequeno delay e recarrega para sumir o botão
+        setTimeout(() => window.location.reload(), 1500);
+      } else {
+        toast.error(res.error || "O seu navegador bloqueou o pedido.");
+      }
+    } catch(err) {
+      toast.error("Ocorreu um erro no sistema do seu dispositivo.");
+    } finally {
+      setIsNotifLoading(false);
     }
   };
 
@@ -168,7 +145,6 @@ const UserDashboard: React.FC = () => {
               src="/logo-vizinho.png" 
               alt="Vizinho+" 
               className="h-10 w-auto object-contain" 
-              onError={(e) => { (e.target as any).src = '/logo192.png' }}
             />
           </div>
           <div className="flex gap-3">
@@ -218,18 +194,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {appNotification && (
-          <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
-            <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
-            <div className="flex-1">
-              <h4 className="text-lg font-black uppercase italic text-white leading-none mb-2">{appNotification.title}</h4>
-              <p className="text-xs font-bold text-slate-300">{appNotification.message}</p>
-              <button onClick={dismissNotification} className="mt-4 bg-[#00d66f] text-[#0a2540] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">Fechar</button>
-            </div>
-            <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={16} /></button>
-          </div>
-        )}
-
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
             <Wallet size={18} /> O meu Saldo
@@ -269,10 +233,16 @@ const UserDashboard: React.FC = () => {
               <span className="font-black uppercase text-[9px] tracking-widest text-left">Instalar no<br/>Ecrã Principal</span>
             </button>
           )}
-          <button onClick={enableNotifications} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'col-span-2'}`}>
-            <Volume2 size={20} className="text-[#00d66f]" />
-            <span className="font-black uppercase text-[9px] tracking-widest text-left">Ativar Notificações<br/>(Recomendado)</span>
-          </button>
+          {!hasNotificationsGranted && (
+            <button onClick={enableNotifications} disabled={isNotifLoading} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'col-span-2'}`}>
+              {isNotifLoading ? <Loader2 size={20} className="animate-spin mx-auto text-[#00d66f]" /> : (
+                <>
+                  <Volume2 size={20} className="text-[#00d66f]" />
+                  <span className="font-black uppercase text-[9px] tracking-widest text-left">Ativar Notificações<br/>(Recomendado)</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
 
         {sysConfig.vantagensUrl && (
@@ -298,9 +268,9 @@ const UserDashboard: React.FC = () => {
           <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
             <Mail size={16} /> Contacto
           </button>
-          <button onClick={() => navigate('/terms')} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
             <ShieldCheck size={16} /> Privacidade
-          </button>
+          </a>
         </div>
         <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Versão Profissional</p>
       </footer>
