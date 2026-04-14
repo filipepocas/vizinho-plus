@@ -1,5 +1,3 @@
-// src/features/profile/ProfileSettings.tsx
-
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { db, auth } from '../../config/firebase';
@@ -20,7 +18,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [rgpdDeleted, setRgpdDeleted] = useState(false);
 
-  // Estado para verificar se este dispositivo específico tem notificações ativas
   const [isThisDeviceLinked, setIsThisDeviceLinked] = useState(false);
 
   const [formData, setFormData] = useState({
@@ -64,17 +61,14 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  // PONTO 1: Eliminar notificações deste equipamento com validação dupla
   const handleDisableNotifications = async () => {
     if (!currentUser?.id) return;
 
-    // 1ª Validação e Aviso
     const confirm1 = window.confirm(
       "ATENÇÃO: Não é recomendável desativar as notificações. \n\nSem elas, não receberás confirmações de cashback em tempo real nem ofertas exclusivas. Desejas continuar?"
     );
 
     if (confirm1) {
-      // 2ª Validação
       const confirm2 = window.confirm(
         "CONFIRMAÇÃO FINAL: Tens a certeza que queres desligar os alertas NESTE equipamento?"
       );
@@ -91,7 +85,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
-  // PONTO 2: Eliminar conta (Cliente ou Merchant)
   const handleDeleteAccount = async () => {
     if (!currentUser?.id) return;
 
@@ -105,10 +98,8 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         const userId = currentUser.id;
         const role = currentUser.role as 'client' | 'merchant';
         
-        // 1. Apaga tudo da base de dados (Firestore)
         await deleteUserWithHistory(userId, role);
         
-        // 2. Apaga o utilizador do sistema de autenticação
         const user = auth.currentUser;
         if (user) {
           await deleteUser(user);
@@ -151,7 +142,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       <main className="max-w-xl mx-auto p-6 space-y-6">
         <form onSubmit={handleSave} className="space-y-6">
           
-          {/* SECÇÃO DISPOSITIVO (PONTO 1) */}
           <div className="bg-white p-6 rounded-3xl border-2 border-slate-100 shadow-sm">
             <div className="flex items-center justify-between mb-4">
                <div className="flex items-center gap-3">
@@ -167,11 +157,10 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             <p className="text-[10px] text-slate-400 font-bold leading-tight">
                {isThisDeviceLinked 
                  ? "Este telemóvel está configurado para receber notificações Cloud Messaging." 
-                 : "As notificações estão desligadas. Faz login novamente para ativar."}
+                 : "As notificações estão desligadas. Faz login novamente ou ative no painel principal."}
             </p>
           </div>
 
-          {/* DADOS PESSOAIS */}
           <div className="bg-white p-8 rounded-[40px] shadow-sm border-2 border-slate-100">
             <div className="flex items-center gap-3 mb-6">
               <UserIcon className="text-[#0a2540]" size={20} />
@@ -192,7 +181,6 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
             {loading ? <RefreshCw className="animate-spin" /> : <><Save /> Guardar Alterações</>}
           </button>
 
-          {/* ZONA DE PERIGO (PONTO 2) */}
           <div className="pt-10">
             <div className="bg-red-50 p-6 rounded-3xl border-2 border-red-100">
               <div className="flex items-center gap-2 mb-4 text-red-600">
@@ -200,7 +188,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                 <h4 className="text-xs font-black uppercase">Zona de Perigo</h4>
               </div>
               <button type="button" onClick={handleDeleteAccount} disabled={isDeleting} className="w-full py-4 bg-white border-2 border-red-200 text-red-500 font-black uppercase text-[10px] rounded-2xl hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2">
-                {isDeleting ? <RefreshCw className="animate-spin" /> : <Trash2 size={16} />} Eliminar Conta Permanentemente
+                {isDeleting ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={16} />} Eliminar Conta Permanentemente
               </button>
             </div>
           </div>

@@ -146,6 +146,15 @@ const UserDashboard: React.FC = () => {
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
+  const enableNotifications = async () => {
+    const res = await requestNotificationPermission(currentUser!.id);
+    if(res.success) {
+      toast.success("Notificações ativadas com sucesso!");
+    } else {
+      toast.error(res.error || "Erro ao ativar notificações.");
+    }
+  };
+
   if (!currentUser) return null;
 
   return (
@@ -182,7 +191,6 @@ const UserDashboard: React.FC = () => {
               <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">
                 {currentUser.name}
               </h1>
-              {/* O NIF AGORA APARECE AQUI! */}
               {currentUser.nif && (
                 <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>
               )}
@@ -261,9 +269,9 @@ const UserDashboard: React.FC = () => {
               <span className="font-black uppercase text-[9px] tracking-widest text-left">Instalar no<br/>Ecrã Principal</span>
             </button>
           )}
-          <button onClick={() => requestNotificationPermission(currentUser.id)} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'col-span-2'}`}>
+          <button onClick={enableNotifications} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'col-span-2'}`}>
             <Volume2 size={20} className="text-[#00d66f]" />
-            <span className="font-black uppercase text-[9px] tracking-widest text-left">Ativar Alertas<br/>de Saldo</span>
+            <span className="font-black uppercase text-[9px] tracking-widest text-left">Ativar Notificações<br/>(Recomendado)</span>
           </button>
         </div>
 

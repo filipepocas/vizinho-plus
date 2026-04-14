@@ -48,7 +48,7 @@ export interface Transaction {
   merchantId: string;
   merchantName: string;
   amount: number;
-  invoiceAmount?: number; // X6: Fatura
+  invoiceAmount?: number; 
   type: 'earn' | 'redeem' | 'cancel';
   status: string;
   createdAt: any;
@@ -65,7 +65,7 @@ export interface TransactionCreate {
   merchantId: string;
   merchantName: string;
   amount: number;
-  invoiceAmount?: number; // X6: Suporte de envio
+  invoiceAmount?: number; 
   type: 'earn' | 'redeem' | 'cancel';
   documentNumber?: string;
   clientName?: string;
@@ -81,6 +81,7 @@ export interface MarketingRequest {
   type: 'banner' | 'leaflet' | 'push_notification'; 
   status: 'pending' | 'approved' | 'rejected';
   createdAt: any;
+  title?: string;
   text?: string;
   imageUrl?: string;
   requestedDate?: string;
@@ -91,6 +92,7 @@ export interface MarketingRequest {
   unit?: string;
   promoPrice?: string;
   promoType?: string;
+  targetType?: string;
   targetCriteria?: string;
   targetValue?: string;
   targetCount?: number;

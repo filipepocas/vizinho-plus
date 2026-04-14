@@ -1,5 +1,3 @@
-// src/features/admin/BannerManager.tsx
-
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../config/firebase';
 import { 
@@ -109,21 +107,36 @@ const BannerManager = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      
       {/* TÍTULO DA SECÇÃO */}
       <div className="flex items-center gap-4 mb-8">
         <div className="bg-[#00d66f] p-3 rounded-2xl border-4 border-[#0a2540] shadow-[4px_4px_0px_0px_#0a2540]">
           <Target className="text-[#0a2540]" size={24} />
         </div>
         <div>
-          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic">Gestão de Banners</h2>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Segmentação e Publicidade</p>
+          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic tracking-tighter">Gestão de Banners</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Segmentação e Publicidade Direta</p>
         </div>
       </div>
 
       <div className="grid lg:grid-cols-2 gap-8">
         {/* FORMULÁRIO DE CRIAÇÃO */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] p-8">
+          
+          {/* GUIA DE DESIGN (REPLICADO DO LOJISTA) */}
+          <div className="bg-[#f0f7ff] p-6 rounded-[32px] border-2 border-blue-100 mb-8">
+              <p className="text-[#0a2540] text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-3">
+                  <AlertCircle size={16} className="text-blue-500"/> Guia de Design Profissional
+              </p>
+              <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-tight">
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Resolução Ideal: <span className="text-[#0a2540]">1920 x 1080 px</span> (Proporção 16:9)</li>
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Conteúdo Seguro: <span className="text-[#0a2540]">Manter textos e produtos no CENTRO da imagem</span></li>
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Margens: Evite detalhes importantes nos 80px superiores e 40px inferiores</li>
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Formato: Máximo 200KB (.jpg ou .webp)</li>
+              </ul>
+          </div>
+
           <form onSubmit={handleSubmit} className="space-y-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Título do Banner</label>
@@ -132,7 +145,7 @@ const BannerManager = () => {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="EX: PROMOÇÃO DE VERÃO"
-                className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none transition-all font-bold uppercase text-[#0a2540]"
+                className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none transition-all font-bold uppercase text-[#0a2540] text-sm"
               />
             </div>
 
@@ -142,7 +155,7 @@ const BannerManager = () => {
                 <select 
                   value={targetType}
                   onChange={(e) => setTargetType(e.target.value as any)}
-                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540]"
+                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-black text-[#0a2540] text-xs uppercase"
                 >
                   <option value="all">TODOS OS CLIENTES</option>
                   <option value="zip">POR CÓDIGO POSTAL</option>
@@ -156,7 +169,7 @@ const BannerManager = () => {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
-                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540]"
+                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540] text-sm"
                 />
               </div>
             </div>
@@ -170,15 +183,15 @@ const BannerManager = () => {
                   value={targetValue}
                   onChange={(e) => setTargetValue(e.target.value)}
                   placeholder="Ex: 4000, 4400, 4150"
-                  className="w-full bg-blue-50 border-4 border-blue-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540]"
+                  className="w-full bg-blue-50 border-4 border-blue-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540] text-sm"
                 />
               </div>
             )}
 
             {targetType === 'birthday' && (
-              <div className="bg-pink-50 border-4 border-pink-100 p-4 rounded-2xl">
+              <div className="bg-pink-50 border-4 border-pink-100 p-5 rounded-2xl">
                 <p className="text-[10px] font-black text-pink-600 uppercase flex items-center gap-2">
-                  <Cake size={14} /> Este banner só aparecerá no dia de aniversário do cliente!
+                  <Cake size={16} /> Este banner só aparecerá no dia de aniversário do cliente!
                 </p>
               </div>
             )}
@@ -191,22 +204,22 @@ const BannerManager = () => {
                   type="number"
                   value={maxImpressions}
                   onChange={(e) => setMaxImpressions(e.target.value)}
-                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 pl-14 pr-6 outline-none font-bold text-[#0a2540]"
+                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 pl-14 pr-6 outline-none font-bold text-[#0a2540] text-sm"
                 />
               </div>
             </div>
 
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Imagem do Banner</label>
-              <div className="relative border-4 border-dashed border-slate-200 rounded-3xl p-8 hover:border-[#00d66f] transition-colors text-center">
+              <div className="relative border-4 border-dashed border-slate-200 rounded-3xl p-8 hover:border-[#00d66f] transition-colors text-center bg-slate-50">
                 <input
                   type="file"
                   onChange={(e) => setImage(e.target.files?.[0] || null)}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   accept="image/*"
                 />
-                <ImageIcon className="mx-auto text-slate-300 mb-2" size={32} />
-                <p className="text-xs font-black text-slate-400 uppercase">
+                <ImageIcon className={`mx-auto mb-2 ${image ? 'text-[#00d66f]' : 'text-slate-300'}`} size={32} />
+                <p className={`text-xs font-black uppercase tracking-widest ${image ? 'text-[#0a2540]' : 'text-slate-400'}`}>
                   {image ? image.name : 'Clica para escolher a imagem'}
                 </p>
               </div>
@@ -214,12 +227,12 @@ const BannerManager = () => {
 
             <button
               disabled={uploading}
-              className="w-full bg-[#00d66f] text-[#0a2540] py-6 rounded-3xl font-black uppercase text-lg shadow-[0_8px_0_0_#0a2540] hover:translate-y-[2px] hover:shadow-[0_6px_0_0_#0a2540] active:translate-y-[6px] active:shadow-none transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+              className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase text-sm shadow-xl hover:bg-black active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-4 border-black/40 mt-4"
             >
               {uploading ? (
-                <div className="w-6 h-6 border-4 border-[#0a2540] border-t-transparent rounded-full animate-spin" />
+                <div className="w-6 h-6 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin" />
               ) : (
-                <>Criar e Ativar Banner <Plus size={24} /></>
+                <>Criar e Ativar Banner <Plus size={20} strokeWidth={3} /></>
               )}
             </button>
           </form>
@@ -227,47 +240,52 @@ const BannerManager = () => {
 
         {/* LISTA DE BANNERS ATIVOS */}
         <div className="space-y-4">
-          <h3 className="text-sm font-black text-[#0a2540] uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-            <Calendar size={18} /> Banners Ativos ({banners.length})
+          <h3 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-6 flex items-center gap-3">
+            <Calendar className="text-[#00d66f]" size={24} /> Banners Ativos ({banners.length})
           </h3>
           
-          <div className="grid gap-4 overflow-y-auto max-h-[800px] pr-2 custom-scrollbar">
-            {banners.map(banner => (
-              <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[32px] overflow-hidden shadow-[6px_6px_0px_0px_#0a2540] flex flex-col sm:flex-row">
-                <div className="w-full sm:w-40 h-40 bg-slate-100">
-                  <img src={banner.imageUrl} alt="" className="w-full h-full object-cover" />
-                </div>
-                <div className="p-6 flex-1 flex flex-col justify-between">
-                  <div>
-                    <h4 className="font-black text-sm uppercase italic text-[#0a2540] leading-tight mb-2">{banner.title}</h4>
-                    <div className="flex flex-wrap gap-2">
-                      <span className="bg-slate-100 text-[#0a2540] text-[8px] font-black px-2 py-1 rounded-lg uppercase border border-[#0a2540]/10">
-                         Fim: {new Date(banner.endDate.seconds * 1000).toLocaleDateString()}
-                      </span>
-                      <span className={`text-white text-[8px] font-black px-2 py-1 rounded-lg uppercase border border-black/10 flex items-center gap-1 ${
-                        banner.targetType === 'all' ? 'bg-blue-500' : 
-                        banner.targetType === 'zip' ? 'bg-orange-500' : 'bg-pink-500'
-                      }`}>
-                        {banner.targetType === 'zip' ? <MapPin size={10}/> : banner.targetType === 'birthday' ? <Cake size={10}/> : <Users size={10}/>}
-                        {banner.targetType === 'all' ? 'TODOS' : banner.targetType === 'zip' ? `CP: ${banner.targetValue}` : 'ANIVERSÁRIO'}
-                      </span>
-                    </div>
+          <div className="grid gap-6 overflow-y-auto max-h-[800px] pr-2 custom-scrollbar pb-10">
+            {banners.map(banner => {
+              // Proteção contra Timestamps (ServerTimestamp) nulos logo após criar
+              const end = banner.endDate && typeof banner.endDate.toDate === 'function' ? banner.endDate.toDate() : new Date();
+
+              return (
+                <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[32px] overflow-hidden shadow-[8px_8px_0px_0px_#0a2540] flex flex-col sm:flex-row group hover:-translate-y-1 transition-transform">
+                  <div className="w-full sm:w-40 h-40 bg-slate-100 flex items-center justify-center overflow-hidden border-r-4 border-transparent sm:border-slate-100">
+                    <img src={banner.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
                   </div>
-                  
-                  <button 
-                    onClick={() => handleDelete(banner.id)}
-                    className="mt-4 text-red-500 hover:text-red-700 font-black uppercase text-[9px] flex items-center gap-1 transition-colors"
-                  >
-                    <Trash2 size={12} /> Eliminar
-                  </button>
+                  <div className="p-6 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-black text-lg uppercase italic text-[#0a2540] leading-none mb-3">{banner.title}</h4>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="bg-slate-100 text-slate-500 text-[9px] font-black px-3 py-1.5 rounded-xl uppercase border-2 border-slate-200">
+                          Válido até: {end.toLocaleDateString()}
+                        </span>
+                        <span className={`text-white text-[9px] font-black px-3 py-1.5 rounded-xl uppercase flex items-center gap-1.5 shadow-sm border-2 ${
+                          banner.targetType === 'all' ? 'bg-blue-500 border-blue-600' : 
+                          banner.targetType === 'zip' ? 'bg-amber-500 border-amber-600' : 'bg-pink-500 border-pink-600'
+                        }`}>
+                          {banner.targetType === 'zip' ? <MapPin size={12} strokeWidth={3} /> : banner.targetType === 'birthday' ? <Cake size={12} strokeWidth={3}/> : <Users size={12} strokeWidth={3}/>}
+                          {banner.targetType === 'all' ? 'VISÍVEL A TODOS' : banner.targetType === 'zip' ? `APENAS CP: ${banner.targetValue}` : 'NO ANIVERSÁRIO'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={() => handleDelete(banner.id)}
+                      className="mt-6 self-start bg-red-50 text-red-500 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] flex items-center gap-2 transition-all border-2 border-red-100 hover:border-red-600"
+                    >
+                      <Trash2 size={14} /> Eliminar Banner
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              )
+            })}
 
             {banners.length === 0 && (
-              <div className="text-center py-20 bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-200">
+              <div className="text-center py-20 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
                 <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
-                <p className="font-black text-slate-400 uppercase text-xs">Nenhum banner ativo</p>
+                <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Nenhum banner ativo</p>
               </div>
             )}
           </div>

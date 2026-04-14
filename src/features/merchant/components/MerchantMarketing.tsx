@@ -1,9 +1,7 @@
-// src/features/merchant/components/MerchantMarketing.tsx
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc } from 'firebase/firestore';
-import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Calendar, AlertCircle } from 'lucide-react';
+import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, AlertCircle, Bell } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest } from '../../../types';
 
@@ -18,21 +16,18 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
   const [myRequests, setMyRequests] = useState<MarketingRequest[]>([]);
   
-  // Tabela de Preços do Admin
   const [prices, setPrices] = useState<any>({});
 
   const [bannerForm, setBannerForm] = useState({ text: '', startDate: '', endDate: '', imageBase64: '' });
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
 
   useEffect(() => {
-    // Carrega preços
     const fetchPrices = async () => {
       const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (docSnap.exists()) setPrices(docSnap.data());
     };
     fetchPrices();
 
-    // Campanhas ativas
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => {
         const now = new Date();
@@ -41,7 +36,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
         setCampaigns(valid);
     });
 
-    // Meus Pedidos
     const qReq = query(collection(db, 'marketing_requests'), where('merchantId', '==', merchantId));
     const unsubReq = onSnapshot(qReq, (snap) => {
         setMyRequests(
@@ -138,7 +132,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
             unit: leafletForm.unit,
             promoPrice: leafletForm.promoPrice, 
             promoType: leafletForm.promoType,
-            imageUrl: leafletForm.imageBase64, // Imagem enviada para o folheto
+            imageUrl: leafletForm.imageBase64,
             createdAt: serverTimestamp()
         });
         toast.success("Pedido de espaço no Folheto enviado com sucesso!");
@@ -180,7 +174,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-tight">
                         <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Resolução Ideal: <span className="text-[#0a2540]">1920 x 1080 px</span> (Proporção 16:9)</li>
                         <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Conteúdo Seguro: <span className="text-[#0a2540]">Manter textos e produtos no CENTRO da imagem</span></li>
-                        <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Margens: Evite detalhes importantes nos 80px superiores e 40px inferiores</li>
                         <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Formato: Máximo 200KB (.jpg ou .webp)</li>
                     </ul>
                 </div>
@@ -216,7 +209,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     </select>
                 </div>
                 <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400">Espaço Pretendido (Selecione o tamanho/local)</label>
+                    <label className="text-[10px] font-black uppercase text-slate-400">Espaço Pretendido</label>
                     <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
                         <option value="leaflet_capa_destaque">Capa Principal - Destaque {getPriceText('leaflet_capa_destaque')}</option>
                         <option value="leaflet_capa_normal">Capa - Tamanho Normal {getPriceText('leaflet_capa_normal')}</option>
@@ -236,7 +229,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                     <div><label className="text-[10px] font-black uppercase text-slate-400">Tipo Campanha (Ex: L3P2)</label><input type="text" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                 </div>
                 
-                {/* NOVO CAMPO: Imagem do Produto no Folheto */}
                 <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Produto</label><input id="leafletImageInput" required type="file" accept="image/*" onChange={handleLeafletImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
                 
                 <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
@@ -253,7 +245,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                             <div className="flex justify-between items-start mb-4">
                                 <div>
                                     <p className="font-black uppercase text-[#0a2540] text-lg leading-none">
-                                        {r.type === 'banner' ? 'Pedido Banner' : `Folheto: ${r.leafletCampaignTitle}`}
+                                        {r.type === 'banner' ? 'Pedido Banner' : r.type === 'push_notification' ? 'Notificação Push (App)' : `Folheto: ${r.leafletCampaignTitle}`}
                                     </p>
                                     <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase mt-2">Enviado a: {r.createdAt?.toDate().toLocaleDateString()}</p>
                                 </div>
@@ -268,6 +260,18 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                                         <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Datas:</span> <span className="text-[#0a2540]">{r.requestedDate}</span></p>
                                         {r.text && <p className="flex justify-between"><span className="text-slate-400 uppercase">Texto:</span> <span className="text-[#0a2540]">{r.text}</span></p>}
                                     </>
+                                ) : r.type === 'push_notification' ? (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Título:</span> <span className="text-[#0a2540]">{r.title}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Mensagem:</span> <span className="text-[#0a2540]">{r.text}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2">
+                                          <span className="text-slate-400 uppercase">Alvo:</span> 
+                                          <span className="text-[#0a2540]">
+                                            {r.targetType === 'all' ? 'Todos' : r.targetType === 'multiple_zip' ? `CP: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : 'Meus Clientes'}
+                                          </span>
+                                        </p>
+                                        <p className="flex justify-between"><span className="text-slate-400 uppercase">Custo / Alcance:</span> <span className="text-blue-500">{r.cost}€ ({r.targetCount} Clientes)</span></p>
+                                    </>
                                 ) : (
                                     <>
                                         <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Produto:</span> <span className="text-[#0a2540]">{r.description}</span></p>
@@ -279,15 +283,14 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
                             </div>
                         </div>
                         
-                        {/* Mostra a imagem anexada ao pedido em ambos os formatos */}
                         {r.imageUrl ? (
                             <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-slate-100 overflow-hidden flex items-center justify-center p-2 shadow-sm">
                                 <img src={r.imageUrl} className="w-full h-full object-contain" alt="Preview da Campanha" />
                             </div>
                         ) : (
                             <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300">
-                                <ImageIcon size={24} />
-                                <span className="text-[8px] font-black uppercase mt-2">S/ Imagem</span>
+                                {r.type === 'push_notification' ? <Bell size={24} /> : <ImageIcon size={24} />}
+                                <span className="text-[8px] font-black uppercase mt-2">{r.type === 'push_notification' ? 'Push FCM' : 'S/ Imagem'}</span>
                             </div>
                         )}
                     </div>

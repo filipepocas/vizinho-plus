@@ -1,5 +1,3 @@
-// src/features/auth/LoginPage.tsx
-
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
@@ -35,11 +33,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  
+  // Estados para o Ecrã Intermédio de Instalação (Onboarding)
   const [setupStep, setSetupStep] = useState(false);
   const [tempUserId, setTempUserId] = useState('');
+  const [tempUserData, setTempUserData] = useState<any>(null);
   const [diagError, setDiagError] = useState<string | null>(null);
 
-  // Estados do formulário de comerciante (RESTAURADOS)
   const [showMerchantModal, setShowMerchantModal] = useState(false);
   const [submittingMerchant, setSubmittingMerchant] = useState(false);
   const [merchantData, setMerchantData] = useState({
@@ -61,13 +61,15 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
       if (userDoc.exists()) {
         const userData = { id: userDoc.id, ...userDoc.data() } as any;
         
-        // Verificação técnica de Notificações e PWA (Requirement 3 & 4)
+        // Verificação técnica de Notificações e PWA
         const hasNotif = Notification.permission === 'granted';
-        const isApp = window.matchMedia('(display-mode: standalone)').matches;
+        const isApp = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
 
+        // Se NÃO estiver instalada a App ou NÃO tiver notificações, mostramos o ecrã de setup.
         if (!hasNotif || (!isApp && !isIOS && isInstallable)) {
           setTempUserId(uid);
+          setTempUserData(userData);
           setSetupStep(true);
           setLoading(false);
           return;
@@ -107,14 +109,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
     }
   };
 
-  // Ecrã de Setup Obrigatório (Estilizado para não quebrar o design)
+  // Ecrã de Setup Obrigatório (Intermédio após Login)
   if (setupStep) {
     return (
-      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
-        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 text-center animate-in zoom-in">
-            <div className="bg-blue-50 p-6 rounded-3xl mb-6">
-                <h2 className="text-xl font-black uppercase text-[#0a2540] mb-2 italic text-gradient">Configuração</h2>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-tight">Precisamos de validar o seu equipamento para garantir o seu cashback.</p>
+      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-white selection:bg-[#00d66f]">
+        <div className="w-full max-w-md bg-white text-[#0a2540] rounded-[40px] border-4 border-[#00d66f] shadow-[12px_12px_0px_#00d66f] p-8 text-center animate-in slide-in-from-bottom-10">
+            <div className="bg-amber-50 p-6 rounded-3xl mb-6 border-2 border-amber-200">
+                <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
+                <h2 className="text-xl font-black uppercase text-[#0a2540] mb-2 italic">Atenção!</h2>
+                <p className="text-[11px] font-bold text-amber-800 uppercase tracking-widest leading-relaxed">
+                  É muito importante que tenha a aplicação instalada por comodidade e para não perder as suas vantagens e saldos.
+                </p>
             </div>
 
             {diagError && (
@@ -124,25 +129,31 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
               </div>
             )}
 
-            <div className="space-y-3 mb-8">
+            <div className="space-y-4 mb-8">
                 {isInstallable && (
-                    <button onClick={installApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg border-b-4 border-black/50">
-                        <Smartphone size={24} className="text-[#00d66f]" /> Instalar App
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-[#00d66f] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg border-b-4 border-black/50 hover:scale-105 transition-transform">
+                        <Smartphone size={24} /> Instalar Aplicação
                     </button>
                 )}
-                <button onClick={async () => {
-                    const res = await requestNotificationPermission(tempUserId);
-                    if(res.success) window.location.reload();
-                    else setDiagError(res.error || null);
-                }} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540]">
-                    <Volume2 size={24} /> Ativar Notificações
-                </button>
+                
+                {Notification.permission !== 'granted' && (
+                  <button onClick={async () => {
+                      const res = await requestNotificationPermission(tempUserId);
+                      if(res.success) {
+                        toast.success("Notificações Ativas!");
+                        setDiagError(null);
+                      } else {
+                        setDiagError(res.error || null);
+                      }
+                  }} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540] hover:scale-105 transition-transform">
+                      <Volume2 size={24} /> Permitir Notificações
+                  </button>
+                )}
             </div>
 
-            <button onClick={async () => {
-                const userDoc = await getDoc(doc(db, 'users', tempUserId));
-                finalizeLogin({ id: tempUserId, ...userDoc.data() });
-            }} className="text-slate-400 font-bold uppercase text-[10px] hover:text-[#0a2540]">Ignorar e entrar na conta ➔</button>
+            <button onClick={() => finalizeLogin(tempUserData)} className="w-full bg-slate-100 text-slate-500 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+              Entrar no meu Perfil <ArrowRight size={16} />
+            </button>
         </div>
       </div>
     );
@@ -150,7 +161,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
-      {/* Background Decorativo Restaurado */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
         <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#00d66f]/5 rounded-full blur-[100px]" />
         <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#0a2540]/5 rounded-full blur-[100px]" />
@@ -185,26 +195,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
             </button>
           </form>
 
-          {/* Botão de Instalação (Requirement 2) */}
-          {isInstallable && (
-            <button onClick={installApp} className="mt-6 w-full bg-green-50 text-[#00d66f] p-4 rounded-2xl font-black uppercase text-[10px] border-2 border-dashed border-[#00d66f] flex items-center justify-center gap-2 hover:bg-green-100 transition-all">
-                <Download size={16} /> Instalar Aplicação no Telemóvel
-            </button>
-          )}
-
           <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-50 space-y-4 text-center">
             <Link to="/register" className="block text-[#0a2540] font-black uppercase italic text-xs hover:text-[#00d66f]">Criar conta Vizinho (Cliente) <ArrowRight className="inline ml-1" size={14} /></Link>
             <button onClick={() => setShowMerchantModal(true)} className="w-full p-4 bg-[#00d66f]/10 text-[#0a2540] rounded-2xl font-black uppercase italic text-[10px] border-2 border-[#00d66f]/20 hover:bg-[#00d66f] transition-all">Sou Lojista / Quero Aderir</button>
           </div>
           
           <div className="mt-6 text-center">
-             {/* CORREÇÃO PONTO 1: target="_blank" */}
              <Link to="/terms" target="_blank" rel="noopener noreferrer" className="text-[9px] text-slate-400 uppercase hover:underline">Termos e Condições e RGPD</Link>
           </div>
         </div>
       </div>
 
-      {/* MODAL DE ADESÃO (RESTAURADO COM TODOS OS CAMPOS ORIGINAIS) */}
       {showMerchantModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8">

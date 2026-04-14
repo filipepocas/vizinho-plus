@@ -1,5 +1,3 @@
-// src/features/admin/AdminComms.tsx
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../config/firebase';
 import { 
@@ -9,7 +7,7 @@ import {
 import { 
   Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, 
   Save, Euro, MessageSquare, Send, Users, CheckSquare, X, Search,
-  Loader2 // ADICIONADO AQUI PARA CORRIGIR O ERRO
+  Loader2 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, User as UserProfile } from '../../types';
@@ -18,7 +16,6 @@ const AdminComms: React.FC = () => {
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
   const [requests, setRequests] = useState<MarketingRequest[]>([]);
   
-  // PONTO 5: Estados para Mensagens
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
   const [selectedMerchantIds, setSelectedMerchantIds] = useState<string[]>([]);
   const [merchantSearch, setMerchantSearch] = useState('');
@@ -34,7 +31,6 @@ const AdminComms: React.FC = () => {
   const [savingPrices, setSavingPrices] = useState(false);
 
   useEffect(() => {
-    // 1. Campanhas e Pedidos
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('createdAt', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign))));
 
@@ -47,7 +43,6 @@ const AdminComms: React.FC = () => {
     };
     fetchPrices();
 
-    // 2. PONTO 5: Carregar todos os Comerciantes para seleção
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
     const unsubMerchants = onSnapshot(qMerchants, (snap) => {
       setMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
@@ -56,7 +51,6 @@ const AdminComms: React.FC = () => {
     return () => { unsubCam(); unsubReq(); unsubMerchants(); };
   }, []);
 
-  // FILTRO DO PONTO 5 (Nome, Email, NIF, CP4 ou CP7)
   const filteredMerchants = useMemo(() => {
     const q = merchantSearch.toLowerCase().trim();
     return merchants.filter(m => 
@@ -136,7 +130,6 @@ const AdminComms: React.FC = () => {
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
         
-        {/* PONTO 5: CENTRAL DE MENSAGENS PARA COMERCIANTES */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
             <div className="flex items-center gap-4 mb-8">
               <div className="bg-[#00d66f] p-3 rounded-2xl border-4 border-[#0a2540]">
@@ -202,7 +195,6 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-        {/* PREÇÁRIO */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6"><Euro className="inline mr-3 text-amber-500"/> Preçário de Marketing</h3>
             <form onSubmit={handleSavePrices} className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -215,23 +207,37 @@ const AdminComms: React.FC = () => {
             </form>
         </div>
 
-        {/* PEDIDOS PENDENTES */}
         <div>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Auditoria de Pedidos</h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {requests.map(r => (
-                    <div key={r.id} className="bg-white border-4 border-[#0a2540] p-6 rounded-[30px] shadow-[8px_8px_0px_#0a2540]">
+                    <div key={r.id} className="bg-white border-4 border-[#0a2540] p-6 rounded-[30px] shadow-[8px_8px_0px_#0a2540] flex flex-col justify-between">
                         <div className="flex justify-between items-start mb-4">
                             <div>
                                 <h4 className="font-black uppercase text-[#0a2540] text-lg leading-none">{r.merchantName}</h4>
-                                <span className="px-2 py-1 bg-amber-100 text-amber-700 rounded text-[8px] font-black uppercase mt-2 inline-block">Pedido: {r.type}</span>
+                                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mt-2 inline-block ${r.type === 'push_notification' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
+                                  Tipo: {r.type === 'push_notification' ? 'Push App' : r.type}
+                                </span>
                             </div>
                             <button onClick={() => deleteDoc(doc(db, 'marketing_requests', r.id!))} className="text-red-400"><Trash2 size={20}/></button>
                         </div>
-                        <div className="text-xs font-bold text-slate-500 mb-6 space-y-1">
-                            <p>Detalhes: {r.description || r.text}</p>
-                            {r.cost && <p className="text-[#00d66f]">Orçamento: {r.cost}€ (Alvo: {r.targetCount} Clientes)</p>}
+
+                        <div className="text-xs font-bold text-slate-500 mb-6 space-y-2 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 flex-grow">
+                            {r.type === 'push_notification' ? (
+                                <>
+                                    <p><strong className="text-[#0a2540]">Título:</strong> {r.title}</p>
+                                    <p><strong className="text-[#0a2540]">Mensagem:</strong> {r.text}</p>
+                                    <p><strong className="text-[#0a2540]">Alvo:</strong> {r.targetType === 'all' ? 'Todos' : r.targetType === 'multiple_zip' ? `CPs: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : 'Clientes Frequentes'}</p>
+                                    <p className="text-[#00d66f] border-t-2 border-slate-200 pt-2 mt-2"><strong className="text-[#0a2540]">Orçamento:</strong> {r.cost}€ (Para {r.targetCount} Clientes)</p>
+                                </>
+                            ) : (
+                                <>
+                                    <p><strong className="text-[#0a2540]">Detalhes:</strong> {r.description || r.text}</p>
+                                    {r.cost && <p className="text-[#00d66f]"><strong className="text-[#0a2540]">Orçamento:</strong> {r.cost}€ (Alvo: {r.targetCount} Clientes)</p>}
+                                </>
+                            )}
                         </div>
+
                         <div className="flex gap-2">
                             {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px]">Aprovar</button>}
                             {r.status !== 'rejected' && <button onClick={() => handleUpdateStatus(r.id!, 'rejected')} className="flex-1 bg-red-100 text-red-700 p-3 rounded-xl font-black uppercase text-[10px]">Rejeitar</button>}
