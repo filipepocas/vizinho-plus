@@ -1,9 +1,16 @@
+// src/features/auth/ForgotPassword.tsx
+
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { Mail, Key, ArrowLeft, CheckCircle2 } from 'lucide-react';
 
-const ForgotPassword: React.FC = () => {
+// INTERFACE ADICIONADA PARA RESOLVER O ERRO NO APP.TSX
+interface ForgotPasswordProps {
+  onBack?: () => void;
+}
+
+const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack }) => {
   const [email, setEmail] = useState('');
   const [sent, setSent] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -25,9 +32,13 @@ const ForgotPassword: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12">
-        <Link to="/login" className="inline-flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540] mb-8 transition-colors">
+        {/* Ajuste no Link de Voltar para usar a prop onBack se disponível */}
+        <button 
+          onClick={() => onBack ? onBack() : window.history.back()}
+          className="inline-flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540] mb-8 transition-colors"
+        >
           <ArrowLeft size={14} /> Voltar ao Login
-        </Link>
+        </button>
 
         <div className="text-center mb-10">
           <div className="bg-amber-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#0a2540]">
@@ -43,7 +54,7 @@ const ForgotPassword: React.FC = () => {
               <p className="font-black uppercase text-xs text-green-600">Email Enviado!</p>
               <p className="text-sm font-bold text-slate-500 leading-relaxed">Verifica a tua caixa de entrada <span className="text-red-500">(e a pasta de SPAM/Lixo Eletrónico)</span> e segue as instruções para criar uma nova password.</p>
             </div>
-            <Link to="/login" className="block w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest transition-all">Ir para o Login</Link>
+            <Link to="/login" className="block w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest transition-all text-center">Ir para o Login</Link>
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-6">

@@ -6,7 +6,7 @@ import { useStore } from './store/useStore';
 import { Toaster } from 'react-hot-toast'; 
 import { getToken, onMessage } from 'firebase/messaging';
 import { messaging, VAPID_KEY } from './config/firebase';
-import { AlertTriangle, Download } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
@@ -43,11 +43,10 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
-// COMPONENTE DE ALERTA DE NOTIFICAÇÕES (Ponto 1)
+// COMPONENTE DE ALERTA DE NOTIFICAÇÕES
 const NotificationAlert = () => {
   const { currentUser, toggleNotifications } = useStore();
   
-  // Só mostra se o utilizador estiver logado e tiver as notificações explicitamente desativadas
   if (!currentUser || currentUser.notificationsEnabled !== false) return null;
 
   return (
@@ -72,31 +71,27 @@ function App() {
   const { initializeAuth, currentUser, updateUserToken } = useStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
-  // 1. Inicializar Autenticação
   useEffect(() => {
     const unsub = initializeAuth();
     return () => unsub();
   }, [initializeAuth]);
 
-  // 2. Lógica de PWA: Capturar o evento de instalação (Ponto 2)
   useEffect(() => {
     const handler = (e: any) => {
       e.preventDefault();
       setDeferredPrompt(e);
-      console.log('PWA: Evento beforeinstallprompt capturado');
     };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // 3. Configurar Mensagens Push (Ponto 4)
   useEffect(() => {
     if (!currentUser || !messaging) return;
 
     const requestPermission = async () => {
       try {
         const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
+        if (permission === 'granted' && messaging) {
           const token = await getToken(messaging, { vapidKey: VAPID_KEY });
           if (token) {
             await updateUserToken(currentUser.id, token);
@@ -109,32 +104,52 @@ function App() {
 
     requestPermission();
 
-    const unsubOnMessage = onMessage(messaging, (payload) => {
-      console.log('Mensagem recebida em primeiro plano:', payload);
-      // Aqui podes usar o toast para mostrar a notificação se a app estiver aberta
-    });
+    const unsubOnMessage = messaging ? onMessage(messaging, (payload) => {
+      console.log('Mensagem recebida:', payload);
+    }) : () => {};
 
     return () => unsubOnMessage();
   }, [currentUser, updateUserToken]);
+
+  const handleBack = () => {
+    window.history.back();
+  };
 
   return (
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-[#00d66f]/30">
         <Toaster position="top-center" />
         
-        {/* Aviso de notificações desativadas */}
         <NotificationAlert />
 
         <Routes>
-          {/* Rotas Públicas */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/login" element={<LoginPage installPrompt={deferredPrompt} />} />
-          <Route path="/register" element={<RegisterPage />} />
-          <Route path="/forgot-password" element={<ForgotPassword />} />
+          
+          {/* LOGIN: Passamos installPrompt e onRegister (caso o componente espere essa navegação) */}
+          <Route path="/login" element={
+            <LoginPage 
+              installPrompt={deferredPrompt} 
+              onRegister={() => window.location.href = '/register'} 
+              onForgotPassword={() => window.location.href = '/forgot-password'}
+            />
+          } />
+          
+          {/* REGISTER: Passamos onBack e onSuccess */}
+          <Route path="/register" element={
+            <RegisterPage 
+              onBack={handleBack} 
+              onSuccess={() => window.location.href = '/login'} 
+            />
+          } />
+          
+          {/* FORGOT PASSWORD: Passamos onBack */}
+          <Route path="/forgot-password" element={
+            <ForgotPassword onBack={handleBack} />
+          } />
+          
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/vantagens" element={<VantagensPage />} />
 
-          {/* Rotas Protegidas */}
           <Route path="/admin/*" element={
             <ProtectedRoute requiredRole="admin">
               <AdminDashboard />
@@ -155,11 +170,10 @@ function App() {
 
           <Route path="/settings" element={
             <ProtectedRoute>
-              <ProfileSettings />
+              <ProfileSettings onBack={handleBack} />
             </ProtectedRoute>
           } />
 
-          {/* Redirecionamento Padrão */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

@@ -20,12 +20,29 @@ export interface User {
   address?: string;
   city?: string; // Adicionado para corrigir erro no UserExplore.tsx
   fcmTokens?: string[]; // Adicionado para corrigir erro no MerchantDashboard.tsx
+  notificationsEnabled?: boolean; // PONTO 1: Estado das notificações
+  notificationsUpdatedAt?: any; // PONTO 1: Data da última alteração
+  lastTokenUpdate?: any; // PONTO 4: Registo do dispositivo
   storeWallets?: Record<string, { available: number; pending: number }>;
   devices?: any[];
   wallet?: {
     available: number;
     pending: number;
   };
+}
+
+// Interface para a Gestão de Banners (PONTO 3)
+export interface Banner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  targetType: 'all' | 'zip' | 'birthday';
+  targetValue?: string;
+  maxImpressions?: number;
+  startDate: any;
+  endDate: any;
+  createdAt: any;
+  active: boolean;
 }
 
 export interface Transaction {
@@ -137,7 +154,6 @@ export interface SystemConfig {
   appVersion?: string;
 }
 
-// INTERFACE VANTAGEM TOTALMENTE CORRIGIDA
 export interface Vantagem {
   id: string;
   title: string;

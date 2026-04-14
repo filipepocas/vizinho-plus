@@ -5,12 +5,18 @@ import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2, AlertTriangle, ArrowLeft } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { requestNotificationPermission } from '../../utils/notifications';
 
-const RegisterPage: React.FC = () => {
+// INTERFACE ADICIONADA PARA RESOLVER O ERRO NO APP.TSX
+interface RegisterPageProps {
+  onBack?: () => void;
+  onSuccess?: () => void;
+}
+
+const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -37,7 +43,6 @@ const RegisterPage: React.FC = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Validações Iniciais
     if (!acceptedTerms) {
       toast.error("TENS DE ACEITAR OS TERMOS E PRIVACIDADE.");
       return;
@@ -61,7 +66,6 @@ const RegisterPage: React.FC = () => {
     setLoading(true);
 
     try {
-      // 1. Criar utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(
         auth, 
         formData.email.trim(), 
@@ -71,7 +75,6 @@ const RegisterPage: React.FC = () => {
       const newCustomerNumber = generateCustomerNumber();
       const uid = userCredential.user.uid;
 
-      // 2. Criar documento do utilizador no Firestore
       await setDoc(doc(db, 'users', uid), {
         id: uid,
         name: formData.name.trim(),
@@ -91,27 +94,24 @@ const RegisterPage: React.FC = () => {
       setSetupStep(true);
       toast.success("CONTA CRIADA COM SUCESSO!");
 
-      // Disparo de permissão de notificações com delay para garantir que o SW está pronto
+      if (onSuccess) onSuccess();
+
       setTimeout(() => {
         requestNotificationPermission(uid);
       }, 1500);
 
     } catch (err: any) {
       console.error("Erro detalhado no registo:", err);
-      
       if (err.code === 'auth/email-already-in-use') {
         toast.error("ESTE EMAIL JÁ ESTÁ REGISTADO.");
-      } else if (err.code === 'permission-denied') {
-        toast.error("ERRO DE PERMISSÃO NA BASE DE DADOS.");
       } else {
-        toast.error("ERRO AO CRIAR CONTA. TENTE NOVAMENTE.");
+        toast.error("ERRO AO CRIAR CONTA.");
       }
     } finally {
       setLoading(false);
     }
   };
 
-  // ECRÃ PÓS REGISTO (PARA NOTIFICAÇÕES E APP)
   if (setupStep) {
     return (
       <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
@@ -127,8 +127,8 @@ const RegisterPage: React.FC = () => {
                   <h3 className="font-black uppercase text-[10px] tracking-widest">Acesso Vital</h3>
                </div>
                <p className="text-xs font-bold text-amber-900 leading-relaxed">
-                 O seu browser já lhe deve ter pedido acesso às notificações. Se não pediu, ou se está num <strong>iPhone</strong>, use os botões abaixo. 
-                 Para ter as <strong>vantagens VIP</strong> tem de Instalar e Ativar os alertas.
+                  O seu browser já lhe deve ter pedido acesso às notificações. Se não pediu, ou se está num <strong>iPhone</strong>, use os botões abaixo. 
+                  Para ter as <strong>vantagens VIP</strong> tem de Instalar e Ativar os alertas.
                </p>
             </div>
 
@@ -153,9 +153,16 @@ const RegisterPage: React.FC = () => {
     );
   }
 
-  // ECRÃ NORMAL DE REGISTO
   return (
-    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 py-12">
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 py-12 relative">
+      {/* Botão de Voltar */}
+      <button 
+        onClick={() => onBack ? onBack() : navigate('/login')}
+        className="absolute top-8 left-8 p-4 bg-white border-4 border-slate-100 rounded-2xl text-[#0a2540] hover:border-[#00d66f] transition-all group"
+      >
+        <ArrowLeft size={24} className="group-hover:-translate-x-1 transition-transform" />
+      </button>
+
       <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
         <div className="text-center mb-10">
           <div className="bg-[#0a2540] w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#00d66f]">
