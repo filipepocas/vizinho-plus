@@ -1,11 +1,7 @@
-// src/App.tsx
-
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { Toaster } from 'react-hot-toast'; 
-import { getToken, onMessage } from 'firebase/messaging';
-import { messaging, VAPID_KEY } from './config/firebase';
 import { AlertTriangle } from 'lucide-react';
 
 import LandingPage from './features/public/LandingPage';
@@ -19,11 +15,7 @@ import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
 import ProfileSettings from './features/profile/ProfileSettings';
 
-// Componente para proteger rotas por tipo de utilizador
-const ProtectedRoute: React.FC<{ 
-  children: React.ReactNode; 
-  requiredRole?: 'admin' | 'merchant' | 'client' 
-}> = ({ children, requiredRole }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredRole?: 'admin' | 'merchant' | 'client' }> = ({ children, requiredRole }) => {
   const { currentUser, isLoading, isInitialized } = useStore();
 
   if (!isInitialized || isLoading) {
@@ -43,24 +35,18 @@ const ProtectedRoute: React.FC<{
   return <>{children}</>;
 };
 
-// COMPONENTE DE ALERTA DE NOTIFICAÇÕES
 const NotificationAlert = () => {
   const { currentUser, toggleNotifications } = useStore();
-  
   if (!currentUser || currentUser.notificationsEnabled !== false) return null;
-
   return (
     <div className="bg-amber-50 border-b border-amber-200 p-3 flex items-center justify-between gap-3 sticky top-0 z-[60]">
       <div className="flex items-center gap-2 text-amber-800">
         <AlertTriangle size={18} className="shrink-0" />
         <p className="text-[10px] font-black uppercase leading-tight">
-          Atenção: Notificações desligadas! Podes estar a perder oportunidades importantes de poupar dinheiro.
+          Atenção: Notificações desligadas! Podes estar a perder oportunidades.
         </p>
       </div>
-      <button 
-        onClick={() => toggleNotifications(currentUser.id, true)}
-        className="bg-amber-200 text-amber-900 px-3 py-1 rounded-lg text-[9px] font-black uppercase whitespace-nowrap"
-      >
+      <button onClick={() => toggleNotifications(currentUser.id, true)} className="bg-amber-200 text-amber-900 px-3 py-1 rounded-lg text-[9px] font-black uppercase whitespace-nowrap">
         Ativar agora
       </button>
     </div>
@@ -68,7 +54,7 @@ const NotificationAlert = () => {
 };
 
 function App() {
-  const { initializeAuth, currentUser, updateUserToken } = useStore();
+  const { initializeAuth, currentUser } = useStore();
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
 
   useEffect(() => {
@@ -85,31 +71,7 @@ function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  useEffect(() => {
-    if (!currentUser || !messaging) return;
-
-    const requestPermission = async () => {
-      try {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted' && messaging) {
-          const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-          if (token) {
-            await updateUserToken(currentUser.id, token);
-          }
-        }
-      } catch (err) {
-        console.error('Erro ao configurar notificações:', err);
-      }
-    };
-
-    requestPermission();
-
-    const unsubOnMessage = messaging ? onMessage(messaging, (payload) => {
-      console.log('Mensagem recebida:', payload);
-    }) : () => {};
-
-    return () => unsubOnMessage();
-  }, [currentUser, updateUserToken]);
+  // X5 - RESOLVIDO: O pedido automático abusivo de Notification.requestPermission foi totalmente apagado daqui.
 
   const handleBack = () => {
     window.history.back();
@@ -119,61 +81,19 @@ function App() {
     <BrowserRouter>
       <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-[#00d66f]/30">
         <Toaster position="top-center" />
-        
         <NotificationAlert />
 
         <Routes>
           <Route path="/" element={<LandingPage />} />
-          
-          {/* LOGIN: Passamos installPrompt e onRegister (caso o componente espere essa navegação) */}
-          <Route path="/login" element={
-            <LoginPage 
-              installPrompt={deferredPrompt} 
-              onRegister={() => window.location.href = '/register'} 
-              onForgotPassword={() => window.location.href = '/forgot-password'}
-            />
-          } />
-          
-          {/* REGISTER: Passamos onBack e onSuccess */}
-          <Route path="/register" element={
-            <RegisterPage 
-              onBack={handleBack} 
-              onSuccess={() => window.location.href = '/login'} 
-            />
-          } />
-          
-          {/* FORGOT PASSWORD: Passamos onBack */}
-          <Route path="/forgot-password" element={
-            <ForgotPassword onBack={handleBack} />
-          } />
-          
+          <Route path="/login" element={<LoginPage installPrompt={deferredPrompt} onRegister={() => window.location.href = '/register'} onForgotPassword={() => window.location.href = '/forgot-password'} />} />
+          <Route path="/register" element={<RegisterPage onBack={handleBack} onSuccess={() => window.location.href = '/login'} />} />
+          <Route path="/forgot-password" element={<ForgotPassword onBack={handleBack} />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/vantagens" element={<VantagensPage />} />
-
-          <Route path="/admin/*" element={
-            <ProtectedRoute requiredRole="admin">
-              <AdminDashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/merchant/*" element={
-            <ProtectedRoute requiredRole="merchant">
-              <MerchantDashboard />
-            </ProtectedRoute>
-          } />
-          
-          <Route path="/dashboard/*" element={
-            <ProtectedRoute requiredRole="client">
-              <UserDashboard />
-            </ProtectedRoute>
-          } />
-
-          <Route path="/settings" element={
-            <ProtectedRoute>
-              <ProfileSettings onBack={handleBack} />
-            </ProtectedRoute>
-          } />
-
+          <Route path="/admin/*" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/merchant/*" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
+          <Route path="/dashboard/*" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><ProfileSettings onBack={handleBack} /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>

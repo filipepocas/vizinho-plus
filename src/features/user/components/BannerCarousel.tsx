@@ -1,5 +1,3 @@
-// src/features/user/components/BannerCarousel.tsx
-
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
@@ -15,17 +13,18 @@ const BannerCarousel: React.FC = () => {
     if (!currentUser) return;
     const userZipBase = currentUser.zipCode?.substring(0, 4);
 
-    const q = query(collection(db, 'banners'), where('isActive', '==', true));
+    const q = query(collection(db, 'banners'), where('active', '==', true));
     
     const unsubscribe = onSnapshot(q, (snap) => {
       const now = new Date();
       const valid = snap.docs
         .map(d => ({ id: d.id, ...d.data() }))
         .filter((b: any) => {
-          const start = b.startDate.toDate();
-          const end = b.endDate.toDate();
-          const isTimeValid = now >= start && now <= end;
+          // X4 - Proteção contra Timestamps Provisórios do Firebase
+          const start = b.startDate && typeof b.startDate.toDate === 'function' ? b.startDate.toDate() : new Date();
+          const end = b.endDate && typeof b.endDate.toDate === 'function' ? b.endDate.toDate() : new Date();
           
+          const isTimeValid = now >= start && now <= end;
           const hasTargetZips = b.targetZipCodes && b.targetZipCodes.length > 0;
           const isZipValid = !hasTargetZips || (userZipBase && b.targetZipCodes?.includes(userZipBase));
 
@@ -43,10 +42,7 @@ const BannerCarousel: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeBanners]);
 
-  if (activeBanners.length === 0) {
-    // Caso não haja banners, mantemos um fundo sólido para não quebrar o layout do Header
-    return <div className="w-full h-64 bg-[#0a2540]" />;
-  }
+  if (activeBanners.length === 0) return <div className="w-full h-64 bg-[#0a2540]" />;
 
   return (
     <div className="relative w-full h-[280px] md:h-[350px] overflow-hidden bg-[#0a2540]">
@@ -61,20 +57,11 @@ const BannerCarousel: React.FC = () => {
           className="absolute inset-0 w-full h-full object-cover"
         />
       </AnimatePresence>
-
-      {/* Overlay para garantir leitura do logotipo e botões que ficam por cima */}
       <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/20 pointer-events-none" />
-
-      {/* Indicadores de página (Dots) - Estilo mais fino e elegante */}
       {activeBanners.length > 1 && (
         <div className="absolute bottom-12 right-6 flex gap-2">
           {activeBanners.map((_, idx) => (
-            <div 
-              key={idx} 
-              className={`h-1.5 rounded-full transition-all duration-500 ${
-                idx === currentIndex ? 'w-6 bg-[#00d66f]' : 'w-1.5 bg-white/40'
-              }`}
-            />
+            <div key={idx} className={`h-1.5 rounded-full transition-all duration-500 ${idx === currentIndex ? 'w-6 bg-[#00d66f]' : 'w-1.5 bg-white/40'}`} />
           ))}
         </div>
       )}

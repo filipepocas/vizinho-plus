@@ -1,4 +1,3 @@
-// public/firebase-messaging-sw.js
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.8.0/firebase-messaging-compat.js');
 
@@ -15,13 +14,32 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-// Esta função é o que faz a magia na versão V1
 messaging.onBackgroundMessage((payload) => {
-  console.log('Mensagem em background:', payload);
   const notificationTitle = payload.notification.title || 'Vizinho+';
   const notificationOptions = {
     body: payload.notification.body,
-    icon: '/logo192.png'
+    icon: '/logo192.png',
+    data: {
+      url: '/' 
+    }
   };
   self.registration.showNotification(notificationTitle, notificationOptions);
+});
+
+// X7 - RESOLVIDO: Ouve o clique na notificação para abrir a App (Safari iOS e Android PWA)
+self.addEventListener('notificationclick', function(event) {
+  event.notification.close();
+  event.waitUntil(
+    clients.matchAll({ type: 'window' }).then((clientList) => {
+      for (let i = 0; i < clientList.length; i++) {
+        const client = clientList[i];
+        if (client.url && 'focus' in client) {
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) {
+        return clients.openWindow(event.notification.data?.url || '/');
+      }
+    })
+  );
 });

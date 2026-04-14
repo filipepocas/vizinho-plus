@@ -1,5 +1,3 @@
-// src/store/useStore.ts
-
 import { create } from 'zustand';
 import { 
   collection, 
@@ -8,11 +6,9 @@ import {
   orderBy, 
   where, 
   serverTimestamp, 
-  setDoc, 
   doc, 
   getDocs, 
   writeBatch, 
-  increment, 
   getDoc, 
   limit, 
   updateDoc, 
@@ -40,7 +36,6 @@ interface StoreState {
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
   updateUserToken: (userId: string, token: string) => Promise<void>;
-  // NOVAS FUNÇÕES PARA NOTIFICAÇÕES (Ponto 1)
   toggleNotifications: (userId: string, enabled: boolean) => Promise<void>;
 }
 
@@ -71,19 +66,16 @@ export const useStore = create<StoreState>((set, get) => ({
   updateUserToken: async (userId: string, token: string) => {
     try {
       const userRef = doc(db, 'users', userId);
-      // Usamos arrayUnion para permitir que o utilizador receba notificações em vários aparelhos
       await updateDoc(userRef, {
         fcmTokens: arrayUnion(token),
         lastTokenUpdate: serverTimestamp(),
-        notificationsEnabled: true // Ao registar o token, assumimos ativas por defeito
+        notificationsEnabled: true
       });
-      console.log("Token de notificação atualizado com sucesso.");
     } catch (e) {
       console.error("Erro ao guardar token:", e);
     }
   },
 
-  // Implementação do Ponto 1: Ativar/Desativar Notificações
   toggleNotifications: async (userId: string, enabled: boolean) => {
     try {
       const userRef = doc(db, 'users', userId);
@@ -93,7 +85,6 @@ export const useStore = create<StoreState>((set, get) => ({
       });
       toast.success(enabled ? "NOTIFICAÇÕES ATIVADAS!" : "NOTIFICAÇÕES DESATIVADAS.");
     } catch (e) {
-      console.error("Erro ao alterar estado das notificações:", e);
       toast.error("ERRO AO ALTERAR PREFERÊNCIAS.");
     }
   },
@@ -105,26 +96,22 @@ export const useStore = create<StoreState>((set, get) => ({
     return !snap.empty;
   },
 
+  // X1 - RESOLVIDO: O frontend apenas regista a transação. O Backend atualiza o saldo da carteira.
   addTransaction: async (tx) => {
     const { currentUser } = get();
     if (!currentUser) return;
     try {
-      const batch = writeBatch(db);
-      let currentCbPercent = currentUser.cashbackPercent || 0;
-      const amount = Number(tx.amount);
-      const cashback = tx.type === 'earn' ?
-        Math.round((amount * currentCbPercent / 100) * 100) / 100 : amount;
       const newTxRef = doc(collection(db, 'transactions'));
       
-      batch.set(newTxRef, {
+      // Criar transação apenas. Cloud Function fará as contas reais.
+      await updateDoc(newTxRef, {
         clientId: tx.clientId,
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name,
-        amount,
-        cashbackAmount: cashback,
-        cashbackPercent: currentCbPercent,
+        amount: Number(tx.amount), // Valor da fatura (Earn) ou do desconto (Redeem)
+        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0, // X6 - Regra dos 50%
         type: tx.type,
-        status: 'available',
+        status: 'pending', // Deixa a cloud function aprovar
         createdAt: serverTimestamp(),
         clientNif: tx.documentNumber || "", 
         documentNumber: tx.documentNumber || "",
@@ -133,24 +120,34 @@ export const useStore = create<StoreState>((set, get) => ({
         clientBirthDate: tx.clientBirthDate || ""
       });
 
-      const userRef = doc(db, 'users', tx.clientId);
-      if (tx.type === 'earn') {
-        batch.update(userRef, {
-          [`wallet.available`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.available`]: increment(cashback),
-          [`storeWallets.${currentUser.id}.merchantName`]: currentUser.shopName || currentUser.name
-        });
-      } else {
-        batch.update(userRef, {
-          [`wallet.available`]: increment(-amount),
-          [`storeWallets.${currentUser.id}.available`]: increment(-amount)
-        });
-      }
-      await batch.commit();
-      toast.success("MOVIMENTO REGISTADO!");
+      toast.success("MOVIMENTO ENVIADO PARA PROCESSAMENTO!");
       return newTxRef.id;
     } catch (e) { 
-      toast.error("ERRO NO REGISTO.");
+      // Em caso de erro, pode estar a tentar criar no updateDoc que não existe, logo forçamos setDoc
+      try {
+        const newTxRef = doc(collection(db, 'transactions'));
+        const batch = writeBatch(db);
+        batch.set(newTxRef, {
+          clientId: tx.clientId,
+          merchantId: currentUser.id,
+          merchantName: currentUser.shopName || currentUser.name,
+          amount: Number(tx.amount),
+          invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
+          type: tx.type,
+          status: 'pending',
+          createdAt: serverTimestamp(),
+          clientNif: tx.documentNumber || "", 
+          documentNumber: tx.documentNumber || "",
+          clientName: tx.clientName || "Desconhecido",
+          clientCardNumber: tx.clientCardNumber || "---",
+          clientBirthDate: tx.clientBirthDate || ""
+        });
+        await batch.commit();
+        toast.success("MOVIMENTO REGISTADO!");
+        return newTxRef.id;
+      } catch(err2) {
+        toast.error("ERRO NO REGISTO.");
+      }
     }
   },
 
@@ -164,32 +161,14 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
+  // X1 - RESOLVIDO: O frontend apenas marca como cancelado.
   cancelTransaction: async (id) => {
     try {
       const txRef = doc(db, 'transactions', id);
-      const txSnap = await getDoc(txRef);
-      if (!txSnap.exists()) return;
-      const txData = txSnap.data();
-      const batch = writeBatch(db);
-      batch.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
-      const userRef = doc(db, 'users', txData.clientId);
-      
-      if (txData.type === 'earn') {
-        const type = txData.status === 'pending' ? 'pending' : 'available';
-        batch.update(userRef, { 
-            [`wallet.${type}`]: increment(-txData.cashbackAmount), 
-            [`storeWallets.${txData.merchantId}.${type}`]: increment(-txData.cashbackAmount) 
-        });
-      } else {
-        batch.update(userRef, { 
-            [`wallet.available`]: increment(txData.amount), 
-            [`storeWallets.${txData.merchantId}.available`]: increment(txData.amount) 
-        });
-      }
-      await batch.commit();
-      toast.success("ANULADO.");
+      await updateDoc(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
+      toast.success("PEDIDO DE ANULAÇÃO ENVIADO.");
     } catch (e) { 
-      toast.error("ERRO.");
+      toast.error("ERRO AO ANULAR.");
     }
   },
 

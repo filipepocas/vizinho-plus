@@ -1,5 +1,3 @@
-// src/features/merchant/MerchantDashboard.tsx
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
@@ -32,7 +30,6 @@ const MerchantDashboard: React.FC = () => {
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
 
-  // --- ESTADOS DO PONTO 6 (CAMPANHA PUSH) ---
   const [pushForm, setPushForm] = useState({ 
     title: '', text: '', targetType: 'all' as 'all' | 'multiple_zip' | 'top' | 'birthDate', targetValue: '' 
   });
@@ -48,7 +45,10 @@ const MerchantDashboard: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number} | null>(null);
+  
+  // X6: Armazena também a fatura para redeems
+  const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
+  
   const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
   const [postInvoiceNum, setPostInvoiceNum] = useState('');
 
@@ -84,7 +84,43 @@ const MerchantDashboard: React.FC = () => {
     return () => unsubMsg();
   }, [currentUser?.id]);
 
-  // --- LÓGICA DE SIMULAÇÃO DO PONTO 6 ---
+  useEffect(() => {
+    const searchClient = async () => {
+      if (!isNifValid) {
+        setFoundClient(null);
+        return;
+      }
+      setIsSearching(true);
+      try {
+        const cleanNumber = cardNumber.replace(/\s/g, '');
+        let q = query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client'));
+        let snap = await getDocs(q);
+        
+        if (snap.empty) {
+          q = query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client'));
+          snap = await getDocs(q);
+        }
+
+        if (!snap.empty) {
+          setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+        } else {
+          setFoundClient(null);
+        }
+      } catch (err) {
+        setFoundClient(null);
+      } finally {
+        setIsSearching(false);
+      }
+    };
+
+    const timeoutId = setTimeout(() => {
+      searchClient();
+    }, 500);
+
+    return () => clearTimeout(timeoutId);
+  }, [cardNumber, isNifValid]);
+
+
   const handleSimulatePush = async () => {
     if (!pushForm.title || !pushForm.text) {
       toast.error("PREENCHA O TÍTULO E A MENSAGEM.");
@@ -98,12 +134,10 @@ const MerchantDashboard: React.FC = () => {
       const snap = await getDocs(q);
       let clients = snap.docs.map(d => d.data());
 
-      // Aplicar filtros de segmentação
       if (pushForm.targetType === 'multiple_zip') {
         const zips = pushForm.targetValue.split(',').map(z => z.trim());
         clients = clients.filter((c: any) => zips.some(z => (c.zipCode || '').startsWith(z)));
       } else if (pushForm.targetType === 'top') {
-        // Filtra clientes que já tiveram transações com este merchant
         clients = clients.filter((c: any) => c.storeWallets?.[currentUser?.id || ""]);
       } else if (pushForm.targetType === 'birthDate') {
         const currentMonth = new Date().getMonth() + 1;
@@ -161,7 +195,8 @@ const MerchantDashboard: React.FC = () => {
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
-    setPendingAction({ type, val: val || 0 });
+    const invAmount = parseFloat(amount); // Valor da fatura (útil no redeem)
+    setPendingAction({ type, val: val || 0, invAmount: invAmount || 0 });
     setShowConfirmModal(true);
   };
 
@@ -175,6 +210,7 @@ const MerchantDashboard: React.FC = () => {
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name || 'Loja',
         amount: pendingAction.val,
+        invoiceAmount: pendingAction.invAmount, // X6 enviado ao Backend
         type: pendingAction.type,
         documentNumber: documentNumber,
         clientName: foundClient.name,
@@ -195,7 +231,6 @@ const MerchantDashboard: React.FC = () => {
         <div className="flex items-center gap-6 text-white">
           <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.shopName || currentUser.name}</h2>
           
-          {/* SINO DE MENSAGENS DO ADMIN (PONTO 5) */}
           <button onClick={() => setShowInbox(true)} className="relative bg-white/10 p-3 rounded-2xl hover:bg-[#00d66f] hover:text-[#0a2540] transition-all">
              <MessageSquare size={24} />
              {adminMessages.length > 0 && (
@@ -217,7 +252,6 @@ const MerchantDashboard: React.FC = () => {
 
       <main className="max-w-7xl mx-auto p-4 w-full space-y-6">
         
-        {/* ABA DE CAMPANHAS PUSH (PONTO 6) */}
         {view === 'push_campaign' && (
           <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl space-y-6">
@@ -252,7 +286,6 @@ const MerchantDashboard: React.FC = () => {
                 </button>
              </div>
 
-             {/* RESULTADO DA SIMULAÇÃO (PONTO 6) */}
              {pushSimulation && (
                <div className="bg-[#00d66f] p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540] flex flex-col justify-center text-center animate-in zoom-in">
                   <h4 className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest mb-6 opacity-60">Orçamento Detalhado</h4>
@@ -278,7 +311,6 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* INBOX DO LOJISTA (PONTO 5) */}
         {showInbox && (
           <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
              <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
@@ -303,7 +335,6 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* OUTRAS ABAS MANTIDAS INTACTAS */}
         {view === 'terminal' && (
           <MerchantTerminal 
             cardNumber={cardNumber} setCardNumber={setCardNumber}
@@ -318,6 +349,30 @@ const MerchantDashboard: React.FC = () => {
             formatCurrency={formatCurrency}
           />
         )}
+
+        {showConfirmModal && foundClient && pendingAction && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
+            <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
+               <div className="bg-[#0a2540] p-6 text-white text-center">
+                 <AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" />
+                 <h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3>
+               </div>
+               <div className="p-8 text-center space-y-4">
+                 <p className="text-xs font-bold text-slate-500 uppercase">Cliente</p>
+                 <p className="text-lg font-black text-[#0a2540]">{foundClient.name}</p>
+                 <div className="border-t-2 border-dashed border-slate-100 my-4"></div>
+                 <p className="text-xs font-bold text-slate-500 uppercase">{pendingAction.type === 'earn' ? 'Fatura Base' : 'Valor a Descontar'}</p>
+                 <p className={`text-4xl font-black italic ${pendingAction.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>{formatCurrency(pendingAction.val)}</p>
+                 
+                 <div className="flex gap-4 mt-8">
+                   <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
+                   <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
+                 </div>
+               </div>
+            </div>
+          </div>
+        )}
+
         {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
         {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}

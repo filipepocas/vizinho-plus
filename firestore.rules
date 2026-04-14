@@ -1,88 +1,108 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // --- FUNÇÕES DE SEGURANÇA ---
     
-    function isSignedIn() { return request.auth != null; }
-    function isSuperAdmin() {
-      return isSignedIn() && request.auth.token.email != null
-        && request.auth.token.email.lower() == 'rochap.filipe@gmail.com';
+    // Verifica se o utilizador está logado
+    function isAuthenticated() {
+      return request.auth != null;
     }
+
+    // Verifica se é o Administrador Principal (Ponto 2, 3 e 5)
     function isAdmin() {
-      return isSuperAdmin() ||
-        (isSignedIn() 
-        && exists(/databases/$(database)/documents/users/$(request.auth.uid))
-        && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin');
+      return isAuthenticated() && request.auth.token.email == "rochap.filipe@gmail.com";
     }
 
-    // USERS: Permite a leitura a utilizadores autenticados (para os lojistas verem clientes e vice-versa)
+    // Verifica se o utilizador é o dono do próprio documento
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    // --- REGRAS POR COLEÇÃO ---
+
+    // 1. UTILIZADORES (Perfis de Clientes e Comerciantes)
     match /users/{userId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.auth.uid == userId;
-      allow update: if isSignedIn() && (request.auth.uid == userId || isAdmin());
-      allow delete: if isSignedIn() && (request.auth.uid == userId || isAdmin());
+      // Todos os logados podem ler perfis (necessário para procurar lojistas e nomes)
+      allow read: if isAuthenticated();
+      // O utilizador pode editar o seu perfil (Ponto 1 e 2) 
+      // OU o Admin pode criar/editar/apagar qualquer um (Ponto 2 e aprovação de lojistas)
+      allow write: if isAdmin() || isOwner(userId);
     }
 
-    // TRANSAÇÕES
+    // 2. PEDIDOS DE ADESÃO DE LOJISTAS (Ponto 2 do Login)
+    match /merchant_requests/{requestId} {
+      // Qualquer pessoa pode enviar um pedido de adesão
+      allow create: if true;
+      // Apenas o Admin pode ler os pedidos ou apagá-los após aprovar
+      allow read, write: if isAdmin();
+    }
+
+    // 3. TRANSAÇÕES (Cashback e Resgates)
     match /transactions/{txId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() && (request.auth.uid == resource.data.clientId || isAdmin());
-    }
-
-    // FEEDBACKS
-    match /feedbacks/{feedbackId} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn();
+      // Clientes e Lojistas precisam de ler o histórico
+      allow read: if isAuthenticated();
+      // Lojistas podem criar transações no terminal
+      allow create: if isAuthenticated();
+      // Apenas o Admin pode atualizar ou anular transações (Auditoria)
       allow update, delete: if isAdmin();
     }
 
-    // CONFIGURAÇÕES DO SISTEMA
-    match /system/{docId} {
-      allow read: if true;
-      allow write: if isAdmin();
+    // 4. MENSAGENS PARA COMERCIANTES (Ponto 5)
+    match /merchant_messages/{msgId} {
+      // Lojistas podem ler e apagar as suas próprias mensagens após lerem
+      allow read, delete: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.merchantId);
+      // Apenas o Admin pode escrever e enviar estas mensagens
+      allow create: if isAdmin();
+      allow update: if isAdmin();
     }
 
-    // PEDIDOS DE LOJISTAS (Registo)
-    match /merchant_requests/{docId} {
-      allow create: if true; // Qualquer pessoa pode pedir para ser lojista
-      allow read, update, delete: if isAdmin();
-    }
-
-    // PEDIDOS DE MARKETING (Banners / Folhetos do Lojista)
-    match /marketing_requests/{docId} {
-      allow create, read: if isSignedIn();
+    // 5. CAMPANHAS DE MARKETING E NOTIFICAÇÕES (Ponto 6)
+    match /marketing_requests/{reqId} {
+      // Lojistas podem criar pedidos de marketing
+      allow create: if isAuthenticated();
+      // Lojistas podem ler os seus próprios pedidos, Admin lê tudo
+      allow read: if isAuthenticated() && (isAdmin() || request.auth.uid == resource.data.merchantId);
+      // Apenas Admin aprova ou remove
       allow update, delete: if isAdmin();
     }
 
-    // CAMPANHAS DE FOLHETOS E BANNERS
-    match /leaflet_campaigns/{docId} {
-      allow read: if isSignedIn();
+    // 6. BANNERS, FOLHETOS E NOTIFICAÇÕES GERAIS
+    match /banners/{id} {
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
-    match /banners/{docId} {
-      allow read: if isSignedIn();
+    match /notifications/{id} {
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
-    match /leaflets/{docId} {
-      allow read: if isSignedIn();
+    match /leaflets/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+    match /leaflet_campaigns/{id} {
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // VANTAGENS VIP (Página Pública e App)
-    match /vantagens/{docId} {
-      allow read: if true; // Tem de ser público para a Landing Page
+    // 7. FEEDBACK E AVALIAÇÕES
+    match /feedbacks/{id} {
+      // Clientes criam feedback, todos logados leem
+      allow create: if isAuthenticated();
+      allow read: if isAuthenticated();
       allow write: if isAdmin();
     }
 
-    // NOTIFICAÇÕES (FCM)
-    match /notifications/{docId} {
-      allow read, write: if isSignedIn();
+    // 8. CONFIGURAÇÕES DE SISTEMA (Preços de Notificação, E-mails de Suporte)
+    match /system/{id} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
     }
 
-    // MENSAGENS ADMIN -> LOJISTAS
-    match /merchant_messages/{docId} {
-      allow read, write: if isSignedIn();
+    // REGRA DE SEGURANÇA FINAL: Bloqueia tudo o que não foi definido acima
+    match /{path=**} {
+      allow read, write: if isAdmin();
     }
   }
 }

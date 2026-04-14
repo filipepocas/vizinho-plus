@@ -1,5 +1,3 @@
-// src/types/index.ts
-
 export interface User {
   id: string;
   name: string;
@@ -18,11 +16,11 @@ export interface User {
   freguesia?: string;
   category?: string;
   address?: string;
-  city?: string; // Adicionado para corrigir erro no UserExplore.tsx
-  fcmTokens?: string[]; // Adicionado para corrigir erro no MerchantDashboard.tsx
-  notificationsEnabled?: boolean; // PONTO 1: Estado das notificações
-  notificationsUpdatedAt?: any; // PONTO 1: Data da última alteração
-  lastTokenUpdate?: any; // PONTO 4: Registo do dispositivo
+  city?: string; 
+  fcmTokens?: string[]; 
+  notificationsEnabled?: boolean; 
+  notificationsUpdatedAt?: any; 
+  lastTokenUpdate?: any; 
   storeWallets?: Record<string, { available: number; pending: number }>;
   devices?: any[];
   wallet?: {
@@ -31,7 +29,6 @@ export interface User {
   };
 }
 
-// Interface para a Gestão de Banners (PONTO 3)
 export interface Banner {
   id: string;
   title: string;
@@ -51,6 +48,7 @@ export interface Transaction {
   merchantId: string;
   merchantName: string;
   amount: number;
+  invoiceAmount?: number; // X6: Fatura
   type: 'earn' | 'redeem' | 'cancel';
   status: string;
   createdAt: any;
@@ -67,6 +65,7 @@ export interface TransactionCreate {
   merchantId: string;
   merchantName: string;
   amount: number;
+  invoiceAmount?: number; // X6: Suporte de envio
   type: 'earn' | 'redeem' | 'cancel';
   documentNumber?: string;
   clientName?: string;
