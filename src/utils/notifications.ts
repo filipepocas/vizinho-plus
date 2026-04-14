@@ -3,16 +3,13 @@
 import { db, messaging, VAPID_KEY } from "../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
-import toast from 'react-hot-toast';
 
 /**
  * PONTO 1: Gera ou recupera um ID único para este aparelho específico.
- * Isto permite-nos saber qual dispositivo remover sem afetar os outros do mesmo email.
  */
 export const getLocalDeviceId = () => {
   let deviceId = localStorage.getItem('vplus_device_id');
   if (!deviceId) {
-    // Cria um ID aleatório robusto
     deviceId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2) + Date.now();
     localStorage.setItem('vplus_device_id', deviceId);
   }
@@ -37,15 +34,15 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
     // 1. LIMPEZA: Remove dispositivos que não aparecem há mais de 45 dias
     devices = devices.filter((d: any) => (now - d.lastLogin) < FORTY_FIVE_DAYS);
 
-    // 2. ATUALIZAÇÃO: Remove este dispositivo da lista se já lá estiver (para o reinserir como mais recente)
+    // 2. ATUALIZAÇÃO: Remove este dispositivo da lista se já lá estiver
     devices = devices.filter((d: any) => d.deviceId !== currentDeviceId);
 
-    // 3. ADICIONA: Insere o dispositivo atual no topo
+    // 3. ADICIONA: Insere o dispositivo atual
     devices.push({
       deviceId: currentDeviceId,
       token: fcmToken,
       lastLogin: now,
-      userAgent: navigator.userAgent.substring(0, 70), // Identifica se é iPhone/Android/etc
+      userAgent: navigator.userAgent.substring(0, 70),
       notificationsEnabled: true
     });
 
@@ -55,27 +52,29 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
       devices = devices.slice(0, 2);
     }
 
-    // 5. SINCRONIZAÇÃO: Atualiza o array de tokens principal (fcmTokens) para o Admin poder enviar
+    // 5. SINCRONIZAÇÃO: Atualiza os tokens FCM para o Admin
     const fcmTokens = devices.map((d: any) => d.token);
 
     await updateDoc(userRef, { 
       devices: devices,
       fcmTokens: fcmTokens 
     });
-    
-    console.log("Equipamentos atualizados com sucesso no Firebase.");
   } catch (error) {
     console.error("Erro ao registar dispositivo:", error);
   }
 };
 
 /**
- * Solicita permissão e regista o token no Firestore
+ * PONTO 4: Solicita permissão e retorna o erro exato se falhar
  */
-export const requestNotificationPermission = async (userId: string) => {
-  if (!messaging) return false;
+export const requestNotificationPermission = async (userId: string): Promise<{success: boolean, error?: string}> => {
+  if (!messaging) return { success: false, error: "O seu navegador não suporta notificações Cloud Messaging." };
 
   try {
+    if (Notification.permission === 'denied') {
+      return { success: false, error: "As notificações foram bloqueadas no seu navegador. Ative-as nas definições do site (ícone do cadeado)." };
+    }
+
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
@@ -87,20 +86,19 @@ export const requestNotificationPermission = async (userId: string) => {
       
       if (currentToken) {
         await registerDeviceInFirebase(userId, currentToken);
-        return true;
+        return { success: true };
       }
+      return { success: false, error: "Não foi possível gerar a credencial de segurança da Google." };
     } else {
-      toast.error("Precisas de autorizar as notificações para receber cashback.");
-      return false;
+      return { success: false, error: "A permissão foi recusada pelo utilizador." };
     }
-  } catch (error) {
-    console.error("Erro ao configurar notificações:", error);
-    return false;
+  } catch (error: any) {
+    return { success: false, error: error.message || "Erro de ligação ao Firebase Cloud Messaging." };
   }
 };
 
 /**
- * PONTO 1: Função para o cliente desativar notificações apenas de UM aparelho específico
+ * PONTO 1: Função para o cliente desativar notificações de UM aparelho (REINSTALADA)
  */
 export const removeCurrentDeviceNotification = async (userId: string) => {
   try {
@@ -110,7 +108,7 @@ export const removeCurrentDeviceNotification = async (userId: string) => {
 
     if (userSnap.exists()) {
       let devices = userSnap.data().devices || [];
-      // Remove o dispositivo atual da lista
+      // Remove apenas o dispositivo onde o utilizador está agora
       devices = devices.filter((d: any) => d.deviceId !== currentDeviceId);
       
       const fcmTokens = devices.map((d: any) => d.token);
