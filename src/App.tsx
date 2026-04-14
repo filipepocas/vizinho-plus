@@ -1,9 +1,12 @@
-import React, { useEffect } from 'react';
+// src/App.tsx
+
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
 import { Toaster } from 'react-hot-toast'; 
-import { getToken, onMessage } from 'firebase/messaging'; // Importes do Firebase Messaging
-import { messaging, VAPID_KEY } from './config/firebase'; // Nossa config
+import { getToken, onMessage } from 'firebase/messaging';
+import { messaging, VAPID_KEY } from './config/firebase';
+import { AlertTriangle, Download } from 'lucide-react';
 
 import LandingPage from './features/public/LandingPage';
 import LoginPage from './features/auth/LoginPage';
@@ -16,6 +19,7 @@ import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
 import ProfileSettings from './features/profile/ProfileSettings';
 
+// Componente para proteger rotas por tipo de utilizador
 const ProtectedRoute: React.FC<{ 
   children: React.ReactNode; 
   requiredRole?: 'admin' | 'merchant' | 'client' 
@@ -25,100 +29,142 @@ const ProtectedRoute: React.FC<{
   if (!isInitialized || isLoading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#f8fafc]">
-        <div className="w-12 h-12 border-4 border-[#0a2540] border-t-[#00d66f] rounded-full animate-spin"></div>
+        <div className="w-12 h-12 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div>
       </div>
     );
   }
 
   if (!currentUser) return <Navigate to="/login" replace />;
-
   if (requiredRole && currentUser.role !== requiredRole) {
-    return <Navigate to="/dashboard" replace />;
+    const defaultPaths = { admin: '/admin', merchant: '/merchant', client: '/dashboard' };
+    return <Navigate to={defaultPaths[currentUser.role as keyof typeof defaultPaths]} replace />;
   }
 
   return <>{children}</>;
 };
 
-function App() {
-  const { initializeAuth, subscribeToTransactions, currentUser, updateUserToken } = useStore();
+// COMPONENTE DE ALERTA DE NOTIFICAÇÕES (Ponto 1)
+const NotificationAlert = () => {
+  const { currentUser, toggleNotifications } = useStore();
+  
+  // Só mostra se o utilizador estiver logado e tiver as notificações explicitamente desativadas
+  if (!currentUser || currentUser.notificationsEnabled !== false) return null;
 
-  // 1. Inicialização do Auth
+  return (
+    <div className="bg-amber-50 border-b border-amber-200 p-3 flex items-center justify-between gap-3 sticky top-0 z-[60]">
+      <div className="flex items-center gap-2 text-amber-800">
+        <AlertTriangle size={18} className="shrink-0" />
+        <p className="text-[10px] font-black uppercase leading-tight">
+          Atenção: Notificações desligadas! Podes estar a perder oportunidades importantes de poupar dinheiro.
+        </p>
+      </div>
+      <button 
+        onClick={() => toggleNotifications(currentUser.id, true)}
+        className="bg-amber-200 text-amber-900 px-3 py-1 rounded-lg text-[9px] font-black uppercase whitespace-nowrap"
+      >
+        Ativar agora
+      </button>
+    </div>
+  );
+};
+
+function App() {
+  const { initializeAuth, currentUser, updateUserToken } = useStore();
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+
+  // 1. Inicializar Autenticação
   useEffect(() => {
     const unsub = initializeAuth();
     return () => unsub();
-  }, []); 
+  }, [initializeAuth]);
 
-  // 2. Subscrição de Transações
+  // 2. Lógica de PWA: Capturar o evento de instalação (Ponto 2)
   useEffect(() => {
-    if (currentUser?.id) {
-      const unsub = subscribeToTransactions(currentUser.role, currentUser.id);
-      return () => unsub();
-    }
-  }, [currentUser?.id, currentUser?.role]);
+    const handler = (e: any) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      console.log('PWA: Evento beforeinstallprompt capturado');
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
 
-  // 3. Configuração de Notificações Push
+  // 3. Configurar Mensagens Push (Ponto 4)
   useEffect(() => {
-    const setupNotifications = async () => {
-      // Só pedimos permissão se houver um utilizador logado e se o messaging estiver disponível
-      if (!currentUser?.id || !messaging) return;
+    if (!currentUser || !messaging) return;
 
+    const requestPermission = async () => {
       try {
         const permission = await Notification.requestPermission();
-        
         if (permission === 'granted') {
           const token = await getToken(messaging, { vapidKey: VAPID_KEY });
-          
           if (token) {
-            // Guarda o token no Firestore através da Store
             await updateUserToken(currentUser.id, token);
           }
         }
-      } catch (error) {
-        console.error("Erro ao configurar notificações:", error);
+      } catch (err) {
+        console.error('Erro ao configurar notificações:', err);
       }
     };
 
-    setupNotifications();
+    requestPermission();
 
-    // Ouvir mensagens com a App aberta (Foreground)
-    if (messaging) {
-      const unsubscribeOnMessage = onMessage(messaging, (payload) => {
-        console.log('Mensagem recebida em foreground:', payload);
-        // Aqui podes adicionar um toast customizado se quiseres
-      });
-      return () => unsubscribeOnMessage();
-    }
-  }, [currentUser?.id]);
+    const unsubOnMessage = onMessage(messaging, (payload) => {
+      console.log('Mensagem recebida em primeiro plano:', payload);
+      // Aqui podes usar o toast para mostrar a notificação se a app estiver aberta
+    });
+
+    return () => unsubOnMessage();
+  }, [currentUser, updateUserToken]);
 
   return (
     <BrowserRouter>
-      <div className="min-h-screen bg-[#f8fafc]">
+      <div className="min-h-screen bg-[#f8fafc] flex flex-col font-sans selection:bg-[#00d66f]/30">
         <Toaster position="top-center" />
+        
+        {/* Aviso de notificações desativadas */}
+        <NotificationAlert />
+
         <Routes>
+          {/* Rotas Públicas */}
           <Route path="/" element={<LandingPage />} />
-          <Route path="/terms" element={<TermsPage />} />
-          <Route path="/vantagens" element={<VantagensPage />} />
-          <Route path="/login" element={<LoginPage />} />
+          <Route path="/login" element={<LoginPage installPrompt={deferredPrompt} />} />
           <Route path="/register" element={<RegisterPage />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
-          <Route path="/dashboard" element={<ProtectedRoute><DashboardRedirect /></ProtectedRoute>} />
-          <Route path="/admin" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/merchant" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
-          <Route path="/client" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
-          <Route path="/settings" element={<ProtectedRoute><ProfileSettings onBack={() => window.history.back()} /></ProtectedRoute>} />
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/vantagens" element={<VantagensPage />} />
+
+          {/* Rotas Protegidas */}
+          <Route path="/admin/*" element={
+            <ProtectedRoute requiredRole="admin">
+              <AdminDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/merchant/*" element={
+            <ProtectedRoute requiredRole="merchant">
+              <MerchantDashboard />
+            </ProtectedRoute>
+          } />
+          
+          <Route path="/dashboard/*" element={
+            <ProtectedRoute requiredRole="client">
+              <UserDashboard />
+            </ProtectedRoute>
+          } />
+
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <ProfileSettings />
+            </ProtectedRoute>
+          } />
+
+          {/* Redirecionamento Padrão */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
     </BrowserRouter>
   );
 }
-
-const DashboardRedirect = () => {
-  const { currentUser } = useStore();
-  if (!currentUser) return <Navigate to="/login" />;
-  if (currentUser.role === 'admin') return <Navigate to="/admin" />;
-  if (currentUser.role === 'merchant') return <Navigate to="/merchant" />;
-  return <Navigate to="/client" />;
-};
 
 export default App;
