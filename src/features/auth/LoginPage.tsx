@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -6,8 +6,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/fires
 import { useStore } from '../../store/useStore';
 import { 
   LogIn, Mail, Lock, ArrowRight, Smartphone, ShieldCheck, 
-  Zap, Store, X, CheckCircle2, Loader2, AlertTriangle, Volume2, Download,
-  Phone, Hash, Tag, MapPin, Percent
+  Zap, Store, X, Loader2, AlertTriangle, Volume2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -28,7 +27,6 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   
-  // Estados para o Ecrã Intermédio de Instalação (Onboarding)
   const [setupStep, setSetupStep] = useState(false);
   const [tempUserId, setTempUserId] = useState('');
   const [tempUserData, setTempUserData] = useState<any>(null);
@@ -41,6 +39,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
     shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: '', pass: ''
   });
 
+  // Novo Hook PWA
   const { isInstallable, installApp } = usePWAInstall();
   const navigate = useNavigate();
   const { setCurrentUser } = useStore();
@@ -56,10 +55,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
       if (userDoc.exists()) {
         const userData = { id: userDoc.id, ...userDoc.data() } as any;
         
-        // VERIFICAÇÃO RIGOROSA: Se não tiver dado permissão de notificações, mostra SEMPRE o ecrã.
         const hasNotif = Notification.permission === 'granted';
+        const isApp = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
-        if (!hasNotif || isInstallable) {
+        // Se precisa de instalar a app OU precisa de notificações, mostra o ecrã.
+        if (!hasNotif || (!isApp && isInstallable)) {
           setTempUserId(uid);
           setTempUserData(userData);
           setSetupStep(true);
@@ -83,7 +83,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
     else navigate('/dashboard');
   };
 
-  // Ecrã de Setup Obrigatório (Intermédio após Login)
+  const handleMerchantRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingMerchant(true);
+    try {
+      await addDoc(collection(db, 'merchant_requests'), { 
+        ...merchantData, status: 'pending', createdAt: serverTimestamp() 
+      });
+      toast.success('PEDIDO ENVIADO! AGUARDE CONTACTO.');
+      setShowMerchantModal(false);
+    } catch (err) { toast.error('ERRO AO ENVIAR PEDIDO.'); } 
+    finally { setSubmittingMerchant(false); }
+  };
+
   if (setupStep) {
     return (
       <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-white selection:bg-[#00d66f]">
@@ -91,7 +103,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
             <div className="bg-amber-50 p-6 rounded-3xl mb-6 border-2 border-amber-200">
                 <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
                 <h2 className="text-xl font-black uppercase text-[#0a2540] mb-2 italic">Atenção!</h2>
-                <p className="text-[11px] font-bold text-amber-800 uppercase tracking-widest leading-relaxed">
+                <p className="text-[10px] font-bold text-amber-800 uppercase tracking-widest leading-relaxed">
                   Para sua comodidade e para não perder alertas de saldo, ative as notificações antes de entrar.
                 </p>
             </div>
@@ -99,7 +111,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
             {diagError && (
               <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl mb-6 flex gap-3 text-left">
                   <AlertTriangle className="text-red-500 shrink-0" size={20} />
-                  <p className="text-[10px] font-bold text-red-700 leading-tight uppercase">{diagError}</p>
+                  <p className="text-[9px] font-bold text-red-700 leading-tight uppercase">{diagError}</p>
               </div>
             )}
 
@@ -112,14 +124,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
                 
                 {Notification.permission !== 'granted' && (
                   <button onClick={async () => {
+                      setDiagError(null);
                       const res = await requestNotificationPermission(tempUserId);
                       if(res.success) {
                         toast.success("Notificações Ativas!");
-                        setDiagError(null);
-                        // Se aceitou, avança logo.
                         setTimeout(() => finalizeLogin(tempUserData), 1000);
                       } else {
-                        setDiagError(res.error || "Erro desconhecido ao ativar.");
+                        setDiagError(res.error || "Erro ao ativar notificações.");
                       }
                   }} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540] hover:scale-105 transition-transform">
                       <Volume2 size={24} /> Permitir Notificações
@@ -173,7 +184,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
           <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-50 space-y-4 text-center">
             <Link to="/forgot-password" className="block text-slate-400 font-bold text-[10px] uppercase hover:text-[#0a2540] mb-4">Esqueci-me da Password</Link>
-            <Link to="/register" className="block text-[#0a2540] font-black uppercase italic text-xs hover:text-[#00d66f]">Criar conta Vizinho (Cliente) <ArrowRight className="inline ml-1" size={14} /></Link>
+            <Link to="/register" className="block text-[#0a2540] font-black uppercase italic text-xs hover:text-[#00d66f]">Criar conta Vizinho <ArrowRight className="inline ml-1" size={14} /></Link>
             <button onClick={() => setShowMerchantModal(true)} className="w-full p-4 bg-[#00d66f]/10 text-[#0a2540] rounded-2xl font-black uppercase italic text-[10px] border-2 border-[#00d66f]/20 hover:bg-[#00d66f] transition-all mt-2">Sou Lojista / Quero Aderir</button>
           </div>
           
@@ -183,7 +194,65 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
         </div>
       </div>
 
-      {/* MODAL DE TERMOS E CONDIÇÕES */}
+      {showMerchantModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3"><Store className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Aderir ao Vizinho+</h2></div>
+              <button onClick={() => setShowMerchantModal(false)}><X size={24} /></button>
+            </div>
+            <form onSubmit={handleMerchantRequest} className="p-8 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label>
+                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-sm" value={merchantData.shopName} onChange={e => setMerchantData({...merchantData, shopName: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Responsável</label>
+                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-sm" value={merchantData.responsibleName} onChange={e => setMerchantData({...merchantData, responsibleName: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Email Comercial</label>
+                  <input required type="email" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.email} onChange={e => setMerchantData({...merchantData, email: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label>
+                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.phone} onChange={e => setMerchantData({...merchantData, phone: e.target.value})} />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF Comercial</label>
+                  <input required maxLength={9} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.nif} onChange={e => setMerchantData({...merchantData, nif: e.target.value.replace(/\D/g, '')})} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label>
+                  <select required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}>
+                    <option value="">Selecione...</option>
+                    {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia</label>
+                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.freguesia} onChange={e => setMerchantData({...merchantData, freguesia: e.target.value})} />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Código Postal</label>
+                  <input required placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.zipCode} onChange={e => setMerchantData({...merchantData, zipCode: e.target.value})} />
+                </div>
+              </div>
+              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase flex items-center justify-center gap-3 border-b-4 border-[#0a2540] mt-4">
+                {submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de Adesão'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
       {showTermsModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-lg h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -193,9 +262,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-4 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
               <p>Ao registares-te no Vizinho+, concordas que a plataforma atua exclusivamente como software facilitador de cashback local.</p>
-              <p>Os teus dados (Nome, Email, NIF, Código Postal) são guardados de forma segura e não são partilhados com terceiros para fins publicitários. O NIF é necessário apenas para validar compras nas lojas aderentes.</p>
-              <p>O saldo de cashback acumulado não tem valor fiduciário (não pode ser trocado por dinheiro real em conta bancária), servindo unicamente para desconto em compras nas lojas da rede.</p>
-              <p>É estritamente proibida a criação de contas falsas ou o uso de dados de terceiros. A administração reserva-se o direito de anular saldos em caso de suspeita de fraude.</p>
+              <p>Os teus dados (Nome, Email, NIF, Código Postal) são guardados de forma segura e não são partilhados com terceiros para fins publicitários.</p>
+              <p>O saldo de cashback acumulado não tem valor fiduciário, servindo unicamente para desconto em compras nas lojas da rede.</p>
+              <p>É estritamente proibida a criação de contas falsas. A administração reserva-se o direito de anular saldos em caso de suspeita de fraude.</p>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
               <button onClick={() => setShowTermsModal(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Fechar</button>

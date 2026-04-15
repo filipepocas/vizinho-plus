@@ -10,7 +10,7 @@ import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, CheckCircle2, Smartphone, IdCard, Bell, Volume2, Loader2 } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, Smartphone, IdCard, Bell, Volume2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -69,10 +69,7 @@ const UserDashboard: React.FC = () => {
         .filter(l => {
           const start = l.startDate.toDate();
           const end = l.endDate.toDate();
-          const isTimeValid = now >= start && now <= end;
-          const hasTargetZips = l.targetZipCodes && l.targetZipCodes.length > 0;
-          const isZipValid = !hasTargetZips || (userZipBase && l.targetZipCodes?.includes(userZipBase));
-          return isTimeValid && isZipValid;
+          return (now >= start && now <= end) && (!l.targetZipCodes?.length || l.targetZipCodes.includes(userZipBase!));
         });
       setActiveLeaflets(valid);
     });
@@ -106,30 +103,19 @@ const UserDashboard: React.FC = () => {
   }, [currentUser]);
 
   const dismissNotification = () => {
-    if (appNotification?.id) {
-      sessionStorage.setItem(`notif_${appNotification.id}`, "true");
-    }
+    if (appNotification?.id) sessionStorage.setItem(`notif_${appNotification.id}`, "true");
     setAppNotification(null);
   };
 
-  const pendingEvaluations = useMemo(() => {
-    return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
-  }, [transactions, evaluatedIds]);
-
-  const stats = useMemo(() => ({
-    available: currentUser?.wallet?.available || 0,
-    pending: currentUser?.wallet?.pending || 0,
-    total: (currentUser?.wallet?.available || 0) + (currentUser?.wallet?.pending || 0)
-  }), [currentUser?.wallet]);
+  const pendingEvaluations = useMemo(() => transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id)), [transactions, evaluatedIds]);
+  const stats = useMemo(() => ({ available: currentUser?.wallet?.available || 0, pending: 0 }), [currentUser?.wallet]);
 
   const handleLogout = async () => {
     await logout();
     navigate('/login');
   };
 
-  const openLeaflet = () => {
-    if (activeLeaflets.length > 0) window.open(activeLeaflets[0].leafletUrl, '_blank');
-  };
+  const openLeaflet = () => { if (activeLeaflets.length > 0) window.open(activeLeaflets[0].leafletUrl, '_blank'); };
 
   const handleOpenEmailApp = () => {
     const subject = encodeURIComponent(`Apoio ao Cliente: Conta ${displayCardNumber}`);
@@ -144,19 +130,18 @@ const UserDashboard: React.FC = () => {
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
-  // Botão com tratamento de Erros explícitos do Navegador
   const enableNotifications = async () => {
     setIsNotifLoading(true);
     try {
       const res = await requestNotificationPermission(currentUser!.id);
       if(res.success) {
         toast.success("Notificações ativadas com sucesso!");
-        setTimeout(() => window.location.reload(), 1500); // Recarrega para limpar o estado
+        setTimeout(() => window.location.reload(), 1500);
       } else {
-        toast.error(res.error || "O seu navegador bloqueou o pedido.", { duration: 6000 });
+        toast.error(res.error || "O navegador bloqueou o pedido.", { duration: 6000 });
       }
     } catch(err) {
-      toast.error("Ocorreu um erro no sistema do seu dispositivo.");
+      toast.error("Ocorreu um erro no sistema.");
     } finally {
       setIsNotifLoading(false);
     }
@@ -164,7 +149,6 @@ const UserDashboard: React.FC = () => {
 
   if (!currentUser) return null;
 
-  // Verificação em tempo real se o utilizador já ativou notificações com sucesso na BD
   const hasNotificationsInDB = currentUser.notificationsEnabled === true && currentUser.fcmTokens && currentUser.fcmTokens.length > 0;
 
   return (
@@ -193,18 +177,12 @@ const UserDashboard: React.FC = () => {
           <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Cliente Vizinho+</p>
-              <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">
-                {currentUser.name}
-              </h1>
-              {currentUser.nif && (
-                <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>
-              )}
+              <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">{currentUser.name}</h1>
+              {currentUser.nif && <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>}
             </div>
             <div className="text-right">
               <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-widest">Saldo Atual</span>
-              <span className="text-2xl font-black text-[#00d66f] italic">
-                {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}
-              </span>
+              <span className="text-2xl font-black text-[#00d66f] italic">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}</span>
             </div>
           </div>
           <div className="p-8 flex flex-col items-center gap-6">
@@ -212,9 +190,7 @@ const UserDashboard: React.FC = () => {
               <QRCodeSVG value={displayCardNumber} size={150} />
             </div>
             <div className="text-center">
-              <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">
-                {displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}
-              </h3>
+              <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
               <div className="flex items-center justify-center gap-2 mt-2">
                 <IdCard size={14} className="text-slate-400" />
                 <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Apresente para ganhar cashback</span>
@@ -267,7 +243,6 @@ const UserDashboard: React.FC = () => {
 
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
 
-        {/* MOSTRA OS BOTOES CONFORME OS SUPORTES DO BROWSER E BD */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {isInstallable && (
             <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 active:border-b-0 transition-all">

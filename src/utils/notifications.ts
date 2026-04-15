@@ -43,7 +43,6 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
 
     const fcmTokens = devices.map((d: any) => d.token).filter(Boolean);
 
-    // Força a atualização da BD para o painel reconhecer o estado
     await updateDoc(userRef, { 
       devices: devices,
       fcmTokens: fcmTokens,
@@ -55,22 +54,23 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
 };
 
 export const requestNotificationPermission = async (userId: string): Promise<{success: boolean, error?: string}> => {
-  if (!messaging) return { success: false, error: "O navegador não suporta Firebase FCM ou está num ambiente não seguro (HTTP)." };
-  if (!('serviceWorker' in navigator)) return { success: false, error: "Service Workers bloqueados. Saia do Modo Privado / Janela Anónima." };
+  if (!messaging) return { success: false, error: "O navegador não suporta Notificações." };
+  if (!('serviceWorker' in navigator)) return { success: false, error: "Service Workers bloqueados pelo navegador." };
 
   try {
     if (Notification.permission === 'denied') {
-      return { success: false, error: "As notificações foram bloqueadas. Ative-as no ícone do cadeado na barra de endereço." };
+      return { success: false, error: "Notificações bloqueadas. Ative nas definições do seu navegador/telemóvel." };
     }
 
     const permission = await Notification.requestPermission();
     
     if (permission === 'granted') {
       try {
-        // Tenta registar explicitamente o Service Worker (Apanha o erro do Firefox Insecure Operation)
+        // Regista o SW e ESPERA que esteja 100% ativo (Resolve Erro da 1ª e 2ª Imagem)
         const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
-        
-        // Aguarda que o service worker esteja pronto e tenta gerar o token
+        await navigator.serviceWorker.ready; 
+
+        // Pede o token usando a VAPID_KEY do config (Resolve Erro da 3ª Imagem)
         const currentToken = await getToken(messaging, { 
           vapidKey: VAPID_KEY,
           serviceWorkerRegistration: registration 
@@ -80,20 +80,16 @@ export const requestNotificationPermission = async (userId: string): Promise<{su
           await registerDeviceInFirebase(userId, currentToken);
           return { success: true };
         }
-        return { success: false, error: "Não foi possível gerar a credencial da Google. Tente noutro navegador." };
+        return { success: false, error: "Token da Google não gerado. Verifique a chave VAPID_KEY." };
       } catch (swError: any) {
         console.error("Erro SW/FCM:", swError);
-        // Tratamento específico para o erro que mostraste no print
-        if (swError.name === 'SecurityError' || swError.message?.includes('insecure')) {
-           return { success: false, error: "Navegador em Modo Privado/Anónimo ou com bloqueio de segurança ativo. Saia do modo privado para ativar." };
-        }
-        return { success: false, error: "Bloqueio do Navegador: " + swError.message };
+        return { success: false, error: "Falha de comunicação: " + swError.message };
       }
     } else {
-      return { success: false, error: "A permissão foi recusada pelo utilizador." };
+      return { success: false, error: "Permissão recusada pelo utilizador." };
     }
   } catch (error: any) {
-    return { success: false, error: error.message || "Erro de ligação ao Firebase Cloud Messaging." };
+    return { success: false, error: error.message || "Erro interno de Cloud Messaging." };
   }
 };
 

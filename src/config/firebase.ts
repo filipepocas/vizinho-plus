@@ -18,7 +18,7 @@ export const firebaseConfig = {
 };
 
 // Chave VAPID (Substitui pelo valor que encontrares na consola do Firebase)
-export const VAPID_KEY = "BFch8QBtIRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIlY";
+export const VAPID_KEY = "BFch8QBtlRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIIY";
 
 // Inicialização segura da App
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
