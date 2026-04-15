@@ -7,7 +7,7 @@ import {
 import { 
   Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, 
   Save, Euro, MessageSquare, Send, Users, CheckSquare, X, Search,
-  Loader2 
+  Loader2, FileText, Calendar
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, User as UserProfile } from '../../types';
@@ -22,7 +22,10 @@ const AdminComms: React.FC = () => {
   const [adminMessage, setAdminMessage] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
 
+  // ESTADOS DO NOVO FOLHETO PARA LOJISTAS
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
+  const [creatingCampaign, setCreatingCampaign] = useState(false);
+
   const [prices, setPrices] = useState({
     banner: '', leaflet_capa_destaque: '', leaflet_capa_normal: '',
     leaflet_contracapa: '', leaflet_interior_full: '', leaflet_interior_1_2: '',
@@ -99,8 +102,12 @@ const AdminComms: React.FC = () => {
     }
   };
 
+  // CUIDA DA CRIAÇÃO DE CAMPANHAS DE FOLHETOS PARA LOJISTAS
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!form.title || !form.limitDate || !form.distDate) return;
+
+    setCreatingCampaign(true);
     try {
         await addDoc(collection(db, 'leaflet_campaigns'), {
             title: form.title,
@@ -108,9 +115,13 @@ const AdminComms: React.FC = () => {
             distributionDate: Timestamp.fromDate(new Date(form.distDate)),
             createdAt: serverTimestamp()
         });
-        toast.success("Campanha criada!");
+        toast.success("Campanha criada para os Lojistas!");
         setForm({title:'', limitDate:'', distDate:''});
-    } catch(err) { toast.error("Erro ao criar."); }
+    } catch(err) { 
+        toast.error("Erro ao criar Campanha."); 
+    } finally {
+        setCreatingCampaign(false);
+    }
   };
 
   const handleSavePrices = async (e: React.FormEvent) => {
@@ -195,18 +206,78 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-        <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
-            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6"><Euro className="inline mr-3 text-amber-500"/> Preçário de Marketing</h3>
-            <form onSubmit={handleSavePrices} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Banner Rotativo</label><input type="text" value={prices.banner} onChange={e=>setPrices({...prices, banner: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Custo per Client (Push)</label><input type="number" step="0.01" value={prices.push_cost_per_client} onChange={e=>setPrices({...prices, push_cost_per_client: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
-                <div><label className="text-[10px] font-black uppercase text-slate-400">Mínimo Serviço (Push)</label><input type="number" step="0.01" value={prices.push_min_cost} onChange={e=>setPrices({...prices, push_min_cost: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
-                <div className="md:col-span-3 flex justify-end">
-                    <button type="submit" disabled={savingPrices} className="bg-[#0a2540] text-white px-10 py-4 rounded-2xl font-black uppercase text-xs">Guardar Preçário</button>
+
+        {/* NOVO QUADRO: PLANEAMENTO DE FOLHETOS (Para Lojistas aderirem) */}
+        <div className="grid lg:grid-cols-2 gap-8">
+            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
+                <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 flex items-center gap-3">
+                   <FileText className="text-[#00d66f]" size={24} /> Planeamento Folhetos
+                </h3>
+                <p className="text-[10px] font-bold text-slate-400 uppercase mb-6">Crie a base do Folheto para que os lojistas possam comprar espaço nele.</p>
+                
+                <form onSubmit={handleCreateCampaign} className="space-y-4">
+                    <div>
+                      <label className="text-[10px] font-black uppercase text-slate-400">Título / Edição</label>
+                      <input required type="text" placeholder="Ex: Folheto de Natal 2026" value={form.title} onChange={e=>setForm({...form, title: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400">Data Limite Adesão</label>
+                        <input required type="date" value={form.limitDate} onChange={e=>setForm({...form, limitDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-black uppercase text-slate-400">Data de Lançamento</label>
+                        <input required type="date" value={form.distDate} onChange={e=>setForm({...form, distDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs" />
+                      </div>
+                    </div>
+                    <button type="submit" disabled={creatingCampaign} className="w-full mt-4 bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase text-xs flex items-center justify-center gap-2">
+                       {creatingCampaign ? <Loader2 className="animate-spin" size={16} /> : <><Plus size={16} /> Abrir Vagas no Folheto</>}
+                    </button>
+                </form>
+
+                <div className="mt-8 space-y-3">
+                   <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-widest border-b-2 border-slate-100 pb-2 mb-4">Campanhas Abertas</h4>
+                   {campaigns.map(c => (
+                     <div key={c.id} className="flex justify-between items-center bg-slate-50 p-4 rounded-2xl border-2 border-slate-100">
+                        <div>
+                           <p className="font-black uppercase text-[#0a2540] text-xs">{c.title}</p>
+                           <p className="text-[9px] font-bold text-slate-400">Fecho Adesões: {c.limitDate.toDate().toLocaleDateString()}</p>
+                        </div>
+                        <button onClick={() => deleteDoc(doc(db, 'leaflet_campaigns', c.id!))} className="text-red-400 hover:text-red-600"><Trash2 size={16} /></button>
+                     </div>
+                   ))}
+                   {campaigns.length === 0 && <p className="text-xs font-bold text-slate-400 text-center">Nenhuma campanha aberta.</p>}
                 </div>
-            </form>
+            </div>
+
+            {/* PREÇÁRIO MARKETING */}
+            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+                <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 flex items-center gap-3">
+                   <Euro className="text-amber-500" size={24} /> Preçário Tabela Geral
+                </h3>
+                <form onSubmit={handleSavePrices} className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Banner Lojista</label><input type="text" value={prices.banner} onChange={e=>setPrices({...prices, banner: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Capa (Destaque)</label><input type="text" value={prices.leaflet_capa_destaque} onChange={e=>setPrices({...prices, leaflet_capa_destaque: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Capa (Normal)</label><input type="text" value={prices.leaflet_capa_normal} onChange={e=>setPrices({...prices, leaflet_capa_normal: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Contracapa</label><input type="text" value={prices.leaflet_contracapa} onChange={e=>setPrices({...prices, leaflet_contracapa: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Pág. Inteira</label><input type="text" value={prices.leaflet_interior_full} onChange={e=>setPrices({...prices, leaflet_interior_full: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Meia Pág.</label><input type="text" value={prices.leaflet_interior_1_2} onChange={e=>setPrices({...prices, leaflet_interior_1_2: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-4 pt-4 border-t-2 border-slate-100 mt-4">
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Notificação Push (Por Cliente)</label><input type="number" step="0.01" value={prices.push_cost_per_client} onChange={e=>setPrices({...prices, push_cost_per_client: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Custo Fixo Mínimo (Push)</label><input type="number" step="0.01" value={prices.push_min_cost} onChange={e=>setPrices({...prices, push_min_cost: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                    </div>
+
+                    <button type="submit" disabled={savingPrices} className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4">
+                      {savingPrices ? <Loader2 className="animate-spin" size={16} /> : <><Save size={16} /> Gravar Preçário</>}
+                    </button>
+                </form>
+            </div>
         </div>
 
+        {/* PEDIDOS PENDENTES DE PUBLICIDADE E PUSH */}
         <div>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Auditoria de Pedidos</h3>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
