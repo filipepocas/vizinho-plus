@@ -7,7 +7,7 @@ import {
 import { 
   Megaphone, Plus, Trash2, CheckCircle2, XCircle, AlertCircle, 
   Save, Euro, MessageSquare, Send, Users, CheckSquare, X, Search,
-  Loader2, FileText, Calendar
+  Loader2, FileText, MapPin, Phone, Mail, Image as ImageIcon, Bell
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, User as UserProfile } from '../../types';
@@ -22,12 +22,13 @@ const AdminComms: React.FC = () => {
   const [adminMessage, setAdminMessage] = useState('');
   const [sendingMsg, setSendingMsg] = useState(false);
 
-  // ESTADOS DO NOVO FOLHETO PARA LOJISTAS
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
+  // PREÇÁRIO ATUALIZADO: Banners agora cobram por cliente/dia com um valor mínimo
   const [prices, setPrices] = useState({
-    banner: '', leaflet_capa_destaque: '', leaflet_capa_normal: '',
+    banner_cost_per_client: '0.02', banner_min_cost: '10.00', 
+    leaflet_capa_destaque: '', leaflet_capa_normal: '',
     leaflet_contracapa: '', leaflet_interior_full: '', leaflet_interior_1_2: '',
     leaflet_interior_1_4: '', push_cost_per_client: '0.05', push_min_cost: '5.00'
   });
@@ -66,9 +67,7 @@ const AdminComms: React.FC = () => {
   }, [merchants, merchantSearch]);
 
   const toggleMerchant = (id: string) => {
-    setSelectedMerchantIds(prev => 
-      prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-    );
+    setSelectedMerchantIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
 
   const handleSelectAllFiltered = () => {
@@ -102,7 +101,6 @@ const AdminComms: React.FC = () => {
     }
   };
 
-  // CUIDA DA CRIAÇÃO DE CAMPANHAS DE FOLHETOS PARA LOJISTAS
   const handleCreateCampaign = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title || !form.limitDate || !form.distDate) return;
@@ -117,11 +115,8 @@ const AdminComms: React.FC = () => {
         });
         toast.success("Campanha criada para os Lojistas!");
         setForm({title:'', limitDate:'', distDate:''});
-    } catch(err) { 
-        toast.error("Erro ao criar Campanha."); 
-    } finally {
-        setCreatingCampaign(false);
-    }
+    } catch(err) { toast.error("Erro ao criar Campanha."); } 
+    finally { setCreatingCampaign(false); }
   };
 
   const handleSavePrices = async (e: React.FormEvent) => {
@@ -138,9 +133,19 @@ const AdminComms: React.FC = () => {
     toast.success("Estado atualizado.");
   };
 
+  const getMerchantDetails = (merchantId: string) => {
+    return merchants.find(m => m.id === merchantId);
+  };
+
+  const formatEuro = (val: any) => {
+    if (!val || isNaN(val)) return null;
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
+  };
+
   return (
     <div className="space-y-12 animate-in fade-in duration-500 pb-20">
         
+        {/* COMUNICADOS AOS LOJISTAS */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
             <div className="flex items-center gap-4 mb-8">
               <div className="bg-[#00d66f] p-3 rounded-2xl border-4 border-[#0a2540]">
@@ -206,8 +211,7 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-
-        {/* NOVO QUADRO: PLANEAMENTO DE FOLHETOS (Para Lojistas aderirem) */}
+        {/* PLANEAMENTO DE FOLHETOS */}
         <div className="grid lg:grid-cols-2 gap-8">
             <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
                 <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 flex items-center gap-3">
@@ -250,14 +254,18 @@ const AdminComms: React.FC = () => {
                 </div>
             </div>
 
-            {/* PREÇÁRIO MARKETING */}
+            {/* PREÇÁRIO MARKETING ATUALIZADO */}
             <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
                 <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 flex items-center gap-3">
                    <Euro className="text-amber-500" size={24} /> Preçário Tabela Geral
                 </h3>
                 <form onSubmit={handleSavePrices} className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-black uppercase text-slate-400">Banner Lojista</label><input type="text" value={prices.banner} onChange={e=>setPrices({...prices, banner: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      {/* BANNERS */}
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Banner: Custo Cliente/Dia</label><input type="number" step="0.001" value={prices.banner_cost_per_client} onChange={e=>setPrices({...prices, banner_cost_per_client: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Banner: Custo Mínimo</label><input type="number" step="0.01" value={prices.banner_min_cost} onChange={e=>setPrices({...prices, banner_min_cost: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                      
+                      {/* FOLHETOS */}
                       <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Capa (Destaque)</label><input type="text" value={prices.leaflet_capa_destaque} onChange={e=>setPrices({...prices, leaflet_capa_destaque: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
                       <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Capa (Normal)</label><input type="text" value={prices.leaflet_capa_normal} onChange={e=>setPrices({...prices, leaflet_capa_normal: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
                       <div><label className="text-[10px] font-black uppercase text-slate-400">Folheto Contracapa</label><input type="text" value={prices.leaflet_contracapa} onChange={e=>setPrices({...prices, leaflet_contracapa: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
@@ -266,8 +274,9 @@ const AdminComms: React.FC = () => {
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4 pt-4 border-t-2 border-slate-100 mt-4">
-                       <div><label className="text-[10px] font-black uppercase text-slate-400">Notificação Push (Por Cliente)</label><input type="number" step="0.01" value={prices.push_cost_per_client} onChange={e=>setPrices({...prices, push_cost_per_client: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
-                       <div><label className="text-[10px] font-black uppercase text-slate-400">Custo Fixo Mínimo (Push)</label><input type="number" step="0.01" value={prices.push_min_cost} onChange={e=>setPrices({...prices, push_min_cost: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                       {/* PUSH */}
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Push (Custo p/ Cliente)</label><input type="number" step="0.001" value={prices.push_cost_per_client} onChange={e=>setPrices({...prices, push_cost_per_client: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Push (Custo Fixo Mínimo)</label><input type="number" step="0.01" value={prices.push_min_cost} onChange={e=>setPrices({...prices, push_min_cost: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" /></div>
                     </div>
 
                     <button type="submit" disabled={savingPrices} className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4">
@@ -277,44 +286,80 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-        {/* PEDIDOS PENDENTES DE PUBLICIDADE E PUSH */}
+        {/* AUDITORIA DE PEDIDOS */}
         <div>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Auditoria de Pedidos</h3>
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {requests.map(r => (
-                    <div key={r.id} className="bg-white border-4 border-[#0a2540] p-6 rounded-[30px] shadow-[8px_8px_0px_#0a2540] flex flex-col justify-between">
-                        <div className="flex justify-between items-start mb-4">
-                            <div>
-                                <h4 className="font-black uppercase text-[#0a2540] text-lg leading-none">{r.merchantName}</h4>
-                                <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mt-2 inline-block ${r.type === 'push_notification' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>
-                                  Tipo: {r.type === 'push_notification' ? 'Push App' : r.type}
-                                </span>
+            <div className="grid grid-cols-1 gap-6">
+                {requests.map(r => {
+                    const merch = getMerchantDetails(r.merchantId);
+
+                    return (
+                      <div key={r.id} className="bg-white border-4 border-[#0a2540] p-6 rounded-[30px] shadow-[8px_8px_0px_#0a2540] flex flex-col md:flex-row gap-6 items-start">
+                          
+                          {/* Info da Loja */}
+                          <div className="md:w-1/3 w-full shrink-0 border-b-2 md:border-b-0 md:border-r-2 border-slate-100 pb-4 md:pb-0 md:pr-6">
+                              <h4 className="font-black uppercase text-[#0a2540] text-lg leading-none">{r.merchantName}</h4>
+                              <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mt-2 inline-block ${r.type === 'push_notification' ? 'bg-blue-100 text-blue-700' : r.type === 'banner' ? 'bg-purple-100 text-purple-700' : 'bg-amber-100 text-amber-700'}`}>
+                                Tipo: {r.type === 'push_notification' ? 'Push App' : r.type === 'banner' ? 'Banner na App' : r.type}
+                              </span>
+                              
+                              {merch && (
+                                <div className="mt-4 space-y-2">
+                                  <p className="text-[10px] font-bold text-slate-500 flex items-center gap-2"><MapPin size={12} className="text-[#00d66f]"/> {merch.zipCode}</p>
+                                  <p className="text-[10px] font-bold text-slate-500 flex items-center gap-2"><Phone size={12} className="text-[#00d66f]"/> {merch.phone}</p>
+                                  <p className="text-[10px] font-bold text-slate-500 flex items-center gap-2"><Mail size={12} className="text-[#00d66f]"/> {merch.email}</p>
+                                </div>
+                              )}
+                          </div>
+
+                          {/* Detalhes do Pedido */}
+                          <div className="flex-1 w-full">
+                              <div className="text-xs font-bold text-slate-500 space-y-2 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mb-4">
+                                  {r.type === 'push_notification' ? (
+                                      <>
+                                          <p><strong className="text-[#0a2540]">Título:</strong> {r.title}</p>
+                                          <p><strong className="text-[#0a2540]">Mensagem:</strong> {r.text}</p>
+                                          <p><strong className="text-[#0a2540]">Alvo:</strong> {r.targetType === 'all' ? 'Todos' : r.targetType === 'multiple_zip' ? `CPs: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : 'Clientes Frequentes'}</p>
+                                          <p className="text-[#00d66f] border-t-2 border-slate-200 pt-2 mt-2"><strong className="text-[#0a2540]">Orçamento Previsto:</strong> {formatEuro(r.cost)} (Para {r.targetCount} Clientes)</p>
+                                      </>
+                                  ) : r.type === 'banner' ? (
+                                      <>
+                                          <p><strong className="text-[#0a2540]">Período:</strong> {r.requestedDate}</p>
+                                          {r.text && <p><strong className="text-[#0a2540]">Texto Adicional:</strong> {r.text}</p>}
+                                          <p><strong className="text-[#0a2540]">Alvo:</strong> {r.targetType === 'all' ? 'Todos' : r.targetType === 'cp4' || r.targetType === 'cp7' ? `CPs: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : r.targetType === 'specific_clients' ? `NIFs/Cartões: ${r.targetValue}` : 'Top 20 Clientes'}</p>
+                                          <p className="text-[#00d66f] border-t-2 border-slate-200 pt-2 mt-2"><strong className="text-[#0a2540]">Orçamento Previsto:</strong> {formatEuro(r.cost)} (Para {r.targetCount} Clientes)</p>
+                                      </>
+                                  ) : (
+                                      <>
+                                          <p><strong className="text-[#0a2540]">Campanha:</strong> {r.leafletCampaignTitle}</p>
+                                          <p><strong className="text-[#0a2540]">Espaço Pretendido:</strong> {r.spaceType?.replace(/_/g, ' ')}</p>
+                                          <p><strong className="text-[#0a2540]">Produto:</strong> {r.description}</p>
+                                          <p><strong className="text-[#0a2540]">Preço Venda:</strong> {r.sellPrice} / {r.unit}</p>
+                                          {r.promoPrice && <p><strong className="text-[#0a2540]">Promoção:</strong> {r.promoPrice} ({r.promoType})</p>}
+                                      </>
+                                  )}
+                              </div>
+
+                              {/* Ações */}
+                              <div className="flex flex-wrap md:flex-nowrap gap-2 items-center justify-between">
+                                  <div className="flex gap-2 w-full md:w-auto">
+                                    {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="bg-[#00d66f] text-[#0a2540] px-6 py-3 rounded-xl font-black uppercase text-[10px]">Aprovar</button>}
+                                    {r.status !== 'rejected' && <button onClick={() => handleUpdateStatus(r.id!, 'rejected')} className="bg-red-100 text-red-700 px-6 py-3 rounded-xl font-black uppercase text-[10px]">Rejeitar</button>}
+                                  </div>
+                                  <button onClick={() => deleteDoc(doc(db, 'marketing_requests', r.id!))} className="text-slate-300 hover:text-red-400 transition-colors p-2"><Trash2 size={20}/></button>
+                              </div>
+                          </div>
+                          
+                          {/* Imagem (Folhetos/Banners) */}
+                          {r.imageUrl && (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-slate-100 rounded-2xl border-4 border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                                <img src={r.imageUrl} className="w-full h-full object-contain" alt="Preview da Campanha" />
                             </div>
-                            <button onClick={() => deleteDoc(doc(db, 'marketing_requests', r.id!))} className="text-red-400"><Trash2 size={20}/></button>
-                        </div>
+                          )}
 
-                        <div className="text-xs font-bold text-slate-500 mb-6 space-y-2 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 flex-grow">
-                            {r.type === 'push_notification' ? (
-                                <>
-                                    <p><strong className="text-[#0a2540]">Título:</strong> {r.title}</p>
-                                    <p><strong className="text-[#0a2540]">Mensagem:</strong> {r.text}</p>
-                                    <p><strong className="text-[#0a2540]">Alvo:</strong> {r.targetType === 'all' ? 'Todos' : r.targetType === 'multiple_zip' ? `CPs: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : 'Clientes Frequentes'}</p>
-                                    <p className="text-[#00d66f] border-t-2 border-slate-200 pt-2 mt-2"><strong className="text-[#0a2540]">Orçamento:</strong> {r.cost}€ (Para {r.targetCount} Clientes)</p>
-                                </>
-                            ) : (
-                                <>
-                                    <p><strong className="text-[#0a2540]">Detalhes:</strong> {r.description || r.text}</p>
-                                    {r.cost && <p className="text-[#00d66f]"><strong className="text-[#0a2540]">Orçamento:</strong> {r.cost}€ (Alvo: {r.targetCount} Clientes)</p>}
-                                </>
-                            )}
-                        </div>
-
-                        <div className="flex gap-2">
-                            {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="flex-1 bg-[#00d66f] text-[#0a2540] p-3 rounded-xl font-black uppercase text-[10px]">Aprovar</button>}
-                            {r.status !== 'rejected' && <button onClick={() => handleUpdateStatus(r.id!, 'rejected')} className="flex-1 bg-red-100 text-red-700 p-3 rounded-xl font-black uppercase text-[10px]">Rejeitar</button>}
-                        </div>
-                    </div>
-                ))}
+                      </div>
+                    )
+                })}
                 {requests.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold p-10 border-4 border-dashed rounded-[40px]">Sem pedidos pendentes.</p>}
             </div>
         </div>

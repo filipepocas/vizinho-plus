@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
@@ -182,27 +182,30 @@ const MerchantDashboard: React.FC = () => {
   const submitPushRequest = async () => {
     if (!pushSimulation) return;
     try {
-      await addDoc(collection(db, 'notifications'), {
+      // CORREÇÃO: Encaminhado para a coleção marketing_requests onde as regras de segurança permitem.
+      await addDoc(collection(db, 'marketing_requests'), {
         merchantId: currentUser?.id,
         merchantName: currentUser?.shopName || currentUser?.name,
         type: 'push_notification',
         title: pushForm.title,
-        message: pushForm.text,
+        text: pushForm.text,
         targetType: pushForm.targetType,
         targetValue: pushForm.targetValue,
-        scheduledFor: pushSimulation.scheduledFor,
+        scheduledFor: Timestamp.fromDate(pushSimulation.scheduledFor),
         targetCount: pushSimulation.count,
         cost: pushSimulation.cost,
         status: 'pending',
-        senderId: currentUser?.id,
-        senderName: currentUser?.shopName || currentUser?.name,
         createdAt: serverTimestamp()
       });
       toast.success("PEDIDO ENVIADO PARA APROVAÇÃO!");
       setPushSimulation(null);
       setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
-      setView('terminal');
-    } catch (e) { toast.error("ERRO AO ENVIAR."); }
+      // Redireciona para o separador Marketing para o lojista ver o pedido pendente
+      setView('marketing'); 
+    } catch (e) { 
+      console.error(e);
+      toast.error("ERRO AO ENVIAR."); 
+    }
   };
 
   const handleDeleteMessage = async (id: string) => {
