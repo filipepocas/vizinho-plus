@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -15,13 +15,13 @@ import FeedbackList from '../../components/admin/FeedbackList';
 import MerchantModal from './MerchantModal';
 import AdminNotifications from './AdminNotifications';
 import AdminComms from './AdminComms';
-import AdminVantagens from './AdminVantagens'; // NOVO IMPORT
+import AdminVantagens from './AdminVantagens'; 
+import AdminLeaflets from './AdminLeaflets'; // RESTAURADO
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  // NOVO: Adicionado 'vantagens' ao state de views
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'notifications' | 'vantagens' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'notifications' | 'vantagens' | 'leaflets' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -74,7 +74,8 @@ const AdminDashboard: React.FC = () => {
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
                 { id: 'comms', label: 'Comunicações Pub', icon: Megaphone },
-                { id: 'vantagens', label: 'Vantagens VIP', icon: Crown }, // NOVO BOTÃO
+                { id: 'leaflets', label: 'Folhetos', icon: FileText }, // RESTAURADO
+                { id: 'vantagens', label: 'Vantagens VIP', icon: Crown }, 
                 { id: 'notifications', label: 'Avisos App', icon: Bell }, 
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
               ].map(item => (
@@ -103,7 +104,8 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'comms' && <AdminComms />}
-        {currentView === 'vantagens' && <AdminVantagens />} {/* NOVO COMPONENTE */}
+        {currentView === 'leaflets' && <AdminLeaflets />} {/* RESTAURADO */}
+        {currentView === 'vantagens' && <AdminVantagens />} 
         {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'settings' && <AdminSettings />}

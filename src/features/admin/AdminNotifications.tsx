@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy, updateDoc, where } from 'firebase/firestore';
-import { Bell, Send, Trash2, AlertCircle, Loader2, Clock, CheckCircle, XCircle, Users, Mail, MapPin, Cake } from 'lucide-react';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
+import { Bell, Send, Trash2, AlertCircle, Loader2, Clock, CheckCircle, XCircle, Users } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 interface NotificationRequest {
@@ -28,11 +28,16 @@ const AdminNotifications: React.FC = () => {
     targetType: 'all' as NotificationRequest['targetType'],
     targetValue: '',
     scheduledDate: '',
-    scheduledTime: ''
+    scheduledTime: '10:00' // Valor padrão (Horas redondas)
+  });
+
+  // Geração de Horas Redondas (08:00 às 20:00)
+  const availableHours = Array.from({ length: 13 }, (_, i) => {
+    const hour = i + 8;
+    return `${hour.toString().padStart(2, '0')}:00`;
   });
 
   useEffect(() => {
-    // Escuta pedidos pendentes e notificações enviadas
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     return onSnapshot(q, (snap) => {
       setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as NotificationRequest)));
@@ -41,16 +46,14 @@ const AdminNotifications: React.FC = () => {
 
   const handleAdminSend = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.title || !formData.message) {
-      toast.error("Preencha o título e a mensagem.");
+    if (!formData.title || !formData.message || !formData.scheduledDate) {
+      toast.error("Preencha todos os campos, incluindo Data e Hora.");
       return;
     }
 
     setLoading(true);
     try {
-      const scheduledDateTime = formData.scheduledDate && formData.scheduledTime 
-        ? new Date(`${formData.scheduledDate}T${formData.scheduledTime}`)
-        : new Date();
+      const scheduledDateTime = new Date(`${formData.scheduledDate}T${formData.scheduledTime}`);
 
       await addDoc(collection(db, 'notifications'), {
         title: formData.title,
@@ -58,7 +61,7 @@ const AdminNotifications: React.FC = () => {
         targetType: formData.targetType,
         targetValue: formData.targetValue.trim(),
         scheduledFor: scheduledDateTime,
-        status: 'approved', // Admin envia direto
+        status: 'approved', 
         type: 'admin_broadcast',
         senderId: 'admin',
         senderName: 'Administração',
@@ -66,9 +69,8 @@ const AdminNotifications: React.FC = () => {
       });
 
       toast.success("Notificação Cloud Messaging agendada!");
-      setFormData({ title: '', message: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '' });
+      setFormData({ title: '', message: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
     } catch (err) {
-      console.error(err);
       toast.error("Erro ao processar envio.");
     } finally {
       setLoading(false);
@@ -96,7 +98,6 @@ const AdminNotifications: React.FC = () => {
   return (
     <div className="space-y-10 animate-in fade-in duration-500 pb-20">
       
-      {/* FORMULÁRIO DE ENVIO DIRETO (ADMIN) */}
       <form onSubmit={handleAdminSend} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f]">
         <div className="flex items-center gap-3 mb-8">
           <div className="bg-[#00d66f] p-3 rounded-2xl text-[#0a2540]">
@@ -141,11 +142,15 @@ const AdminNotifications: React.FC = () => {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Data de Envio</label>
-                <input type="date" className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none" value={formData.scheduledDate} onChange={e => setFormData({...formData, scheduledDate: e.target.value})} />
+                <input type="date" required className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]" value={formData.scheduledDate} onChange={e => setFormData({...formData, scheduledDate: e.target.value})} />
               </div>
               <div>
-                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Hora (Aprox.)</label>
-                <input type="time" className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none" value={formData.scheduledTime} onChange={e => setFormData({...formData, scheduledTime: e.target.value})} />
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2 ml-2">Hora (Exata)</label>
+                <select className="w-full p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]" value={formData.scheduledTime} onChange={e => setFormData({...formData, scheduledTime: e.target.value})}>
+                  {availableHours.map(h => (
+                    <option key={h} value={h}>{h}</option>
+                  ))}
+                </select>
               </div>
             </div>
           </div>
@@ -156,60 +161,63 @@ const AdminNotifications: React.FC = () => {
         </button>
       </form>
 
-      {/* LISTA DE PEDIDOS PENDENTES (LOJISTAS) E HISTÓRICO */}
       <div className="space-y-6">
         <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] ml-2 flex items-center gap-2">
           <Clock size={20} className="text-[#00d66f]" /> Gestão de Pedidos e Envios
         </h3>
 
         <div className="grid grid-cols-1 gap-4">
-          {requests.map(req => (
-            <div key={req.id} className={`bg-white border-4 ${req.status === 'pending' ? 'border-orange-400 shadow-[8px_8px_0px_#ffedd5]' : 'border-slate-200'} rounded-[35px] p-6 flex flex-col md:flex-row justify-between items-center gap-6 transition-all`}>
-              <div className="flex-1 space-y-3 w-full">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full ${req.type === 'admin_broadcast' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
-                    {req.type === 'admin_broadcast' ? 'ADMIN' : `LOJISTA: ${req.senderName}`}
-                  </span>
-                  {req.status === 'pending' && (
-                    <span className="text-[9px] font-black uppercase bg-orange-100 text-orange-600 px-3 py-1 rounded-full animate-pulse">
-                      Aguardando Aprovação
+          {requests.map(req => {
+            const scheduledForDate = req.scheduledFor instanceof Date ? req.scheduledFor : req.scheduledFor?.toDate();
+            
+            return (
+              <div key={req.id} className={`bg-white border-4 ${req.status === 'pending' ? 'border-orange-400 shadow-[8px_8px_0px_#ffedd5]' : 'border-slate-200'} rounded-[35px] p-6 flex flex-col md:flex-row justify-between items-center gap-6 transition-all`}>
+                <div className="flex-1 space-y-3 w-full">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[9px] font-black uppercase px-3 py-1 rounded-full ${req.type === 'admin_broadcast' ? 'bg-purple-100 text-purple-600' : 'bg-blue-100 text-blue-600'}`}>
+                      {req.type === 'admin_broadcast' ? 'ADMIN' : `LOJISTA: ${req.senderName}`}
                     </span>
+                    {req.status === 'pending' && (
+                      <span className="text-[9px] font-black uppercase bg-orange-100 text-orange-600 px-3 py-1 rounded-full animate-pulse">
+                        Aguardando Aprovação
+                      </span>
+                    )}
+                  </div>
+                  
+                  <div>
+                    <h4 className="font-black uppercase text-[#0a2540] text-xl leading-none">{req.title}</h4>
+                    <p className="text-sm text-slate-500 mt-2 font-medium">{req.message}</p>
+                  </div>
+
+                  <div className="flex flex-wrap gap-3">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl">
+                      <Users size={12} /> {req.targetType === 'all' ? 'Todos' : req.targetValue}
+                    </div>
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl">
+                      <Clock size={12} /> Agendado: {scheduledForDate ? scheduledForDate.toLocaleString() : 'Sem Data'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 w-full md:w-auto">
+                  {req.status === 'pending' ? (
+                    <>
+                      <button onClick={() => handleAction(req.id!, 'approve')} className="flex-1 md:flex-none bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2 font-black uppercase text-xs">
+                        <CheckCircle size={18} /> Aceitar
+                      </button>
+                      <button onClick={() => handleAction(req.id!, 'reject')} className="flex-1 md:flex-none bg-red-100 text-red-600 p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2 font-black uppercase text-xs">
+                        <XCircle size={18} /> Recusar
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => handleAction(req.id!, 'reject')} className="bg-slate-100 text-slate-400 p-4 rounded-2xl hover:bg-red-50 text-red-500 transition-all">
+                      <Trash2 size={20} />
+                    </button>
                   )}
                 </div>
-                
-                <div>
-                  <h4 className="font-black uppercase text-[#0a2540] text-xl leading-none">{req.title}</h4>
-                  <p className="text-sm text-slate-500 mt-2 font-medium">{req.message}</p>
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl">
-                    <Users size={12} /> {req.targetType === 'all' ? 'Todos' : req.targetValue}
-                  </div>
-                  <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl">
-                    <Clock size={12} /> Agendado: {req.scheduledFor instanceof Date ? req.scheduledFor.toLocaleString() : req.scheduledFor?.toDate().toLocaleString()}
-                  </div>
-                </div>
               </div>
-
-              <div className="flex gap-2 w-full md:w-auto">
-                {req.status === 'pending' ? (
-                  <>
-                    <button onClick={() => handleAction(req.id!, 'approve')} className="flex-1 md:flex-none bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2 font-black uppercase text-xs">
-                      <CheckCircle size={18} /> Aceitar
-                    </button>
-                    <button onClick={() => handleAction(req.id!, 'reject')} className="flex-1 md:flex-none bg-red-100 text-red-600 p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2 font-black uppercase text-xs">
-                      <XCircle size={18} /> Recusar
-                    </button>
-                  </>
-                ) : (
-                  <button onClick={() => handleAction(req.id!, 'reject')} className="bg-slate-100 text-slate-400 p-4 rounded-2xl hover:bg-red-50 text-red-500 transition-all">
-                    <Trash2 size={20} />
-                  </button>
-                )}
-              </div>
-            </div>
-          ))}
+            )
+          })}
 
           {requests.length === 0 && (
             <div className="text-center py-20 bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-200">

@@ -31,9 +31,11 @@ const MerchantDashboard: React.FC = () => {
   const [showInbox, setShowInbox] = useState(false);
 
   const [pushForm, setPushForm] = useState({ 
-    title: '', text: '', targetType: 'all' as 'all' | 'multiple_zip' | 'top' | 'birthDate', targetValue: '' 
+    title: '', text: '', targetType: 'all' as 'all' | 'multiple_zip' | 'top' | 'birthDate', targetValue: '',
+    scheduledDate: '', scheduledTime: '10:00'
   });
-  const [pushSimulation, setPushSimulation] = useState<{ count: number, cost: number } | null>(null);
+  
+  const [pushSimulation, setPushSimulation] = useState<{ count: number, cost: number, scheduledFor: Date } | null>(null);
   const [simulating, setSimulating] = useState(false);
   const [pushPrices, setPushPrices] = useState({ perClient: 0.05, minService: 5.00 });
 
@@ -46,7 +48,6 @@ const MerchantDashboard: React.FC = () => {
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   
-  // X6: Armazena também a fatura para redeems
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
   
   const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
@@ -55,6 +56,12 @@ const MerchantDashboard: React.FC = () => {
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
   
+  // Geração de Horas Redondas (08:00 às 20:00) para o Lojista
+  const availableHours = Array.from({ length: 13 }, (_, i) => {
+    const hour = i + 8;
+    return `${hour.toString().padStart(2, '0')}:00`;
+  });
+
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
     const percent = currentUser?.cashbackPercent || 0;
@@ -122,10 +129,21 @@ const MerchantDashboard: React.FC = () => {
 
 
   const handleSimulatePush = async () => {
-    if (!pushForm.title || !pushForm.text) {
-      toast.error("PREENCHA O TÍTULO E A MENSAGEM.");
+    if (!pushForm.title || !pushForm.text || !pushForm.scheduledDate) {
+      toast.error("PREENCHA TODOS OS CAMPOS.");
       return;
     }
+
+    // VALIDAÇÃO: 2 HORAS DE ANTECEDÊNCIA (Ponto 3)
+    const scheduledDateTime = new Date(`${pushForm.scheduledDate}T${pushForm.scheduledTime}`);
+    const now = new Date();
+    const diffInHours = (scheduledDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+    if (diffInHours < 2) {
+      toast.error("A data/hora escolhida tem de ser com pelo menos 2 horas de antecedência.", { duration: 5000 });
+      return;
+    }
+
     setSimulating(true);
 
     try {
@@ -153,7 +171,7 @@ const MerchantDashboard: React.FC = () => {
       if (totalCost < pushPrices.minService && count > 0) totalCost = pushPrices.minService;
       if (count === 0) totalCost = 0;
 
-      setPushSimulation({ count, cost: totalCost });
+      setPushSimulation({ count, cost: totalCost, scheduledFor: scheduledDateTime });
     } catch (e) {
       toast.error("ERRO AO CALCULAR ALCANCE.");
     } finally {
@@ -164,20 +182,26 @@ const MerchantDashboard: React.FC = () => {
   const submitPushRequest = async () => {
     if (!pushSimulation) return;
     try {
-      await addDoc(collection(db, 'marketing_requests'), {
+      await addDoc(collection(db, 'notifications'), {
         merchantId: currentUser?.id,
         merchantName: currentUser?.shopName || currentUser?.name,
         type: 'push_notification',
-        ...pushForm,
+        title: pushForm.title,
+        message: pushForm.text,
+        targetType: pushForm.targetType,
+        targetValue: pushForm.targetValue,
+        scheduledFor: pushSimulation.scheduledFor,
         targetCount: pushSimulation.count,
         cost: pushSimulation.cost,
         status: 'pending',
+        senderId: currentUser?.id,
+        senderName: currentUser?.shopName || currentUser?.name,
         createdAt: serverTimestamp()
       });
       toast.success("PEDIDO ENVIADO PARA APROVAÇÃO!");
       setPushSimulation(null);
-      setPushForm({ title: '', text: '', targetType: 'all', targetValue: '' });
-      setView('marketing');
+      setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
+      setView('terminal');
     } catch (e) { toast.error("ERRO AO ENVIAR."); }
   };
 
@@ -195,7 +219,7 @@ const MerchantDashboard: React.FC = () => {
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
-    const invAmount = parseFloat(amount); // Valor da fatura (útil no redeem)
+    const invAmount = parseFloat(amount); 
     setPendingAction({ type, val: val || 0, invAmount: invAmount || 0 });
     setShowConfirmModal(true);
   };
@@ -210,7 +234,7 @@ const MerchantDashboard: React.FC = () => {
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name || 'Loja',
         amount: pendingAction.val,
-        invoiceAmount: pendingAction.invAmount, // X6 enviado ao Backend
+        invoiceAmount: pendingAction.invAmount,
         type: pendingAction.type,
         documentNumber: documentNumber,
         clientName: foundClient.name,
@@ -281,6 +305,19 @@ const MerchantDashboard: React.FC = () => {
                    )}
                 </div>
 
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label>
+                    <input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label>
+                    <select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
+                      {availableHours.map(h => <option key={h} value={h}>{h}</option>)}
+                    </select>
+                  </div>
+                </div>
+
                 <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">
                    {simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}
                 </button>
@@ -302,8 +339,8 @@ const MerchantDashboard: React.FC = () => {
                   </div>
 
                   <div className="space-y-3">
-                     <button onClick={submitPushRequest} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl">Avançar com o Pedido</button>
-                     <button onClick={() => setPushSimulation(null)} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest">Anular / Corrigir</button>
+                     <button onClick={submitPushRequest} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl hover:scale-105 transition-transform">Avançar com o Pedido</button>
+                     <button onClick={() => setPushSimulation(null)} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white/40">Anular / Corrigir</button>
                   </div>
                   <p className="mt-6 text-[8px] font-black uppercase text-[#0a2540]/60 italic">* Valor sujeito a aprovação manual da administração.</p>
                </div>
