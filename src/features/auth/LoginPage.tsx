@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { signInWithEmailAndPassword } from 'firebase/auth';
@@ -6,7 +6,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/fires
 import { useStore } from '../../store/useStore';
 import { 
   LogIn, Mail, Lock, ArrowRight, Smartphone, ShieldCheck, 
-  Zap, Store, X, Loader2, AlertTriangle, Volume2
+  Zap, Store, X, Loader2, AlertTriangle, Volume2, User, MapPin, Hash, Phone, Tag
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -36,10 +36,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [submittingMerchant, setSubmittingMerchant] = useState(false);
   const [merchantData, setMerchantData] = useState({
-    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: '', pass: ''
+    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: ''
   });
 
-  // Novo Hook PWA
   const { isInstallable, installApp } = usePWAInstall();
   const navigate = useNavigate();
   const { setCurrentUser } = useStore();
@@ -54,11 +53,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
       if (userDoc.exists()) {
         const userData = { id: userDoc.id, ...userDoc.data() } as any;
-        
         const hasNotif = Notification.permission === 'granted';
         const isApp = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
-        // Se precisa de instalar a app OU precisa de notificações, mostra o ecrã.
         if (!hasNotif || (!isApp && isInstallable)) {
           setTempUserId(uid);
           setTempUserData(userData);
@@ -66,13 +63,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
           setLoading(false);
           return;
         }
-
         finalizeLogin(userData);
       }
-    } catch (error) { 
-      toast.error('EMAIL OU PASSWORD INCORRETOS.'); 
-      setLoading(false); 
-    }
+    } catch (error) { toast.error('EMAIL OU PASSWORD INCORRETOS.'); setLoading(false); }
   };
 
   const finalizeLogin = async (userData: any) => {
@@ -98,30 +91,27 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
   if (setupStep) {
     return (
-      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-white selection:bg-[#00d66f]">
+      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-white">
         <div className="w-full max-w-md bg-white text-[#0a2540] rounded-[40px] border-4 border-[#00d66f] shadow-[12px_12px_0px_#00d66f] p-8 text-center animate-in slide-in-from-bottom-10">
             <div className="bg-amber-50 p-6 rounded-3xl mb-6 border-2 border-amber-200">
                 <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
                 <h2 className="text-xl font-black uppercase text-[#0a2540] mb-2 italic">Atenção!</h2>
-                <p className="text-[10px] font-bold text-amber-800 uppercase tracking-widest leading-relaxed">
-                  Para sua comodidade e para não perder alertas de saldo, ative as notificações antes de entrar.
+                <p className="text-[11px] font-bold text-amber-800 uppercase tracking-widest leading-relaxed">
+                  Para sua comodidade e não perder alertas de saldo, ative as notificações antes de entrar.
                 </p>
             </div>
-
             {diagError && (
               <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl mb-6 flex gap-3 text-left">
                   <AlertTriangle className="text-red-500 shrink-0" size={20} />
                   <p className="text-[9px] font-bold text-red-700 leading-tight uppercase">{diagError}</p>
               </div>
             )}
-
             <div className="space-y-4 mb-8">
                 {isInstallable && (
                     <button onClick={installApp} className="w-full bg-[#0a2540] text-[#00d66f] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg border-b-4 border-black/50 hover:scale-105 transition-transform">
                         <Smartphone size={24} /> Instalar Aplicação
                     </button>
                 )}
-                
                 {Notification.permission !== 'granted' && (
                   <button onClick={async () => {
                       setDiagError(null);
@@ -129,15 +119,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
                       if(res.success) {
                         toast.success("Notificações Ativas!");
                         setTimeout(() => finalizeLogin(tempUserData), 1000);
-                      } else {
-                        setDiagError(res.error || "Erro ao ativar notificações.");
-                      }
+                      } else { setDiagError(res.error || "Erro."); }
                   }} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540] hover:scale-105 transition-transform">
                       <Volume2 size={24} /> Permitir Notificações
                   </button>
                 )}
             </div>
-
             <button onClick={() => finalizeLogin(tempUserData)} className="w-full bg-slate-100 text-slate-500 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
               Entrar no meu Perfil <ArrowRight size={16} />
             </button>
@@ -155,31 +142,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
       <div className="w-full max-w-md z-10">
         <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-20 h-20 bg-[#0a2540] rounded-[32px] mb-6 shadow-2xl transform -rotate-6">
-            <Zap className="text-[#00d66f]" size={40} fill="#00d66f" />
-          </div>
-          <h1 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none mb-2">
-            Vizinho<span className="text-[#00d66f]">Plus</span>
-          </h1>
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-[#0a2540] rounded-[32px] mb-6 shadow-2xl transform -rotate-6"><Zap className="text-[#00d66f]" size={40} fill="#00d66f" /></div>
+          <h1 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none mb-2">Vizinho<span className="text-[#00d66f]">Plus</span></h1>
         </div>
 
         <div className="bg-white rounded-[48px] p-8 md:p-10 shadow-2xl border-4 border-slate-100 relative overflow-hidden">
-          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic mb-8 flex items-center gap-3">
-            <LogIn className="text-[#00d66f]" size={28} /> Entrar
-          </h2>
+          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic mb-8 flex items-center gap-3"><LogIn className="text-[#00d66f]" size={28} /> Entrar</h2>
 
           <form onSubmit={handleLogin} className="space-y-6">
-            <div className="relative group">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="teu@email.com" />
-            </div>
-            <div className="relative group">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
-              <input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="••••••••" />
-            </div>
-            <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl">
-              {loading ? <Loader2 className="animate-spin" /> : <>Aceder à conta <ArrowRight size={20} /></>}
-            </button>
+            <div className="relative group"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} /><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="teu@email.com" /></div>
+            <div className="relative group"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} /><input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="••••••••" /></div>
+            <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl">{loading ? <Loader2 className="animate-spin" /> : <>Aceder à conta <ArrowRight size={20} /></>}</button>
           </form>
 
           <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-50 space-y-4 text-center">
@@ -188,9 +161,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
             <button onClick={() => setShowMerchantModal(true)} className="w-full p-4 bg-[#00d66f]/10 text-[#0a2540] rounded-2xl font-black uppercase italic text-[10px] border-2 border-[#00d66f]/20 hover:bg-[#00d66f] transition-all mt-2">Sou Lojista / Quero Aderir</button>
           </div>
           
-          <div className="mt-6 text-center">
-             <button onClick={() => setShowTermsModal(true)} className="text-[9px] text-slate-400 uppercase hover:underline font-bold">Termos e Condições e RGPD</button>
-          </div>
+          <div className="mt-6 text-center"><button onClick={() => setShowTermsModal(true)} className="text-[9px] text-slate-400 uppercase hover:underline font-bold">Termos e Condições e RGPD</button></div>
         </div>
       </div>
 
@@ -203,51 +174,22 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
             </div>
             <form onSubmit={handleMerchantRequest} className="p-8 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label>
-                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-sm" value={merchantData.shopName} onChange={e => setMerchantData({...merchantData, shopName: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Responsável</label>
-                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl outline-none focus:border-[#00d66f] font-bold text-sm" value={merchantData.responsibleName} onChange={e => setMerchantData({...merchantData, responsibleName: e.target.value})} />
-                </div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label><div className="relative"><Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.shopName} onChange={e => setMerchantData({...merchantData, shopName: e.target.value})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome do Responsável</label><div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.responsibleName} onChange={e => setMerchantData({...merchantData, responsibleName: e.target.value})} /></div></div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Email Comercial</label>
-                  <input required type="email" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.email} onChange={e => setMerchantData({...merchantData, email: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label>
-                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.phone} onChange={e => setMerchantData({...merchantData, phone: e.target.value})} />
-                </div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Email Comercial</label><div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required type="email" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.email} onChange={e => setMerchantData({...merchantData, email: e.target.value})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label><div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required type="tel" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.phone} onChange={e => setMerchantData({...merchantData, phone: e.target.value})} /></div></div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF Comercial</label>
-                  <input required maxLength={9} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.nif} onChange={e => setMerchantData({...merchantData, nif: e.target.value.replace(/\D/g, '')})} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label>
-                  <select required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}>
-                    <option value="">Selecione...</option>
-                    {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
-                  </select>
-                </div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF Comercial</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.nif} onChange={e => setMerchantData({...merchantData, nif: e.target.value.replace(/\D/g, '')})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label><div className="relative"><Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}><option value="">SELECIONE O SETOR...</option>{MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}</select></div></div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia</label>
-                  <input required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.freguesia} onChange={e => setMerchantData({...merchantData, freguesia: e.target.value})} />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Código Postal</label>
-                  <input required placeholder="0000-000" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" value={merchantData.zipCode} onChange={e => setMerchantData({...merchantData, zipCode: e.target.value})} />
-                </div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia / Localidade</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.freguesia} onChange={e => setMerchantData({...merchantData, freguesia: e.target.value})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Código Postal (CP4 ou CP7)</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required placeholder="Ex: 4000-000" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.zipCode} onChange={e => setMerchantData({...merchantData, zipCode: e.target.value})} /></div></div>
               </div>
-              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase flex items-center justify-center gap-3 border-b-4 border-[#0a2540] mt-4">
-                {submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de Adesão'}
-              </button>
+              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase flex justify-center gap-3 border-b-4 border-[#0a2540] mt-4">{submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de Adesão'}</button>
             </form>
           </div>
         </div>
@@ -261,14 +203,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
               <button onClick={() => setShowTermsModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 space-y-4 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <p>Ao registares-te no Vizinho+, concordas que a plataforma atua exclusivamente como software facilitador de cashback local.</p>
-              <p>Os teus dados (Nome, Email, NIF, Código Postal) são guardados de forma segura e não são partilhados com terceiros para fins publicitários.</p>
-              <p>O saldo de cashback acumulado não tem valor fiduciário, servindo unicamente para desconto em compras nas lojas da rede.</p>
-              <p>É estritamente proibida a criação de contas falsas. A administração reserva-se o direito de anular saldos em caso de suspeita de fraude.</p>
+              <p>Ao registares-te, concordas que a plataforma atua exclusivamente como facilitador de cashback.</p>
+              <p>Os teus dados (Nome, Email, NIF, Código Postal) são guardados de forma segura e não partilhados com terceiros para fins publicitários.</p>
+              <p>O saldo não tem valor fiduciário, servindo unicamente para desconto nas lojas da rede.</p>
+              <p>É proibida a criação de contas falsas. A administração reserva o direito de anular saldos em caso de fraude.</p>
             </div>
-            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-              <button onClick={() => setShowTermsModal(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Fechar</button>
-            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTermsModal(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Fechar</button></div>
           </div>
         </div>
       )}

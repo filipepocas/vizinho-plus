@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Image as ImageIcon, Loader2, FileText, CheckCircle2 
+  Megaphone, X, Loader2, Send
 } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
@@ -16,11 +16,12 @@ const LandingPage: React.FC = () => {
   const [showExternalModal, setShowExternalModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'banner' | 'leaflet'>('banner');
   const [loading, setLoading] = useState(false);
+  const [loadingPartner, setLoadingPartner] = useState(false);
   
   const [prices, setPrices] = useState<any>({});
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
 
-  // Formulário Entidade
+  // Formulário Empresa Externa (Marketing)
   const [extForm, setExtForm] = useState({ companyName: '', contactName: '', nif: '', email: '', phone: '' });
 
   // Formulário Banner
@@ -30,6 +31,9 @@ const LandingPage: React.FC = () => {
   // Formulário Folheto
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
+
+  // NOVO: Formulário de Adesão de Parceiros
+  const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
 
   useEffect(() => {
     const fetchPrices = async () => {
@@ -85,7 +89,6 @@ const LandingPage: React.FC = () => {
         }
 
         const count = clients.length;
-        // CÁLCULO EXTERNO: Preço Base + 50%
         const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5;
         const minCost = (Number(prices.banner_min_cost) || 10) * 1.5;
 
@@ -102,7 +105,6 @@ const LandingPage: React.FC = () => {
     if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa.");
     if (!leafletForm.campaignId || !leafletForm.imageBase64) return toast.error("Selecione o folheto e insira a imagem.");
     
-    // CÁLCULO EXTERNO: Preço Base + 50%
     const baseCost = Number(prices.leaflet_rodape_externo) || 50;
     const finalCost = baseCost * 1.5;
     
@@ -149,13 +151,41 @@ const LandingPage: React.FC = () => {
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
   };
 
+  // NOVO: Função para o formulário da página principal (Lojistas potenciais)
+  const handlePartnerSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoadingPartner(true);
+    try {
+      await addDoc(collection(db, 'merchant_requests'), {
+        shopName: partnerForm.shopName,
+        responsibleName: partnerForm.responsibleName,
+        email: partnerForm.email,
+        phone: partnerForm.phone,
+        freguesia: partnerForm.freguesia,
+        zipCode: partnerForm.zipCode,
+        category: "Indefinida", // O admin define depois
+        cashbackPercent: 5, // Padrão sugerido
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      toast.success("Pedido enviado! Em breve a nossa equipa entrará em contacto.");
+      setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
+    } catch (e) {
+      toast.error("Erro ao enviar o pedido.");
+    } finally {
+      setLoadingPartner(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
-      <nav className="max-w-7xl mx-auto px-8 py-8 flex justify-between items-center">
+      <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
-        <button onClick={() => setShowExternalModal(true)} className="bg-white px-6 py-3 rounded-full text-[#0a2540] font-black uppercase text-[10px] tracking-widest shadow-md hover:scale-105 transition-all border-2 border-slate-100 flex items-center gap-2">
-            <Megaphone size={14} className="text-[#00d66f]" /> Anunciar
+        
+        {/* BOTÃO A PISCAR */}
+        <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
+            <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
         </button>
       </nav>
 
@@ -177,13 +207,38 @@ const LandingPage: React.FC = () => {
           <ArrowRight className="group-hover:translate-x-2 transition-transform" size={20} strokeWidth={3} />
         </button>
 
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 w-full border-t border-slate-100 pt-16">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-8 w-full border-t border-slate-100 pt-16 mb-24">
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500"><ShieldCheck size={24} /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">100% Seguro</h3></div>
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-500"><Store size={24} /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Comércio Local</h3></div>
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-[#00d66f] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#00d66f]/30"><Zap size={24} fill="currentColor" /></div><h3 className="font-black text-[#00d66f] uppercase text-[10px] tracking-widest">Adesão Grátis</h3></div>
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-amber-400 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-400/30"><Crown size={24} fill="currentColor" /></div><h3 className="font-black text-amber-600 uppercase text-[10px] tracking-widest">Ofertas VIP</h3></div>
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-400"><Heart size={24} fill="currentColor" /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Bairro Forte</h3></div>
         </div>
+
+        {/* NOVO FORMULÁRIO DE ADESÃO PARA LOJISTAS */}
+        <div className="w-full max-w-4xl bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] text-left">
+           <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
+           <p className="text-sm font-bold text-slate-500 mb-8">Faça parte da nossa comunidade, fidelize clientes e aumente as suas vendas. Preencha os dados abaixo e a nossa equipa tratará de tudo.</p>
+           
+           <form onSubmit={handlePartnerSubmit} className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <input required type="text" placeholder="Empresa / Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
+                 <input required type="text" placeholder="Nome de Contacto" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <input required type="tel" placeholder="Telefone / Telemóvel" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
+                 <input required type="email" placeholder="E-mail" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                 <input required type="text" placeholder="Localidade / Freguesia" value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
+                 <input required type="text" placeholder="Código Postal (CP4 ou CP7)" value={partnerForm.zipCode} onChange={e=>setPartnerForm({...partnerForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
+              </div>
+              <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
+                 {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
+              </button>
+           </form>
+        </div>
+
       </main>
 
       <footer className="py-12 text-center text-slate-300">
@@ -259,7 +314,7 @@ const LandingPage: React.FC = () => {
 
               {activeTab === 'leaflet' && (
                 <form onSubmit={simulateLeaflet} className="space-y-4">
-                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
+                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
                         <option value="">(Escolha a Edição do Folheto)</option>
                         {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                    </select>

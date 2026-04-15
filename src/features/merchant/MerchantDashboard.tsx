@@ -203,16 +203,18 @@ const MerchantDashboard: React.FC = () => {
   };
 
   const handleDeleteMessage = async (id: string) => {
-    await deleteDoc(doc(db, 'merchant_messages', id));
-    toast.success("MENSAGEM ELIMINADA.");
-  };
-
-  useEffect(() => {
-    if (currentUser?.id) {
-      const unsubscribe = subscribeToTransactions('merchant', currentUser.id);
-      return () => unsubscribe();
+    try {
+      await deleteDoc(doc(db, 'merchant_messages', id));
+      toast.success("MENSAGEM APAGADA.");
+      
+      // Fecha a caixa se foi a última mensagem
+      if (adminMessages.length <= 1) {
+        setShowInbox(false);
+      }
+    } catch (e) {
+      toast.error("ERRO AO APAGAR A MENSAGEM.");
     }
-  }, [currentUser?.id, subscribeToTransactions]);
+  };
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
@@ -268,7 +270,6 @@ const MerchantDashboard: React.FC = () => {
           <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
           <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
           
-          {/* BOTÃO DE LOGOUT REDIRECIONA PARA A HOME PAGE ("/") */}
           <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all">
             <LogOut size={20} />
           </button>
@@ -350,21 +351,27 @@ const MerchantDashboard: React.FC = () => {
         )}
 
         {showInbox && (
-          <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-md flex items-center justify-center p-6">
              <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
                 <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-                   <h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens do Sistema</h3>
-                   <button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+                   <h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3>
+                   <button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button>
                 </div>
                 <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
                    {adminMessages.length === 0 ? (
                      <p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>
                    ) : adminMessages.map(msg => (
-                     <div key={msg.id} className="bg-slate-50 p-5 rounded-3xl border-2 border-slate-100 relative group">
-                        <p className="text-sm font-bold text-slate-600 leading-relaxed">{msg.message}</p>
-                        <div className="mt-4 flex justify-between items-center border-t border-slate-200 pt-3">
-                           <span className="text-[8px] font-black text-slate-400 uppercase">{new Date(msg.createdAt?.seconds * 1000).toLocaleString()}</span>
-                           <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-500 hover:scale-110 transition-transform"><Trash2 size={16} /></button>
+                     <div key={msg.id} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 relative group transition-colors hover:border-blue-100 hover:bg-blue-50/30">
+                        <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                        
+                        <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
+                           <span className="text-[9px] font-black text-slate-400 uppercase">Enviada a: {msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : 'Recente'}</span>
+                           <button 
+                             onClick={() => handleDeleteMessage(msg.id)} 
+                             className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"
+                           >
+                             <Trash2 size={14} /> Apagar
+                           </button>
                         </div>
                      </div>
                    ))}
