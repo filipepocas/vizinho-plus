@@ -1,116 +1,306 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowRight, 
-  ShieldCheck, 
-  Store, 
-  Heart, 
-  Zap, 
-  Crown 
+  ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
+  Megaphone, X, Image as ImageIcon, Loader2, FileText, CheckCircle2 
 } from 'lucide-react';
+import { db } from '../../config/firebase';
+import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import toast from 'react-hot-toast';
+import { LeafletCampaign } from '../../types';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
+  const [showExternalModal, setShowExternalModal] = useState(false);
+  const [activeTab, setActiveTab] = useState<'banner' | 'leaflet'>('banner');
+  const [loading, setLoading] = useState(false);
+  
+  const [prices, setPrices] = useState<any>({});
+  const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
+
+  // Formulário Entidade
+  const [extForm, setExtForm] = useState({ companyName: '', contactName: '', nif: '', email: '', phone: '' });
+
+  // Formulário Banner
+  const [bannerForm, setBannerForm] = useState({ title: '', startDate: '', endDate: '', imageBase64: '', targetType: 'all', targetValue: '' });
+  const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
+  
+  // Formulário Folheto
+  const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
+  const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (docSnap.exists()) setPrices(docSnap.data());
+    };
+    fetchPrices();
+
+    const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
+    const unsubCam = onSnapshot(qCam, (snap) => {
+        const now = new Date();
+        setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign)).filter(c => c.limitDate.toDate() > now));
+    });
+    return () => unsubCam();
+  }, []);
+
+  const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { 
+        if (type === 'banner') setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
+        else setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const simulateBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa primeiro.");
+    if (!bannerForm.startDate || !bannerForm.endDate || !bannerForm.imageBase64) return toast.error("Preencha datas e insira a imagem.");
+
+    const start = new Date(bannerForm.startDate);
+    const end = new Date(bannerForm.endDate);
+    if (end <= start) return toast.error("A data de fim tem de ser posterior à data de início.");
+
+    const timeDiff = end.getTime() - start.getTime();
+    const days = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    setLoading(true);
+    try {
+        const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
+        let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+        if (bannerForm.targetType === 'cp4' || bannerForm.targetType === 'cp7') {
+            const zips = bannerForm.targetValue.split(',').map(z => z.trim());
+            clients = clients.filter(c => zips.some(z => (c.zipCode || '').startsWith(z)));
+        } else if (bannerForm.targetType === 'birthDate') {
+            const currentMonth = new Date().getMonth() + 1;
+            clients = clients.filter(c => c.birthDate && parseInt(c.birthDate.split('-')[1]) === currentMonth);
+        }
+
+        const count = clients.length;
+        // CÁLCULO EXTERNO: Preço Base + 50%
+        const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5;
+        const minCost = (Number(prices.banner_min_cost) || 10) * 1.5;
+
+        let totalCost = count * perClientDay * days;
+        if (totalCost < minCost && count > 0) totalCost = minCost;
+        if (count === 0) totalCost = 0;
+
+        setBannerSimulation({ count, cost: totalCost, days });
+    } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
+  };
+
+  const simulateLeaflet = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa.");
+    if (!leafletForm.campaignId || !leafletForm.imageBase64) return toast.error("Selecione o folheto e insira a imagem.");
+    
+    // CÁLCULO EXTERNO: Preço Base + 50%
+    const baseCost = Number(prices.leaflet_rodape_externo) || 50;
+    const finalCost = baseCost * 1.5;
+    
+    setLeafletSimulation({ cost: finalCost });
+  };
+
+  const submitExternalRequest = async (type: 'banner' | 'leaflet') => {
+    setLoading(true);
+    try {
+        const baseData = {
+            isExternal: true,
+            status: 'pending',
+            createdAt: serverTimestamp(),
+            companyName: extForm.companyName,
+            contactName: extForm.contactName,
+            nif: extForm.nif,
+            email: extForm.email,
+            phone: extForm.phone
+        };
+
+        if (type === 'banner' && bannerSimulation) {
+            await addDoc(collection(db, 'marketing_requests'), {
+                ...baseData, type: 'banner',
+                title: bannerForm.title, imageUrl: bannerForm.imageBase64,
+                requestedDate: `Início: ${bannerForm.startDate} | Fim: ${bannerForm.endDate} (${bannerSimulation.days} dias)`,
+                targetType: bannerForm.targetType, targetValue: bannerForm.targetValue,
+                targetCount: bannerSimulation.count, cost: bannerSimulation.cost
+            });
+        } else if (type === 'leaflet' && leafletSimulation) {
+            const camp = campaigns.find(c => c.id === leafletForm.campaignId);
+            await addDoc(collection(db, 'marketing_requests'), {
+                ...baseData, type: 'leaflet',
+                leafletCampaignId: leafletForm.campaignId, leafletCampaignTitle: camp?.title,
+                spaceType: 'Rodapé das Páginas Interiores',
+                description: leafletForm.description, sellPrice: leafletForm.sellPrice,
+                unit: leafletForm.unit, promoPrice: leafletForm.promoPrice, promoType: leafletForm.promoType,
+                imageUrl: leafletForm.imageBase64, cost: leafletSimulation.cost
+            });
+        }
+        
+        toast.success("Pedido submetido com sucesso! A nossa equipa entrará em contacto.");
+        setShowExternalModal(false);
+        setBannerSimulation(null); setLeafletSimulation(null);
+    } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
-      {/* 1. NAVEGAÇÃO DISCRETA */}
-      <nav className="max-w-7xl mx-auto px-8 py-8 flex justify-start items-center">
+      <nav className="max-w-7xl mx-auto px-8 py-8 flex justify-between items-center">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
+        <button onClick={() => setShowExternalModal(true)} className="bg-white px-6 py-3 rounded-full text-[#0a2540] font-black uppercase text-[10px] tracking-widest shadow-md hover:scale-105 transition-all border-2 border-slate-100 flex items-center gap-2">
+            <Megaphone size={14} className="text-[#00d66f]" /> Anunciar
+        </button>
       </nav>
 
-      {/* 2. HERO SECTION */}
       <main className="max-w-6xl mx-auto px-8 pt-12 pb-24 text-center flex flex-col items-center">
-        
-        {/* LOGOTIPO IMPACTANTE */}
         <div className="mb-12 animate-in fade-in zoom-in duration-1000">
-          <img 
-            src={logoPath} 
-            alt="Vizinho+" 
-            className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" 
-          />
+          <img src={logoPath} alt="Vizinho+" className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" />
         </div>
-
-        {/* SLOGAN COMERCIAL */}
         <div className="space-y-6 max-w-3xl mb-12">
           <h1 className="text-4xl md:text-6xl font-black text-[#0a2540] leading-tight tracking-tighter uppercase italic">
             Valorize o que é nosso. <br />
             <span className="text-[#00d66f]">Ganhe em cada compra.</span>
           </h1>
           <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed">
-            A plataforma de fidelização que une os vizinhos e fortalece a economia local. 
-            Acumule cashback real em todas as lojas aderentes.
+            A plataforma de fidelização que une os vizinhos e fortalece a economia local. Acumule cashback real em todas as lojas aderentes.
           </p>
         </div>
-
-        {/* BOTÃO DE AÇÃO PRINCIPAL */}
-        <button 
-          onClick={() => navigate('/login')}
-          className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20"
-        >
+        <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20">
           Entrar ou Registar Agora
           <ArrowRight className="group-hover:translate-x-2 transition-transform" size={20} strokeWidth={3} />
         </button>
 
-        {/* TRUST INDICATORS - 5 COLUNAS */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 w-full border-t border-slate-100 pt-16">
-          
-          {/* 1. SEGURO */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500">
-              <ShieldCheck size={24} />
-            </div>
-            <h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">100% Seguro</h3>
-            <p className="text-[10px] text-slate-400 font-bold leading-tight">Dados e saldos protegidos.</p>
-          </div>
-
-          {/* 2. LOCAL */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-500">
-              <Store size={24} />
-            </div>
-            <h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Comércio Local</h3>
-            <p className="text-[10px] text-slate-400 font-bold leading-tight">Apoie os seus vizinhos.</p>
-          </div>
-
-          {/* 3. GRATUITO - DESTAQUE VERDE */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-[#00d66f] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#00d66f]/30">
-              <Zap size={24} fill="currentColor" />
-            </div>
-            <h3 className="font-black text-[#00d66f] uppercase text-[10px] tracking-widest">Adesão Grátis</h3>
-            <p className="text-[10px] text-slate-400 font-bold leading-tight">Sem custos para o vizinho.</p>
-          </div>
-
-          {/* 4. VANTAGENS - DESTAQUE DOURADO */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-amber-400 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-400/30">
-              <Crown size={24} fill="currentColor" />
-            </div>
-            <h3 className="font-black text-amber-600 uppercase text-[10px] tracking-widest">Ofertas VIP</h3>
-            <p className="text-[10px] text-slate-400 font-bold leading-tight">Vantagens exclusivas.</p>
-          </div>
-
-          {/* 5. CIRCULAR */}
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-400">
-              <Heart size={24} fill="currentColor" />
-            </div>
-            <h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Bairro Forte</h3>
-            <p className="text-[10px] text-slate-400 font-bold leading-tight">O valor fica no bairro.</p>
-          </div>
-
+          <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-blue-50 rounded-2xl flex items-center justify-center text-blue-500"><ShieldCheck size={24} /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">100% Seguro</h3></div>
+          <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-slate-100 rounded-2xl flex items-center justify-center text-slate-500"><Store size={24} /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Comércio Local</h3></div>
+          <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-[#00d66f] rounded-2xl flex items-center justify-center text-white shadow-lg shadow-[#00d66f]/30"><Zap size={24} fill="currentColor" /></div><h3 className="font-black text-[#00d66f] uppercase text-[10px] tracking-widest">Adesão Grátis</h3></div>
+          <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-amber-400 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-400/30"><Crown size={24} fill="currentColor" /></div><h3 className="font-black text-amber-600 uppercase text-[10px] tracking-widest">Ofertas VIP</h3></div>
+          <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-400"><Heart size={24} fill="currentColor" /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Bairro Forte</h3></div>
         </div>
       </main>
 
-      {/* FOOTER */}
       <footer className="py-12 text-center text-slate-300">
-        <p className="text-[9px] font-black uppercase tracking-[0.4em]">
-          Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local
-        </p>
+        <p className="text-[9px] font-black uppercase tracking-[0.4em]">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
+
+      {/* MODAL DE PUBLICIDADE PARA EXTERNOS */}
+      {showExternalModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8 relative">
+            
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3"><Megaphone className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Anunciar no Vizinho+</h2></div>
+              <button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}}><X size={24} className="hover:text-red-400"/></button>
+            </div>
+
+            <div className="p-8">
+              <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">1. Dados da Empresa / Requisitante</h3>
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                  <input required placeholder="Nome da Empresa" value={extForm.companyName} onChange={e=>setExtForm({...extForm, companyName: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                  <input required placeholder="Pessoa de Contacto" value={extForm.contactName} onChange={e=>setExtForm({...extForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                  <input required placeholder="NIF" maxLength={9} value={extForm.nif} onChange={e=>setExtForm({...extForm, nif: e.target.value.replace(/\D/g, '')})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                  <input required type="email" placeholder="Email" value={extForm.email} onChange={e=>setExtForm({...extForm, email: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                  <input required type="tel" placeholder="Telefone" value={extForm.phone} onChange={e=>setExtForm({...extForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+              </div>
+
+              <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">2. Tipo de Publicidade</h3>
+              <div className="flex gap-2 mb-6">
+                 <button onClick={() => {setActiveTab('banner'); setLeafletSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Banner Digital (App)</button>
+                 <button onClick={() => {setActiveTab('leaflet'); setBannerSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'leaflet' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Folheto Físico/Digital</button>
+              </div>
+
+              {activeTab === 'banner' && (
+                <form onSubmit={simulateBanner} className="space-y-4">
+                   <div className="grid grid-cols-2 gap-4">
+                      <input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                      <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                   </div>
+                   <input type="text" placeholder="Título Opcional" value={bannerForm.title} onChange={e=>setBannerForm({...bannerForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                   
+                   <div className="space-y-2">
+                      <select required value={bannerForm.targetType} onChange={e=>setBannerForm({...bannerForm, targetType: e.target.value, targetValue: ''})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
+                          <option value="all">Todos os Clientes na App</option>
+                          <option value="cp4">Por Código Postal (Ex: 4000)</option>
+                          <option value="cp7">Por Cód. Postal Completo (Ex: 4000-123)</option>
+                          <option value="birthDate">Aniversariantes do Mês</option>
+                      </select>
+                      {(bannerForm.targetType === 'cp4' || bannerForm.targetType === 'cp7') && (
+                        <input required type="text" placeholder="Insira CPs (Separe por vírgula. Ex: 4000, 4400)" value={bannerForm.targetValue} onChange={e=>setBannerForm({...bannerForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-2 border-blue-100 rounded-xl font-black text-xs" />
+                      )}
+                   </div>
+
+                   <div className="bg-slate-100 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Upload Imagem (1920x1080px. Máx 500KB)</p>
+                      <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
+                   </div>
+
+                   {!bannerSimulation ? (
+                     <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Calcular Orçamento'}</button>
+                   ) : (
+                     <div className="bg-[#00d66f] p-6 rounded-2xl text-center">
+                        <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento Calculado</p>
+                        <p className="text-3xl font-black italic text-[#0a2540]">{formatEuro(bannerSimulation.cost)}</p>
+                        <p className="text-[10px] font-bold text-[#0a2540] mb-4">Alcance: {bannerSimulation.count} clientes durante {bannerSimulation.days} dias.</p>
+                        <div className="flex gap-2">
+                           <button type="button" onClick={() => setBannerSimulation(null)} className="flex-1 py-3 bg-white/40 text-[#0a2540] rounded-xl font-black uppercase text-[10px]">Cancelar</button>
+                           <button type="button" onClick={() => submitExternalRequest('banner')} className="flex-1 py-3 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[10px]">Avançar com Pedido</button>
+                        </div>
+                     </div>
+                   )}
+                </form>
+              )}
+
+              {activeTab === 'leaflet' && (
+                <form onSubmit={simulateLeaflet} className="space-y-4">
+                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
+                        <option value="">(Escolha a Edição do Folheto)</option>
+                        {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                   </select>
+
+                   <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-xl text-center">
+                      <p className="text-[10px] font-black uppercase text-amber-800">Espaço Fixo para Entidades Externas:</p>
+                      <p className="text-sm font-black uppercase text-amber-900">Rodapé das Páginas Interiores</p>
+                   </div>
+
+                   <input required type="text" placeholder="Nome / Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                   
+                   <div className="grid grid-cols-2 gap-4">
+                      <input required type="text" placeholder="Preço (€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                      <input required type="text" placeholder="Unidade (ex: kg, uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                      <input type="text" placeholder="Preço Riscado (Opcional)" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                      <input type="text" placeholder="Destaque (Opcional)" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                   </div>
+
+                   <div className="bg-slate-100 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Upload Imagem (Alta Qualidade. Fundo Branco/Transparente)</p>
+                      <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
+                   </div>
+
+                   {!leafletSimulation ? (
+                     <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Ver Preço do Espaço'}</button>
+                   ) : (
+                     <div className="bg-[#00d66f] p-6 rounded-2xl text-center">
+                        <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento Fixo (Rodapé)</p>
+                        <p className="text-3xl font-black italic text-[#0a2540] mb-4">{formatEuro(leafletSimulation.cost)}</p>
+                        <div className="flex gap-2">
+                           <button type="button" onClick={() => setLeafletSimulation(null)} className="flex-1 py-3 bg-white/40 text-[#0a2540] rounded-xl font-black uppercase text-[10px]">Cancelar</button>
+                           <button type="button" onClick={() => submitExternalRequest('leaflet')} className="flex-1 py-3 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[10px]">Avançar com Pedido</button>
+                        </div>
+                     </div>
+                   )}
+                </form>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

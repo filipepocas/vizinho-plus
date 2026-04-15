@@ -75,8 +75,8 @@ export interface TransactionCreate {
 
 export interface MarketingRequest {
   id?: string;
-  merchantId: string;
-  merchantName: string;
+  merchantId?: string; // Ficou opcional para permitir pedidos externos
+  merchantName?: string; // Ficou opcional para permitir pedidos externos
   shopName?: string;
   type: 'banner' | 'leaflet' | 'push_notification'; 
   status: 'pending' | 'approved' | 'rejected';
@@ -97,6 +97,13 @@ export interface MarketingRequest {
   targetValue?: string;
   targetCount?: number;
   cost?: number;
+  // --- NOVOS CAMPOS PARA PEDIDOS DE EMPRESAS EXTERNAS ---
+  isExternal?: boolean;
+  companyName?: string;
+  contactName?: string;
+  nif?: string;
+  email?: string;
+  phone?: string;
 }
 
 export interface Leaflet {

@@ -16,7 +16,7 @@ import MerchantModal from './MerchantModal';
 import AdminNotifications from './AdminNotifications';
 import AdminComms from './AdminComms';
 import AdminVantagens from './AdminVantagens'; 
-import AdminLeaflets from './AdminLeaflets'; // RESTAURADO
+import AdminLeaflets from './AdminLeaflets'; 
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -60,7 +60,7 @@ const AdminDashboard: React.FC = () => {
               <button onClick={() => setCurrentView('settings')} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-white/10 rounded-xl md:rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-white/10">
                 <Settings size={18} /> Master
               </button>
-              <button onClick={async () => { await logout(); navigate('/login'); }} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-red-500/10 rounded-xl md:rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
+              <button onClick={async () => { await logout(); navigate('/'); }} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-red-500/10 rounded-xl md:rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
                 <LogOut size={18} /> Sair
               </button>
             </div>
@@ -74,7 +74,7 @@ const AdminDashboard: React.FC = () => {
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
                 { id: 'comms', label: 'Comunicações Pub', icon: Megaphone },
-                { id: 'leaflets', label: 'Folhetos', icon: FileText }, // RESTAURADO
+                { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'vantagens', label: 'Vantagens VIP', icon: Crown }, 
                 { id: 'notifications', label: 'Avisos App', icon: Bell }, 
                 { id: 'reviews', label: 'Feedback', icon: MessageSquare },
@@ -99,12 +99,11 @@ const AdminDashboard: React.FC = () => {
               <AdminTransactions transactions={globalTransactions} clients={globalClients} merchants={globalMerchants} />
           </div>
         )}
-        
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'comms' && <AdminComms />}
-        {currentView === 'leaflets' && <AdminLeaflets />} {/* RESTAURADO */}
+        {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 
         {currentView === 'notifications' && <AdminNotifications />}
         {currentView === 'reviews' && <FeedbackList />}

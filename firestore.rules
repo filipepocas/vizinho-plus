@@ -2,32 +2,27 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // FUNÇÃO AUXILIAR: Verifica se o utilizador tem a role de Admin
     function isAdmin() {
       return request.auth != null && 
              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
 
-    // FUNÇÃO AUXILIAR: Verifica se o utilizador está autenticado
     function isAuthenticated() {
       return request.auth != null;
     }
 
     // 1. UTILIZADORES (Users)
-    // O Admin pode ler e escrever tudo. O utilizador comum só os seus próprios dados.
-    // Lojistas podem ler dados de clientes por NIF (necessário para processar vendas).
     match /users/{userId} {
-      allow read: if isAuthenticated(); // Necessário para cruzamento de dados e pesquisas no frontend
-      allow create: if true; // Permite a criação de conta no registo
+      allow read: if true; // Permitido temporariamente para a Simulação Externa funcionar
+      allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
     }
 
     // 2. TRANSAÇÕES (Transactions)
-    // O Cliente só vê as suas. O Lojista só vê as da sua loja. O Admin vê todas.
     match /transactions/{transactionId} {
       allow read: if isAdmin() || 
                   (isAuthenticated() && (resource.data.clientId == request.auth.uid || resource.data.merchantId == request.auth.uid));
-      allow create: if isAuthenticated(); // Frontend cria com status: 'pending' e a Function resolve
+      allow create: if isAuthenticated(); 
       allow update: if isAdmin() || 
                     (isAuthenticated() && (resource.data.clientId == request.auth.uid || resource.data.merchantId == request.auth.uid));
       allow delete: if isAdmin();
@@ -40,47 +35,24 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
 
-    // 4. COLEÇÕES DE ACESSO PÚBLICO E DE LEITURA GERAL
-    // (Banners, Vantagens, Folhetos e Sistema podem ser lidos por clientes não autenticados ou em onboarding)
-    
-    match /vantagens/{vantagemId} {
-      allow read: if true; // CORRIGIDO: Permite leitura pública na Landing Page / Vantagens
-      allow write: if isAdmin();
-    }
+    // 4. COLEÇÕES PÚBLICAS
+    match /vantagens/{vantagemId} { allow read: if true; allow write: if isAdmin(); }
+    match /banners/{bannerId} { allow read: if true; allow write: if isAdmin(); }
+    match /leaflets/{leafletId} { allow read: if true; allow write: if isAdmin(); }
+    match /leaflet_campaigns/{campaignId} { allow read: if true; allow write: if isAdmin(); }
+    match /system/{document=**} { allow read: if true; allow write: if isAdmin(); }
 
-    match /banners/{bannerId} {
-      allow read: if true; 
-      allow write: if isAdmin();
-    }
-
-    match /leaflets/{leafletId} {
-      allow read: if true; 
-      allow write: if isAdmin();
-    }
-
-    match /leaflet_campaigns/{campaignId} {
-      allow read: if true;
-      allow write: if isAdmin();
-    }
-
-    match /system/{document=**} {
-      allow read: if true; 
-      allow write: if isAdmin();
-    }
-
-    // 5. PEDIDOS DOS LOJISTAS E NOTIFICAÇÕES (Marketing, Adesões, Mensagens)
-    
+    // 5. PEDIDOS E NOTIFICAÇÕES
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
-      allow create: if true; // O lojista cria na página de login antes de ter conta
+      allow create: if true; 
       allow update, delete: if isAdmin();
     }
 
     match /marketing_requests/{requestId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
-      allow create: if isAuthenticated() && request.resource.data.merchantId == request.auth.uid;
-      allow update: if isAdmin();
-      allow delete: if isAdmin();
+      allow create: if (isAuthenticated() && request.resource.data.merchantId == request.auth.uid) || request.resource.data.isExternal == true;
+      allow update, delete: if isAdmin();
     }
 
     match /merchant_messages/{msgId} {
@@ -94,6 +66,5 @@ service cloud.firestore {
       allow create: if isAdmin();
       allow update, delete: if isAdmin();
     }
-
   }
 }

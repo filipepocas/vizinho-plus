@@ -1,17 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
 import { 
-  LayoutDashboard, BarChart3, LogOut, Settings, History, Save, X, 
+  LogOut, Settings, History, Save, X, 
   Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download, 
   MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
   Loader2, Trash2 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import * as XLSX from 'xlsx';
 
 import MerchantTerminal from './components/MerchantTerminal';
 import QRScannerModal from './components/QRScannerModal';
@@ -56,7 +55,6 @@ const MerchantDashboard: React.FC = () => {
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
   
-  // Geração de Horas Redondas (08:00 às 20:00) para o Lojista
   const availableHours = Array.from({ length: 13 }, (_, i) => {
     const hour = i + 8;
     return `${hour.toString().padStart(2, '0')}:00`;
@@ -134,7 +132,6 @@ const MerchantDashboard: React.FC = () => {
       return;
     }
 
-    // VALIDAÇÃO: 2 HORAS DE ANTECEDÊNCIA (Ponto 3)
     const scheduledDateTime = new Date(`${pushForm.scheduledDate}T${pushForm.scheduledTime}`);
     const now = new Date();
     const diffInHours = (scheduledDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
@@ -182,7 +179,6 @@ const MerchantDashboard: React.FC = () => {
   const submitPushRequest = async () => {
     if (!pushSimulation) return;
     try {
-      // CORREÇÃO: Encaminhado para a coleção marketing_requests onde as regras de segurança permitem.
       await addDoc(collection(db, 'marketing_requests'), {
         merchantId: currentUser?.id,
         merchantName: currentUser?.shopName || currentUser?.name,
@@ -191,7 +187,7 @@ const MerchantDashboard: React.FC = () => {
         text: pushForm.text,
         targetType: pushForm.targetType,
         targetValue: pushForm.targetValue,
-        scheduledFor: Timestamp.fromDate(pushSimulation.scheduledFor),
+        scheduledFor: pushSimulation.scheduledFor,
         targetCount: pushSimulation.count,
         cost: pushSimulation.cost,
         status: 'pending',
@@ -200,10 +196,8 @@ const MerchantDashboard: React.FC = () => {
       toast.success("PEDIDO ENVIADO PARA APROVAÇÃO!");
       setPushSimulation(null);
       setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
-      // Redireciona para o separador Marketing para o lojista ver o pedido pendente
       setView('marketing'); 
     } catch (e) { 
-      console.error(e);
       toast.error("ERRO AO ENVIAR."); 
     }
   };
@@ -273,7 +267,11 @@ const MerchantDashboard: React.FC = () => {
           <button onClick={() => setView('push_campaign')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'push_campaign' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BellRing size={16} className="inline mr-1" /> Notificar Clientes</button>
           <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
           <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
-          <button onClick={async () => { await logout(); navigate('/login'); }} className="p-3 text-red-400"><LogOut size={20} /></button>
+          
+          {/* BOTÃO DE LOGOUT REDIRECIONA PARA A HOME PAGE ("/") */}
+          <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all">
+            <LogOut size={20} />
+          </button>
         </nav>
       </header>
 

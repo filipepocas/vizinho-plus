@@ -67,9 +67,13 @@ const UserDashboard: React.FC = () => {
       const valid = snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Leaflet))
         .filter(l => {
-          const start = l.startDate.toDate();
-          const end = l.endDate.toDate();
-          return (now >= start && now <= end) && (!l.targetZipCodes?.length || l.targetZipCodes.includes(userZipBase!));
+          const start = l.startDate && typeof l.startDate.toDate === 'function' ? l.startDate.toDate() : new Date();
+          const end = l.endDate && typeof l.endDate.toDate === 'function' ? l.endDate.toDate() : new Date();
+          
+          const isTimeValid = now >= start && now <= end;
+          const hasTargetZips = l.targetZipCodes && l.targetZipCodes.length > 0;
+          const isZipValid = !hasTargetZips || (userZipBase && l.targetZipCodes?.includes(userZipBase));
+          return isTimeValid && isZipValid;
         });
       setActiveLeaflets(valid);
     });
@@ -112,7 +116,7 @@ const UserDashboard: React.FC = () => {
 
   const handleLogout = async () => {
     await logout();
-    navigate('/login');
+    navigate('/');
   };
 
   const openLeaflet = () => { if (activeLeaflets.length > 0) window.open(activeLeaflets[0].leafletUrl, '_blank'); };
