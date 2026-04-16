@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
@@ -15,9 +15,11 @@ const LandingPage: React.FC = () => {
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
   const [showExternalModal, setShowExternalModal] = useState(false);
+  const [showEventModal, setShowEventModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'banner' | 'leaflet'>('banner');
   const [loading, setLoading] = useState(false);
   const [loadingPartner, setLoadingPartner] = useState(false);
+  const [loadingEvent, setLoadingEvent] = useState(false);
   
   const [prices, setPrices] = useState<any>({});
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
@@ -26,19 +28,21 @@ const LandingPage: React.FC = () => {
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt' });
 
   const [extForm, setExtForm] = useState({ companyName: '', contactName: '', nif: '', email: '', phone: '' });
-
   const [bannerForm, setBannerForm] = useState({ title: '', startDate: '', endDate: '', imageBase64: '', targetType: 'all', targetValue: '' });
   const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
 
   const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
-
-  // Formulário Cliente com Confirmações
   const [clientForm, setClientForm] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [clientLoading, setClientLoading] = useState(false);
+
+  const [eventForm, setEventForm] = useState({
+    entityName: '', contactName: '', phone: '', email: '', title: '', location: '',
+    eventType: '', ticketPrice: '', description: '', startDate: '', endDate: '', startTime: '', imageBase64: ''
+  });
 
   useEffect(() => {
     const fetchSys = async () => {
@@ -59,13 +63,14 @@ const LandingPage: React.FC = () => {
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet') => {
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet' | 'event') => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = (ev) => { 
         if (type === 'banner') setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
-        else setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
+        else if (type === 'leaflet') setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
+        else setEventForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
     };
     reader.readAsDataURL(file);
   };
@@ -167,18 +172,10 @@ const LandingPage: React.FC = () => {
     } catch (e) { toast.error("Erro ao enviar o pedido."); } finally { setLoadingPartner(false); }
   };
 
-  // Registo do Cliente com Dupla Validação
   const handleClientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (clientForm.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) {
-      toast.error("OS EMAILS NÃO COINCIDEM. VERIFIQUE.");
-      return;
-    }
-    if (clientForm.password !== confirmPassword) {
-      toast.error("AS PASSWORDS NÃO COINCIDEM. VERIFIQUE.");
-      return;
-    }
+    if (clientForm.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) return toast.error("OS EMAILS NÃO COINCIDEM.");
+    if (clientForm.password !== confirmPassword) return toast.error("AS PASSWORDS NÃO COINCIDEM.");
 
     setClientLoading(true);
     try {
@@ -195,11 +192,25 @@ const LandingPage: React.FC = () => {
       
       toast.success("Bem-vindo ao Vizinho+!");
       navigate('/login');
-    } catch (err: any) { 
-      toast.error("Erro ao criar conta. Email já em uso?"); 
-    } finally { 
-      setClientLoading(false); 
-    }
+    } catch (err: any) { toast.error("Erro ao criar conta. Email já em uso?"); } finally { setClientLoading(false); }
+  };
+
+  const handleEventSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(!eventForm.imageBase64) return toast.error("A imagem do cartaz é obrigatória.");
+    setLoadingEvent(true);
+    try {
+      await addDoc(collection(db, 'events'), {
+        ...eventForm,
+        startDate: new Date(eventForm.startDate),
+        endDate: new Date(eventForm.endDate),
+        status: 'pending',
+        createdAt: serverTimestamp()
+      });
+      toast.success("Evento enviado para aprovação!");
+      setShowEventModal(false);
+      setEventForm({entityName:'', contactName:'', phone:'', email:'', title:'', location:'', eventType:'', ticketPrice:'', description:'', startDate:'', endDate:'', startTime:'', imageBase64:''});
+    } catch (e) { toast.error("Erro ao enviar evento."); } finally { setLoadingEvent(false); }
   };
 
   return (
@@ -207,9 +218,15 @@ const LandingPage: React.FC = () => {
       
       <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
-        <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
-            <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
-        </button>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+            <button onClick={() => setShowEventModal(true)} className="bg-white text-[#0a2540] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-md border-2 border-slate-200 flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors">
+                <CalendarPlus size={16} className="text-blue-500" /> Comunicar Evento Grátis
+            </button>
+            <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center justify-center gap-2 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
+                <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
+            </button>
+        </div>
       </nav>
 
       <main className="max-w-6xl mx-auto px-8 pt-12 pb-24 text-center flex flex-col items-center">
@@ -248,13 +265,11 @@ const LandingPage: React.FC = () => {
               <form onSubmit={handleClientRegister} className="space-y-4">
                   <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-sm" />
                   
-                  {/* Dupla Validação Email */}
                   <div className="grid grid-cols-1 gap-4">
                      <input required type="email" placeholder="E-mail" value={clientForm.email} onChange={e=>setClientForm({...clientForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                      <input required type="email" placeholder="Repita o E-mail" value={confirmEmail} onChange={e=>setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-2 border-[#00d66f] rounded-2xl font-black text-[#0a2540] focus:border-[#0a2540] outline-none text-xs" />
                   </div>
 
-                  {/* Dupla Validação Password */}
                   <div className="grid grid-cols-2 gap-4">
                      <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                      <input required type="password" placeholder="Repita a Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f] rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
@@ -319,35 +334,75 @@ const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      {showTerms && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos de Utilização & RGPD</h3>
-              <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+      {/* MODAL DE EVENTOS COMUNITÁRIOS */}
+      {showEventModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-blue-500 shadow-[16px_16px_0px_0px_#3b82f6] overflow-hidden animate-in zoom-in my-8 relative">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3"><CalendarPlus size={24} className="text-white" /><h2 className="font-black uppercase italic tracking-tighter text-xl">Comunicar Evento</h2></div>
+              <button onClick={() => setShowEventModal(false)}><X size={24} className="hover:text-blue-200"/></button>
             </div>
-            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de atribuição de saldo (cashback) local. O Vizinho+ é uma ferramenta de mediação técnica, não sendo parte integrante, interveniente ou responsável por qualquer transação comercial direta entre Lojistas e Clientes.</p>
-              <p>Em conformidade com o Regulamento Geral de Proteção de Dados (RGPD), a entidade responsável pelo tratamento dos dados pessoais recolhidos é a Panóplia Lógica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde. Os teus dados pessoais (Nome, Email, NIF e Código Postal) são recolhidos estritamente para o funcionamento da plataforma. O NIF é solicitado especificamente para validar, processar e cruzar de forma fidedigna as compras efetuadas nas lojas aderentes.</p>
-              <p>Garantimos que os teus dados pessoais não são partilhados, cedidos ou vendidos a terceiros para fins publicitários ou de marketing externo.</p>
-              <p>O saldo de cashback acumulado na tua carteira digital Vizinho+ possui uma natureza exclusivamente promocional e não tem valor fiduciário. Isto significa que o saldo não pode ser levantado em numerário, transferido para contas bancárias ou trocado por dinheiro vivo; serve unicamente como desconto acumulado nas lojas da rede.</p>
-              <p className="text-red-500">A tecnologia, o sistema de gestão de saldos, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora e estão protegidos por direitos de propriedade intelectual. É estritamente proibida a reprodução, cópia, manipulação de código ou engenharia reversa por qualquer entidade ou indivíduo não autorizado.</p>
-              <p>Para garantir o cumprimento das normas legais, não serão aceites registos de menores de idade. Ao registares-te, declaras ter idade legal igual ou superior a 18 anos.</p>
+            
+            <div className="p-8">
+              <p className="text-sm font-bold text-slate-500 mb-6 border-b-2 border-slate-100 pb-6">
+                Comunique aqui os seus eventos desportivos, artes, festas, etc. de forma <strong>gratuita</strong>. Preencha os dados e, após validação, ficará visível para a comunidade local na nossa App.
+              </p>
+
+              <form onSubmit={handleEventSubmit} className="space-y-4">
+                 <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">1. Dados do Promotor</h3>
+                 <div className="grid grid-cols-2 gap-4 mb-6">
+                    <input required placeholder="Nome da Entidade/Clube" value={eventForm.entityName} onChange={e=>setEventForm({...eventForm, entityName: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                    <input required placeholder="Pessoa de Contacto" value={eventForm.contactName} onChange={e=>setEventForm({...eventForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                    <input required type="tel" placeholder="Telefone" value={eventForm.phone} onChange={e=>setEventForm({...eventForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                    <input required type="email" placeholder="Email" value={eventForm.email} onChange={e=>setEventForm({...eventForm, email: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                 </div>
+
+                 <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">2. Detalhes do Evento</h3>
+                 <input required placeholder="Título do Evento" value={eventForm.title} onChange={e=>setEventForm({...eventForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                 
+                 <div className="grid grid-cols-2 gap-4">
+                    <input required placeholder="Local do Evento" value={eventForm.location} onChange={e=>setEventForm({...eventForm, location: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                    <select required value={eventForm.eventType} onChange={e=>setEventForm({...eventForm, eventType: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase outline-none focus:border-blue-500">
+                       <option value="">Tipo de Evento...</option>
+                       <option value="Desporto">Desporto</option>
+                       <option value="Cultura / Artes">Cultura / Artes</option>
+                       <option value="Festa / Música">Festa / Música</option>
+                       <option value="Feira / Mercado">Feira / Mercado</option>
+                       <option value="Outro">Outro</option>
+                    </select>
+                 </div>
+
+                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data Início</label><input required type="date" value={eventForm.startDate} onChange={e=>setEventForm({...eventForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data Fim</label><input required type="date" value={eventForm.endDate} onChange={e=>setEventForm({...eventForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Hora Início</label><input required type="time" value={eventForm.startTime} onChange={e=>setEventForm({...eventForm, startTime: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <input required placeholder="Preço (Ex: Grátis ou 5€)" value={eventForm.ticketPrice} onChange={e=>setEventForm({...eventForm, ticketPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                 </div>
+
+                 <textarea required placeholder="Descreva o evento (o que vai acontecer, programa, etc)..." rows={4} value={eventForm.description} onChange={e=>setEventForm({...eventForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 resize-none" />
+
+                 <div className="bg-slate-100 p-4 rounded-2xl">
+                    <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Cartaz / Imagem do Evento</p>
+                    <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'event')} className="w-full text-xs font-bold" />
+                 </div>
+
+                 <button type="submit" disabled={loadingEvent} className="w-full bg-blue-500 text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4 hover:bg-blue-600 transition-colors shadow-lg">
+                   {loadingEvent ? <Loader2 className="animate-spin"/> : 'Submeter Evento Grátis'}
+                 </button>
+              </form>
             </div>
-            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>
         </div>
       )}
 
+      {/* MODAL EXTERNAL PUB (Marketing Externa) */}
       {showExternalModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8 relative">
-            
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3"><Megaphone className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Anunciar no Vizinho+</h2></div>
               <button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}}><X size={24} className="hover:text-red-400"/></button>
             </div>
-
             <div className="p-8">
               <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">1. Dados da Empresa / Requisitante</h3>
               <div className="grid grid-cols-2 gap-4 mb-8">
@@ -357,7 +412,6 @@ const LandingPage: React.FC = () => {
                   <input required type="email" placeholder="Email" value={extForm.email} onChange={e=>setExtForm({...extForm, email: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
                   <input required type="tel" placeholder="Telefone" value={extForm.phone} onChange={e=>setExtForm({...extForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
               </div>
-
               <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">2. Tipo de Publicidade</h3>
               <div className="flex gap-2 mb-6">
                  <button onClick={() => {setActiveTab('banner'); setLeafletSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Banner Digital (App)</button>
@@ -371,7 +425,6 @@ const LandingPage: React.FC = () => {
                       <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                    </div>
                    <input type="text" placeholder="Título Opcional" value={bannerForm.title} onChange={e=>setBannerForm({...bannerForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm focus:border-[#00d66f] outline-none" />
-                   
                    <div className="space-y-2">
                       <select required value={bannerForm.targetType} onChange={e=>setBannerForm({...bannerForm, targetType: e.target.value, targetValue: ''})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
                           <option value="all">Todos os Clientes na App</option>
@@ -383,12 +436,10 @@ const LandingPage: React.FC = () => {
                         <input required type="text" placeholder="Insira CPs (Separe por vírgula. Ex: 4000, 4400)" value={bannerForm.targetValue} onChange={e=>setBannerForm({...bannerForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-2 border-blue-100 rounded-xl font-black text-xs" />
                       )}
                    </div>
-
                    <div className="bg-slate-100 p-4 rounded-2xl">
                       <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Upload Imagem (1920x1080px. Máx 500KB)</p>
                       <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
                    </div>
-
                    {!bannerSimulation ? (
                      <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Calcular Orçamento'}</button>
                    ) : (
@@ -411,26 +462,21 @@ const LandingPage: React.FC = () => {
                         <option value="">(Escolha a Edição do Folheto)</option>
                         {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                    </select>
-
                    <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-xl text-center">
                       <p className="text-[10px] font-black uppercase text-amber-800">Espaço Fixo para Entidades Externas:</p>
                       <p className="text-sm font-black uppercase text-amber-900">Rodapé das Páginas Interiores</p>
                    </div>
-
                    <input required type="text" placeholder="Nome / Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
-                   
                    <div className="grid grid-cols-2 gap-4">
                       <input required type="text" placeholder="Preço (€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                       <input required type="text" placeholder="Unidade (ex: kg, uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                       <input type="text" placeholder="Preço Riscado (Opcional)" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                       <input type="text" placeholder="Destaque (Opcional)" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                    </div>
-
                    <div className="bg-slate-100 p-4 rounded-2xl">
                       <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Upload Imagem (Alta Qualidade. Fundo Branco/Transparente)</p>
                       <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
                    </div>
-
                    {!leafletSimulation ? (
                      <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2">{loading ? <Loader2 className="animate-spin"/> : 'Ver Preço do Espaço'}</button>
                    ) : (
@@ -446,6 +492,61 @@ const LandingPage: React.FC = () => {
                 </form>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL TERMOS DE UTILIZAÇÃO */}
+      {showTerms && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3>
+              <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Natureza da Plataforma</h4>
+                <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de atribuição de saldo (cashback) local. O Vizinho+ é uma ferramenta de mediação técnica, não sendo parte integrante, interveniente ou responsável por qualquer transação comercial direta entre Lojistas e Clientes.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Entidade Responsável e Compromisso de Privacidade</h4>
+                <p>O Vizinho+ respeita a tua privacidade e compromete-se a protegê-la. Em conformidade com o Regulamento Geral de Proteção de Dados (RGPD), a entidade responsável pelo tratamento dos dados pessoais recolhidos é a Panóplia Lógica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde.</p>
+                <p>Estabelecemos medidas de segurança técnica e organizacionais rigorosas para garantir que o processamento dos teus dados é realizado de forma segura, prevenindo acessos não autorizados ou o uso indevido da informação.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Recolha e Utilização de Dados Pessoais</h4>
+                <p>A recolha de dados ocorre de forma voluntária quando utilizas os nossos serviços ou entras em contacto connosco.</p>
+                <ul className="list-disc ml-5 mt-2 space-y-1">
+                  <li><strong>Dados Recolhidos:</strong> Nome, Email, NIF e Código Postal.</li>
+                  <li><strong>Finalidade:</strong> Estes dados são recolhidos estritamente para o funcionamento da plataforma. O NIF é solicitado especificamente para validar, processar e cruzar de forma fidedigna as compras efetuadas nas lojas aderentes, garantindo a atribuição correta do saldo.</li>
+                  <li><strong>Consentimento:</strong> Ao submeteres os teus dados, concedes o teu consentimento "prévio, livre e explícito" para o seu tratamento nos fins aqui descritos.</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Partilha de Informação</h4>
+                <p>Garantimos que os teus dados pessoais não são partilhados, cedidos ou vendidos a terceiros para fins publicitários ou de marketing externo. A informação circula apenas dentro do ecossistema tecnológico necessário para a prestação do serviço Vizinho+.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Natureza do Saldo (Cashback)</h4>
+                <p>O saldo de cashback acumulado na tua carteira digital Vizinho+ possui uma natureza exclusivamente promocional e não tem valor fiduciário. Isto significa que o saldo:</p>
+                <ul className="list-disc ml-5 mt-2 space-y-1">
+                  <li>Não pode ser levantado em numerário;</li>
+                  <li>Não pode ser transferido para contas bancárias;</li>
+                  <li>Não pode ser trocado por dinheiro vivo;</li>
+                  <li>Serve unicamente como desconto acumulado para utilização exclusiva na rede de lojas aderentes ao programa.</li>
+                </ul>
+              </div>
+              <div>
+                <h4 className="font-black text-red-500 mb-1 uppercase">6. Proteção de Propriedade Intelectual</h4>
+                <p>A tecnologia, o sistema de gestão de saldos, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora e estão protegidos por direitos de propriedade intelectual. É estritamente proibida a reprodução, cópia, manipulação de código ou engenharia reversa por qualquer entidade ou indivíduo não autorizado.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">7. Restrição de Idade e Direitos</h4>
+                <p>Para garantir o cumprimento das normas legais e a segurança dos utilizadores, não serão aceites registos de menores de idade. Ao registares-te, declaras ter idade legal igual ou superior a 18 anos. A qualquer momento, podes exercer os teus direitos de acesso, retificação, oposição ou eliminação dos teus dados pessoais, conforme previsto na lei, através dos canais de contacto oficiais da plataforma.</p>
+              </div>
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>
         </div>
       )}

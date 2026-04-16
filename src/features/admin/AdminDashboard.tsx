@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, getDocs, deleteDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt, CalendarPlus, Leaf } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -17,12 +17,14 @@ import AdminNotifications from './AdminNotifications';
 import AdminComms from './AdminComms';
 import AdminVantagens from './AdminVantagens'; 
 import AdminLeaflets from './AdminLeaflets'; 
-import AdminBilling from './AdminBilling'; // NOVO: MENU COBRANÇAS
+import AdminBilling from './AdminBilling'; 
+import AdminEvents from './AdminEvents'; // NOVO COMPONENTE
+import AdminAntiWaste from './AdminAntiWaste'; // NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'billing' | 'notifications' | 'vantagens' | 'leaflets' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'billing' | 'events' | 'anti_waste' | 'notifications' | 'vantagens' | 'leaflets' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -39,6 +41,30 @@ const AdminDashboard: React.FC = () => {
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
     const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
     
+    // NOVO: Limpeza Passiva (Auto-delete) de Eventos e Desperdícios expirados
+    const cleanupExpiredData = async () => {
+       const now = new Date();
+       
+       // 1. Limpar Eventos
+       const eventsSnap = await getDocs(collection(db, 'events'));
+       eventsSnap.forEach(docSnap => {
+          const ev = docSnap.data();
+          if (ev.endDate && ev.endDate.toDate() < now) {
+             deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
+          }
+       });
+
+       // 2. Limpar Combate ao Desperdício
+       const wasteSnap = await getDocs(collection(db, 'anti_waste'));
+       wasteSnap.forEach(docSnap => {
+          const w = docSnap.data();
+          if (w.endTime && w.endTime.toDate() < now) {
+             deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
+          }
+       });
+    };
+    cleanupExpiredData();
+
     return () => { unsubTx(); unsubMerchants(); unsubClients(); };
   }, []);
 
@@ -74,8 +100,10 @@ const AdminDashboard: React.FC = () => {
                 { id: 'requests', label: 'Aprovar', icon: CheckSquare }, 
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
+                { id: 'events', label: 'Eventos', icon: CalendarPlus }, // NOVO MENU
+                { id: 'anti_waste', label: 'Desperdício', icon: Leaf }, // NOVO MENU
                 { id: 'comms', label: 'Comunicações Pub', icon: Megaphone },
-                { id: 'billing', label: 'Cobranças', icon: Receipt }, // NOVO MENU ADICIONADO
+                { id: 'billing', label: 'Cobranças', icon: Receipt }, 
                 { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'vantagens', label: 'Vantagens VIP', icon: Crown }, 
                 { id: 'notifications', label: 'Avisos App', icon: Bell }, 
@@ -104,6 +132,8 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
+        {currentView === 'events' && <AdminEvents />} 
+        {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 

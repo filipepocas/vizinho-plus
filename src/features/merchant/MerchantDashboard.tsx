@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
@@ -8,7 +8,7 @@ import {
   LogOut, Settings, History, Save, X, 
   Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download, 
   MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
-  Loader2, Trash2, BookOpen
+  Loader2, Trash2, BookOpen, Leaf
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -24,11 +24,11 @@ const MerchantDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history' | 'marketing' | 'push_campaign'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history' | 'marketing' | 'push_campaign' | 'anti_waste'>('terminal');
   
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
-  const [showRulesModal, setShowRulesModal] = useState(false); // NOVO ESTADO DAS REGRAS
+  const [showRulesModal, setShowRulesModal] = useState(false); 
 
   const [pushForm, setPushForm] = useState({ 
     title: '', text: '', targetType: 'all' as 'all' | 'multiple_zip' | 'top' | 'birthDate', targetValue: '',
@@ -49,17 +49,17 @@ const MerchantDashboard: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
-  
   const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
   const [postInvoiceNum, setPostInvoiceNum] = useState('');
 
+  // NOVO: Estados de Desperdício
+  const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00', targetZip: currentUser?.zipCode?.substring(0,4) || '' });
+  const [activeWasteOffers, setActiveWasteOffers] = useState<any[]>([]);
+  const [loadingWaste, setLoadingWaste] = useState(false);
+
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
-  
-  const availableHours = Array.from({ length: 13 }, (_, i) => {
-    const hour = i + 8;
-    return `${hour.toString().padStart(2, '0')}:00`;
-  });
+  const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
@@ -71,136 +71,85 @@ const MerchantDashboard: React.FC = () => {
     if (!currentUser?.id) return;
 
     const qMsg = query(collection(db, 'merchant_messages'), where('merchantId', '==', currentUser.id));
-    const unsubMsg = onSnapshot(qMsg, (snap) => {
-      setAdminMessages(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    const unsubMsg = onSnapshot(qMsg, (snap) => setAdminMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    const qWaste = query(collection(db, 'anti_waste'), where('merchantId', '==', currentUser.id));
+    const unsubWaste = onSnapshot(qWaste, (snap) => {
+        const now = new Date();
+        setActiveWasteOffers(snap.docs.map(d => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
     });
 
     const fetchPrices = async () => {
       const configSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (configSnap.exists()) {
         const data = configSnap.data();
-        setPushPrices({ 
-          perClient: parseFloat(data.push_cost_per_client) || 0.05, 
-          minService: parseFloat(data.push_min_cost) || 5.00 
-        });
+        setPushPrices({ perClient: parseFloat(data.push_cost_per_client) || 0.05, minService: parseFloat(data.push_min_cost) || 5.00 });
       }
     };
     fetchPrices();
 
-    return () => unsubMsg();
+    return () => { unsubMsg(); unsubWaste(); };
   }, [currentUser?.id]);
 
   useEffect(() => {
     const searchClient = async () => {
-      if (!isNifValid) {
-        setFoundClient(null);
-        return;
-      }
+      if (!isNifValid) { setFoundClient(null); return; }
       setIsSearching(true);
       try {
         const cleanNumber = cardNumber.replace(/\s/g, '');
         let q = query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client'));
         let snap = await getDocs(q);
-        
         if (snap.empty) {
           q = query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client'));
           snap = await getDocs(q);
         }
-
-        if (!snap.empty) {
-          setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-        } else {
-          setFoundClient(null);
-        }
-      } catch (err) {
-        setFoundClient(null);
-      } finally {
-        setIsSearching(false);
-      }
+        if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+        else setFoundClient(null);
+      } catch (err) { setFoundClient(null); } finally { setIsSearching(false); }
     };
-
-    const timeoutId = setTimeout(() => {
-      searchClient();
-    }, 500);
-
+    const timeoutId = setTimeout(() => searchClient(), 500);
     return () => clearTimeout(timeoutId);
   }, [cardNumber, isNifValid]);
 
 
   const handleSimulatePush = async () => {
-    if (!pushForm.title || !pushForm.text || !pushForm.scheduledDate) {
-      toast.error("PREENCHA TODOS OS CAMPOS.");
-      return;
-    }
-
+    if (!pushForm.title || !pushForm.text || !pushForm.scheduledDate) return toast.error("PREENCHA TODOS OS CAMPOS.");
     const scheduledDateTime = new Date(`${pushForm.scheduledDate}T${pushForm.scheduledTime}`);
-    const now = new Date();
-    const diffInHours = (scheduledDateTime.getTime() - now.getTime()) / (1000 * 60 * 60);
-
-    if (diffInHours < 2) {
-      toast.error("A data/hora escolhida tem de ser com pelo menos 2 horas de antecedência.", { duration: 5000 });
-      return;
-    }
-
+    if ((scheduledDateTime.getTime() - new Date().getTime()) / 3600000 < 2) return toast.error("A data/hora escolhida tem de ser com pelo menos 2 horas de antecedência.");
     setSimulating(true);
-
     try {
-      const usersRef = collection(db, 'users');
-      let q = query(usersRef, where('role', '==', 'client'), where('status', '==', 'active'));
-      const snap = await getDocs(q);
+      const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
       let clients = snap.docs.map(d => d.data());
-
       if (pushForm.targetType === 'multiple_zip') {
         const zips = pushForm.targetValue.split(',').map(z => z.trim());
         clients = clients.filter((c: any) => zips.some(z => (c.zipCode || '').startsWith(z)));
       } else if (pushForm.targetType === 'top') {
         clients = clients.filter((c: any) => c.storeWallets?.[currentUser?.id || ""]);
       } else if (pushForm.targetType === 'birthDate') {
-        const currentMonth = new Date().getMonth() + 1;
-        clients = clients.filter((c: any) => {
-          if (!c.birthDate) return false;
-          const month = parseInt(c.birthDate.split('-')[1]);
-          return month === currentMonth;
-        });
+        const cm = new Date().getMonth() + 1;
+        clients = clients.filter((c: any) => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
       }
-
-      const count = clients.length;
-      let totalCost = count * pushPrices.perClient;
-      if (totalCost < pushPrices.minService && count > 0) totalCost = pushPrices.minService;
-      if (count === 0) totalCost = 0;
-
-      setPushSimulation({ count, cost: totalCost, scheduledFor: scheduledDateTime });
-    } catch (e) {
-      toast.error("ERRO AO CALCULAR ALCANCE.");
-    } finally {
-      setSimulating(false);
-    }
+      let totalCost = clients.length * pushPrices.perClient;
+      if (totalCost < pushPrices.minService && clients.length > 0) totalCost = pushPrices.minService;
+      if (clients.length === 0) totalCost = 0;
+      setPushSimulation({ count: clients.length, cost: totalCost, scheduledFor: scheduledDateTime });
+    } catch (e) { toast.error("ERRO AO CALCULAR ALCANCE."); } finally { setSimulating(false); }
   };
 
   const submitPushRequest = async () => {
     if (!pushSimulation) return;
     try {
       await addDoc(collection(db, 'marketing_requests'), {
-        merchantId: currentUser?.id,
-        merchantName: currentUser?.shopName || currentUser?.name,
-        type: 'push_notification',
-        title: pushForm.title,
-        text: pushForm.text,
-        targetType: pushForm.targetType,
-        targetValue: pushForm.targetValue,
-        scheduledFor: pushSimulation.scheduledFor,
-        targetCount: pushSimulation.count,
-        cost: pushSimulation.cost,
-        status: 'pending',
-        createdAt: serverTimestamp()
+        merchantId: currentUser?.id, merchantName: currentUser?.shopName || currentUser?.name,
+        type: 'push_notification', title: pushForm.title, text: pushForm.text,
+        targetType: pushForm.targetType, targetValue: pushForm.targetValue,
+        scheduledFor: pushSimulation.scheduledFor, targetCount: pushSimulation.count,
+        cost: pushSimulation.cost, status: 'pending', createdAt: serverTimestamp()
       });
-      toast.success("PEDIDO ENVIADO PARA APROVAÇÃO!");
-      setPushSimulation(null);
-      setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
+      toast.success("PEDIDO ENVIADO!");
+      setPushSimulation(null); setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
       setView('marketing'); 
-    } catch (e) { 
-      toast.error("ERRO AO ENVIAR."); 
-    }
+    } catch (e) { toast.error("ERRO."); }
   };
 
   const handleDeleteMessage = async (id: string) => {
@@ -208,36 +157,59 @@ const MerchantDashboard: React.FC = () => {
       await deleteDoc(doc(db, 'merchant_messages', id));
       toast.success("MENSAGEM APAGADA.");
       if (adminMessages.length <= 1) setShowInbox(false);
-    } catch (e) { toast.error("ERRO AO APAGAR A MENSAGEM."); }
+    } catch (e) { toast.error("ERRO."); }
   };
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
     const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
-    const invAmount = parseFloat(amount); 
-    setPendingAction({ type, val: val || 0, invAmount: invAmount || 0 });
+    setPendingAction({ type, val: val || 0, invAmount: parseFloat(amount) || 0 });
     setShowConfirmModal(true);
   };
 
   const handleConfirm = async () => {
     if (!pendingAction || !currentUser || !foundClient) return;
-    setShowConfirmModal(false);
-    setIsLoading(true);
+    setShowConfirmModal(false); setIsLoading(true);
     try {
       const newTxId = await addTransaction({
-        clientId: foundClient.id,
-        merchantId: currentUser.id,
-        merchantName: currentUser.shopName || currentUser.name || 'Loja',
-        amount: pendingAction.val,
-        invoiceAmount: pendingAction.invAmount,
-        type: pendingAction.type,
-        documentNumber: documentNumber,
-        clientName: foundClient.name,
-        clientCardNumber: foundClient.customerNumber,
-        clientBirthDate: foundClient.birthDate
+        clientId: foundClient.id, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name || 'Loja',
+        amount: pendingAction.val, invoiceAmount: pendingAction.invAmount, type: pendingAction.type, documentNumber: documentNumber,
+        clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
       });
-      setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
-    } catch (e) { toast.error("ERRO AO REGISTAR."); } finally { setIsLoading(false); }
+      toast.success('Concluído!');
+    } catch (e) { toast.error("ERRO."); } finally { setIsLoading(false); }
+  };
+
+  // SUBMETER ANÚNCIO DESPERDÍCIO
+  const handleWasteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(activeWasteOffers.length > 0) return toast.error("Só é permitida 1 publicação por dia.");
+    if(!wasteForm.targetZip) return toast.error("Insira o Código Postal alvo.");
+
+    setLoadingWaste(true);
+    try {
+        const [hours, minutes] = wasteForm.endTime.split(':');
+        const endDate = new Date();
+        endDate.setHours(Number(hours), Number(minutes), 0, 0);
+
+        if (endDate <= new Date()) {
+            setLoadingWaste(false);
+            return toast.error("A hora de fim tem que ser no futuro (hoje).");
+        }
+
+        await addDoc(collection(db, 'anti_waste'), {
+            merchantId: currentUser?.id,
+            merchantName: currentUser?.shopName || currentUser?.name,
+            address: currentUser?.address || currentUser?.freguesia || '',
+            productInfo: wasteForm.productInfo,
+            conditions: wasteForm.conditions,
+            targetZip: wasteForm.targetZip,
+            endTime: Timestamp.fromDate(endDate),
+            createdAt: serverTimestamp()
+        });
+        toast.success("Anúncio publicado com sucesso!");
+        setWasteForm({...wasteForm, productInfo: '', conditions: ''});
+    } catch(err) { toast.error("Erro ao publicar."); } finally { setLoadingWaste(false); }
   };
 
   if (!currentUser) return null;
@@ -251,18 +223,15 @@ const MerchantDashboard: React.FC = () => {
           
           <button onClick={() => setShowInbox(true)} className="relative bg-white/10 p-3 rounded-2xl hover:bg-[#00d66f] hover:text-[#0a2540] transition-all">
              <MessageSquare size={24} />
-             {adminMessages.length > 0 && (
-               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0f172a] animate-pulse">
-                 {adminMessages.length}
-               </span>
-             )}
+             {adminMessages.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0f172a] animate-pulse">{adminMessages.length}</span>}
           </button>
         </div>
         
         <nav className="flex flex-wrap justify-center gap-2">
           <button onClick={() => setView('terminal')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
-          <button onClick={() => setView('push_campaign')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'push_campaign' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BellRing size={16} className="inline mr-1" /> Notificar Clientes</button>
+          <button onClick={() => setView('push_campaign')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'push_campaign' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BellRing size={16} className="inline mr-1" /> Push</button>
           <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
+          <button onClick={() => setView('anti_waste')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'anti_waste' ? 'bg-green-500 text-white' : 'text-green-400 hover:bg-green-500/20'}`}><Leaf size={16} className="inline mr-1" /> Desperdício</button>
           <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
           <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Loja</button>
           <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
@@ -271,26 +240,75 @@ const MerchantDashboard: React.FC = () => {
 
       <main className="max-w-7xl mx-auto p-4 w-full space-y-6">
         
-        {/* BOTÃO DAS REGRAS A PISCAR */}
         <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
           <BookOpen size={20} /> Ler Regras de Utilização do Comerciante
         </button>
+
+        {/* COMBATE AO DESPERDÍCIO */}
+        {view === 'anti_waste' && (
+           <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
+              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-green-500 shadow-[12px_12px_0px_#22c55e] space-y-6">
+                 <div>
+                    <h3 className="text-xl font-black uppercase italic text-green-700 flex items-center gap-2"><Leaf /> Combate ao Desperdício</h3>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Anuncie gratuitamente produtos com validade curta ou sobras diárias.</p>
+                 </div>
+                 
+                 <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100">
+                    <p className="text-[10px] font-black text-green-800 uppercase mb-1">Regras:</p>
+                    <ul className="text-[9px] font-bold text-green-700 space-y-1 ml-4 list-disc">
+                       <li>O anúncio é válido apenas para o dia de hoje.</li>
+                       <li>Será apagado automaticamente na hora definida.</li>
+                       <li>Só pode ter um anúncio ativo por dia.</li>
+                    </ul>
+                 </div>
+
+                 <form onSubmit={handleWasteSubmit} className="space-y-4">
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Produtos / Sobras</label><input required placeholder="Ex: 5 caixas de pão, 3 bolos do dia..." value={wasteForm.productInfo} onChange={e=>setWasteForm({...wasteForm, productInfo: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Condições de Aquisição</label><input required placeholder="Ex: Tudo com 50% de desconto" value={wasteForm.conditions} onChange={e=>setWasteForm({...wasteForm, conditions: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Hora Limite (Hoje)</label><input required type="time" value={wasteForm.endTime} onChange={e=>setWasteForm({...wasteForm, endTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Código Postal Alvo</label><input required type="text" placeholder="CP4 ou CP7" value={wasteForm.targetZip} onChange={e=>setWasteForm({...wasteForm, targetZip: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
+                    </div>
+                    <button type="submit" disabled={loadingWaste || activeWasteOffers.length > 0} className="w-full bg-green-500 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all shadow-lg flex justify-center gap-3 disabled:opacity-50">
+                       {loadingWaste ? <Loader2 className="animate-spin"/> : <><Send size={18}/> Publicar Imediatamente</>}
+                    </button>
+                 </form>
+              </div>
+
+              <div className="space-y-4">
+                 <h3 className="text-lg font-black uppercase text-slate-400">Anúncio Ativo Hoje</h3>
+                 {activeWasteOffers.map(o => (
+                    <div key={o.id} className="bg-white border-4 border-green-500 p-6 rounded-[30px] relative">
+                       <p className="font-black text-lg text-[#0a2540] uppercase">{o.merchantName}</p>
+                       <p className="text-[10px] font-bold text-slate-400 mb-4">{o.address} | CP: {o.targetZip}</p>
+                       <div className="space-y-2 bg-green-50 p-4 rounded-2xl border-2 border-green-100">
+                          <p className="text-sm font-bold text-green-900">{o.productInfo}</p>
+                          <p className="text-xs font-black text-green-700 bg-white inline-block px-3 py-1 rounded-lg shadow-sm">{o.conditions}</p>
+                       </div>
+                       <div className="mt-4 flex justify-between items-center">
+                          <p className="text-[9px] font-black uppercase text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border-2 border-slate-200">
+                             Expira às: {o.endTime.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </p>
+                          <button onClick={() => deleteDoc(doc(db, 'anti_waste', o.id))} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-xl transition-colors"><Trash2 size={16}/></button>
+                       </div>
+                    </div>
+                 ))}
+                 {activeWasteOffers.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-300 text-sm uppercase">Nenhum anúncio ativo hoje.</p>}
+              </div>
+           </div>
+        )}
 
         {view === 'push_campaign' && (
           <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl space-y-6">
                 <div>
-                   <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center gap-2">
-                      <Send className="text-[#00d66f]" /> Pedir Envio de Notificações
-                   </h3>
+                   <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center gap-2"><Send className="text-[#00d66f]" /> Pedir Envio de Notificações</h3>
                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Desperte o telemóvel dos seus clientes</p>
                 </div>
-
                 <div className="space-y-4">
                    <input type="text" placeholder="Título (Ex: Promoção de Verão!)" value={pushForm.title} onChange={e=>setPushForm({...pushForm, title: e.target.value.toUpperCase()})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
                    <textarea rows={4} placeholder="Mensagem curta e apelativa (Máx. 100 caracteres)..." value={pushForm.text} onChange={e=>setPushForm({...pushForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f] resize-none" maxLength={100} />
                 </div>
-
                 <div className="space-y-4">
                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Quem deve receber?</label>
                    <select value={pushForm.targetType} onChange={e=>setPushForm({...pushForm, targetType: e.target.value as any, targetValue: ''})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
@@ -299,45 +317,22 @@ const MerchantDashboard: React.FC = () => {
                       <option value="top">Meus Clientes (Top de Vendas)</option>
                       <option value="birthDate">Aniversariantes do Mês</option>
                    </select>
-
-                   {pushForm.targetType === 'multiple_zip' && (
-                     <input type="text" placeholder="Insira CP4 separados por vírgula (Ex: 4620, 4400)" value={pushForm.targetValue} onChange={e=>setPushForm({...pushForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs" />
-                   )}
+                   {pushForm.targetType === 'multiple_zip' && <input type="text" placeholder="Insira CP4 separados por vírgula (Ex: 4620, 4400)" value={pushForm.targetValue} onChange={e=>setPushForm({...pushForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs" />}
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label>
-                    <input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label>
-                    <select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
-                      {availableHours.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label><input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label><select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">{availableHours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
                 </div>
-
-                <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">
-                   {simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}
-                </button>
+                <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">{simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}</button>
              </div>
 
              {pushSimulation && (
                <div className="bg-[#00d66f] p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540] flex flex-col justify-center text-center animate-in zoom-in">
                   <h4 className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest mb-6 opacity-60">Orçamento Detalhado</h4>
-                  
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10">
-                        <span className="text-[9px] font-black uppercase block mb-1">Clientes</span>
-                        <span className="text-3xl font-black italic">{pushSimulation.count}</span>
-                     </div>
-                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10">
-                        <span className="text-[9px] font-black uppercase block mb-1">Investimento</span>
-                        <span className="text-3xl font-black italic">{formatCurrency(pushSimulation.cost)}</span>
-                     </div>
+                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Clientes</span><span className="text-3xl font-black italic">{pushSimulation.count}</span></div>
+                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Investimento</span><span className="text-3xl font-black italic">{formatCurrency(pushSimulation.cost)}</span></div>
                   </div>
-
                   <div className="space-y-3">
                      <button onClick={submitPushRequest} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl hover:scale-105 transition-transform">Avançar com o Pedido</button>
                      <button onClick={() => setPushSimulation(null)} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white/40">Anular / Corrigir</button>
@@ -351,25 +346,14 @@ const MerchantDashboard: React.FC = () => {
         {showInbox && (
           <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
              <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
-                <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-                   <h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3>
-                   <button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button>
-                </div>
+                <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3><button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button></div>
                 <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
-                   {adminMessages.length === 0 ? (
-                     <p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>
-                   ) : adminMessages.map(msg => (
+                   {adminMessages.length === 0 ? (<p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>) : adminMessages.map(msg => (
                      <div key={msg.id} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 relative group transition-colors hover:border-blue-100 hover:bg-blue-50/30">
                         <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
-                        
                         <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
                            <span className="text-[9px] font-black text-slate-400 uppercase">Enviada a: {msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : 'Recente'}</span>
-                           <button 
-                             onClick={() => handleDeleteMessage(msg.id)} 
-                             className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"
-                           >
-                             <Trash2 size={14} /> Apagar
-                           </button>
+                           <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"><Trash2 size={14} /> Apagar</button>
                         </div>
                      </div>
                    ))}
@@ -397,23 +381,18 @@ const MerchantDashboard: React.FC = () => {
         {showConfirmModal && foundClient && pendingAction && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
             <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
-               <div className="bg-[#0a2540] p-6 text-white text-center">
-                 <AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" />
-                 <h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3>
-               </div>
+               <div className="bg-[#0a2540] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3></div>
                <div className="p-8 text-center space-y-4">
                  <p className="text-xs font-bold text-slate-500 uppercase">Cliente</p>
                  <p className="text-lg font-black text-[#0a2540]">{foundClient.name}</p>
                  <div className="border-t-2 border-dashed border-slate-100 my-4"></div>
                  <p className="text-xs font-bold text-slate-500 uppercase">{pendingAction.type === 'earn' ? 'Fatura Base' : 'Valor a Descontar'}</p>
                  <p className={`text-4xl font-black italic ${pendingAction.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>{formatCurrency(pendingAction.val)}</p>
-                 
                  {pendingAction.type === 'redeem' && !currentUser.isLeaving && (
                    <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest mt-2 border-t-2 border-green-100 pt-2">
                      Novo Cashback a Gerar: {formatCurrency(Math.max(0, pendingAction.invAmount - pendingAction.val) * (Number(currentUser.cashbackPercent)/100))}
                    </p>
                  )}
-
                  <div className="flex gap-4 mt-8">
                    <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
                    <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
@@ -436,7 +415,6 @@ const MerchantDashboard: React.FC = () => {
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
       
-      {/* MODAL DE REGRAS DO LOJISTA */}
       {showRulesModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -451,35 +429,12 @@ const MerchantDashboard: React.FC = () => {
                 <p>O Vizinho+ atua exclusivamente como intermediário tecnológico de marketing e comunicação. <strong><u>Isentamo-nos de qualquer responsabilidade civil ou comercial sobre litígios, devoluções ou atritos com os Clientes.</u></strong> A venda, o pós-venda e o respetivo suporte são da sua exclusiva responsabilidade enquanto comerciante.</p>
               </div>
 
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Obrigação de Registo</h4>
-                <p>O Lojista compromete-se a registar o movimento de atribuição de saldo (Cashback) sempre que o Cliente Vizinho+ apresentar a sua identificação antes do pagamento, respeitando a percentagem acordada e configurada no seu painel.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Limites de Desconto (Regra dos 50%)</h4>
-                <p>O Lojista apenas deve aceitar o desconto de saldo de um cliente até ao <strong>limite máximo de 50% do valor da nova fatura</strong>. O Terminal do Comerciante já calcula este limite automaticamente. Tentar contornar este limite constitui uma infração às regras da plataforma.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Emissão de Faturas</h4>
-                <p>A plataforma Vizinho+ é uma ferramenta tecnológica de fidelização e não emite faturas comerciais. A venda de produtos, prestação de serviços, emissão do documento fiscal (Fatura/Recibo) e liquidação do IVA associado são da total responsabilidade do Lojista. O desconto de cashback deve ser refletido na sua faturação comercial conforme as diretrizes da AT para descontos comerciais.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Gestão de Anulações</h4>
-                <p>O Lojista tem a capacidade de solicitar a anulação de um movimento caso haja devolução do produto pelo cliente ou um erro no lançamento. O uso abusivo da ferramenta de anulação para defraudar clientes resultará na suspensão imediata da loja na rede Vizinho+.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">6. Saída da Plataforma</h4>
-                <p>Caso o Lojista decida terminar a sua parceria com o Vizinho+, deverá acionar o processo de saída no painel de administração (através da equipa Vizinho+). Durante este período, a loja ficará bloqueada de gerar novos saldos (Earn), mas tem a obrigação incondicional de continuar a aceitar os resgates (Redeem) dos clientes que possuam saldo nessa mesma loja, até à data de desativação acordada.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-red-600 mb-1 uppercase">7. Prevenção de Fraude e Autofaturação</h4>
-                <p>A plataforma monitoriza ativamente anomalias. É rigorosamente proibida a criação de transações fictícias, o registo de compras de familiares diretos em volumes anormais sem justificação, ou o conluio com clientes para adulteração de saldos. Quaisquer desvios identificados resultarão no bloqueio do acesso, reporte às autoridades competentes e pedido de indemnização pelos prejuízos causados à rede.</p>
-              </div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Obrigação de Registo</h4><p>O Lojista compromete-se a registar o movimento de atribuição de saldo sempre que o Cliente apresentar a identificação antes do pagamento.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Limites de Desconto (Regra dos 50%)</h4><p>O Lojista apenas deve aceitar o desconto de saldo até ao <strong>limite máximo de 50% do valor da nova fatura</strong>.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Emissão de Faturas</h4><p>O Vizinho+ não emite faturas comerciais. A venda, a fatura/recibo e o IVA são da total responsabilidade do Lojista.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Gestão de Anulações</h4><p>O Lojista pode anular movimentos em caso de erro, mas o uso abusivo resultará em suspensão.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">6. Saída da Plataforma</h4><p>Em caso de saída, a loja fica bloqueada de gerar novos saldos (Earn), mas é obrigada a aceitar os resgates (Redeem) até à data de desativação.</p></div>
+              <div><h4 className="font-black text-red-600 mb-1 uppercase">7. Prevenção de Fraude e Autofaturação</h4><p>É rigorosamente proibida a autofaturação, o registo de compras fictícias ou o conluio com clientes para adulteração de saldos. Estes atos implicam bloqueio e ação legal.</p></div>
 
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50">

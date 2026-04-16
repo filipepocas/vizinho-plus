@@ -37,13 +37,8 @@ export interface MarketingRequest {
   unit?: string; promoPrice?: string; promoType?: string; targetType?: string; targetCriteria?: string;
   targetValue?: string; targetCount?: number; cost?: number; isExternal?: boolean;
   companyName?: string; contactName?: string; nif?: string; email?: string; phone?: string;
-  // --- NOVOS CAMPOS PARA FATURAÇÃO (MENU COBRANÇAS) ---
-  serviceCompleted?: boolean;
-  finalPrice?: number;
-  billingSent?: boolean;
-  billingSentDate?: string;
-  paymentReceived?: boolean;
-  paymentReceivedDate?: string;
+  serviceCompleted?: boolean; finalPrice?: number; billingSent?: boolean; billingSentDate?: string;
+  paymentReceived?: boolean; paymentReceivedDate?: string;
 }
 
 export interface Leaflet {
@@ -76,4 +71,21 @@ export interface Vantagem {
 
 export interface Feedback {
   id: string; merchantId: string; clientId: string; userName: string; rating: number; comment: string; createdAt: any;
+}
+
+// NOVO: Eventos Comunitários
+export interface AppEvent {
+  id?: string;
+  entityName: string; contactName: string; phone: string; email: string;
+  title: string; location: string; eventType: string; ticketPrice: string; description: string;
+  startDate: any; endDate: any; startTime: string; imageUrl: string;
+  status: 'pending' | 'approved'; targetZips?: string[]; createdAt: any;
+}
+
+// NOVO: Combate ao Desperdício
+export interface AntiWasteItem {
+  id?: string;
+  merchantId: string; merchantName: string; address: string;
+  productInfo: string; conditions: string; targetZip: string;
+  endTime: any; createdAt: any;
 }
