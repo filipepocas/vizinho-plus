@@ -22,24 +22,22 @@ const LandingPage: React.FC = () => {
   const [prices, setPrices] = useState<any>({});
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
 
-  // Modais de Termos e Links
   const [showTerms, setShowTerms] = useState(false);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt' });
 
-  // Formulário Empresa Externa
   const [extForm, setExtForm] = useState({ companyName: '', contactName: '', nif: '', email: '', phone: '' });
 
-  // Formulários Banner e Folheto
   const [bannerForm, setBannerForm] = useState({ title: '', startDate: '', endDate: '', imageBase64: '', targetType: 'all', targetValue: '' });
   const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
 
-  // Formulário Adesão Lojistas
   const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
 
-  // Formulário Registo Cliente Direto
+  // Formulário Cliente com Confirmações
   const [clientForm, setClientForm] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [clientLoading, setClientLoading] = useState(false);
 
   useEffect(() => {
@@ -169,8 +167,19 @@ const LandingPage: React.FC = () => {
     } catch (e) { toast.error("Erro ao enviar o pedido."); } finally { setLoadingPartner(false); }
   };
 
+  // Registo do Cliente com Dupla Validação
   const handleClientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    if (clientForm.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) {
+      toast.error("OS EMAILS NÃO COINCIDEM. VERIFIQUE.");
+      return;
+    }
+    if (clientForm.password !== confirmPassword) {
+      toast.error("AS PASSWORDS NÃO COINCIDEM. VERIFIQUE.");
+      return;
+    }
+
     setClientLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, clientForm.email.trim(), clientForm.password);
@@ -186,7 +195,11 @@ const LandingPage: React.FC = () => {
       
       toast.success("Bem-vindo ao Vizinho+!");
       navigate('/login');
-    } catch (err: any) { toast.error("Erro ao criar conta. Email já em uso?"); } finally { setClientLoading(false); }
+    } catch (err: any) { 
+      toast.error("Erro ao criar conta. Email já em uso?"); 
+    } finally { 
+      setClientLoading(false); 
+    }
   };
 
   return (
@@ -194,7 +207,6 @@ const LandingPage: React.FC = () => {
       
       <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
-        
         <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
             <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
         </button>
@@ -232,18 +244,29 @@ const LandingPage: React.FC = () => {
             <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] text-left">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Criar Cartão Cliente</h2>
               <p className="text-sm font-bold text-slate-500 mb-8">Registe-se em 1 minuto para aceder ao seu cartão digital gratuito e começar a poupar.</p>
+              
               <form onSubmit={handleClientRegister} className="space-y-4">
-                  <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none" />
-                  <div className="grid grid-cols-2 gap-4">
+                  <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-sm" />
+                  
+                  {/* Dupla Validação Email */}
+                  <div className="grid grid-cols-1 gap-4">
                      <input required type="email" placeholder="E-mail" value={clientForm.email} onChange={e=>setClientForm({...clientForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                     <input required type="tel" placeholder="Telemóvel" value={clientForm.phone} onChange={e=>setClientForm({...clientForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                     <input required type="email" placeholder="Repita o E-mail" value={confirmEmail} onChange={e=>setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-2 border-[#00d66f] rounded-2xl font-black text-[#0a2540] focus:border-[#0a2540] outline-none text-xs" />
                   </div>
+
+                  {/* Dupla Validação Password */}
+                  <div className="grid grid-cols-2 gap-4">
+                     <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                     <input required type="password" placeholder="Repita a Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f] rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                      <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">Data Nasc.</label><input required type="date" value={clientForm.birthDate} onChange={e=>setClientForm({...clientForm, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none" /></div>
                      <input required type="text" maxLength={8} placeholder="Cód. Postal" value={clientForm.zipCode} onChange={e=>setClientForm({...clientForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
-                  <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   
+                  <input required type="tel" placeholder="Telemóvel" value={clientForm.phone} onChange={e=>setClientForm({...clientForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+
                   <p className="text-[9px] font-bold text-slate-400 mt-2">Ao registar, aceita os <button type="button" onClick={()=>setShowTerms(true)} className="text-[#0a2540] underline">Termos e Condições e RGPD</button>.</p>
 
                   <button disabled={clientLoading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-transform flex justify-center items-center gap-3 mt-6 border-b-4 border-[#0a2540]">
@@ -292,7 +315,7 @@ const LandingPage: React.FC = () => {
         </div>
         <div className="text-center px-6">
           <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, o sistema de gestão de saldos, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora e estão protegidos por direitos de propriedade intelectual. É estritamente proibida a sua reprodução, cópia ou engenharia reversa por qualquer entidade não autorizada.</p>
+          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas, sob pena de instauração de procedimentos civis e criminais.</p>
         </div>
       </footer>
 
