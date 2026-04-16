@@ -14,6 +14,8 @@ interface MonthStat {
   m: number;
   y: number;
   volume: number;
+  visits: number;
+  daysInMonth: number;
 }
 
 const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) => {
@@ -68,17 +70,22 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     }));
   }, [transactions]);
 
+  // CÁLCULO MENSAL, MÉDIA DE COMPRAS POR DIA E TICKET MÉDIO (VALOR DE VENDA / COMPRAS)
   const monthStats = useMemo(() => {
     const months: MonthStat[] = [];
     
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
+      const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      
       months.push({ 
         label: d.toLocaleDateString('pt-PT', { month: 'short' }), 
         m: d.getMonth(), 
         y: d.getFullYear(), 
-        volume: 0 
+        volume: 0,
+        visits: 0,
+        daysInMonth: daysInMonth
       });
     }
 
@@ -88,13 +95,13 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
         const idx = months.findIndex(m => m.m === date.getMonth() && m.y === date.getFullYear());
         if (idx !== -1) {
           months[idx].volume += Number(t.amount || 0);
+          months[idx].visits += 1;
         }
       }
     });
     return months;
   }, [transactions]);
 
-  // TOP 20 CLIENTES (Últimos 12 Meses)
   const topClients = useMemo(() => {
     const oneYearAgo = new Date();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
@@ -194,17 +201,27 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
               <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
             </h3>
-            <div className="space-y-6 mt-auto">
+            <div className="space-y-5 mt-auto">
               {monthStats.map((m, i) => {
                   const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
+                  
+                  // Ticket Médio (Volume / Transações do Mês)
+                  const avgTicket = m.visits > 0 ? m.volume / m.visits : 0;
+                  // Média de Transações (Vendas) por Dia
+                  const avgDailyVisits = m.visits / m.daysInMonth;
+
                   return (
-                    <div key={i} className="space-y-2">
+                    <div key={i} className="space-y-1">
                       <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
                         <span className="text-slate-500">{m.label}</span>
                         <span className="text-[#0a2540] italic">{formatCurrency(m.volume)}</span>
                       </div>
-                      <div className="h-3 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
                         <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[7px] font-bold text-slate-400 uppercase tracking-widest pt-1">
+                         <span title="Ticket Médio / Valor por Venda">Ticket Médio: {formatCurrency(avgTicket)}</span>
+                         <span title="Média de Transações/Compras Diárias">{avgDailyVisits.toFixed(1)} Vendas/dia</span>
                       </div>
                     </div>
                   );

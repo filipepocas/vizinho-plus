@@ -38,10 +38,9 @@ service cloud.firestore {
     match /leaflet_campaigns/{campaignId} { allow read: if true; allow write: if isAdmin(); }
     match /system/{document=**} { allow read: if true; allow write: if isAdmin(); }
 
-    // PEDIDOS (Lojistas, Adesão e Marketing)
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
-      allow create: if true; // PERMITE QUE O VISITANTE DA LANDING PAGE FAÇA O PEDIDO DE ADESÃO
+      allow create: if true; 
       allow update, delete: if isAdmin();
     }
 
@@ -54,7 +53,7 @@ service cloud.firestore {
     match /merchant_messages/{msgId} {
       allow read: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
       allow create: if isAdmin();
-      allow update, delete: if isAdmin();
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
     }
 
     match /notifications/{notifId} {
