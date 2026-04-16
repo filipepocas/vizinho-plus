@@ -194,6 +194,7 @@ const LandingPage: React.FC = () => {
       
       <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
+        
         <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
             <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
         </button>
@@ -213,7 +214,6 @@ const LandingPage: React.FC = () => {
           </p>
         </div>
         
-        {/* BOTÃO ALTERADO PARA APENAS LOGIN/RECUPERAR */}
         <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20">
           Entrar / Recuperar Password
           <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
@@ -227,10 +227,8 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-400"><Heart size={24} fill="currentColor" /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Bairro Forte</h3></div>
         </div>
 
-        {/* REGISTO DE CLIENTES E LOJISTAS LADO A LADO */}
         <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl">
             
-            {/* NOVO: REGISTO DE CLIENTES */}
             <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] text-left">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Criar Cartão Cliente</h2>
               <p className="text-sm font-bold text-slate-500 mb-8">Registe-se em 1 minuto para aceder ao seu cartão digital gratuito e começar a poupar.</p>
@@ -254,7 +252,6 @@ const LandingPage: React.FC = () => {
               </form>
             </div>
 
-            {/* ADESÃO DE LOJISTAS */}
             <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] text-left">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
               <p className="text-sm font-bold text-slate-500 mb-8">Faça parte da nossa comunidade, fidelize clientes e aumente as suas vendas. Preencha os dados e a nossa equipa tratará de tudo.</p>
@@ -295,11 +292,10 @@ const LandingPage: React.FC = () => {
         </div>
         <div className="text-center px-6">
           <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas, sob pena de instauração de procedimentos civis e criminais.</p>
+          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, o sistema de gestão de saldos, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora e estão protegidos por direitos de propriedade intelectual. É estritamente proibida a sua reprodução, cópia ou engenharia reversa por qualquer entidade não autorizada.</p>
         </div>
       </footer>
 
-      {/* MODAL EXTERNO, MODAL TERMOS AQUI... (Manteve-se igual para poupar espaço mas garantindo que o fecho e funções funcionam). Vou adicionar o modal de Termos */}
       {showTerms && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -308,10 +304,12 @@ const LandingPage: React.FC = () => {
               <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <p>Ao registares-te no Vizinho+, concordas que a plataforma atua exclusivamente como solução tecnológica facilitadora de atribuição de saldo (cashback) local. A plataforma não é parte integrante de qualquer transação comercial entre Lojistas e Clientes.</p>
-              <p>Os teus dados pessoais (Nome, Email, NIF, Código Postal) são recolhidos estritamente para o funcionamento da plataforma e são guardados de forma segura. Não os partilhamos ou vendemos a terceiros para fins publicitários. O NIF é necessário apenas para validar e cruzar as compras efetuadas nas lojas aderentes.</p>
-              <p>O saldo de cashback acumulado na carteira não tem valor fiduciário (não pode ser levantado, transferido para contas bancárias ou trocado por dinheiro vivo), servindo unicamente como desconto acumulado a ser utilizado nas lojas da rede Vizinho+.</p>
-              <p className="text-red-500">A tecnologia, sistema de gestão de saldos, interface gráfica e ideologia do programa Vizinho+ estão protegidos. É estritamente proibida a sua reprodução ou manipulação de código por entidades não autorizadas.</p>
+              <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de atribuição de saldo (cashback) local. O Vizinho+ é uma ferramenta de mediação técnica, não sendo parte integrante, interveniente ou responsável por qualquer transação comercial direta entre Lojistas e Clientes.</p>
+              <p>Em conformidade com o Regulamento Geral de Proteção de Dados (RGPD), a entidade responsável pelo tratamento dos dados pessoais recolhidos é a Panóplia Lógica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde. Os teus dados pessoais (Nome, Email, NIF e Código Postal) são recolhidos estritamente para o funcionamento da plataforma. O NIF é solicitado especificamente para validar, processar e cruzar de forma fidedigna as compras efetuadas nas lojas aderentes.</p>
+              <p>Garantimos que os teus dados pessoais não são partilhados, cedidos ou vendidos a terceiros para fins publicitários ou de marketing externo.</p>
+              <p>O saldo de cashback acumulado na tua carteira digital Vizinho+ possui uma natureza exclusivamente promocional e não tem valor fiduciário. Isto significa que o saldo não pode ser levantado em numerário, transferido para contas bancárias ou trocado por dinheiro vivo; serve unicamente como desconto acumulado nas lojas da rede.</p>
+              <p className="text-red-500">A tecnologia, o sistema de gestão de saldos, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora e estão protegidos por direitos de propriedade intelectual. É estritamente proibida a reprodução, cópia, manipulação de código ou engenharia reversa por qualquer entidade ou indivíduo não autorizado.</p>
+              <p>Para garantir o cumprimento das normas legais, não serão aceites registos de menores de idade. Ao registares-te, declaras ter idade legal igual ou superior a 18 anos.</p>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>
@@ -386,7 +384,7 @@ const LandingPage: React.FC = () => {
 
               {activeTab === 'leaflet' && (
                 <form onSubmit={simulateLeaflet} className="space-y-4">
-                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
+                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
                         <option value="">(Escolha a Edição do Folheto)</option>
                         {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                    </select>
