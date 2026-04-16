@@ -16,12 +16,11 @@ const AdminComms: React.FC = () => {
   const [form, setForm] = useState({ title: '', limitDate: '', distDate: '' });
   const [creatingCampaign, setCreatingCampaign] = useState(false);
 
-  // PREÇÁRIO ATUALIZADO (Inclui o Preço Base para Externos no Folheto)
   const [prices, setPrices] = useState({
     banner_cost_per_client: '0.02', banner_min_cost: '10.00', 
     leaflet_capa_destaque: '', leaflet_capa_normal: '', leaflet_contracapa: '', 
     leaflet_interior_full: '', leaflet_interior_1_2: '', leaflet_interior_1_4: '', 
-    leaflet_rodape_externo: '50.00', // NOVO CAMPO
+    leaflet_rodape_externo: '50.00', 
     push_cost_per_client: '0.05', push_min_cost: '5.00'
   });
   const [savingPrices, setSavingPrices] = useState(false);
@@ -29,13 +28,21 @@ const AdminComms: React.FC = () => {
   useEffect(() => {
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('createdAt', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign))));
+    
+    // CORREÇÃO: Mostramos aqui TODOS exceto os aprovados (que vão para Cobranças)
     const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'));
-    const unsubReq = onSnapshot(qReq, (snap) => setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest))));
+    const unsubReq = onSnapshot(qReq, (snap) => {
+        const allReqs = snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest));
+        // Oculta os aprovados para não gerar ruído no ecrã de análise
+        setRequests(allReqs.filter(r => r.status !== 'approved'));
+    });
+
     const fetchPrices = async () => {
       const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (docSnap.exists()) setPrices(docSnap.data() as any);
     };
     fetchPrices();
+    
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
     const unsubMerchants = onSnapshot(qMerchants, (snap) => setMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
 
@@ -89,11 +96,14 @@ const AdminComms: React.FC = () => {
 
   const handleUpdateStatus = async (id: string, status: string) => {
     await updateDoc(doc(db, 'marketing_requests', id), { status });
-    toast.success("Estado atualizado.");
+    if (status === 'approved') {
+        toast.success("Aprovado! Movido para o Menu de Cobranças.");
+    } else {
+        toast.success("Pedido Rejeitado.");
+    }
   };
 
   const getMerchantDetails = (merchantId: string) => merchants.find(m => m.id === merchantId);
-
   const formatEuro = (val: any) => {
     if (!val || isNaN(val)) return null;
     return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
@@ -164,27 +174,27 @@ const AdminComms: React.FC = () => {
             </div>
         </div>
 
-        {/* AUDITORIA DE PEDIDOS (INCLUI EXTERNOS NO MESMO ECRÃ) */}
+        {/* AUDITORIA DE PEDIDOS PENDENTES */}
         <div>
-            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Auditoria de Pedidos (Lojistas & Externos)</h3>
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Análise de Pedidos Pendentes</h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase mb-4">NOTA: Ao aprovar um pedido, ele é movido para o separador de Cobranças para acompanhamento financeiro.</p>
             <div className="grid grid-cols-1 gap-6">
                 {requests.map(r => {
                     const merch = r.isExternal ? null : getMerchantDetails(r.merchantId || '');
 
                     return (
-                      <div key={r.id} className={`bg-white border-4 p-6 rounded-[30px] flex flex-col md:flex-row gap-6 items-start ${r.isExternal ? 'border-purple-600 shadow-[8px_8px_0px_#9333ea]' : 'border-[#0a2540] shadow-[8px_8px_0px_#0a2540]'}`}>
+                      <div key={r.id} className={`bg-white border-4 p-6 rounded-[30px] flex flex-col md:flex-row gap-6 items-start ${r.status === 'rejected' ? 'border-red-200 opacity-70' : r.isExternal ? 'border-purple-600 shadow-[8px_8px_0px_#9333ea]' : 'border-[#0a2540] shadow-[8px_8px_0px_#0a2540]'}`}>
                           
-                          {/* Info da Loja ou Empresa Externa */}
                           <div className="md:w-1/3 w-full shrink-0 border-b-2 md:border-b-0 md:border-r-2 border-slate-100 pb-4 md:pb-0 md:pr-6">
                               <div className="flex items-center gap-2 mb-2">
                                 {r.isExternal && <span className="bg-purple-600 text-white px-2 py-0.5 rounded text-[8px] font-black uppercase">EXTERNO</span>}
+                                {r.status === 'rejected' && <span className="bg-red-500 text-white px-2 py-0.5 rounded text-[8px] font-black uppercase">REJEITADO</span>}
                                 <h4 className="font-black uppercase text-[#0a2540] text-lg leading-none">{r.isExternal ? r.companyName : r.merchantName}</h4>
                               </div>
                               <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase mt-2 inline-block ${r.type === 'push_notification' ? 'bg-blue-100 text-blue-700' : r.type === 'banner' ? 'bg-indigo-100 text-indigo-700' : 'bg-amber-100 text-amber-700'}`}>
                                 Tipo: {r.type === 'push_notification' ? 'Push App' : r.type === 'banner' ? 'Banner na App' : r.type}
                               </span>
                               
-                              {/* Contactos do Requisitante */}
                               <div className="mt-4 space-y-2">
                                 <p className="text-[10px] font-bold text-slate-500 flex items-center gap-2"><Users size={12} className={r.isExternal ? 'text-purple-500' : 'text-[#00d66f]'}/> Resp: {r.isExternal ? r.contactName : (merch?.responsibleName || '---')}</p>
                                 <p className="text-[10px] font-bold text-slate-500 flex items-center gap-2"><MapPin size={12} className={r.isExternal ? 'text-purple-500' : 'text-[#00d66f]'}/> NIF: {r.isExternal ? r.nif : (merch?.nif || '---')} {merch?.zipCode ? `| CP: ${merch.zipCode}` : ''}</p>
@@ -193,7 +203,6 @@ const AdminComms: React.FC = () => {
                               </div>
                           </div>
 
-                          {/* Detalhes do Pedido */}
                           <div className="flex-1 w-full">
                               <div className="text-xs font-bold text-slate-500 space-y-2 bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 mb-4">
                                   {r.type === 'push_notification' ? (
@@ -224,10 +233,12 @@ const AdminComms: React.FC = () => {
 
                               <div className="flex flex-wrap md:flex-nowrap gap-2 items-center justify-between">
                                   <div className="flex gap-2 w-full md:w-auto">
-                                    {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="bg-[#00d66f] text-[#0a2540] px-6 py-3 rounded-xl font-black uppercase text-[10px]">Aprovar</button>}
+                                    {r.status !== 'approved' && <button onClick={() => handleUpdateStatus(r.id!, 'approved')} className="bg-[#00d66f] text-[#0a2540] px-6 py-3 rounded-xl font-black uppercase text-[10px]">Aprovar Pedido</button>}
                                     {r.status !== 'rejected' && <button onClick={() => handleUpdateStatus(r.id!, 'rejected')} className="bg-red-100 text-red-700 px-6 py-3 rounded-xl font-black uppercase text-[10px]">Rejeitar</button>}
                                   </div>
-                                  <button onClick={() => deleteDoc(doc(db, 'marketing_requests', r.id!))} className="text-slate-300 hover:text-red-400 transition-colors p-2"><Trash2 size={20}/></button>
+                                  <button onClick={() => {
+                                      if(window.confirm("Apagar definitivamente este pedido da base de dados?")) deleteDoc(doc(db, 'marketing_requests', r.id!))
+                                  }} className="text-slate-300 hover:text-red-400 transition-colors p-2" title="Apagar definitivamente"><Trash2 size={20}/></button>
                               </div>
                           </div>
                           
@@ -236,11 +247,10 @@ const AdminComms: React.FC = () => {
                                 <img src={r.imageUrl} className="w-full h-full object-contain" alt="Preview da Campanha" />
                             </div>
                           )}
-
                       </div>
                     )
                 })}
-                {requests.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold p-10 border-4 border-dashed rounded-[40px]">Sem pedidos pendentes.</p>}
+                {requests.length === 0 && <p className="col-span-full text-center text-slate-400 font-bold p-10 border-4 border-dashed rounded-[40px]">Nenhum pedido pendente ou rejeitado.</p>}
             </div>
         </div>
     </div>

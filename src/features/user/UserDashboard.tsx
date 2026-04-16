@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
-import { QRCodeCanvas } from 'qrcode.react'; // CORREÇÃO: Mudou de QRCodeSVG para QRCodeCanvas
+import { QRCodeCanvas } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile, Leaflet, AppNotification } from '../../types';
@@ -10,7 +10,7 @@ import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, Smartphone, IdCard, Bell, Volume2, Loader2, Printer } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, Smartphone, IdCard, Bell, Volume2, Loader2, Printer, BookOpen } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -28,6 +28,7 @@ const UserDashboard: React.FC = () => {
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false); // NOVO ESTADO DAS REGRAS
   const [emailCopied, setEmailCopied] = useState(false);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
 
@@ -147,12 +148,9 @@ const UserDashboard: React.FC = () => {
     }
   };
 
-  // CORREÇÕES DO CARTÃO DE IMPRESSÃO
   const handlePrintCard = () => {
-    // 1. Obter a imagem do Canvas gerado
     const qrCanvas = document.getElementById('user-qr-canvas') as HTMLCanvasElement;
     const qrImage = qrCanvas ? qrCanvas.toDataURL('image/png') : '';
-    // 2. Caminho absoluto do logótipo real
     const logoUrl = window.location.origin + '/logo-vizinho.png';
 
     const printWindow = window.open('', '', 'width=900,height=600');
@@ -166,11 +164,9 @@ const UserDashboard: React.FC = () => {
             body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fff; }
             .card-container { display: flex; gap: 20px; }
             .card { width: 330px; height: 210px; border-radius: 16px; box-sizing: border-box; overflow: hidden; position: relative; }
-            /* Frente do Cartão - Gradiente VPlus */
             .card-front { background: linear-gradient(135deg, #0a2540 0%, #0a2540 50%, #00d66f 100%); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px solid #0a2540; padding: 20px; }
             .card-front img { max-width: 80%; max-height: 60px; object-fit: contain; margin-bottom: 15px; }
             .tagline { font-size: 11px; letter-spacing: 2px; font-weight: bold; text-transform: uppercase; color: #fff; text-align: center; }
-            /* Verso do Cartão - Borda escura para recorte */
             .card-back { background: #ffffff; color: #0a2540; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 2px solid #94a3b8; }
             .qr-code { width: 100px; height: 100px; margin-bottom: 15px; }
             .number { font-size: 18px; font-family: monospace; letter-spacing: 4px; font-weight: 900; margin-bottom: 8px; }
@@ -229,6 +225,11 @@ const UserDashboard: React.FC = () => {
       </div>
 
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
+
+        {/* BOTÃO DAS REGRAS A PISCAR */}
+        <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
+          <BookOpen size={20} /> Ler Regras de Utilização
+        </button>
         
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
@@ -248,7 +249,6 @@ const UserDashboard: React.FC = () => {
           </div>
           <div className="p-8 flex flex-col items-center gap-6">
             <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
-              {/* CORREÇÃO: QRCodeCanvas permite a conversão para imagem posteriormente */}
               <QRCodeCanvas id="user-qr-canvas" value={displayCardNumber} size={150} />
             </div>
             <div className="text-center">
@@ -381,6 +381,59 @@ const UserDashboard: React.FC = () => {
                   {emailCopied ? 'Copiado!' : 'Copiar Email'}
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE REGRAS DO CLIENTE */}
+      {showRulesModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Regras de Utilização</h3>
+              <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
+              
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade e Papel da Plataforma</u></h4>
+                <p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico, fornecendo ferramentas de marketing, comunicação e gestão de fidelização (cashback). <strong><u>O Vizinho+ isenta-se de qualquer responsabilidade sobre eventuais litígios, atritos, defeitos de produtos ou falhas na prestação de serviços que ocorram entre o Cliente e o Comerciante.</u></strong> Qualquer reclamação comercial deve ser resolvida diretamente entre as duas partes envolvidas na compra.</p>
+              </div>
+
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4>
+                <p>O saldo acumulado na sua conta Vizinho+ é um benefício exclusivo e não possui valor fiduciário. Não pode ser trocado por dinheiro vivo, nem transferido para contas bancárias. O saldo serve unicamente como desconto em compras nas lojas da rede aderente.</p>
+              </div>
+
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4>
+                <p>Para acumular ou descontar saldo, o Cliente <strong>deve obrigatoriamente apresentar o seu Cartão Digital ou fornecer o NIF/Número de Cliente</strong> ao lojista <strong>antes</strong> do registo do pagamento. Após a fatura estar encerrada ou o pagamento efetuado, o lojista não é obrigado a atribuir o cashback.</p>
+              </div>
+
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4>
+                <p>Ao utilizar o seu saldo acumulado numa loja para obter um desconto, o valor a descontar <strong>nunca poderá ser superior a 50% do valor total da nova compra</strong>, independentemente de o seu saldo total ser maior. <em>(Exemplo: Numa compra de 10€, o desconto máximo aplicável será de 5€).</em></p>
+              </div>
+
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4>
+                <p>Quando utiliza saldo para obter um desconto, o Lojista irá gerar um novo cashback sobre o valor remanescente que foi efetivamente pago por si. <em>(Exemplo: Compra de 10€, onde desconta 5€ de saldo. Irá ganhar a percentagem de cashback correspondente aos 5€ que pagou).</em></p>
+              </div>
+
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">6. Lojas em Processo de Saída</h4>
+                <p>Se uma loja decidir abandonar a rede Vizinho+, será notificado no perfil da mesma. Durante o período de transição, a loja deixará de atribuir novos cashbacks, mas é obrigada a aceitar o desconto do saldo que já acumulou nessa loja, até à data de encerramento estipulada.</p>
+              </div>
+
+              <div>
+                <h4 className="font-black text-red-600 mb-1 uppercase">7. Prevenção de Fraude</h4>
+                <p>O seu cartão digital e o saldo associado são estritamente pessoais e intransmissíveis. A tentativa de uso de dados de terceiros, NIFs falsos, ou conluio para gerar saldos fictícios resultará no bloqueio imediato e permanente da sua conta, bem como na perda de todo o saldo acumulado.</p>
+              </div>
+
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
+              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600 transition-colors">Compreendi e Aceito as Regras</button>
             </div>
           </div>
         </div>

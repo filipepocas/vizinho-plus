@@ -1,35 +1,13 @@
 export interface User {
-  id: string;
-  name: string;
-  email: string;
-  role: 'admin' | 'merchant' | 'client';
-  nif?: string;
-  phone?: string;
-  zipCode?: string;
-  status?: string;
-  createdAt?: any;
-  customerNumber?: string;
-  birthDate?: string;
-  cashbackPercent?: number;
-  shopName?: string;
-  responsibleName?: string;
-  freguesia?: string;
-  category?: string;
-  address?: string;
-  city?: string; 
-  fcmTokens?: string[]; 
-  notificationsEnabled?: boolean; 
-  notificationsUpdatedAt?: any; 
-  lastTokenUpdate?: any; 
+  id: string; name: string; email: string; role: 'admin' | 'merchant' | 'client';
+  nif?: string; phone?: string; zipCode?: string; status?: string; createdAt?: any;
+  customerNumber?: string; birthDate?: string; cashbackPercent?: number;
+  shopName?: string; responsibleName?: string; freguesia?: string; category?: string;
+  address?: string; city?: string; fcmTokens?: string[]; notificationsEnabled?: boolean; 
+  notificationsUpdatedAt?: any; lastTokenUpdate?: any; 
   storeWallets?: Record<string, { available: number; pending: number }>;
-  devices?: any[];
-  wallet?: { available: number; pending: number; };
-  
-  // NOVOS CAMPOS DO COMERCIANTE (Item 9)
-  websiteUrl?: string;
-  publicEmail?: string;
-  isLeaving?: boolean;
-  leavingDate?: string;
+  devices?: any[]; wallet?: { available: number; pending: number; };
+  websiteUrl?: string; publicEmail?: string; isLeaving?: boolean; leavingDate?: string;
 }
 
 export interface Banner {
@@ -59,6 +37,13 @@ export interface MarketingRequest {
   unit?: string; promoPrice?: string; promoType?: string; targetType?: string; targetCriteria?: string;
   targetValue?: string; targetCount?: number; cost?: number; isExternal?: boolean;
   companyName?: string; contactName?: string; nif?: string; email?: string; phone?: string;
+  // --- NOVOS CAMPOS PARA FATURAÇÃO (MENU COBRANÇAS) ---
+  serviceCompleted?: boolean;
+  finalPrice?: number;
+  billingSent?: boolean;
+  billingSentDate?: string;
+  paymentReceived?: boolean;
+  paymentReceivedDate?: string;
 }
 
 export interface Leaflet {

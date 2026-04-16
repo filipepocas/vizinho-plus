@@ -36,8 +36,17 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!acceptedTerms) { toast.error("TENS DE ACEITAR OS TERMOS."); return; }
-    if (formData.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) { toast.error("EMAILS DIFERENTES."); return; }
-    if (formData.password !== confirmPassword) { toast.error("PASSWORDS DIFERENTES."); return; }
+    
+    // VALIDAÇÕES RÍGIDAS DE CONFIRMAÇÃO DE EMAIL E PASS
+    if (formData.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) { 
+      toast.error("OS EMAILS NÃO COINCIDEM. VERIFIQUE."); 
+      return; 
+    }
+    if (formData.password !== confirmPassword) { 
+      toast.error("AS PASSWORDS NÃO COINCIDEM. VERIFIQUE."); 
+      return; 
+    }
+    
     setLoading(true);
 
     try {
@@ -52,7 +61,7 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
       setSetupStep(true);
       if (onSuccess) onSuccess();
     } catch (err: any) {
-      toast.error("ERRO AO CRIAR CONTA. Email já existe?");
+      toast.error("ERRO AO CRIAR CONTA. O Email poderá já estar em uso.");
     } finally { setLoading(false); }
   };
 
@@ -92,14 +101,16 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
         <form onSubmit={handleRegister} className="space-y-4">
           <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold" placeholder="Nome Completo" />
           
+          {/* CONFIRMAÇÃO DE EMAIL */}
           <div className="grid grid-cols-1 gap-4">
-            <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Email" />
-            <input type="email" required value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-4 border-[#00d66f] rounded-3xl font-bold text-xs" placeholder="Confirmar Email" />
+            <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Escreva o seu E-mail" />
+            <input type="email" required value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-4 border-[#00d66f] rounded-3xl font-black text-xs text-[#0a2540]" placeholder="Repita o E-mail" />
           </div>
           
+          {/* CONFIRMAÇÃO DE PASSWORD */}
           <div className="grid grid-cols-2 gap-4">
             <input type="password" required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Password" />
-            <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Confirmar Pass" />
+            <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-4 border-[#00d66f] rounded-3xl font-bold text-xs" placeholder="Repita a Password" />
           </div>
           
           <div className="grid grid-cols-2 gap-4">

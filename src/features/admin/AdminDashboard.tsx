@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit }
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -17,11 +17,12 @@ import AdminNotifications from './AdminNotifications';
 import AdminComms from './AdminComms';
 import AdminVantagens from './AdminVantagens'; 
 import AdminLeaflets from './AdminLeaflets'; 
+import AdminBilling from './AdminBilling'; // NOVO: MENU COBRANÇAS
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
-  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'notifications' | 'vantagens' | 'leaflets' | 'settings'>('overview');
+  const [currentView, setCurrentView] = useState<'overview' | 'merchants' | 'requests' | 'users' | 'reviews' | 'comms' | 'billing' | 'notifications' | 'vantagens' | 'leaflets' | 'settings'>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
@@ -74,6 +75,7 @@ const AdminDashboard: React.FC = () => {
                 { id: 'merchants', label: 'Lojas', icon: Store },
                 { id: 'users', label: 'Vizinhos', icon: Users },
                 { id: 'comms', label: 'Comunicações Pub', icon: Megaphone },
+                { id: 'billing', label: 'Cobranças', icon: Receipt }, // NOVO MENU ADICIONADO
                 { id: 'leaflets', label: 'Folhetos', icon: FileText },
                 { id: 'vantagens', label: 'Vantagens VIP', icon: Crown }, 
                 { id: 'notifications', label: 'Avisos App', icon: Bell }, 
@@ -103,6 +105,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
         {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'comms' && <AdminComms />}
+        {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 
         {currentView === 'notifications' && <AdminNotifications />}
