@@ -10,7 +10,7 @@ import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, Smartphone, IdCard, Bell, Volume2, Loader2 } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, Smartphone, IdCard, Bell, Volume2, Loader2, Printer } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -69,11 +69,7 @@ const UserDashboard: React.FC = () => {
         .filter(l => {
           const start = l.startDate && typeof l.startDate.toDate === 'function' ? l.startDate.toDate() : new Date();
           const end = l.endDate && typeof l.endDate.toDate === 'function' ? l.endDate.toDate() : new Date();
-          
-          const isTimeValid = now >= start && now <= end;
-          const hasTargetZips = l.targetZipCodes && l.targetZipCodes.length > 0;
-          const isZipValid = !hasTargetZips || (userZipBase && l.targetZipCodes?.includes(userZipBase));
-          return isTimeValid && isZipValid;
+          return (now >= start && now <= end) && (!l.targetZipCodes?.length || l.targetZipCodes.includes(userZipBase!));
         });
       setActiveLeaflets(valid);
     });
@@ -151,6 +147,61 @@ const UserDashboard: React.FC = () => {
     }
   };
 
+  // GERAR CARTÃO PDF / IMPRESSÃO
+  const handlePrintCard = () => {
+    const qrCanvas = document.querySelector('canvas') as HTMLCanvasElement;
+    const qrImage = qrCanvas ? qrCanvas.toDataURL() : '';
+
+    const printWindow = window.open('', '', 'width=900,height=600');
+    if (!printWindow) return;
+
+    printWindow.document.write(`
+      <html>
+        <head>
+          <title>Cartão Vizinho+ - ${currentUser?.name}</title>
+          <style>
+            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fff; }
+            .card-container { display: flex; gap: 20px; }
+            .card { width: 330px; height: 210px; border-radius: 16px; box-sizing: border-box; overflow: hidden; position: relative; border: 1px dashed #ccc; }
+            /* Frente do Cartão */
+            .card-front { background: linear-gradient(135deg, #0a2540 0%, #0a2540 60%, #00d66f 100%); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; }
+            .logo { font-size: 36px; font-weight: 900; font-style: italic; letter-spacing: -2px; }
+            .logo span { color: #00d66f; }
+            .tagline { font-size: 10px; letter-spacing: 3px; margin-top: 10px; opacity: 0.8; text-transform: uppercase; }
+            /* Verso do Cartão */
+            .card-back { background: #ffffff; color: #0a2540; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
+            .qr-code { width: 100px; height: 100px; margin-bottom: 10px; }
+            .number { font-size: 16px; font-family: monospace; letter-spacing: 4px; font-weight: bold; margin-bottom: 5px; }
+            .name { font-size: 12px; font-weight: 900; text-transform: uppercase; }
+            .nif { font-size: 10px; color: #666; margin-top: 5px; }
+            @media print {
+              body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+              @page { margin: 0; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="card-container">
+            <div class="card card-front">
+              <div class="logo">Vizinho<span>Plus</span></div>
+              <div class="tagline">O seu bairro. O seu valor.</div>
+            </div>
+            <div class="card card-back">
+              <img src="${qrImage}" class="qr-code" />
+              <div class="number">${displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</div>
+              <div class="name">${currentUser?.name}</div>
+              <div class="nif">${currentUser?.nif ? 'NIF: ' + currentUser.nif : 'CLIENTE VIZINHO+'}</div>
+            </div>
+          </div>
+          <script>
+            window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); }
+          </script>
+        </body>
+      </html>
+    `);
+    printWindow.document.close();
+  };
+
   if (!currentUser) return null;
 
   const hasNotificationsInDB = currentUser.notificationsEnabled === true && currentUser.fcmTokens && currentUser.fcmTokens.length > 0;
@@ -177,9 +228,14 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
         
-        <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden">
+        <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
+          {/* BOTÃO GERAR CARTÃO PDF */}
+          <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
+             <Printer size={20} />
+          </button>
+
           <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
-            <div>
+            <div className="pr-12">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Cliente Vizinho+</p>
               <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">{currentUser.name}</h1>
               {currentUser.nif && <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>}
@@ -195,9 +251,11 @@ const UserDashboard: React.FC = () => {
             </div>
             <div className="text-center">
               <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
-              <div className="flex items-center justify-center gap-2 mt-2">
-                <IdCard size={14} className="text-slate-400" />
-                <span className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Apresente para ganhar cashback</span>
+              
+              {/* NOTA ATUALIZADA (Item 7) */}
+              <div className="flex flex-col items-center justify-center gap-1 mt-4">
+                <span className="text-[11px] font-black text-[#0a2540] uppercase tracking-widest bg-[#00d66f]/20 px-3 py-1 rounded-md">Apresente este cartão ANTES de terminar a compra</span>
+                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Para garantir que acumula ou desconta saldo</span>
               </div>
             </div>
           </div>
@@ -294,7 +352,10 @@ const UserDashboard: React.FC = () => {
             <ShieldCheck size={16} /> Privacidade
           </a>
         </div>
-        <p className="text-slate-300 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Versão Profissional</p>
+        <div className="text-center px-6">
+          <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
+          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas, sob pena de instauração de procedimentos civis e criminais.</p>
+        </div>
       </footer>
 
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}

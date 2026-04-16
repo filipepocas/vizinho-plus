@@ -2,10 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock
 } from 'lucide-react';
-import { db } from '../../config/firebase';
-import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { db, auth } from '../../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot, setDoc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 
@@ -21,26 +22,34 @@ const LandingPage: React.FC = () => {
   const [prices, setPrices] = useState<any>({});
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
 
-  // Formulário Empresa Externa (Marketing)
+  // Modais de Termos e Links
+  const [showTerms, setShowTerms] = useState(false);
+  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt' });
+
+  // Formulário Empresa Externa
   const [extForm, setExtForm] = useState({ companyName: '', contactName: '', nif: '', email: '', phone: '' });
 
-  // Formulário Banner
+  // Formulários Banner e Folheto
   const [bannerForm, setBannerForm] = useState({ title: '', startDate: '', endDate: '', imageBase64: '', targetType: 'all', targetValue: '' });
   const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
-  
-  // Formulário Folheto
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
 
-  // NOVO: Formulário de Adesão de Parceiros
+  // Formulário Adesão Lojistas
   const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
 
+  // Formulário Registo Cliente Direto
+  const [clientForm, setClientForm] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [clientLoading, setClientLoading] = useState(false);
+
   useEffect(() => {
-    const fetchPrices = async () => {
-      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
-      if (docSnap.exists()) setPrices(docSnap.data());
+    const fetchSys = async () => {
+      const pSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (pSnap.exists()) setPrices(pSnap.data());
+      const cSnap = await getDoc(doc(db, 'system', 'config'));
+      if (cSnap.exists()) setSysConfig(cSnap.data() as any);
     };
-    fetchPrices();
+    fetchSys();
 
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => {
@@ -115,14 +124,9 @@ const LandingPage: React.FC = () => {
     setLoading(true);
     try {
         const baseData = {
-            isExternal: true,
-            status: 'pending',
-            createdAt: serverTimestamp(),
-            companyName: extForm.companyName,
-            contactName: extForm.contactName,
-            nif: extForm.nif,
-            email: extForm.email,
-            phone: extForm.phone
+            isExternal: true, status: 'pending', createdAt: serverTimestamp(),
+            companyName: extForm.companyName, contactName: extForm.contactName,
+            nif: extForm.nif, email: extForm.email, phone: extForm.phone
         };
 
         if (type === 'banner' && bannerSimulation) {
@@ -146,35 +150,43 @@ const LandingPage: React.FC = () => {
         }
         
         toast.success("Pedido submetido com sucesso! A nossa equipa entrará em contacto.");
-        setShowExternalModal(false);
-        setBannerSimulation(null); setLeafletSimulation(null);
+        setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
   };
 
-  // NOVO: Função para o formulário da página principal (Lojistas potenciais)
   const handlePartnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoadingPartner(true);
     try {
       await addDoc(collection(db, 'merchant_requests'), {
-        shopName: partnerForm.shopName,
-        responsibleName: partnerForm.responsibleName,
-        email: partnerForm.email,
-        phone: partnerForm.phone,
-        freguesia: partnerForm.freguesia,
-        zipCode: partnerForm.zipCode,
-        category: "Indefinida", // O admin define depois
-        cashbackPercent: 5, // Padrão sugerido
-        status: 'pending',
-        createdAt: serverTimestamp()
+        shopName: partnerForm.shopName, responsibleName: partnerForm.responsibleName,
+        email: partnerForm.email, phone: partnerForm.phone, freguesia: partnerForm.freguesia,
+        zipCode: partnerForm.zipCode, category: "Indefinida", cashbackPercent: 5,
+        status: 'pending', createdAt: serverTimestamp()
       });
       toast.success("Pedido enviado! Em breve a nossa equipa entrará em contacto.");
       setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
-    } catch (e) {
-      toast.error("Erro ao enviar o pedido.");
-    } finally {
-      setLoadingPartner(false);
-    }
+    } catch (e) { toast.error("Erro ao enviar o pedido."); } finally { setLoadingPartner(false); }
+  };
+
+  const handleClientRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setClientLoading(true);
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, clientForm.email.trim(), clientForm.password);
+      const uid = userCredential.user.uid;
+      let zipClean = clientForm.zipCode.replace(/\D/g, '');
+      if (zipClean.length > 4) zipClean = zipClean.substring(0, 4) + '-' + zipClean.substring(4, 7);
+
+      await setDoc(doc(db, 'users', uid), {
+        id: uid, name: clientForm.name.trim(), customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(), 
+        phone: clientForm.phone.trim(), zipCode: zipClean, email: clientForm.email.toLowerCase().trim(),
+        birthDate: clientForm.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], createdAt: serverTimestamp()
+      });
+      
+      toast.success("Bem-vindo ao Vizinho+!");
+      navigate('/login');
+    } catch (err: any) { toast.error("Erro ao criar conta. Email já em uso?"); } finally { setClientLoading(false); }
   };
 
   return (
@@ -182,8 +194,6 @@ const LandingPage: React.FC = () => {
       
       <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
-        
-        {/* BOTÃO A PISCAR */}
         <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
             <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
         </button>
@@ -202,9 +212,11 @@ const LandingPage: React.FC = () => {
             A plataforma de fidelização que une os vizinhos e fortalece a economia local. Acumule cashback real em todas as lojas aderentes.
           </p>
         </div>
+        
+        {/* BOTÃO ALTERADO PARA APENAS LOGIN/RECUPERAR */}
         <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20">
-          Entrar ou Registar Agora
-          <ArrowRight className="group-hover:translate-x-2 transition-transform" size={20} strokeWidth={3} />
+          Entrar / Recuperar Password
+          <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
         </button>
 
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 w-full border-t border-slate-100 pt-16 mb-24">
@@ -215,37 +227,97 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-400"><Heart size={24} fill="currentColor" /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Bairro Forte</h3></div>
         </div>
 
-        {/* NOVO FORMULÁRIO DE ADESÃO PARA LOJISTAS */}
-        <div className="w-full max-w-4xl bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] text-left">
-           <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
-           <p className="text-sm font-bold text-slate-500 mb-8">Faça parte da nossa comunidade, fidelize clientes e aumente as suas vendas. Preencha os dados abaixo e a nossa equipa tratará de tudo.</p>
-           
-           <form onSubmit={handlePartnerSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <input required type="text" placeholder="Empresa / Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
-                 <input required type="text" placeholder="Nome de Contacto" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <input required type="tel" placeholder="Telefone / Telemóvel" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
-                 <input required type="email" placeholder="E-mail" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <input required type="text" placeholder="Localidade / Freguesia" value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
-                 <input required type="text" placeholder="Código Postal (CP4 ou CP7)" value={partnerForm.zipCode} onChange={e=>setPartnerForm({...partnerForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none" />
-              </div>
-              <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
-                 {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
-              </button>
-           </form>
+        {/* REGISTO DE CLIENTES E LOJISTAS LADO A LADO */}
+        <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl">
+            
+            {/* NOVO: REGISTO DE CLIENTES */}
+            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] text-left">
+              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Criar Cartão Cliente</h2>
+              <p className="text-sm font-bold text-slate-500 mb-8">Registe-se em 1 minuto para aceder ao seu cartão digital gratuito e começar a poupar.</p>
+              <form onSubmit={handleClientRegister} className="space-y-4">
+                  <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none" />
+                  <div className="grid grid-cols-2 gap-4">
+                     <input required type="email" placeholder="E-mail" value={clientForm.email} onChange={e=>setClientForm({...clientForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                     <input required type="tel" placeholder="Telemóvel" value={clientForm.phone} onChange={e=>setClientForm({...clientForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                     <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">Data Nasc.</label><input required type="date" value={clientForm.birthDate} onChange={e=>setClientForm({...clientForm, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none" /></div>
+                     <input required type="text" maxLength={8} placeholder="Cód. Postal" value={clientForm.zipCode} onChange={e=>setClientForm({...clientForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                  </div>
+                  <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                  
+                  <p className="text-[9px] font-bold text-slate-400 mt-2">Ao registar, aceita os <button type="button" onClick={()=>setShowTerms(true)} className="text-[#0a2540] underline">Termos e Condições e RGPD</button>.</p>
+
+                  <button disabled={clientLoading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-transform flex justify-center items-center gap-3 mt-6 border-b-4 border-[#0a2540]">
+                    {clientLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> Obter Cartão Grátis</>}
+                  </button>
+              </form>
+            </div>
+
+            {/* ADESÃO DE LOJISTAS */}
+            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] text-left">
+              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
+              <p className="text-sm font-bold text-slate-500 mb-8">Faça parte da nossa comunidade, fidelize clientes e aumente as suas vendas. Preencha os dados e a nossa equipa tratará de tudo.</p>
+              
+              <form onSubmit={handlePartnerSubmit} className="space-y-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input required type="text" placeholder="Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="text" placeholder="Nome do Responsável" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input required type="tel" placeholder="Telefone / Tlm" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="email" placeholder="E-mail Comercial" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <input required type="text" placeholder="Localidade / Freguesia" value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="text" placeholder="Cód. Postal (CP4 ou CP7)" value={partnerForm.zipCode} onChange={e=>setPartnerForm({...partnerForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                  </div>
+                  <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
+                    {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
+                  </button>
+              </form>
+            </div>
         </div>
 
       </main>
 
-      <footer className="py-12 text-center text-slate-300">
-        <p className="text-[9px] font-black uppercase tracking-[0.4em]">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
+      <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white">
+        <div className="flex gap-6">
+          <button onClick={() => {
+            navigator.clipboard.writeText(sysConfig.supportEmail);
+            toast.success("Email copiado!");
+          }} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">
+            Apoio / Contacto
+          </button>
+          <button onClick={() => setShowTerms(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">
+            Termos & Privacidade
+          </button>
+        </div>
+        <div className="text-center px-6">
+          <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
+          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas, sob pena de instauração de procedimentos civis e criminais.</p>
+        </div>
       </footer>
 
-      {/* MODAL DE PUBLICIDADE PARA EXTERNOS */}
+      {/* MODAL EXTERNO, MODAL TERMOS AQUI... (Manteve-se igual para poupar espaço mas garantindo que o fecho e funções funcionam). Vou adicionar o modal de Termos */}
+      {showTerms && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos de Utilização & RGPD</h3>
+              <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
+              <p>Ao registares-te no Vizinho+, concordas que a plataforma atua exclusivamente como solução tecnológica facilitadora de atribuição de saldo (cashback) local. A plataforma não é parte integrante de qualquer transação comercial entre Lojistas e Clientes.</p>
+              <p>Os teus dados pessoais (Nome, Email, NIF, Código Postal) são recolhidos estritamente para o funcionamento da plataforma e são guardados de forma segura. Não os partilhamos ou vendemos a terceiros para fins publicitários. O NIF é necessário apenas para validar e cruzar as compras efetuadas nas lojas aderentes.</p>
+              <p>O saldo de cashback acumulado na carteira não tem valor fiduciário (não pode ser levantado, transferido para contas bancárias ou trocado por dinheiro vivo), servindo unicamente como desconto acumulado a ser utilizado nas lojas da rede Vizinho+.</p>
+              <p className="text-red-500">A tecnologia, sistema de gestão de saldos, interface gráfica e ideologia do programa Vizinho+ estão protegidos. É estritamente proibida a sua reprodução ou manipulação de código por entidades não autorizadas.</p>
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
+          </div>
+        </div>
+      )}
+
       {showExternalModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8 relative">
@@ -314,7 +386,7 @@ const LandingPage: React.FC = () => {
 
               {activeTab === 'leaflet' && (
                 <form onSubmit={simulateLeaflet} className="space-y-4">
-                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
+                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
                         <option value="">(Escolha a Edição do Folheto)</option>
                         {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
                    </select>

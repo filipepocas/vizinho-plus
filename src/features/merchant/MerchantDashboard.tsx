@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import  React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
@@ -41,16 +41,14 @@ const MerchantDashboard: React.FC = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
   const [amount, setAmount] = useState('');
-  const [documentNumber, setDocumentNumber] = useState('');
+  
+  // Campo fatura removido do Terminal, fica só para a confirmação posterior se desejado
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
-  
-  const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
-  const [postInvoiceNum, setPostInvoiceNum] = useState('');
 
   const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
@@ -118,10 +116,7 @@ const MerchantDashboard: React.FC = () => {
       }
     };
 
-    const timeoutId = setTimeout(() => {
-      searchClient();
-    }, 500);
-
+    const timeoutId = setTimeout(() => searchClient(), 500);
     return () => clearTimeout(timeoutId);
   }, [cardNumber, isNifValid]);
 
@@ -180,40 +175,25 @@ const MerchantDashboard: React.FC = () => {
     if (!pushSimulation) return;
     try {
       await addDoc(collection(db, 'marketing_requests'), {
-        merchantId: currentUser?.id,
-        merchantName: currentUser?.shopName || currentUser?.name,
-        type: 'push_notification',
-        title: pushForm.title,
-        text: pushForm.text,
-        targetType: pushForm.targetType,
-        targetValue: pushForm.targetValue,
-        scheduledFor: pushSimulation.scheduledFor,
-        targetCount: pushSimulation.count,
-        cost: pushSimulation.cost,
-        status: 'pending',
-        createdAt: serverTimestamp()
+        merchantId: currentUser?.id, merchantName: currentUser?.shopName || currentUser?.name,
+        type: 'push_notification', title: pushForm.title, text: pushForm.text,
+        targetType: pushForm.targetType, targetValue: pushForm.targetValue,
+        scheduledFor: pushSimulation.scheduledFor, targetCount: pushSimulation.count,
+        cost: pushSimulation.cost, status: 'pending', createdAt: serverTimestamp()
       });
       toast.success("PEDIDO ENVIADO PARA APROVAÇÃO!");
       setPushSimulation(null);
       setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
       setView('marketing'); 
-    } catch (e) { 
-      toast.error("ERRO AO ENVIAR."); 
-    }
+    } catch (e) { toast.error("ERRO AO ENVIAR."); }
   };
 
   const handleDeleteMessage = async (id: string) => {
     try {
       await deleteDoc(doc(db, 'merchant_messages', id));
       toast.success("MENSAGEM APAGADA.");
-      
-      // Fecha a caixa se foi a última mensagem
-      if (adminMessages.length <= 1) {
-        setShowInbox(false);
-      }
-    } catch (e) {
-      toast.error("ERRO AO APAGAR A MENSAGEM.");
-    }
+      if (adminMessages.length <= 1) setShowInbox(false);
+    } catch (e) { toast.error("ERRO AO APAGAR A MENSAGEM."); }
   };
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
@@ -228,20 +208,14 @@ const MerchantDashboard: React.FC = () => {
     setShowConfirmModal(false);
     setIsLoading(true);
     try {
-      const newTxId = await addTransaction({
-        clientId: foundClient.id,
-        merchantId: currentUser.id,
-        merchantName: currentUser.shopName || currentUser.name || 'Loja',
-        amount: pendingAction.val,
-        invoiceAmount: pendingAction.invAmount,
-        type: pendingAction.type,
-        documentNumber: documentNumber,
-        clientName: foundClient.name,
-        clientCardNumber: foundClient.customerNumber,
-        clientBirthDate: foundClient.birthDate
+      await addTransaction({
+        clientId: foundClient.id, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name || 'Loja',
+        amount: pendingAction.val, invoiceAmount: pendingAction.invAmount, type: pendingAction.type,
+        documentNumber: '', // Removido do frontend
+        clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
       });
-      setPostTxModal({ isOpen: true, txId: newTxId || '', needsInvoice: !documentNumber.trim() });
-      setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
+      setAmount(''); setCardNumber(''); setFoundClient(null);
+      toast.success(pendingAction.type === 'earn' ? 'Cashback Atribuído!' : 'Desconto Confirmado!');
     } catch (e) { toast.error("ERRO AO REGISTAR."); } finally { setIsLoading(false); }
   };
 
@@ -256,11 +230,7 @@ const MerchantDashboard: React.FC = () => {
           
           <button onClick={() => setShowInbox(true)} className="relative bg-white/10 p-3 rounded-2xl hover:bg-[#00d66f] hover:text-[#0a2540] transition-all">
              <MessageSquare size={24} />
-             {adminMessages.length > 0 && (
-               <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0f172a] animate-pulse">
-                 {adminMessages.length}
-               </span>
-             )}
+             {adminMessages.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0f172a] animate-pulse">{adminMessages.length}</span>}
           </button>
         </div>
         
@@ -270,9 +240,10 @@ const MerchantDashboard: React.FC = () => {
           <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
           <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
           
-          <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all">
-            <LogOut size={20} />
-          </button>
+          {/* BOTÃO DEFINIÇÕES DA LOJA AQUI */}
+          <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Loja</button>
+
+          <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
         </nav>
       </header>
 
@@ -282,17 +253,13 @@ const MerchantDashboard: React.FC = () => {
           <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl space-y-6">
                 <div>
-                   <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center gap-2">
-                      <Send className="text-[#00d66f]" /> Pedir Envio de Notificações
-                   </h3>
+                   <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center gap-2"><Send className="text-[#00d66f]" /> Pedir Envio de Notificações</h3>
                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Desperte o telemóvel dos seus clientes</p>
                 </div>
-
                 <div className="space-y-4">
                    <input type="text" placeholder="Título (Ex: Promoção de Verão!)" value={pushForm.title} onChange={e=>setPushForm({...pushForm, title: e.target.value.toUpperCase()})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
                    <textarea rows={4} placeholder="Mensagem curta e apelativa (Máx. 100 caracteres)..." value={pushForm.text} onChange={e=>setPushForm({...pushForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f] resize-none" maxLength={100} />
                 </div>
-
                 <div className="space-y-4">
                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Quem deve receber?</label>
                    <select value={pushForm.targetType} onChange={e=>setPushForm({...pushForm, targetType: e.target.value as any, targetValue: ''})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
@@ -301,45 +268,22 @@ const MerchantDashboard: React.FC = () => {
                       <option value="top">Meus Clientes (Top de Vendas)</option>
                       <option value="birthDate">Aniversariantes do Mês</option>
                    </select>
-
-                   {pushForm.targetType === 'multiple_zip' && (
-                     <input type="text" placeholder="Insira CP4 separados por vírgula (Ex: 4620, 4400)" value={pushForm.targetValue} onChange={e=>setPushForm({...pushForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs" />
-                   )}
+                   {pushForm.targetType === 'multiple_zip' && <input type="text" placeholder="Insira CP4 separados por vírgula (Ex: 4620, 4400)" value={pushForm.targetValue} onChange={e=>setPushForm({...pushForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs" />}
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label>
-                    <input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
-                  </div>
-                  <div>
-                    <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label>
-                    <select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
-                      {availableHours.map(h => <option key={h} value={h}>{h}</option>)}
-                    </select>
-                  </div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label><input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label><select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">{availableHours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
                 </div>
-
-                <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">
-                   {simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}
-                </button>
+                <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">{simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}</button>
              </div>
 
              {pushSimulation && (
                <div className="bg-[#00d66f] p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540] flex flex-col justify-center text-center animate-in zoom-in">
                   <h4 className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest mb-6 opacity-60">Orçamento Detalhado</h4>
-                  
                   <div className="grid grid-cols-2 gap-4 mb-8">
-                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10">
-                        <span className="text-[9px] font-black uppercase block mb-1">Clientes</span>
-                        <span className="text-3xl font-black italic">{pushSimulation.count}</span>
-                     </div>
-                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10">
-                        <span className="text-[9px] font-black uppercase block mb-1">Investimento</span>
-                        <span className="text-3xl font-black italic">{formatCurrency(pushSimulation.cost)}</span>
-                     </div>
+                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Clientes</span><span className="text-3xl font-black italic">{pushSimulation.count}</span></div>
+                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Investimento</span><span className="text-3xl font-black italic">{formatCurrency(pushSimulation.cost)}</span></div>
                   </div>
-
                   <div className="space-y-3">
                      <button onClick={submitPushRequest} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl hover:scale-105 transition-transform">Avançar com o Pedido</button>
                      <button onClick={() => setPushSimulation(null)} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white/40">Anular / Corrigir</button>
@@ -351,27 +295,16 @@ const MerchantDashboard: React.FC = () => {
         )}
 
         {showInbox && (
-          <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
              <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
-                <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-                   <h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3>
-                   <button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button>
-                </div>
+                <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3><button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button></div>
                 <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
-                   {adminMessages.length === 0 ? (
-                     <p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>
-                   ) : adminMessages.map(msg => (
+                   {adminMessages.length === 0 ? (<p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>) : adminMessages.map(msg => (
                      <div key={msg.id} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 relative group transition-colors hover:border-blue-100 hover:bg-blue-50/30">
                         <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
-                        
                         <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
                            <span className="text-[9px] font-black text-slate-400 uppercase">Enviada a: {msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : 'Recente'}</span>
-                           <button 
-                             onClick={() => handleDeleteMessage(msg.id)} 
-                             className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"
-                           >
-                             <Trash2 size={14} /> Apagar
-                           </button>
+                           <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"><Trash2 size={14} /> Apagar</button>
                         </div>
                      </div>
                    ))}
@@ -386,22 +319,20 @@ const MerchantDashboard: React.FC = () => {
             isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
             amount={amount} setAmount={setAmount}
             previewCashback={previewCashbackValue}
-            documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
+            documentNumber={""} setDocumentNumber={() => {}} // Dummy info
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
             isLoading={isLoading}
             clientStoreBalance={foundClient?.storeWallets?.[currentUser.id]?.available || 0}
             formatCurrency={formatCurrency}
+            isLeaving={currentUser.isLeaving}
           />
         )}
 
         {showConfirmModal && foundClient && pendingAction && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
             <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
-               <div className="bg-[#0a2540] p-6 text-white text-center">
-                 <AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" />
-                 <h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3>
-               </div>
+               <div className="bg-[#0a2540] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3></div>
                <div className="p-8 text-center space-y-4">
                  <p className="text-xs font-bold text-slate-500 uppercase">Cliente</p>
                  <p className="text-lg font-black text-[#0a2540]">{foundClient.name}</p>
@@ -409,6 +340,12 @@ const MerchantDashboard: React.FC = () => {
                  <p className="text-xs font-bold text-slate-500 uppercase">{pendingAction.type === 'earn' ? 'Fatura Base' : 'Valor a Descontar'}</p>
                  <p className={`text-4xl font-black italic ${pendingAction.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>{formatCurrency(pendingAction.val)}</p>
                  
+                 {pendingAction.type === 'redeem' && !currentUser.isLeaving && (
+                   <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest mt-2 border-t-2 border-green-100 pt-2">
+                     Novo Cashback a Gerar: {formatCurrency(Math.max(0, pendingAction.invAmount - pendingAction.val) * (Number(currentUser.cashbackPercent)/100))}
+                   </p>
+                 )}
+
                  <div className="flex gap-4 mt-8">
                    <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
                    <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
@@ -423,6 +360,11 @@ const MerchantDashboard: React.FC = () => {
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
       </main>
+
+      <footer className="py-12 flex flex-col items-center gap-6 mt-20">
+        <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
+        <p className="text-slate-400/50 text-[7px] font-bold max-w-2xl leading-relaxed uppercase text-center px-4">A tecnologia, design e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia ou adaptação por entidades não autorizadas, sob pena de instauração de severos procedimentos civis e criminais.</p>
+      </footer>
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
       

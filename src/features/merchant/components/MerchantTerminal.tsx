@@ -1,5 +1,3 @@
-// src/features/merchant/components/MerchantTerminal.tsx
-
 import React, { useState } from 'react';
 import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
@@ -20,12 +18,13 @@ interface MerchantTerminalProps {
   isLoading: boolean;
   clientStoreBalance: number;
   formatCurrency: (val: number) => string;
+  isLeaving?: boolean; // NOVO: Flag de bloqueio
 }
 
 const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   cardNumber, setCardNumber, isNifValid, foundClient,
-  amount, setAmount, previewCashback, documentNumber, setDocumentNumber,
-  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching
+  amount, setAmount, previewCashback,
+  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching, isLeaving
 }) => {
 
   const [customRedeem, setCustomRedeem] = useState<string>('');
@@ -44,16 +43,16 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   const maxDiscountAllowed = invoiceAmount * 0.5;
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
 
-  const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0;
+  // Se a loja está a fechar (isLeaving), bloqueia o Earn
+  const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0 && !isLeaving;
   
-  // Melhoria na validação do desconto
   const redeemVal = parseFloat(customRedeem);
   const canProcessRedeem = !isLoading && 
                           foundClient !== null && 
                           invoiceAmount > 0 && 
                           !isNaN(redeemVal) && 
                           redeemVal > 0 && 
-                          redeemVal <= (actualDiscountToApply + 0.01); // Margem para arredondamentos
+                          redeemVal <= (actualDiscountToApply + 0.01); 
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
@@ -62,9 +61,15 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
         <div className="space-y-10 relative z-10">
           
           <div className="space-y-4">
-            <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">
-              <Search size={16} /> Identificar Cliente (Nº Cartão ou NIF)
-            </label>
+            <div className="flex justify-between items-center ml-2">
+               <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                 <Search size={16} /> Identificar Cliente
+               </label>
+               <span className="text-[9px] font-bold text-[#00d66f] bg-green-50 px-3 py-1 rounded-lg uppercase">
+                 Ler Cartão Antes do Pagamento
+               </span>
+            </div>
+            
             <div className="flex flex-col sm:flex-row gap-4">
               <input 
                 type="text" inputMode="numeric" value={cardNumber} onChange={handleNifChange} placeholder="000 000 000" 
@@ -80,30 +85,29 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Nova Fatura (€)</label>
-              <input 
-                type="number" step="0.01" min="0" value={amount} onChange={e => { setAmount(e.target.value); setCustomRedeem(''); }} placeholder="0.00" 
-                className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner" 
-              />
-              
-              {invoiceAmount > 0 && (
-                <div className="flex flex-col gap-2 animate-in zoom-in">
-                  <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
-                    <ArrowRight size={16} className="text-[#00d66f]" />
-                    <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
-                      Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
-                    </span>
-                  </div>
+          <div className="space-y-4">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Nova Fatura (€)</label>
+            <input 
+              type="number" step="0.01" min="0" value={amount} onChange={e => { setAmount(e.target.value); setCustomRedeem(''); }} placeholder="0.00" 
+              className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner" 
+            />
+            
+            {invoiceAmount > 0 && !isLeaving && (
+              <div className="flex flex-col gap-2 animate-in zoom-in">
+                <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
+                  <ArrowRight size={16} className="text-[#00d66f]" />
+                  <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
+                    Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
+                  </span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
-            <div className="space-y-4">
-              <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Nº Fatura / Recibo (Opcional)</label>
-              <input type="text" value={documentNumber} onChange={e => setDocumentNumber(e.target.value.toUpperCase())} placeholder="EX: FT 123/2026" className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-2xl font-black uppercase text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner tracking-widest" />
-            </div>
+            {isLeaving && (
+              <div className="bg-red-50 p-4 rounded-2xl border-2 border-red-200 flex items-center gap-3 text-red-600 font-bold text-[10px] uppercase">
+                <AlertTriangle size={16} /> Loja em Processo de Saída: O botão de atribuir Cashback está desativado. Apenas pode aceitar resgates de saldo.
+              </div>
+            )}
           </div>
         </div>
       </div>
