@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
-import { QRCodeSVG } from 'qrcode.react';
+import { QRCodeCanvas } from 'qrcode.react'; // CORREÇÃO: Mudou de QRCodeSVG para QRCodeCanvas
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile, Leaflet, AppNotification } from '../../types';
@@ -147,10 +147,13 @@ const UserDashboard: React.FC = () => {
     }
   };
 
-  // GERAR CARTÃO PDF / IMPRESSÃO
+  // CORREÇÕES DO CARTÃO DE IMPRESSÃO
   const handlePrintCard = () => {
-    const qrCanvas = document.querySelector('canvas') as HTMLCanvasElement;
-    const qrImage = qrCanvas ? qrCanvas.toDataURL() : '';
+    // 1. Obter a imagem do Canvas gerado
+    const qrCanvas = document.getElementById('user-qr-canvas') as HTMLCanvasElement;
+    const qrImage = qrCanvas ? qrCanvas.toDataURL('image/png') : '';
+    // 2. Caminho absoluto do logótipo real
+    const logoUrl = window.location.origin + '/logo-vizinho.png';
 
     const printWindow = window.open('', '', 'width=900,height=600');
     if (!printWindow) return;
@@ -160,20 +163,19 @@ const UserDashboard: React.FC = () => {
         <head>
           <title>Cartão Vizinho+ - ${currentUser?.name}</title>
           <style>
-            body { font-family: sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fff; }
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #fff; }
             .card-container { display: flex; gap: 20px; }
-            .card { width: 330px; height: 210px; border-radius: 16px; box-sizing: border-box; overflow: hidden; position: relative; border: 1px dashed #ccc; }
-            /* Frente do Cartão */
-            .card-front { background: linear-gradient(135deg, #0a2540 0%, #0a2540 60%, #00d66f 100%); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; }
-            .logo { font-size: 36px; font-weight: 900; font-style: italic; letter-spacing: -2px; }
-            .logo span { color: #00d66f; }
-            .tagline { font-size: 10px; letter-spacing: 3px; margin-top: 10px; opacity: 0.8; text-transform: uppercase; }
-            /* Verso do Cartão */
-            .card-back { background: #ffffff; color: #0a2540; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; }
-            .qr-code { width: 100px; height: 100px; margin-bottom: 10px; }
-            .number { font-size: 16px; font-family: monospace; letter-spacing: 4px; font-weight: bold; margin-bottom: 5px; }
-            .name { font-size: 12px; font-weight: 900; text-transform: uppercase; }
-            .nif { font-size: 10px; color: #666; margin-top: 5px; }
+            .card { width: 330px; height: 210px; border-radius: 16px; box-sizing: border-box; overflow: hidden; position: relative; }
+            /* Frente do Cartão - Gradiente VPlus */
+            .card-front { background: linear-gradient(135deg, #0a2540 0%, #0a2540 50%, #00d66f 100%); color: white; display: flex; flex-direction: column; justify-content: center; align-items: center; border: 1px solid #0a2540; padding: 20px; }
+            .card-front img { max-width: 80%; max-height: 60px; object-fit: contain; margin-bottom: 15px; }
+            .tagline { font-size: 11px; letter-spacing: 2px; font-weight: bold; text-transform: uppercase; color: #fff; text-align: center; }
+            /* Verso do Cartão - Borda escura para recorte */
+            .card-back { background: #ffffff; color: #0a2540; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center; border: 2px solid #94a3b8; }
+            .qr-code { width: 100px; height: 100px; margin-bottom: 15px; }
+            .number { font-size: 18px; font-family: monospace; letter-spacing: 4px; font-weight: 900; margin-bottom: 8px; }
+            .name { font-size: 13px; font-weight: 900; text-transform: uppercase; color: #0a2540; line-height: 1.2; padding: 0 10px; }
+            .nif { font-size: 10px; color: #64748b; margin-top: 5px; font-weight: bold; text-transform: uppercase; }
             @media print {
               body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
               @page { margin: 0; }
@@ -183,18 +185,18 @@ const UserDashboard: React.FC = () => {
         <body>
           <div class="card-container">
             <div class="card card-front">
-              <div class="logo">Vizinho<span>Plus</span></div>
-              <div class="tagline">O seu bairro. O seu valor.</div>
+              <img src="${logoUrl}" alt="Vizinho+" />
+              <div class="tagline">Valoriza o que é local</div>
             </div>
             <div class="card card-back">
-              <img src="${qrImage}" class="qr-code" />
+              ${qrImage ? `<img src="${qrImage}" class="qr-code" />` : '<div style="height:100px; display:flex; align-items:center; color:red; font-size:10px;">Erro no QR</div>'}
               <div class="number">${displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</div>
               <div class="name">${currentUser?.name}</div>
               <div class="nif">${currentUser?.nif ? 'NIF: ' + currentUser.nif : 'CLIENTE VIZINHO+'}</div>
             </div>
           </div>
           <script>
-            window.onload = () => { setTimeout(() => { window.print(); window.close(); }, 500); }
+            setTimeout(() => { window.print(); window.close(); }, 800);
           </script>
         </body>
       </html>
@@ -229,7 +231,6 @@ const UserDashboard: React.FC = () => {
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
         
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
-          {/* BOTÃO GERAR CARTÃO PDF */}
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
              <Printer size={20} />
           </button>
@@ -247,12 +248,12 @@ const UserDashboard: React.FC = () => {
           </div>
           <div className="p-8 flex flex-col items-center gap-6">
             <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
-              <QRCodeSVG value={displayCardNumber} size={150} />
+              {/* CORREÇÃO: QRCodeCanvas permite a conversão para imagem posteriormente */}
+              <QRCodeCanvas id="user-qr-canvas" value={displayCardNumber} size={150} />
             </div>
             <div className="text-center">
               <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
               
-              {/* NOTA ATUALIZADA (Item 7) */}
               <div className="flex flex-col items-center justify-center gap-1 mt-4">
                 <span className="text-[11px] font-black text-[#0a2540] uppercase tracking-widest bg-[#00d66f]/20 px-3 py-1 rounded-md">Apresente este cartão ANTES de terminar a compra</span>
                 <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Para garantir que acumula ou desconta saldo</span>
