@@ -4,13 +4,16 @@ import { useStore } from '../../store/useStore';
 import { QRCodeCanvas } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Transaction, User as UserProfile, Leaflet, AppNotification } from '../../types';
+import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, AntiWasteItem } from '../../types';
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, Smartphone, IdCard, Bell, Volume2, Loader2, Printer, BookOpen } from 'lucide-react';
+
+// CORREÇÃO: O import do Smartphone foi garantido aqui na linha abaixo.
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, Leaf, MapPin, Store, Smartphone } from 'lucide-react';
+
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -20,7 +23,7 @@ const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore'>('home');
+  const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore' | 'events' | 'anti_waste'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
   
@@ -28,11 +31,15 @@ const UserDashboard: React.FC = () => {
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [showContactModal, setShowContactModal] = useState(false);
-  const [showRulesModal, setShowRulesModal] = useState(false); // NOVO ESTADO DAS REGRAS
+  const [showRulesModal, setShowRulesModal] = useState(false); 
   const [emailCopied, setEmailCopied] = useState(false);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
 
   const [isNotifLoading, setIsNotifLoading] = useState(false);
+  const [localNotifGranted, setLocalNotifGranted] = useState(false);
+
+  const [events, setEvents] = useState<AppEvent[]>([]);
+  const [wasteItems, setWasteItems] = useState<AntiWasteItem[]>([]);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
@@ -103,6 +110,40 @@ const UserDashboard: React.FC = () => {
     });
   }, [currentUser]);
 
+  useEffect(() => {
+    if (!currentUser) return;
+    const userZipBase = currentUser.zipCode?.substring(0, 4);
+    const q = query(collection(db, 'events'), where('status', '==', 'approved'), orderBy('startDate', 'asc'));
+    return onSnapshot(q, (snap) => {
+      const now = new Date();
+      const validEvents = snap.docs.map(d => ({id: d.id, ...d.data()} as AppEvent))
+        .filter(e => {
+            const isFuture = e.endDate.toDate() >= now;
+            const matchZip = !e.targetZips?.length || e.targetZips.includes(userZipBase!);
+            return isFuture && matchZip;
+        });
+      setEvents(validEvents);
+    });
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) return;
+    const userZipBase = currentUser.zipCode?.substring(0, 4);
+    const userZipFull = currentUser.zipCode;
+    const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
+    
+    return onSnapshot(q, (snap) => {
+      const now = new Date();
+      const active = snap.docs.map(d => ({id: d.id, ...d.data()} as AntiWasteItem))
+        .filter(w => {
+            const isFuture = w.endTime.toDate() > now;
+            const matchZip = w.targetZip === userZipBase || w.targetZip === userZipFull;
+            return isFuture && matchZip;
+        });
+      setWasteItems(active);
+    });
+  }, [currentUser]);
+
   const dismissNotification = () => {
     if (appNotification?.id) sessionStorage.setItem(`notif_${appNotification.id}`, "true");
     setAppNotification(null);
@@ -137,7 +178,7 @@ const UserDashboard: React.FC = () => {
       const res = await requestNotificationPermission(currentUser!.id);
       if(res.success) {
         toast.success("Notificações ativadas com sucesso!");
-        setTimeout(() => window.location.reload(), 1500);
+        setLocalNotifGranted(true); 
       } else {
         toast.error(res.error || "O navegador bloqueou o pedido.", { duration: 6000 });
       }
@@ -203,6 +244,7 @@ const UserDashboard: React.FC = () => {
   if (!currentUser) return null;
 
   const hasNotificationsInDB = currentUser.notificationsEnabled === true && currentUser.fcmTokens && currentUser.fcmTokens.length > 0;
+  const isButtonHidden = hasNotificationsInDB || localNotifGranted || Notification.permission === 'granted';
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
@@ -225,8 +267,7 @@ const UserDashboard: React.FC = () => {
       </div>
 
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
-
-        {/* BOTÃO DAS REGRAS A PISCAR */}
+        
         <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
           <BookOpen size={20} /> Ler Regras de Utilização
         </button>
@@ -282,10 +323,76 @@ const UserDashboard: React.FC = () => {
             {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">{pendingEvaluations.length}</span>}
             <MessageSquare size={18} /> Avaliar Lojas
           </button>
+
+          <button onClick={() => setView(view === 'events' ? 'home' : 'events')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#3b82f6] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
+             {events.length > 0 && <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{events.length}</span>}
+             <CalendarPlus size={18} className={view === 'events' ? 'text-white' : 'text-blue-500'} /> Eventos Locais
+          </button>
+          <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#22c55e] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
+             {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
+             <Leaf size={18} className={view === 'anti_waste' ? 'text-white' : 'text-green-500'} /> Oportunidades 24h
+          </button>
         </div>
 
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
+
+        {view === 'events' && (
+           <div className="space-y-4 animate-in fade-in duration-500">
+              <h3 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-4 flex items-center gap-2"><CalendarPlus className="text-blue-500" /> Agenda da Freguesia</h3>
+              {events.map(ev => (
+                 <div key={ev.id} className="bg-white border-4 border-blue-500 rounded-[30px] p-6 shadow-lg flex flex-col md:flex-row gap-6">
+                    <div className="w-full md:w-48 shrink-0 bg-slate-100 rounded-2xl border-2 border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                       <img src={ev.imageUrl} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
+                    </div>
+                    <div className="flex-1">
+                        <h4 className="font-black uppercase text-[#0a2540] text-xl mb-1">{ev.title}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Org: {ev.entityName} | {ev.eventType}</p>
+                        
+                        <p className="text-xs font-bold text-slate-600 leading-relaxed mb-4">{ev.description}</p>
+                        
+                        <div className="grid grid-cols-2 gap-2 bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 text-[10px] font-black uppercase text-blue-900">
+                           <p className="flex items-center gap-2"><MapPin size={14} className="text-blue-500" /> {ev.location}</p>
+                           <p className="flex items-center gap-2"><Star size={14} className="text-blue-500" /> {ev.ticketPrice}</p>
+                           <p className="flex items-center gap-2 col-span-2 mt-2 pt-2 border-t border-blue-200">
+                             Da {ev.startDate.toDate().toLocaleDateString()} a {ev.endDate.toDate().toLocaleDateString()} (Início às {ev.startTime})
+                           </p>
+                        </div>
+                    </div>
+                 </div>
+              ))}
+              {events.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhum evento agendado para breve.</p>}
+           </div>
+        )}
+
+        {view === 'anti_waste' && (
+           <div className="space-y-4 animate-in fade-in duration-500">
+              <div className="bg-green-500 text-white p-6 rounded-[30px] shadow-lg mb-6">
+                 <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite (Desperdício)</h3>
+                 <p className="text-xs font-bold opacity-90 mt-2">Os lojistas anunciam sobras do dia com descontos acentuados. Válido apenas nas lojas, sujeito ao stock existente.</p>
+              </div>
+              {wasteItems.map(w => (
+                 <div key={w.id} className="bg-white border-4 border-green-500 rounded-[30px] p-6 shadow-lg relative overflow-hidden">
+                    <div className="flex justify-between items-start mb-4 border-b-2 border-slate-100 pb-4">
+                       <div>
+                          <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#00d66f]"/> {w.merchantName}</h4>
+                          <p className="text-[10px] font-bold text-slate-400 mt-1">{w.address}</p>
+                       </div>
+                    </div>
+                    <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100 mb-4">
+                       <p className="text-sm font-bold text-green-900 mb-2">{w.productInfo}</p>
+                       <span className="bg-white text-green-700 font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg border border-green-200 inline-block shadow-sm">
+                         🛒 Condições: {w.conditions}
+                       </span>
+                    </div>
+                    <p className="text-right text-[10px] font-black uppercase text-slate-500 bg-slate-100 p-3 rounded-xl border-2 border-slate-200 inline-block w-full">
+                       ⚠️ Termina Hoje às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                    </p>
+                 </div>
+              ))}
+              {wasteItems.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhuma oportunidade hoje. Tente mais tarde!</p>}
+           </div>
+        )}
 
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
@@ -314,7 +421,7 @@ const UserDashboard: React.FC = () => {
             </button>
           )}
           
-          {!hasNotificationsInDB && (
+          {!isButtonHidden && (
             <button onClick={enableNotifications} disabled={isNotifLoading} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center justify-center md:justify-start gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'md:col-span-2'}`}>
               {isNotifLoading ? <Loader2 size={20} className="animate-spin text-[#00d66f]" /> : (
                 <>
