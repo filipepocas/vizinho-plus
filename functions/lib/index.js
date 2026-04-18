@@ -33,172 +33,223 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onNewFeedback = exports.matureCashback = exports.createMerchant = void 0;
+exports.sendAdminNotification = exports.onNewFeedback = exports.createMerchant = exports.revertCancelledTransaction = exports.processNewTransaction = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
-const luxon_1 = require("luxon");
 admin.initializeApp();
 const db = admin.firestore();
+const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 /**
- * Função para criar um novo comerciante de forma segura.
- * Usa Admin SDK para criar o utilizador no Auth e Firestore.
+ * 1. PROCESSAR NOVAS TRANSAÇÕES E NOTIFICAÇÕES
  */
-exports.createMerchant = functions.https.onCall(async (data, context) => {
+exports.processNewTransaction = functions.region("us-central1").firestore
+    .document("transactions/{transactionId}")
+    .onCreate(async (snap, context) => {
+    const tx = snap.data();
+    if (!tx || tx.processedByBackend)
+        return;
+    const clientRef = db.collection("users").doc(tx.clientId);
+    const merchantRef = db.collection("users").doc(tx.merchantId);
+    try {
+        await db.runTransaction(async (transaction) => {
+            const clientDoc = await transaction.get(clientRef);
+            const merchantDoc = await transaction.get(merchantRef);
+            if (!clientDoc.exists || !merchantDoc.exists)
+                throw new Error("Documentos não encontrados.");
+            const merchantData = merchantDoc.data();
+            if (!merchantData)
+                throw new Error("Dados do lojista vazios.");
+            const merchantCashbackPercent = Number(merchantData.cashbackPercent) || 0;
+            const baseAmount = Number(tx.amount) || 0;
+            const isLeaving = merchantData.isLeaving === true;
+            let secureCashbackAmount = 0;
+            let newCashbackEarned = 0;
+            if (tx.type === 'earn') {
+                if (isLeaving)
+                    throw new Error("Loja em processo de saída.");
+                secureCashbackAmount = roundToTwo(baseAmount * (merchantCashbackPercent / 100));
+            }
+            else if (tx.type === 'redeem') {
+                secureCashbackAmount = baseAmount;
+                const invoiceAmount = Number(tx.invoiceAmount) || 0;
+                if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
+                    throw new Error("Fraude: Resgate superior a 50%.");
+                }
+                if (!isLeaving && invoiceAmount > secureCashbackAmount) {
+                    const amountPaid = invoiceAmount - secureCashbackAmount;
+                    newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
+                }
+            }
+            transaction.update(snap.ref, {
+                cashbackAmount: secureCashbackAmount,
+                cashbackEarned: newCashbackEarned,
+                cashbackPercent: tx.type === 'earn' ? merchantCashbackPercent : 0,
+                processedByBackend: true
+            });
+            const userData = clientDoc.data();
+            if (!userData)
+                throw new Error("Dados do cliente vazios.");
+            let storeWallets = userData.storeWallets || {};
+            const mId = tx.merchantId;
+            if (!storeWallets[mId])
+                storeWallets[mId] = { available: 0, pending: 0, merchantName: tx.merchantName };
+            let currentAvailable = storeWallets[mId].available || 0;
+            if (tx.type === 'earn') {
+                storeWallets[mId].available = roundToTwo(currentAvailable + secureCashbackAmount);
+            }
+            else if (tx.type === 'redeem') {
+                if (currentAvailable < secureCashbackAmount)
+                    throw new Error("Saldo insuficiente.");
+                storeWallets[mId].available = roundToTwo(currentAvailable - secureCashbackAmount + newCashbackEarned);
+            }
+            storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();
+            let globalAvailable = 0;
+            Object.values(storeWallets).forEach((w) => { globalAvailable += (w.available || 0); });
+            transaction.update(clientRef, {
+                storeWallets: storeWallets,
+                wallet: { available: roundToTwo(globalAvailable), pending: 0 }
+            });
+        });
+        // Notificação
+        const clientDocAfter = await clientRef.get();
+        const clientData = clientDocAfter.data();
+        if (clientData && clientData.wallet) {
+            const totalAvailable = clientData.wallet.available || 0;
+            if (totalAvailable >= 50 && clientData.fcmTokens && clientData.fcmTokens.length > 0) {
+                const message = {
+                    notification: {
+                        title: "Saldo de 50€ Atingido! 🎉",
+                        body: `Parabéns! Já tens ${totalAvailable.toFixed(2)}€ acumulados no Vizinho+!`,
+                    },
+                    tokens: clientData.fcmTokens,
+                    android: { priority: "high", notification: { color: "#00d66f" } },
+                    webpush: { headers: { Urgency: "high" } }
+                };
+                await admin.messaging().sendEachForMulticast(message);
+            }
+        }
+    }
+    catch (error) {
+        console.error("Erro Transação:", error);
+        await snap.ref.update({ status: "rejected", rejectReason: error.message });
+    }
+});
+/**
+ * 2. REVERTER ANULAÇÕES
+ */
+exports.revertCancelledTransaction = functions.region("us-central1").firestore
+    .document("transactions/{transactionId}")
+    .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    if (before && after && before.status !== 'cancelled' && after.status === 'cancelled') {
+        const clientRef = db.collection("users").doc(after.clientId);
+        await db.runTransaction(async (transaction) => {
+            const clientDoc = await transaction.get(clientRef);
+            const userData = clientDoc.data();
+            if (!clientDoc.exists || !userData)
+                return;
+            let storeWallets = userData.storeWallets || {};
+            const mId = after.merchantId;
+            if (!storeWallets[mId])
+                return;
+            let currentAvailable = storeWallets[mId].available || 0;
+            const amountToCancel = Number(after.cashbackAmount) || 0;
+            const earnedToCancel = Number(after.cashbackEarned) || 0;
+            if (after.type === 'earn') {
+                storeWallets[mId].available = roundToTwo(Math.max(0, currentAvailable - amountToCancel));
+            }
+            else if (after.type === 'redeem') {
+                storeWallets[mId].available = roundToTwo(currentAvailable + amountToCancel - earnedToCancel);
+            }
+            let globalAvailable = 0;
+            Object.values(storeWallets).forEach((w) => { globalAvailable += (w.available || 0); });
+            transaction.update(clientRef, {
+                storeWallets: storeWallets,
+                wallet: { available: roundToTwo(globalAvailable), pending: 0 }
+            });
+        });
+    }
+});
+/**
+ * 3. CRIAR COMERCIANTE
+ */
+exports.createMerchant = functions.region("us-central1").https.onCall(async (data, context) => {
     var _a;
-    // Apenas o Admin principal pode criar comerciantes
     if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
-        throw new functions.https.HttpsError("permission-denied", "Apenas o Administrador pode realizar esta ação.");
+        throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
     }
     const { email, password, name, nif, category, cashbackPercent, freguesia, zipCode } = data;
     try {
-        // 1. Criar utilizador no Auth
-        const userRecord = await admin.auth().createUser({
-            email: email,
-            password: password,
-            displayName: name,
-        });
-        // 2. Definir Custom Claims (opcional, mas recomendado para segurança extra)
+        const userRecord = await admin.auth().createUser({ email, password, displayName: name });
         await admin.auth().setCustomUserClaims(userRecord.uid, { role: "merchant" });
-        // 3. Criar documento no Firestore
         await db.collection("users").doc(userRecord.uid).set({
-            id: userRecord.uid,
-            name: name,
-            email: email.toLowerCase(),
-            nif: nif,
-            role: "merchant",
-            status: "active",
-            category: category,
-            cashbackPercent: Number(cashbackPercent),
-            freguesia: freguesia,
-            zipCode: zipCode,
-            wallet: { available: 0, pending: 0 },
-            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+            id: userRecord.uid, name, email: email.toLowerCase(), nif, role: "merchant", status: "active",
+            category, cashbackPercent: Number(cashbackPercent), freguesia, zipCode, wallet: { available: 0, pending: 0 },
+            createdAt: admin.firestore.FieldValue.serverTimestamp(), fcmTokens: []
         });
         return { success: true, uid: userRecord.uid };
     }
     catch (error) {
-        console.error("Erro ao criar comerciante:", error);
         throw new functions.https.HttpsError("internal", error.message);
     }
 });
 /**
- * Função para amadurecer transações pendentes de cashback.
- * Transforma transações 'pending' em 'available' se tiverem mais de 48h.
- * Agora disparada por chamada manual (onCall) para evitar necessidade de plano Blaze (agendamento).
- * Utiliza o fuso horário de Portugal Continental para cálculos.
+ * 4. NOTIFICAR FEEDBACK
  */
-exports.matureCashback = functions.https.onCall(async (_data, context) => {
-    var _a;
-    // Apenas o Admin principal pode disparar a maturação
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
-        throw new functions.https.HttpsError("permission-denied", "Apenas o Administrador pode realizar esta ação.");
-    }
-    try {
-        // Obter hora atual no fuso horário de Portugal
-        const nowPortugal = luxon_1.DateTime.now().setZone("Europe/Lisbon");
-        // Subtrair 48 horas
-        const threshold = nowPortugal.minus({ hours: 48 });
-        const thresholdTimestamp = admin.firestore.Timestamp.fromDate(threshold.toJSDate());
-        const pendingTransactionsQuery = db.collection("transactions")
-            .where("status", "==", "pending")
-            .where("type", "==", "earn")
-            .where("createdAt", "<=", thresholdTimestamp);
-        const snapshot = await pendingTransactionsQuery.get();
-        if (snapshot.empty) {
-            return { success: true, message: "Nenhuma transação para amadurecer.", count: 0 };
-        }
-        const batchSize = 400;
-        let count = 0;
-        for (let i = 0; i < snapshot.size; i += batchSize) {
-            const batch = db.batch();
-            const chunk = snapshot.docs.slice(i, i + batchSize);
-            for (const doc of chunk) {
-                const transactionData = doc.data();
-                const clientId = transactionData.clientId;
-                const merchantId = transactionData.merchantId;
-                const amount = transactionData.cashbackAmount;
-                // Atualizar a transação
-                batch.update(doc.ref, {
-                    status: "available",
-                    maturedAt: admin.firestore.FieldValue.serverTimestamp(),
-                    maturedAtTZ: nowPortugal.toISO(), // Guardar a hora da maturação no fuso de PT
-                });
-                const clientRef = db.collection("users").doc(clientId);
-                batch.update(clientRef, {
-                    [`storeWallets.${merchantId}.pending`]: admin.firestore.FieldValue.increment(-amount),
-                    [`storeWallets.${merchantId}.available`]: admin.firestore.FieldValue.increment(amount),
-                    "wallet.pending": admin.firestore.FieldValue.increment(-amount),
-                    "wallet.available": admin.firestore.FieldValue.increment(amount),
-                });
-                count++;
-            }
-            await batch.commit();
-        }
-        return {
-            success: true,
-            message: `${count} transações amadurecidas com sucesso.`,
-            count,
-            processedAt: nowPortugal.toISO()
-        };
-    }
-    catch (error) {
-        console.error("Erro ao amadurecer cashback:", error);
-        throw new functions.https.HttpsError("internal", error.message);
-    }
-});
-/**
- * Notifica o comerciante quando recebe uma nova avaliação.
- * Disparado sempre que um documento é criado na coleção 'feedbacks'.
- */
-exports.onNewFeedback = functions.firestore
+exports.onNewFeedback = functions.region("us-central1").firestore
     .document("feedbacks/{feedbackId}")
-    .onCreate(async (snapshot, _context) => {
-    const feedback = snapshot.data();
+    .onCreate(async (snap, context) => {
+    const feedback = snap.data();
     if (!feedback)
         return;
-    const { merchantId, rating, userName, comment } = feedback;
     try {
-        // 1. Obter os tokens do comerciante
-        const merchantDoc = await db.collection("users").doc(merchantId).get();
+        const merchantDoc = await db.collection("users").doc(feedback.merchantId).get();
         const merchantData = merchantDoc.data();
-        if (!merchantData || !merchantData.fcmTokens || !Array.isArray(merchantData.fcmTokens) || merchantData.fcmTokens.length === 0) {
-            console.log(`Comerciante ${merchantId} não tem tokens de notificação.`);
-            return;
-        }
-        const tokens = merchantData.fcmTokens;
-        // 2. Preparar a mensagem
-        const message = {
-            notification: {
-                title: "Nova Avaliação!",
-                body: `${userName} deu-te ${rating} estrelas: "${comment || 'Sem comentário'}"`,
-            },
-            tokens: tokens,
-        };
-        // 3. Enviar a notificação
-        const response = await admin.messaging().sendEachForMulticast(message);
-        console.log(`${response.successCount} notificações enviadas com sucesso para o comerciante ${merchantId}.`);
-        // Limpar tokens inválidos se necessário
-        if (response.failureCount > 0) {
-            const failedTokens = [];
-            response.responses.forEach((resp, idx) => {
-                if (!resp.success) {
-                    const error = resp.error;
-                    if ((error === null || error === void 0 ? void 0 : error.code) === "messaging/invalid-registration-token" ||
-                        (error === null || error === void 0 ? void 0 : error.code) === "messaging/registration-token-not-registered") {
-                        failedTokens.push(tokens[idx]);
-                    }
-                }
-            });
-            if (failedTokens.length > 0) {
-                await db.collection("users").doc(merchantId).update({
-                    fcmTokens: admin.firestore.FieldValue.arrayRemove(...failedTokens)
-                });
-                console.log(`Removidos ${failedTokens.length} tokens inválidos.`);
-            }
+        if (merchantData && merchantData.fcmTokens && merchantData.fcmTokens.length > 0) {
+            const message = {
+                notification: { title: "Nova Avaliação!", body: `${feedback.userName} deu-te ${feedback.rating} estrelas.` },
+                tokens: merchantData.fcmTokens,
+                android: { priority: "high" },
+                webpush: { headers: { Urgency: "high" } }
+            };
+            await admin.messaging().sendEachForMulticast(message);
         }
     }
+    catch (error) { }
+});
+/**
+ * 5. NOTIFICAÇÃO MANUAL DO ADMIN
+ */
+exports.sendAdminNotification = functions.region("us-central1").https.onCall(async (data, context) => {
+    var _a;
+    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
+        throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
+    }
+    const { targetUserId, title, body } = data;
+    try {
+        let tokens = [];
+        if (targetUserId === "all") {
+            const allUsers = await db.collection("users").where("fcmTokens", "!=", []).get();
+            allUsers.forEach(doc => {
+                const d = doc.data();
+                if (d.fcmTokens)
+                    tokens.push(...d.fcmTokens);
+            });
+        }
+        else {
+            const userDoc = await db.collection("users").doc(targetUserId).get();
+            const d = userDoc.data();
+            tokens = (d === null || d === void 0 ? void 0 : d.fcmTokens) || [];
+        }
+        if (tokens.length === 0)
+            return { success: false };
+        const message = { notification: { title, body }, tokens, android: { priority: "high" }, webpush: { headers: { Urgency: "high" } } };
+        const response = await admin.messaging().sendEachForMulticast(message);
+        return { success: true, sentCount: response.successCount };
+    }
     catch (error) {
-        console.error("Erro ao enviar notificação de feedback:", error);
+        throw new functions.https.HttpsError("internal", error.message);
     }
 });
 //# sourceMappingURL=index.js.map
