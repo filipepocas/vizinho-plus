@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
-import { signInWithEmailAndPassword } from 'firebase/auth';
-import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { doc, getDoc, collection, addDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { useStore } from '../../store/useStore';
 import { 
   LogIn, Mail, Lock, ArrowRight, Smartphone, ShieldCheck, 
@@ -95,10 +95,34 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
     
     setSubmittingMerchant(true);
     try {
+      // 1. Cria o utilizador no Firebase Auth
       const userCredential = await createUserWithEmailAndPassword(auth, merchantData.email.trim(), merchantData.password);
-      await auth.signOut(); 
       
-      await doc(db, 'users', userCredential.user.uid);
+      // 2. Faz logout imediato para não entrar na conta pendente
+      await signOut(auth); 
+      
+      // 3. Cria o documento do Lojista como "Pendente"
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        id: userCredential.user.uid,
+        name: merchantData.shopName.trim(),
+        shopName: merchantData.shopName.trim(),
+        responsibleName: merchantData.responsibleName.trim(),
+        phone: merchantData.phone.trim(),
+        email: merchantData.email.toLowerCase().trim(),
+        nif: merchantData.nif.trim(),
+        role: 'merchant',
+        status: 'pending',
+        category: merchantData.category,
+        cashbackPercent: 5,
+        distrito: merchantData.distrito,
+        concelho: merchantData.concelho,
+        freguesia: merchantData.freguesia,
+        zipCode: merchantData.zipCode.trim(),
+        wallet: { available: 0, pending: 0 },
+        createdAt: serverTimestamp()
+      });
+
+      // 4. Cria o Pedido para o Admin Aprovar
       await addDoc(collection(db, 'merchant_requests'), { 
         uid: userCredential.user.uid,
         ...merchantData, 
@@ -106,6 +130,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
         status: 'pending', 
         createdAt: serverTimestamp() 
       });
+
       toast.success('PEDIDO ENVIADO! A SUA CONTA ENCONTRA-SE EM AVALIAÇÃO.');
       setShowMerchantModal(false);
       setMerchantData({shopName: '', responsibleName: '', nif: '', email: '', phone: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: ''});
