@@ -16,12 +16,13 @@ import {
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-import { Transaction, TransactionCreate, User as UserProfile } from '../types';
+import { Transaction, TransactionCreate, User as UserProfile, LocationsMap } from '../types';
 import toast from 'react-hot-toast';
 
 interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
+  locations: LocationsMap; // NOVO: Armazena as zonas globalmente
   isLoading: boolean;
   isInitialized: boolean;
   setCurrentUser: (user: UserProfile | null) => void;
@@ -42,6 +43,7 @@ interface StoreState {
 export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
+  locations: {}, // Estado inicial vazio
   isLoading: true,
   isInitialized: false,
 
@@ -96,22 +98,20 @@ export const useStore = create<StoreState>((set, get) => ({
     return !snap.empty;
   },
 
-  // X1 - RESOLVIDO: O frontend apenas regista a transação. O Backend atualiza o saldo da carteira.
   addTransaction: async (tx) => {
     const { currentUser } = get();
     if (!currentUser) return;
     try {
       const newTxRef = doc(collection(db, 'transactions'));
       
-      // Criar transação apenas. Cloud Function fará as contas reais.
       await updateDoc(newTxRef, {
         clientId: tx.clientId,
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name,
-        amount: Number(tx.amount), // Valor da fatura (Earn) ou do desconto (Redeem)
-        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0, // X6 - Regra dos 50%
+        amount: Number(tx.amount),
+        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
         type: tx.type,
-        status: 'pending', // Deixa a cloud function aprovar
+        status: 'pending',
         createdAt: serverTimestamp(),
         clientNif: tx.documentNumber || "", 
         documentNumber: tx.documentNumber || "",
@@ -123,7 +123,6 @@ export const useStore = create<StoreState>((set, get) => ({
       toast.success("MOVIMENTO ENVIADO PARA PROCESSAMENTO!");
       return newTxRef.id;
     } catch (e) { 
-      // Em caso de erro, pode estar a tentar criar no updateDoc que não existe, logo forçamos setDoc
       try {
         const newTxRef = doc(collection(db, 'transactions'));
         const batch = writeBatch(db);
@@ -161,7 +160,6 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  // X1 - RESOLVIDO: O frontend apenas marca como cancelado.
   cancelTransaction: async (id) => {
     try {
       const txRef = doc(db, 'transactions', id);
@@ -185,6 +183,16 @@ export const useStore = create<StoreState>((set, get) => ({
 
   initializeAuth: () => {
     let unsubProfile: (() => void) | null = null;
+    
+    // NOVO: Carregar Zonas da Base de Dados assim que a app arranca
+    const unsubLocations = onSnapshot(doc(db, 'system', 'locations'), (docSnap) => {
+      if (docSnap.exists() && docSnap.data().data) {
+        set({ locations: docSnap.data().data });
+      } else {
+        set({ locations: {} });
+      }
+    });
+
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (unsubProfile) { unsubProfile(); unsubProfile = null; }
 
@@ -203,7 +211,12 @@ export const useStore = create<StoreState>((set, get) => ({
         set({ currentUser: null, isLoading: false, isInitialized: true });
       }
     });
-    return () => { unsubAuth(); if (unsubProfile) unsubProfile(); };
+    
+    return () => { 
+      unsubAuth(); 
+      if (unsubProfile) unsubProfile(); 
+      unsubLocations(); 
+    };
   },
 
   deleteUserWithHistory: async (userId, role) => {

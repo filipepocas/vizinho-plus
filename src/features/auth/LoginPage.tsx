@@ -6,7 +6,7 @@ import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/fires
 import { useStore } from '../../store/useStore';
 import { 
   LogIn, Mail, Lock, ArrowRight, Smartphone, ShieldCheck, 
-  Zap, Store, X, Loader2, AlertTriangle, Volume2, User, MapPin, Hash, Phone, Tag
+  Zap, Store, X, Loader2, AlertTriangle, Volume2, User, MapPin, Hash, Phone, Tag, ExternalLink
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -19,7 +19,13 @@ interface LoginPageProps {
 }
 
 const MERCH_CATEGORIES = [
-  "Restauração & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias", "Moda & Acessórios", "Outros"
+  "Restauração & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
+  "Padarias & Pastelarias", "Moda & Acessórios", "Saúde & Farmácias",
+  "Beleza & Cabeleireiros", "Oficinas & Automóveis", "Construção & Bricolage",
+  "Artigos para Casa & Decoração", "Papelarias & Livrarias", "Floristas & Jardinagem",
+  "Petshops & Veterinários", "Tecnologia & Informática", "Desporto & Lazer",
+  "Ópticas", "Ourivesarias & Relojoarias", "Lavandarias & Engomadoria",
+  "Sapateiros & Reparações", "Educação & Centros de Explicações", "Outros"
 ];
 
 const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForgotPassword }) => {
@@ -35,13 +41,18 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
   const [showMerchantModal, setShowMerchantModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [submittingMerchant, setSubmittingMerchant] = useState(false);
+  
   const [merchantData, setMerchantData] = useState({
-    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: ''
+    shopName: '', responsibleName: '', nif: '', email: '', phone: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: ''
   });
 
   const { isInstallable, installApp } = usePWAInstall();
   const navigate = useNavigate();
-  const { setCurrentUser } = useStore();
+  const { setCurrentUser, locations } = useStore();
+
+  const distritos = Object.keys(locations || {}).sort();
+  const merchantConcelhos = merchantData.distrito ? Object.keys(locations[merchantData.distrito] || {}).sort() : [];
+  const merchantFreguesias = merchantData.distrito && merchantData.concelho ? (locations[merchantData.distrito][merchantData.concelho] || []).sort() : [];
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,14 +89,30 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
   const handleMerchantRequest = async (e: React.FormEvent) => {
     e.preventDefault();
+    const zipCodeRegex = /^\d{4}-\d{3}$/;
+    if (!zipCodeRegex.test(merchantData.zipCode)) return toast.error('CÓDIGO POSTAL INVÁLIDO. USE O FORMATO 0000-000');
+    if (!merchantData.distrito || !merchantData.concelho || !merchantData.freguesia) return toast.error("Preencha a Localização Completa.");
+    
     setSubmittingMerchant(true);
     try {
+      const userCredential = await createUserWithEmailAndPassword(auth, merchantData.email.trim(), merchantData.password);
+      await auth.signOut(); 
+      
+      await doc(db, 'users', userCredential.user.uid);
       await addDoc(collection(db, 'merchant_requests'), { 
-        ...merchantData, status: 'pending', createdAt: serverTimestamp() 
+        uid: userCredential.user.uid,
+        ...merchantData, 
+        cashbackPercent: 5,
+        status: 'pending', 
+        createdAt: serverTimestamp() 
       });
-      toast.success('PEDIDO ENVIADO! AGUARDE CONTACTO.');
+      toast.success('PEDIDO ENVIADO! A SUA CONTA ENCONTRA-SE EM AVALIAÇÃO.');
       setShowMerchantModal(false);
-    } catch (err) { toast.error('ERRO AO ENVIAR PEDIDO.'); } 
+      setMerchantData({shopName: '', responsibleName: '', nif: '', email: '', phone: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: ''});
+    } catch (err: any) { 
+      if(err.code === 'auth/email-already-in-use') toast.error("Este e-mail já está registado.");
+      else toast.error('ERRO AO ENVIAR PEDIDO.'); 
+    } 
     finally { setSubmittingMerchant(false); }
   };
 
@@ -157,7 +184,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
 
           <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-50 space-y-4 text-center">
             <Link to="/forgot-password" className="block text-slate-400 font-bold text-[10px] uppercase hover:text-[#0a2540] mb-4">Esqueci-me da Password</Link>
-            <Link to="/register" className="block text-[#0a2540] font-black uppercase italic text-xs hover:text-[#00d66f]">Criar conta Vizinho <ArrowRight className="inline ml-1" size={14} /></Link>
+            <Link to="/register" className="block text-[#0a2540] font-black uppercase italic text-xs hover:text-[#00d66f]">Cliente - adesão gratuita <ArrowRight className="inline ml-1" size={14} /></Link>
             <button onClick={() => setShowMerchantModal(true)} className="w-full p-4 bg-[#00d66f]/10 text-[#0a2540] rounded-2xl font-black uppercase italic text-[10px] border-2 border-[#00d66f]/20 hover:bg-[#00d66f] transition-all mt-2">Sou Lojista / Quero Aderir</button>
           </div>
           
@@ -166,9 +193,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
       </div>
 
       {showMerchantModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
+          <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8 relative">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center sticky top-0 z-10">
               <div className="flex items-center gap-3"><Store className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Aderir ao Vizinho+</h2></div>
               <button onClick={() => setShowMerchantModal(false)}><X size={24} /></button>
             </div>
@@ -185,11 +212,47 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForg
                 <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF Comercial</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.nif} onChange={e => setMerchantData({...merchantData, nif: e.target.value.replace(/\D/g, '')})} /></div></div>
                 <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label><div className="relative"><Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}><option value="">SELECIONE O SETOR...</option>{MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}</select></div></div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia / Localidade</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.freguesia} onChange={e => setMerchantData({...merchantData, freguesia: e.target.value})} /></div></div>
-                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Código Postal (CP4 ou CP7)</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required placeholder="Ex: 4000-000" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.zipCode} onChange={e => setMerchantData({...merchantData, zipCode: e.target.value})} /></div></div>
+
+              <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                 <p className="text-[10px] font-black uppercase text-slate-400">Morada da Loja Física</p>
+                 <select required value={merchantData.distrito} onChange={e=>setMerchantData({...merchantData, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
+                    <option value="">Distrito</option>
+                    {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                 </select>
+                 <select required disabled={!merchantData.distrito} value={merchantData.concelho} onChange={e=>setMerchantData({...merchantData, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                    <option value="">Concelho</option>
+                    {merchantConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                 </select>
+                 <select required disabled={!merchantData.concelho} value={merchantData.freguesia} onChange={e=>setMerchantData({...merchantData, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                    <option value="">Freguesia</option>
+                    {merchantFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                 </select>
+                 <div className="relative">
+                   <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                   <input required placeholder="Cód. Postal (0000-000)" value={merchantData.zipCode} onChange={e=> {
+                     let val = e.target.value.replace(/\D/g, '');
+                     if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
+                     setMerchantData({...merchantData, zipCode: val});
+                   }} className="w-full pl-12 p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
+                 </div>
               </div>
-              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase flex justify-center gap-3 border-b-4 border-[#0a2540] mt-4">{submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de Adesão'}</button>
+
+              <div>
+                <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Defina uma Password (Para entrar no Painel)</label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                  <input required type="password" placeholder="Mínimo 6 caracteres" value={merchantData.password} onChange={e => setMerchantData({...merchantData, password: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" />
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 mt-4 text-[9px] font-bold text-slate-400">
+                <input required type="checkbox" className="w-4 h-4 accent-[#00d66f]" />
+                <p>Confirmo que li e aceito as <a href="/merchant-terms" target="_blank" className="text-[#0a2540] underline flex items-center gap-1 inline-flex"><ExternalLink size={10}/> Condições de Adesão Comerciais</a> e o RGPD.</p>
+              </div>
+
+              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase flex justify-center gap-3 border-b-4 border-[#0a2540] mt-4 shadow-xl hover:scale-[1.02] transition-transform">
+                {submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de Adesão'}
+              </button>
             </form>
           </div>
         </div>

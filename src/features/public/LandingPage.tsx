@@ -1,19 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot, setDoc } from 'firebase/firestore';
+import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
+import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot, getCountFromServer } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
+import { useStore } from '../../store/useStore';
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
+  const { locations } = useStore();
 
+  const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showExternalModal, setShowExternalModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'banner' | 'leaflet'>('banner');
@@ -23,35 +26,55 @@ const LandingPage: React.FC = () => {
   
   const [prices, setPrices] = useState<any>({});
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
+  const [membersCount, setMembersCount] = useState(0);
 
   const [showTerms, setShowTerms] = useState(false);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt' });
 
+  // Distritos extraídos da Base de Dados
+  const distritos = Object.keys(locations || {}).sort();
+
+  // Estados dos Formulários com Zonas
   const [extForm, setExtForm] = useState({ companyName: '', contactName: '', nif: '', email: '', phone: '' });
-  const [bannerForm, setBannerForm] = useState({ title: '', startDate: '', endDate: '', imageBase64: '', targetType: 'all', targetValue: '' });
+  
+  const [bannerForm, setBannerForm] = useState({ title: '', startDate: '', endDate: '', imageBase64: '', targetDistrito: '', targetConcelho: '', targetFreguesia: '' });
   const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
+  
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
 
-  const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
-  const [clientForm, setClientForm] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
+  
+  const [clientForm, setClientForm] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [clientLoading, setClientLoading] = useState(false);
 
   const [eventForm, setEventForm] = useState({
     entityName: '', contactName: '', phone: '', email: '', title: '', location: '',
-    eventType: '', ticketPrice: '', description: '', startDate: '', endDate: '', startTime: '', imageBase64: ''
+    eventType: '', ticketPrice: '', description: '', startDate: '', endDate: '', startTime: '', imageBase64: '',
+    distrito: '', concelho: '', freguesia: ''
   });
+  const [eventTargets, setEventTargets] = useState<string[]>([]);
+
+  const [showContactModal, setShowContactModal] = useState(false);
+  const [emailCopied, setEmailCopied] = useState(false);
 
   useEffect(() => {
-    const fetchSys = async () => {
+    const fetchData = async () => {
       const pSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (pSnap.exists()) setPrices(pSnap.data());
       const cSnap = await getDoc(doc(db, 'system', 'config'));
       if (cSnap.exists()) setSysConfig(cSnap.data() as any);
+
+      // Contar membros reais na plataforma
+      try {
+        const coll = collection(db, 'users');
+        const snapshot = await getCountFromServer(coll);
+        setMembersCount(snapshot.data().count);
+      } catch (err) { setMembersCount(1250); } // Fallback
     };
-    fetchSys();
+    fetchData();
 
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
     const unsubCam = onSnapshot(qCam, (snap) => {
@@ -75,10 +98,23 @@ const LandingPage: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  const handleAddEventTarget = () => {
+    let target = '';
+    if (eventForm.freguesia) target = `Freguesia: ${eventForm.freguesia} (${eventForm.concelho})`;
+    else if (eventForm.concelho) target = `Concelho: ${eventForm.concelho} (${eventForm.distrito})`;
+    else if (eventForm.distrito) target = `Distrito: ${eventForm.distrito}`;
+    
+    if (target && !eventTargets.includes(target)) {
+      setEventTargets([...eventTargets, target]);
+      setEventForm({...eventForm, freguesia: '', concelho: ''}); // reset para escolher mais
+    }
+  };
+
   const simulateBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa primeiro.");
     if (!bannerForm.startDate || !bannerForm.endDate || !bannerForm.imageBase64) return toast.error("Preencha datas e insira a imagem.");
+    if (!bannerForm.distrito) return toast.error("Selecione pelo menos o Distrito Alvo.");
 
     const start = new Date(bannerForm.startDate);
     const end = new Date(bannerForm.endDate);
@@ -92,13 +128,10 @@ const LandingPage: React.FC = () => {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
         let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
-        if (bannerForm.targetType === 'cp4' || bannerForm.targetType === 'cp7') {
-            const zips = bannerForm.targetValue.split(',').map(z => z.trim());
-            clients = clients.filter(c => zips.some(z => (c.zipCode || '').startsWith(z)));
-        } else if (bannerForm.targetType === 'birthDate') {
-            const currentMonth = new Date().getMonth() + 1;
-            clients = clients.filter(c => c.birthDate && parseInt(c.birthDate.split('-')[1]) === currentMonth);
-        }
+        // Filtragem em cascata para Banner
+        if (bannerForm.freguesia) clients = clients.filter(c => c.freguesia === bannerForm.freguesia);
+        else if (bannerForm.concelho) clients = clients.filter(c => c.concelho === bannerForm.concelho);
+        else if (bannerForm.distrito) clients = clients.filter(c => c.distrito === bannerForm.distrito);
 
         const count = clients.length;
         const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5;
@@ -133,11 +166,15 @@ const LandingPage: React.FC = () => {
         };
 
         if (type === 'banner' && bannerSimulation) {
+            let targetVal = bannerForm.distrito;
+            if (bannerForm.concelho) targetVal += ` > ${bannerForm.concelho}`;
+            if (bannerForm.freguesia) targetVal += ` > ${bannerForm.freguesia}`;
+
             await addDoc(collection(db, 'marketing_requests'), {
                 ...baseData, type: 'banner',
                 title: bannerForm.title, imageUrl: bannerForm.imageBase64,
                 requestedDate: `Início: ${bannerForm.startDate} | Fim: ${bannerForm.endDate} (${bannerSimulation.days} dias)`,
-                targetType: bannerForm.targetType, targetValue: bannerForm.targetValue,
+                targetType: 'zonas', targetValue: targetVal,
                 targetCount: bannerSimulation.count, cost: bannerSimulation.cost
             });
         } else if (type === 'leaflet' && leafletSimulation) {
@@ -153,29 +190,66 @@ const LandingPage: React.FC = () => {
         }
         
         toast.success("Pedido submetido com sucesso! A nossa equipa entrará em contacto.");
-        setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);
+        setShowExternalModal(false); setShowCommunityModal(false); setBannerSimulation(null); setLeafletSimulation(null);
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
   };
 
   const handlePartnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!partnerForm.distrito || !partnerForm.concelho || !partnerForm.freguesia) {
+      return toast.error("Por favor, preencha a localização completa (Distrito, Concelho e Freguesia).");
+    }
+    const zipCodeRegex = /^\d{4}-\d{3}$/;
+    if (!zipCodeRegex.test(partnerForm.zipCode)) return toast.error('CÓDIGO POSTAL INVÁLIDO. USE O FORMATO 0000-000');
+
     setLoadingPartner(true);
     try {
+      // Cria a conta do Lojista pendente com a password que ele definiu
+      const userCredential = await createUserWithEmailAndPassword(auth, partnerForm.email.trim(), partnerForm.password);
+      await signOut(auth); // Desloga imediatamente para não dar erro
+      
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        id: userCredential.user.uid,
+        name: partnerForm.shopName.trim(),
+        shopName: partnerForm.shopName.trim(),
+        responsibleName: partnerForm.responsibleName.trim(),
+        phone: partnerForm.phone.trim(),
+        email: partnerForm.email.toLowerCase().trim(),
+        role: 'merchant',
+        status: 'pending', // Fica bloqueado até Admin aprovar
+        category: partnerForm.category,
+        cashbackPercent: 5,
+        distrito: partnerForm.distrito,
+        concelho: partnerForm.concelho,
+        freguesia: partnerForm.freguesia,
+        zipCode: partnerForm.zipCode.trim(),
+        wallet: { available: 0, pending: 0 },
+        createdAt: serverTimestamp()
+      });
+
+      // Regista na coleção de requests para o Admin aprovar
       await addDoc(collection(db, 'merchant_requests'), {
+        uid: userCredential.user.uid,
         shopName: partnerForm.shopName, responsibleName: partnerForm.responsibleName,
-        email: partnerForm.email, phone: partnerForm.phone, freguesia: partnerForm.freguesia,
-        zipCode: partnerForm.zipCode, category: "Indefinida", cashbackPercent: 5,
+        email: partnerForm.email, phone: partnerForm.phone, 
+        distrito: partnerForm.distrito, concelho: partnerForm.concelho, freguesia: partnerForm.freguesia,
+        zipCode: partnerForm.zipCode, category: partnerForm.category, cashbackPercent: 5,
         status: 'pending', createdAt: serverTimestamp()
       });
-      toast.success("Pedido enviado! Em breve a nossa equipa entrará em contacto.");
-      setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', freguesia: '', zipCode: '' });
-    } catch (e) { toast.error("Erro ao enviar o pedido."); } finally { setLoadingPartner(false); }
+
+      toast.success("Registo concluído! A sua conta será avaliada pela nossa equipa em breve.");
+      setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
+    } catch (e: any) { 
+      if(e.code === 'auth/email-already-in-use') toast.error("Este e-mail já está registado.");
+      else toast.error("Erro ao registar comerciante."); 
+    } finally { setLoadingPartner(false); }
   };
 
   const handleClientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (clientForm.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) return toast.error("OS EMAILS NÃO COINCIDEM.");
     if (clientForm.password !== confirmPassword) return toast.error("AS PASSWORDS NÃO COINCIDEM.");
+    if (!clientForm.distrito || !clientForm.concelho || !clientForm.freguesia) return toast.error("Preencha a sua morada (Distrito, Concelho e Freguesia).");
 
     setClientLoading(true);
     try {
@@ -187,7 +261,9 @@ const LandingPage: React.FC = () => {
       await setDoc(doc(db, 'users', uid), {
         id: uid, name: clientForm.name.trim(), customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(), 
         phone: clientForm.phone.trim(), zipCode: zipClean, email: clientForm.email.toLowerCase().trim(),
-        birthDate: clientForm.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], createdAt: serverTimestamp()
+        birthDate: clientForm.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], 
+        distrito: clientForm.distrito, concelho: clientForm.concelho, freguesia: clientForm.freguesia,
+        createdAt: serverTimestamp()
       });
       
       toast.success("Bem-vindo ao Vizinho+!");
@@ -198,38 +274,77 @@ const LandingPage: React.FC = () => {
   const handleEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!eventForm.imageBase64) return toast.error("A imagem do cartaz é obrigatória.");
+    if(eventTargets.length === 0) return toast.error("Adicione pelo menos um Local de Destino.");
     setLoadingEvent(true);
     try {
       await addDoc(collection(db, 'events'), {
         ...eventForm,
+        targetZones: eventTargets, // Array de strings descritivas das zonas
         startDate: new Date(eventForm.startDate),
         endDate: new Date(eventForm.endDate),
         status: 'pending',
         createdAt: serverTimestamp()
       });
       toast.success("Evento enviado para aprovação!");
-      setShowEventModal(false);
-      setEventForm({entityName:'', contactName:'', phone:'', email:'', title:'', location:'', eventType:'', ticketPrice:'', description:'', startDate:'', endDate:'', startTime:'', imageBase64:''});
+      setShowEventModal(false); setShowCommunityModal(false);
+      setEventForm({entityName:'', contactName:'', phone:'', email:'', title:'', location:'', eventType:'', ticketPrice:'', description:'', startDate:'', endDate:'', startTime:'', imageBase64:'', distrito:'', concelho:'', freguesia:''});
+      setEventTargets([]);
     } catch (e) { toast.error("Erro ao enviar evento."); } finally { setLoadingEvent(false); }
   };
+
+  const handleOpenEmailApp = () => {
+    window.location.href = `mailto:${sysConfig.supportEmail}?subject=Contacto%20Plataforma%20Vizinho%2B`;
+  };
+
+  const handleCopyEmail = () => {
+    navigator.clipboard.writeText(sysConfig.supportEmail);
+    setEmailCopied(true);
+    toast.success("E-mail copiado!");
+    setTimeout(() => setEmailCopied(false), 3000);
+  };
+
+  // Variaveis Dinamicas de Zona para os Formulários
+  const clientConcelhos = clientForm.distrito ? Object.keys(locations[clientForm.distrito] || {}).sort() : [];
+  const clientFreguesias = clientForm.distrito && clientForm.concelho ? (locations[clientForm.distrito][clientForm.concelho] || []).sort() : [];
+
+  const partnerConcelhos = partnerForm.distrito ? Object.keys(locations[partnerForm.distrito] || {}).sort() : [];
+  const partnerFreguesias = partnerForm.distrito && partnerForm.concelho ? (locations[partnerForm.distrito][partnerForm.concelho] || []).sort() : [];
+
+  const extConcelhos = bannerForm.distrito ? Object.keys(locations[bannerForm.distrito] || {}).sort() : [];
+  const extFreguesias = bannerForm.distrito && bannerForm.concelho ? (locations[bannerForm.distrito][bannerForm.concelho] || []).sort() : [];
+
+  const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
+  const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
+      {/* AVISO TOPO - FOLHETOS / VIP */}
+      {campaigns.length > 0 && (
+        <div className="bg-[#0a2540] text-[#00d66f] text-center p-3 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-black transition-colors" onClick={() => navigate('/login')}>
+          🔥 Campanhas Exclusivas em Vigor! Descobre as novidades nos Folhetos Digitais. Clique para Entrar. 🔥
+        </div>
+      )}
+      <div className="bg-amber-400 text-amber-900 text-center p-2 text-[9px] font-black uppercase tracking-widest cursor-pointer hover:bg-amber-500 transition-colors" onClick={() => navigate('/login')}>
+        ⭐ Membros têm acesso a Vantagens Exclusivas VIP! Adira Hoje. ⭐
+      </div>
+
       <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
         <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
         
-        <div className="flex flex-col sm:flex-row gap-3">
-            <button onClick={() => setShowEventModal(true)} className="bg-white text-[#0a2540] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-md border-2 border-slate-200 flex items-center justify-center gap-2 hover:bg-slate-50 transition-colors">
-                <CalendarPlus size={16} className="text-blue-500" /> Comunicar Evento Grátis
-            </button>
-            <button onClick={() => setShowExternalModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center justify-center gap-2 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors">
-                <Megaphone size={16} /> Anuncie aqui para milhares de pessoas
+        <div className="flex gap-3">
+            <button onClick={() => setShowCommunityModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center justify-center gap-2 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors relative z-20">
+                <Lightbulb size={18} fill="currentColor" className="text-amber-300" /> Comunicar na Comunidade
             </button>
         </div>
       </nav>
 
-      <main className="max-w-6xl mx-auto px-8 pt-12 pb-24 text-center flex flex-col items-center">
+      <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
+        
+        <div className="bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-full font-black uppercase text-xl md:text-3xl italic tracking-tighter shadow-[8px_8px_0px_#0a2540] mb-12 animate-in slide-in-from-top-10">
+          Já somos {membersCount} membros! Junte-se a nós.<br /> <span className="text-white drop-shadow-md">Aqui todos ganhamos!</span>
+        </div>
+
         <div className="mb-12 animate-in fade-in zoom-in duration-1000">
           <img src={logoPath} alt="Vizinho+" className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" />
         </div>
@@ -243,7 +358,7 @@ const LandingPage: React.FC = () => {
           </p>
         </div>
         
-        <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20">
+        <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20 z-10">
           Entrar / Recuperar Password
           <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
         </button>
@@ -256,13 +371,13 @@ const LandingPage: React.FC = () => {
           <div className="flex flex-col items-center gap-3"><div className="w-12 h-12 bg-red-50 rounded-2xl flex items-center justify-center text-red-400"><Heart size={24} fill="currentColor" /></div><h3 className="font-black text-[#0a2540] uppercase text-[10px] tracking-widest">Bairro Forte</h3></div>
         </div>
 
-        <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl">
+        <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl text-left">
             
-            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] text-left">
-              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Criar Cartão Cliente</h2>
+            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] flex flex-col">
+              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Adesão Gratuita Cliente</h2>
               <p className="text-sm font-bold text-slate-500 mb-8">Registe-se em 1 minuto para aceder ao seu cartão digital gratuito e começar a poupar.</p>
               
-              <form onSubmit={handleClientRegister} className="space-y-4">
+              <form onSubmit={handleClientRegister} className="space-y-4 flex-grow">
                   <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-sm" />
                   
                   <div className="grid grid-cols-1 gap-4">
@@ -275,6 +390,23 @@ const LandingPage: React.FC = () => {
                      <input required type="password" placeholder="Repita a Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f] rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
 
+                  {/* NOVOS DADOS ZONAS */}
+                  <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                     <p className="text-[10px] font-black uppercase text-slate-400">Morada (Para lhe darmos acesso à sua rede local)</p>
+                     <select required value={clientForm.distrito} onChange={e=>setClientForm({...clientForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
+                        <option value="">Distrito</option>
+                        {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                     </select>
+                     <select required disabled={!clientForm.distrito} value={clientForm.concelho} onChange={e=>setClientForm({...clientForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                        <option value="">Concelho</option>
+                        {clientConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                     </select>
+                     <select required disabled={!clientForm.concelho} value={clientForm.freguesia} onChange={e=>setClientForm({...clientForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                        <option value="">Freguesia</option>
+                        {clientFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                     </select>
+                  </div>
+
                   <div className="grid grid-cols-2 gap-4">
                      <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">Data Nasc.</label><input required type="date" value={clientForm.birthDate} onChange={e=>setClientForm({...clientForm, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none" /></div>
                      <input required type="text" maxLength={8} placeholder="Cód. Postal" value={clientForm.zipCode} onChange={e=>setClientForm({...clientForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
@@ -285,16 +417,16 @@ const LandingPage: React.FC = () => {
                   <p className="text-[9px] font-bold text-slate-400 mt-2">Ao registar, aceita os <button type="button" onClick={()=>setShowTerms(true)} className="text-[#0a2540] underline">Termos e Condições e RGPD</button>.</p>
 
                   <button disabled={clientLoading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-transform flex justify-center items-center gap-3 mt-6 border-b-4 border-[#0a2540]">
-                    {clientLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> Obter Cartão Grátis</>}
+                    {clientLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> Aderir à Comunidade</>}
                   </button>
               </form>
             </div>
 
-            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] text-left">
+            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] flex flex-col text-left">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
-              <p className="text-sm font-bold text-slate-500 mb-8">Faça parte da nossa comunidade, fidelize clientes e aumente as suas vendas. Preencha os dados e a nossa equipa tratará de tudo.</p>
+              <p className="text-sm font-bold text-slate-500 mb-8">Fidelize clientes e aumente as suas vendas. Preencha os dados para aprovação.</p>
               
-              <form onSubmit={handlePartnerSubmit} className="space-y-4">
+              <form onSubmit={handlePartnerSubmit} className="space-y-4 flex-grow">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <input required type="text" placeholder="Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
                     <input required type="text" placeholder="Nome do Responsável" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
@@ -303,10 +435,35 @@ const LandingPage: React.FC = () => {
                     <input required type="tel" placeholder="Telefone / Tlm" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
                     <input required type="email" placeholder="E-mail Comercial" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input required type="text" placeholder="Localidade / Freguesia" value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
-                    <input required type="text" placeholder="Cód. Postal (CP4 ou CP7)" value={partnerForm.zipCode} onChange={e=>setPartnerForm({...partnerForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                  
+                  <div className="grid grid-cols-1 gap-4">
+                    <input required type="password" placeholder="Defina a sua Password de Acesso" value={partnerForm.password} onChange={e=>setPartnerForm({...partnerForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="text" placeholder="Categoria de Atividade (Ex: Padaria, Restaurante)" value={partnerForm.category} onChange={e=>setPartnerForm({...partnerForm, category: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
                   </div>
+
+                  <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+                     <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
+                     <select required value={partnerForm.distrito} onChange={e=>setPartnerForm({...partnerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
+                        <option value="">Distrito</option>
+                        {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                     </select>
+                     <select required disabled={!partnerForm.distrito} value={partnerForm.concelho} onChange={e=>setPartnerForm({...partnerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                        <option value="">Concelho</option>
+                        {partnerConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                     </select>
+                     <select required disabled={!partnerForm.concelho} value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                        <option value="">Freguesia</option>
+                        {partnerFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                     </select>
+                     <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> {
+                       let val = e.target.value.replace(/\D/g, '');
+                       if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
+                       setPartnerForm({...partnerForm, zipCode: val});
+                     }} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]" />
+                  </div>
+                  
+                  <p className="text-[9px] font-bold text-slate-400 mt-2">Ao registar, aceita as <button type="button" onClick={()=>setShowTerms(true)} className="text-[#0a2540] underline">Condições de Adesão Comerciais e RGPD</button>.</p>
+
                   <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
                     {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
                   </button>
@@ -318,11 +475,8 @@ const LandingPage: React.FC = () => {
 
       <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white">
         <div className="flex gap-6">
-          <button onClick={() => {
-            navigator.clipboard.writeText(sysConfig.supportEmail);
-            toast.success("Email copiado!");
-          }} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">
-            Apoio / Contacto
+          <button onClick={() => setShowContactModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors flex items-center gap-2">
+             <Mail size={16}/> Apoio / Contacto
           </button>
           <button onClick={() => setShowTerms(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">
             Termos & Privacidade
@@ -334,59 +488,141 @@ const LandingPage: React.FC = () => {
         </div>
       </footer>
 
-      {/* MODAL DE EVENTOS COMUNITÁRIOS */}
+      {/* MODAL APOIO / CONTACTO */}
+      {showContactModal && (
+        <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
+          <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border-4 border-[#00d66f]">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Mail className="text-[#00d66f]" size={20} />
+                <h2 className="font-black uppercase italic tracking-tighter text-lg">Apoio ao Cliente</h2>
+              </div>
+              <button onClick={() => setShowContactModal(false)}><X size={20} className="hover:text-[#00d66f]" /></button>
+            </div>
+            <div className="p-8 space-y-6 text-center">
+              <p className="text-sm font-bold text-slate-500">Estamos aqui para ajudar. Pode copiar o e-mail ou abrir diretamente na sua aplicação.</p>
+              <div className="space-y-4">
+                <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-lg">
+                  <Send size={16} className="text-[#00d66f]"/> Abrir App de Email
+                </button>
+                <button onClick={handleCopyEmail} className="w-full bg-slate-50 text-[#0a2540] p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 border-slate-200 hover:border-[#00d66f] transition-all flex items-center justify-center gap-3">
+                  <Copy size={16} /> {emailCopied ? 'Copiado!' : 'Copiar Email'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ESCOLHA COMUNIDADE (HOLOFOTE) */}
+      {showCommunityModal && (
+         <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
+             <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden animate-in zoom-in duration-300 border-4 border-[#0a2540]">
+                 <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center">
+                    <h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-2"><Lightbulb /> Comunicar na Comunidade</h2>
+                    <button onClick={() => setShowCommunityModal(false)}><X size={24} className="hover:text-white"/></button>
+                 </div>
+                 <div className="p-8 grid gap-6">
+                    <button onClick={() => {setShowCommunityModal(false); setShowEventModal(true);}} className="bg-blue-50 border-4 border-blue-100 hover:border-blue-500 p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group">
+                       <CalendarPlus size={40} className="text-blue-500 group-hover:scale-110 transition-transform" />
+                       <h3 className="font-black text-[#0a2540] uppercase text-lg">Comunicar Evento Grátis</h3>
+                       <p className="text-[10px] font-bold text-slate-500 uppercase">Partilhe festas, desporto e artes com a rede local</p>
+                    </button>
+                    <button onClick={() => {setShowCommunityModal(false); setShowExternalModal(true);}} className="bg-[#0a2540] border-4 border-[#0a2540] hover:border-[#00d66f] p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group shadow-xl">
+                       <Megaphone size={40} className="text-[#00d66f] group-hover:scale-110 transition-transform" />
+                       <h3 className="font-black text-white uppercase text-lg">Promova os seus serviços</h3>
+                       <p className="text-[10px] font-bold text-slate-400 uppercase">Anuncie a sua empresa para milhares de utilizadores</p>
+                    </button>
+                 </div>
+             </div>
+         </div>
+      )}
+
+      {/* MODAL EVENTOS COMUNITÁRIOS */}
       {showEventModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-blue-500 shadow-[16px_16px_0px_0px_#3b82f6] overflow-hidden animate-in zoom-in my-8 relative">
-            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-blue-500 shadow-[16px_16px_0px_0px_#3b82f6] overflow-hidden animate-in zoom-in relative">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center sticky top-0 z-10">
               <div className="flex items-center gap-3"><CalendarPlus size={24} className="text-white" /><h2 className="font-black uppercase italic tracking-tighter text-xl">Comunicar Evento</h2></div>
               <button onClick={() => setShowEventModal(false)}><X size={24} className="hover:text-blue-200"/></button>
             </div>
             
             <div className="p-8">
               <p className="text-sm font-bold text-slate-500 mb-6 border-b-2 border-slate-100 pb-6">
-                Comunique aqui os seus eventos desportivos, artes, festas, etc. de forma <strong>gratuita</strong>. Preencha os dados e, após validação, ficará visível para a comunidade local na nossa App.
+                Comunique aqui os seus eventos desportivos, artes, festas, etc. de forma <strong>gratuita</strong>. Preencha os dados e, após validação, ficará visível para as Zonas Alvo.
               </p>
 
-              <form onSubmit={handleEventSubmit} className="space-y-4">
-                 <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">1. Dados do Promotor</h3>
-                 <div className="grid grid-cols-2 gap-4 mb-6">
-                    <input required placeholder="Nome da Entidade/Clube" value={eventForm.entityName} onChange={e=>setEventForm({...eventForm, entityName: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                    <input required placeholder="Pessoa de Contacto" value={eventForm.contactName} onChange={e=>setEventForm({...eventForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                    <input required type="tel" placeholder="Telefone" value={eventForm.phone} onChange={e=>setEventForm({...eventForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                    <input required type="email" placeholder="Email" value={eventForm.email} onChange={e=>setEventForm({...eventForm, email: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+              <form onSubmit={handleEventSubmit} className="space-y-6">
+                 <div>
+                   <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">1. Onde deseja promover o Evento?</h3>
+                   <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
+                      <select value={eventForm.distrito} onChange={e=>setEventForm({...eventForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-blue-500">
+                         <option value="">Distrito</option>
+                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <select disabled={!eventForm.distrito} value={eventForm.concelho} onChange={e=>setEventForm({...eventForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-blue-500 disabled:opacity-50">
+                         <option value="">Todo o Distrito (Ou escolha um Concelho)</option>
+                         {eventConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <select disabled={!eventForm.concelho} value={eventForm.freguesia} onChange={e=>setEventForm({...eventForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-blue-500 disabled:opacity-50">
+                         <option value="">Todo o Concelho (Ou escolha uma Freguesia)</option>
+                         {eventFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
+                      <button type="button" onClick={handleAddEventTarget} disabled={!eventForm.distrito} className="bg-blue-500 text-white p-3 rounded-xl font-black uppercase text-[10px] disabled:opacity-50">Adicionar Zona Alvo</button>
+                   </div>
+                   {eventTargets.length > 0 && (
+                     <div className="mt-3 flex flex-wrap gap-2">
+                       {eventTargets.map((t, idx) => (
+                         <span key={idx} className="bg-blue-100 text-blue-700 px-3 py-1 rounded-full text-[10px] font-black uppercase flex items-center gap-1">
+                           {t} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => setEventTargets(eventTargets.filter((_, i) => i !== idx))}/>
+                         </span>
+                       ))}
+                     </div>
+                   )}
                  </div>
 
-                 <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">2. Detalhes do Evento</h3>
-                 <input required placeholder="Título do Evento" value={eventForm.title} onChange={e=>setEventForm({...eventForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                 
-                 <div className="grid grid-cols-2 gap-4">
-                    <input required placeholder="Local do Evento" value={eventForm.location} onChange={e=>setEventForm({...eventForm, location: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                    <select required value={eventForm.eventType} onChange={e=>setEventForm({...eventForm, eventType: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase outline-none focus:border-blue-500">
-                       <option value="">Tipo de Evento...</option>
-                       <option value="Desporto">Desporto</option>
-                       <option value="Cultura / Artes">Cultura / Artes</option>
-                       <option value="Festa / Música">Festa / Música</option>
-                       <option value="Feira / Mercado">Feira / Mercado</option>
-                       <option value="Outro">Outro</option>
-                    </select>
+                 <div>
+                   <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">2. Dados do Promotor</h3>
+                   <div className="grid grid-cols-2 gap-4">
+                      <input required placeholder="Nome da Entidade/Clube" value={eventForm.entityName} onChange={e=>setEventForm({...eventForm, entityName: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                      <input required placeholder="Pessoa de Contacto" value={eventForm.contactName} onChange={e=>setEventForm({...eventForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                      <input required type="tel" placeholder="Telefone" value={eventForm.phone} onChange={e=>setEventForm({...eventForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                      <input required type="email" placeholder="Email" value={eventForm.email} onChange={e=>setEventForm({...eventForm, email: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                   </div>
                  </div>
 
-                 <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data Início</label><input required type="date" value={eventForm.startDate} onChange={e=>setEventForm({...eventForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
-                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data Fim</label><input required type="date" value={eventForm.endDate} onChange={e=>setEventForm({...eventForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
-                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Hora Início</label><input required type="time" value={eventForm.startTime} onChange={e=>setEventForm({...eventForm, startTime: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
-                    <input required placeholder="Preço (Ex: Grátis ou 5€)" value={eventForm.ticketPrice} onChange={e=>setEventForm({...eventForm, ticketPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                 <div>
+                   <h3 className="text-[10px] font-black uppercase text-slate-400 mb-2">3. Detalhes do Evento</h3>
+                   <input required placeholder="Título do Evento" value={eventForm.title} onChange={e=>setEventForm({...eventForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500 mb-4" />
+                   
+                   <div className="grid grid-cols-2 gap-4 mb-4">
+                      <input required placeholder="Local do Evento" value={eventForm.location} onChange={e=>setEventForm({...eventForm, location: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                      <select required value={eventForm.eventType} onChange={e=>setEventForm({...eventForm, eventType: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase outline-none focus:border-blue-500">
+                         <option value="">Tipo de Evento...</option>
+                         <option value="Desporto">Desporto</option>
+                         <option value="Cultura / Artes">Cultura / Artes</option>
+                         <option value="Festa / Música">Festa / Música</option>
+                         <option value="Feira / Mercado">Feira / Mercado</option>
+                         <option value="Outro">Outro</option>
+                      </select>
+                   </div>
+
+                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+                      <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data Início</label><input required type="date" value={eventForm.startDate} onChange={e=>setEventForm({...eventForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                      <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data Fim</label><input required type="date" value={eventForm.endDate} onChange={e=>setEventForm({...eventForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                      <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Hora Início</label><input required type="time" value={eventForm.startTime} onChange={e=>setEventForm({...eventForm, startTime: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                      <input required placeholder="Preço (Ex: Grátis ou 5€)" value={eventForm.ticketPrice} onChange={e=>setEventForm({...eventForm, ticketPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
+                   </div>
+
+                   <textarea required placeholder="Descreva o evento (o que vai acontecer, programa, etc)..." rows={4} value={eventForm.description} onChange={e=>setEventForm({...eventForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 resize-none mb-4" />
+
+                   <div className="bg-slate-100 p-4 rounded-2xl">
+                      <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Cartaz / Imagem do Evento</p>
+                      <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'event')} className="w-full text-xs font-bold" />
+                   </div>
                  </div>
 
-                 <textarea required placeholder="Descreva o evento (o que vai acontecer, programa, etc)..." rows={4} value={eventForm.description} onChange={e=>setEventForm({...eventForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 resize-none" />
-
-                 <div className="bg-slate-100 p-4 rounded-2xl">
-                    <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Cartaz / Imagem do Evento</p>
-                    <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'event')} className="w-full text-xs font-bold" />
-                 </div>
-
-                 <button type="submit" disabled={loadingEvent} className="w-full bg-blue-500 text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4 hover:bg-blue-600 transition-colors shadow-lg">
+                 <button type="submit" disabled={loadingEvent} className="w-full bg-blue-500 text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4 hover:bg-blue-600 transition-colors shadow-lg border-b-4 border-blue-700">
                    {loadingEvent ? <Loader2 className="animate-spin"/> : 'Submeter Evento Grátis'}
                  </button>
               </form>
@@ -395,12 +631,12 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL EXTERNAL PUB (Marketing Externa) */}
+      {/* MODAL EXTERNAL PUB (Marketing Externa) - AGORA COM ZONAS */}
       {showExternalModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8 relative">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-              <div className="flex items-center gap-3"><Megaphone className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Anunciar no Vizinho+</h2></div>
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in relative">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center sticky top-0 z-10">
+              <div className="flex items-center gap-3"><Megaphone className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Promova os seus serviços</h2></div>
               <button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}}><X size={24} className="hover:text-red-400"/></button>
             </div>
             <div className="p-8">
@@ -425,17 +661,23 @@ const LandingPage: React.FC = () => {
                       <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                    </div>
                    <input type="text" placeholder="Título Opcional" value={bannerForm.title} onChange={e=>setBannerForm({...bannerForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-sm focus:border-[#00d66f] outline-none" />
-                   <div className="space-y-2">
-                      <select required value={bannerForm.targetType} onChange={e=>setBannerForm({...bannerForm, targetType: e.target.value, targetValue: ''})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
-                          <option value="all">Todos os Clientes na App</option>
-                          <option value="cp4">Por Código Postal (Ex: 4000)</option>
-                          <option value="cp7">Por Cód. Postal Completo (Ex: 4000-123)</option>
-                          <option value="birthDate">Aniversariantes do Mês</option>
+                   
+                   <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 grid grid-cols-1 gap-3">
+                      <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Quem vai ver este Banner?</p>
+                      <select required value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
+                         <option value="">Distrito</option>
+                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
                       </select>
-                      {(bannerForm.targetType === 'cp4' || bannerForm.targetType === 'cp7') && (
-                        <input required type="text" placeholder="Insira CPs (Separe por vírgula. Ex: 4000, 4400)" value={bannerForm.targetValue} onChange={e=>setBannerForm({...bannerForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-2 border-blue-100 rounded-xl font-black text-xs" />
-                      )}
+                      <select disabled={!bannerForm.distrito} value={bannerForm.concelho} onChange={e=>setBannerForm({...bannerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                         <option value="">Todo o Distrito (Ou escolha um Concelho)</option>
+                         {extConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <select disabled={!bannerForm.concelho} value={bannerForm.freguesia} onChange={e=>setBannerForm({...bannerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                         <option value="">Todo o Concelho (Ou escolha uma Freguesia)</option>
+                         {extFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                      </select>
                    </div>
+
                    <div className="bg-slate-100 p-4 rounded-2xl">
                       <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Upload Imagem (1920x1080px. Máx 500KB)</p>
                       <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />

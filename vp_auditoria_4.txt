@@ -1,0 +1,3226 @@
+﻿--- PARTE 4 DE 5 ---
+
+
+PASTA/FICHEIRO: \src\features\admin\AdminUsers.tsx
+----------------------------------------
+
+// src/features/admin/AdminUsers.tsx
+
+import React, { useState } from 'react';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { User as UserProfile, Transaction } from '../../types/index';
+import { 
+  Search, Users, Mail, Locate, Download, Phone, 
+  BellRing, BellOff, Trash2, RefreshCw, AlertCircle 
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import * as XLSX from 'xlsx';
+import { useStore } from '../../store/useStore';
+
+interface AdminUsersProps {
+  users: UserProfile[];
+  transactions: Transaction[];
+}
+
+const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+  const { deleteUserWithHistory } = useStore();
+  const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+
+  const filteredUsers = users.filter(u => {
+    if (!searchQuery) return true;
+    const q = searchQuery.toLowerCase().trim();
+    return (
+        (u.name && u.name.toLowerCase().includes(q)) ||
+        (u.nif && u.nif.toLowerCase().includes(q)) ||
+        (u.zipCode && u.zipCode.toLowerCase().includes(q)) ||
+        (u.email && u.email.toLowerCase().includes(q))
+    );
+  });
+
+  const updateStatus = async (id: string, status: string) => {
+    try {
+        await updateDoc(doc(db, 'users', id), { status });
+        toast.success("ESTADO ATUALIZADO.");
+    } catch (err) {
+        toast.error("Erro ao atualizar.");
+    }
+  };
+
+  // PONTO 2: Eliminar cliente e histÃ³rico pelo Admin
+  const handleDeleteUser = async (id: string, name: string) => {
+    if (!window.confirm(`ALERTA: Deseja eliminar permanentemente o vizinho "${name}" e todos os seus dados? Esta aÃ§Ã£o nÃ£o pode ser revertida.`)) return;
+    
+    setIsDeletingId(id);
+    try {
+      await deleteUserWithHistory(id, 'client');
+      toast.success("Cliente eliminado com sucesso.");
+    } catch (e) {
+      toast.error("Erro ao eliminar cliente.");
+    } finally {
+      setIsDeletingId(null);
+    }
+  };
+
+  const exportToExcel = () => {
+    const dataToExport = filteredUsers.map(u => {
+      const userTxs = transactions.filter(t => t.clientId === u.id && t.type === 'earn' && t.status !== 'cancelled');
+      
+      const shopStats: Record<string, { name: string, volume: number, visits: number }> = {};
+      userTxs.forEach(t => {
+        if (!shopStats[t.merchantId]) {
+          shopStats[t.merchantId] = { name: t.merchantName, volume: 0, visits: 0 };
+        }
+        shopStats[t.merchantId].volume += t.amount;
+        shopStats[t.merchantId].visits += 1;
+      });
+
+      let topVolumeShop = "N/D";
+      let maxVolume = 0;
+      let topVisitsShop = "N/D";
+      let maxVisits = 0;
+
+      Object.values(shopStats).forEach(shop => {
+        if (shop.volume > maxVolume) { maxVolume = shop.volume; topVolumeShop = shop.name; }
+        if (shop.visits > maxVisits) { maxVisits = shop.visits; topVisitsShop = shop.name; }
+      });
+
+      return {
+        Nome: u.name || '---',
+        Email: u.email || '---',
+        Telefone: u.phone || '---',
+        NIF: u.nif || '---',
+        "Equipamentos Ativos": u.devices ? u.devices.length : 0, // PONTO 3
+        "CÃ³digo Postal": u.zipCode || '---',
+        "Data AdesÃ£o": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---',
+        "Loja (Mais Visitas)": topVisitsShop,
+        Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(dataToExport);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Vizinhos");
+    XLSX.writeFile(wb, `Vizinhos_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500">
+      <div className="flex flex-col sm:flex-row gap-4">
+        <div className="relative group flex-1">
+          <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+          <input type="text" placeholder="PESQUISAR POR NOME, NIF, EMAIL OU C. POSTAL..." className="w-full p-6 pl-14 bg-white border-4 border-[#0a2540] rounded-3xl outline-none shadow-[8px_8px_0px_0px_#0a2540] font-black text-xs uppercase transition-all focus:border-[#00d66f]" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} />
+        </div>
+        <button onClick={exportToExcel} className="bg-[#0a2540] text-white px-8 py-5 rounded-3xl font-black text-[11px] uppercase tracking-[0.2em] shadow-[4px_4px_0px_#00d66f] hover:bg-black transition-all flex items-center justify-center gap-3 border-2 border-[#00d66f]">
+            <Download size={20} /> Exportar
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {filteredUsers.length > 0 ? filteredUsers.map((u) => {
+          // LÃ³gica do PONTO 3
+          const deviceCount = u.devices ? u.devices.length : 0;
+          const hasNotifications = deviceCount > 0;
+
+          return (
+            <div key={u.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-transform">
+                
+                {/* INDICADOR DE EQUIPAMENTOS (PONTO 3) */}
+                <div className="absolute top-4 right-4 flex gap-2">
+                   {hasNotifications ? (
+                     <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black flex items-center gap-1 border border-green-200">
+                        <BellRing size={12} /> {deviceCount} {deviceCount === 1 ? 'APARELHO' : 'APARELHOS'}
+                     </div>
+                   ) : (
+                     <div className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-[9px] font-black flex items-center gap-1">
+                        <BellOff size={12} /> SEM ALERTAS
+                     </div>
+                   )}
+                </div>
+
+                <div className="flex items-center gap-4 mb-6 mt-4">
+                  <div className="bg-slate-100 p-4 rounded-2xl text-[#0a2540] group-hover:bg-[#00d66f] transition-colors">
+                      <Users size={24} />
+                  </div>
+                  <div className="overflow-hidden">
+                      <h3 className="font-black text-lg uppercase italic tracking-tighter text-[#0a2540] leading-none truncate">{u.name}</h3>
+                      <span className="text-[10px] font-bold text-slate-400 uppercase">{u.nif || u.customerNumber || 'Sem Doc'}</span>
+                  </div>
+                </div>
+
+                <div className="space-y-2 mb-8 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                  <div className="flex items-center gap-3 text-slate-500">
+                      <Mail size={14} className="text-[#00d66f]" />
+                      <span className="text-[10px] font-bold truncate">{u.email}</span>
+                  </div>
+                  {u.phone && (
+                    <div className="flex items-center gap-3 text-slate-500">
+                        <Phone size={14} className="text-[#00d66f]" />
+                        <span className="text-[10px] font-bold truncate">{u.phone}</span>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-3 text-slate-500">
+                      <Locate size={14} className="text-[#00d66f]" />
+                      <span className="text-[10px] font-bold uppercase">{u.zipCode || 'Sem C.Postal'}</span>
+                  </div>
+                </div>
+
+                <div className="mt-auto flex flex-col gap-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    {u.status === 'active' ? (
+                        <button onClick={() => updateStatus(u.id, 'disabled')} className="w-full bg-slate-100 hover:bg-red-50 hover:text-red-500 text-slate-400 p-4 rounded-2xl font-black uppercase text-[10px] transition-colors">Suspender</button>
+                    ) : (
+                        <button onClick={() => updateStatus(u.id, 'active')} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] shadow-md border-b-4 border-[#0a2540]/20 hover:bg-[#00c265]">Ativar</button>
+                    )}
+                    
+                    {/* BOTÃƒO ELIMINAR (PONTO 2) */}
+                    <button 
+                      onClick={() => handleDeleteUser(u.id, u.name)} 
+                      disabled={isDeletingId === u.id}
+                      className="w-full bg-red-50 hover:bg-red-500 hover:text-white text-red-500 p-4 rounded-2xl font-black uppercase text-[10px] transition-all flex items-center justify-center gap-2"
+                    >
+                      {isDeletingId === u.id ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />} Eliminar
+                    </button>
+                  </div>
+                </div>
+            </div>
+          )
+        }) : (
+        <div className="col-span-full text-center p-12 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
+            <p className="font-black text-slate-300 uppercase tracking-widest text-sm">Nenhum vizinho encontrado.</p>
+        </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default AdminUsers;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\admin\AdminVantagens.tsx
+----------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { db } from '../../config/firebase';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
+import { Crown, Image as ImageIcon, Plus, Trash2, MapPin, Globe, Loader2, Tag, ExternalLink } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { Vantagem } from '../../types';
+
+const AdminVantagens: React.FC = () => {
+  const [vantagens, setVantagens] = useState<Vantagem[]>([]);
+  const [uploading, setUploading] = useState(false);
+  
+  const [formData, setFormData] = useState({
+    partnerName: '',
+    category: '',
+    address: '',
+    zipCode: '',
+    websiteUrl: '',
+    description: '',
+    imageBase64: ''
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
+    return onSnapshot(q, (snap) => {
+      setVantagens(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vantagem)));
+    });
+  }, []);
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+        // Comprime a imagem para poupar espaÃ§o
+        if (width > 800) {
+          height = Math.round((height * 800) / width);
+          width = 800;
+        }
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        setFormData(prev => ({ ...prev, imageBase64: compressedBase64 }));
+      };
+      img.src = event.target?.result as string;
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.imageBase64 || !formData.partnerName || !formData.description) {
+      toast.error("Preencha os campos obrigatÃ³rios (Nome, DescriÃ§Ã£o e Imagem).");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      await addDoc(collection(db, 'vantagens'), {
+        ...formData,
+        createdAt: serverTimestamp()
+      });
+
+      toast.success("Vantagem publicada com sucesso!");
+      setFormData({ partnerName: '', category: '', address: '', zipCode: '', websiteUrl: '', description: '', imageBase64: '' });
+      
+      const fileInput = document.getElementById('vantagemImageInput') as HTMLInputElement;
+      if (fileInput) fileInput.value = '';
+
+    } catch (error) {
+      toast.error("Erro ao publicar. Tenta novamente.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("Eliminar este parceiro das vantagens exclusivas?")) return;
+    try {
+      await deleteDoc(doc(db, 'vantagens', id));
+      toast.success("Vantagem removida.");
+    } catch (error) {
+      toast.error("Erro ao eliminar.");
+    }
+  };
+
+  return (
+    <div className="space-y-10 animate-in fade-in duration-500">
+      
+      {/* LINK PARTILHÃVEL */}
+      <div className="bg-amber-50 border-4 border-amber-200 p-8 rounded-[40px] flex flex-col md:flex-row justify-between items-center gap-6">
+          <div>
+              <h3 className="text-xl font-black uppercase italic tracking-tighter text-amber-900 mb-2 flex items-center gap-2">
+                  <Crown size={24} className="text-amber-500"/> PÃ¡gina PÃºblica VIP
+              </h3>
+              <p className="text-sm font-bold text-amber-800">Copia o link abaixo e partilha nas redes sociais para atrair clientes.</p>
+          </div>
+          <a href={`${window.location.origin}/vantagens`} target="_blank" rel="noreferrer" className="bg-amber-500 text-white px-8 py-4 rounded-3xl font-black uppercase text-xs tracking-widest shadow-lg hover:bg-amber-600 transition-all flex items-center gap-2 text-center">
+              Aceder Ã  PÃ¡gina <ExternalLink size={18} />
+          </a>
+      </div>
+
+      <form onSubmit={handleUpload} className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+        <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Adicionar Novo Parceiro VIP</h3>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div><label className="text-[10px] font-black uppercase text-slate-400">Nome do Parceiro</label><input required type="text" value={formData.partnerName} onChange={e=>setFormData({...formData, partnerName: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"/></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400">Categoria da Oferta (Ex: SaÃºde, Lazer)</label><div className="relative"><Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input required type="text" value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-[#0a2540]"/></div></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400">Morada (Opcional)</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="text" value={formData.address} onChange={e=>setFormData({...formData, address: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs outline-none focus:border-[#0a2540]"/></div></div>
+            <div><label className="text-[10px] font-black uppercase text-slate-400">CÃ³d. Postal (4 Primeiros DÃ­gitos)</label><input type="text" maxLength={4} placeholder="Ex: 4000" value={formData.zipCode} onChange={e=>setFormData({...formData, zipCode: e.target.value.replace(/\D/g, '')})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs outline-none focus:border-[#0a2540]"/></div>
+            <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Website / Link (Opcional)</label><div className="relative"><Globe className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16}/><input type="url" placeholder="https://..." value={formData.websiteUrl} onChange={e=>setFormData({...formData, websiteUrl: e.target.value})} className="w-full pl-12 p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs outline-none focus:border-[#0a2540]"/></div></div>
+            <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Texto Explicativo das Vantagens</label><textarea required value={formData.description} onChange={e=>setFormData({...formData, description: e.target.value})} placeholder="Descreva as vantagens exclusivas para os membros Vizinho+..." className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-sm outline-none focus:border-[#0a2540] min-h-[100px] resize-none"></textarea></div>
+            <div className="md:col-span-2"><label className="text-[10px] font-black uppercase text-slate-400">Fotografia / Logotipo</label><div className="relative"><ImageIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20}/><input id="vantagemImageInput" required type="file" accept="image/*" onChange={handleFileChange} className="w-full pl-12 p-4 border-4 border-dashed border-slate-200 rounded-3xl font-bold text-xs"/></div></div>
+        </div>
+
+        <button disabled={uploading} className="mt-8 w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-tighter text-sm hover:bg-black transition-all flex items-center justify-center gap-4 shadow-xl active:translate-y-1">
+          {uploading ? <Loader2 className="animate-spin" /> : <Plus size={24} strokeWidth={3} />} Publicar Vantagem
+        </button>
+      </form>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        {vantagens.map(v => (
+          <div key={v.id} className="bg-white border-4 border-slate-100 rounded-[40px] overflow-hidden relative shadow-md flex flex-col hover:border-[#00d66f] transition-colors">
+            <div className="h-48 bg-slate-100 flex items-center justify-center overflow-hidden">
+                <img src={v.imageBase64} className="w-full h-full object-cover" alt="Partner" />
+            </div>
+            <div className="p-6 flex flex-col flex-grow">
+                <div className="flex justify-between items-start mb-2">
+                    <p className="font-black text-lg uppercase italic text-[#0a2540] leading-tight">{v.partnerName}</p>
+                    <span className="bg-amber-100 text-amber-700 px-3 py-1 rounded-full text-[8px] font-black uppercase tracking-widest">{v.category}</span>
+                </div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4"><MapPin size={10} className="inline mr-1"/> {v.zipCode ? `CP: ${v.zipCode}` : 'Global'}</p>
+                <p className="text-xs font-bold text-slate-600 mb-6 flex-grow whitespace-pre-wrap">{v.description}</p>
+                
+                <button onClick={() => handleDelete(v.id!)} className="w-full py-4 bg-red-50 text-red-500 rounded-2xl font-black uppercase text-[10px] hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 mt-auto">
+                    <Trash2 size={16} /> Eliminar
+                </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default AdminVantagens;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\admin\BannerManager.tsx
+----------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { db, storage } from '../../config/firebase';
+import { 
+  collection, 
+  addDoc, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  serverTimestamp,
+  query,
+  orderBy 
+} from 'firebase/firestore';
+import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { 
+  Image as ImageIcon, 
+  Plus, 
+  Trash2, 
+  Target, 
+  Users, 
+  MapPin, 
+  Cake, 
+  Calendar,
+  AlertCircle,
+  Eye
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+
+interface Banner {
+  id: string;
+  title: string;
+  imageUrl: string;
+  targetType: 'all' | 'zip' | 'birthday';
+  targetValue?: string;
+  maxImpressions?: number;
+  startDate: any;
+  endDate: any;
+}
+
+const BannerManager = () => {
+  const [banners, setBanners] = useState<Banner[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+
+  // Estados do formulÃ¡rio
+  const [title, setTitle] = useState('');
+  const [image, setImage] = useState<File | null>(null);
+  const [targetType, setTargetType] = useState<'all' | 'zip' | 'birthday'>('all');
+  const [targetValue, setTargetValue] = useState('');
+  const [maxImpressions, setMaxImpressions] = useState('1000');
+  const [endDate, setEndDate] = useState('');
+
+  useEffect(() => {
+    fetchBanners();
+  }, []);
+
+  const fetchBanners = async () => {
+    const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
+    const snap = await getDocs(q);
+    setBanners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Banner)));
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!image || !title || !endDate) {
+      toast.error("PREENCHE TODOS OS CAMPOS OBRIGATÃ“RIOS!");
+      return;
+    }
+
+    setUploading(true);
+    try {
+      // 1. Upload da Imagem
+      const imageRef = ref(storage, `banners/${Date.now()}_${image.name}`);
+      await uploadBytes(imageRef, image);
+      const imageUrl = await getDownloadURL(imageRef);
+
+      // 2. Guardar no Firestore
+      await addDoc(collection(db, 'banners'), {
+        title: title.toUpperCase(),
+        imageUrl,
+        targetType,
+        targetValue: targetValue.trim(),
+        maxImpressions: Number(maxImpressions),
+        startDate: serverTimestamp(),
+        endDate: new Date(endDate),
+        createdAt: serverTimestamp(),
+        active: true
+      });
+
+      toast.success("BANNER CRIADO COM SUCESSO!");
+      setTitle('');
+      setImage(null);
+      setTargetValue('');
+      setEndDate('');
+      fetchBanners();
+    } catch (e) {
+      toast.error("ERRO AO CRIAR BANNER.");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!window.confirm("ELIMINAR ESTE BANNER?")) return;
+    await deleteDoc(doc(db, 'banners', id));
+    toast.success("ELIMINADO.");
+    fetchBanners();
+  };
+
+  return (
+    <div className="space-y-8 animate-in fade-in duration-500 pb-20">
+      
+      {/* TÃTULO DA SECÃ‡ÃƒO */}
+      <div className="flex items-center gap-4 mb-8">
+        <div className="bg-[#00d66f] p-3 rounded-2xl border-4 border-[#0a2540] shadow-[4px_4px_0px_0px_#0a2540]">
+          <Target className="text-[#0a2540]" size={24} />
+        </div>
+        <div>
+          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic tracking-tighter">GestÃ£o de Banners</h2>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">SegmentaÃ§Ã£o e Publicidade Direta</p>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-2 gap-8">
+        {/* FORMULÃRIO DE CRIAÃ‡ÃƒO */}
+        <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] p-8">
+          
+          {/* GUIA DE DESIGN (REPLICADO DO LOJISTA) */}
+          <div className="bg-[#f0f7ff] p-6 rounded-[32px] border-2 border-blue-100 mb-8">
+              <p className="text-[#0a2540] text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-3">
+                  <AlertCircle size={16} className="text-blue-500"/> Guia de Design Profissional
+              </p>
+              <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-tight">
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> ResoluÃ§Ã£o Ideal: <span className="text-[#0a2540]">1920 x 1080 px</span> (ProporÃ§Ã£o 16:9)</li>
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> ConteÃºdo Seguro: <span className="text-[#0a2540]">Manter textos e produtos no CENTRO da imagem</span></li>
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Margens: Evite detalhes importantes nos 80px superiores e 40px inferiores</li>
+                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Formato: MÃ¡ximo 200KB (.jpg ou .webp)</li>
+              </ul>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">TÃ­tulo do Banner</label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="EX: PROMOÃ‡ÃƒO DE VERÃƒO"
+                className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none transition-all font-bold uppercase text-[#0a2540] text-sm"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Quem vai ver?</label>
+                <select 
+                  value={targetType}
+                  onChange={(e) => setTargetType(e.target.value as any)}
+                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-black text-[#0a2540] text-xs uppercase"
+                >
+                  <option value="all">TODOS OS CLIENTES</option>
+                  <option value="zip">POR CÃ“DIGO POSTAL</option>
+                  <option value="birthday">ANIVERSARIANTES</option>
+                </select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Validade atÃ©</label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540] text-sm"
+                />
+              </div>
+            </div>
+
+            {/* CAMPOS DINÃ‚MICOS CONFORME A ESCOLHA */}
+            {targetType === 'zip' && (
+              <div className="space-y-2 animate-in slide-in-from-top-2">
+                <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">CÃ³digos Postais (separados por vÃ­rgula)</label>
+                <input
+                  type="text"
+                  value={targetValue}
+                  onChange={(e) => setTargetValue(e.target.value)}
+                  placeholder="Ex: 4000, 4400, 4150"
+                  className="w-full bg-blue-50 border-4 border-blue-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540] text-sm"
+                />
+              </div>
+            )}
+
+            {targetType === 'birthday' && (
+              <div className="bg-pink-50 border-4 border-pink-100 p-5 rounded-2xl">
+                <p className="text-[10px] font-black text-pink-600 uppercase flex items-center gap-2">
+                  <Cake size={16} /> Este banner sÃ³ aparecerÃ¡ no dia de aniversÃ¡rio do cliente!
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Limite de VisualizaÃ§Ãµes</label>
+              <div className="relative">
+                <Eye className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                <input
+                  type="number"
+                  value={maxImpressions}
+                  onChange={(e) => setMaxImpressions(e.target.value)}
+                  className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 pl-14 pr-6 outline-none font-bold text-[#0a2540] text-sm"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Imagem do Banner</label>
+              <div className="relative border-4 border-dashed border-slate-200 rounded-3xl p-8 hover:border-[#00d66f] transition-colors text-center bg-slate-50">
+                <input
+                  type="file"
+                  onChange={(e) => setImage(e.target.files?.[0] || null)}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                  accept="image/*"
+                />
+                <ImageIcon className={`mx-auto mb-2 ${image ? 'text-[#00d66f]' : 'text-slate-300'}`} size={32} />
+                <p className={`text-xs font-black uppercase tracking-widest ${image ? 'text-[#0a2540]' : 'text-slate-400'}`}>
+                  {image ? image.name : 'Clica para escolher a imagem'}
+                </p>
+              </div>
+            </div>
+
+            <button
+              disabled={uploading}
+              className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase text-sm shadow-xl hover:bg-black active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-4 border-black/40 mt-4"
+            >
+              {uploading ? (
+                <div className="w-6 h-6 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin" />
+              ) : (
+                <>Criar e Ativar Banner <Plus size={20} strokeWidth={3} /></>
+              )}
+            </button>
+          </form>
+        </div>
+
+        {/* LISTA DE BANNERS ATIVOS */}
+        <div className="space-y-4">
+          <h3 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-6 flex items-center gap-3">
+            <Calendar className="text-[#00d66f]" size={24} /> Banners Ativos ({banners.length})
+          </h3>
+          
+          <div className="grid gap-6 overflow-y-auto max-h-[800px] pr-2 custom-scrollbar pb-10">
+            {banners.map(banner => {
+              // ProteÃ§Ã£o contra Timestamps (ServerTimestamp) nulos logo apÃ³s criar
+              const end = banner.endDate && typeof banner.endDate.toDate === 'function' ? banner.endDate.toDate() : new Date();
+
+              return (
+                <div key={banner.id} className="bg-white border-4 border-[#0a2540] rounded-[32px] overflow-hidden shadow-[8px_8px_0px_0px_#0a2540] flex flex-col sm:flex-row group hover:-translate-y-1 transition-transform">
+                  <div className="w-full sm:w-40 h-40 bg-slate-100 flex items-center justify-center overflow-hidden border-r-4 border-transparent sm:border-slate-100">
+                    <img src={banner.imageUrl} alt="" className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" />
+                  </div>
+                  <div className="p-6 flex-1 flex flex-col justify-between">
+                    <div>
+                      <h4 className="font-black text-lg uppercase italic text-[#0a2540] leading-none mb-3">{banner.title}</h4>
+                      <div className="flex flex-wrap gap-2">
+                        <span className="bg-slate-100 text-slate-500 text-[9px] font-black px-3 py-1.5 rounded-xl uppercase border-2 border-slate-200">
+                          VÃ¡lido atÃ©: {end.toLocaleDateString()}
+                        </span>
+                        <span className={`text-white text-[9px] font-black px-3 py-1.5 rounded-xl uppercase flex items-center gap-1.5 shadow-sm border-2 ${
+                          banner.targetType === 'all' ? 'bg-blue-500 border-blue-600' : 
+                          banner.targetType === 'zip' ? 'bg-amber-500 border-amber-600' : 'bg-pink-500 border-pink-600'
+                        }`}>
+                          {banner.targetType === 'zip' ? <MapPin size={12} strokeWidth={3} /> : banner.targetType === 'birthday' ? <Cake size={12} strokeWidth={3}/> : <Users size={12} strokeWidth={3}/>}
+                          {banner.targetType === 'all' ? 'VISÃVEL A TODOS' : banner.targetType === 'zip' ? `APENAS CP: ${banner.targetValue}` : 'NO ANIVERSÃRIO'}
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <button 
+                      onClick={() => handleDelete(banner.id)}
+                      className="mt-6 self-start bg-red-50 text-red-500 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] flex items-center gap-2 transition-all border-2 border-red-100 hover:border-red-600"
+                    >
+                      <Trash2 size={14} /> Eliminar Banner
+                    </button>
+                  </div>
+                </div>
+              )
+            })}
+
+            {banners.length === 0 && (
+              <div className="text-center py-20 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
+                <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
+                <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Nenhum banner ativo</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default BannerManager;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\admin\MerchantModal.tsx
+----------------------------------------
+
+import React, { useState } from 'react';
+import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag, User, Phone } from 'lucide-react';
+import { provisionAuth, db } from '../../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+
+interface MerchantModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  onSuccess: () => void;
+}
+
+const MERCH_CATEGORIES = [
+  "RestauraÃ§Ã£o & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
+  "Padarias & Pastelarias", "Moda & AcessÃ³rios", "SaÃºde & FarmÃ¡cias",
+  "Beleza & Cabeleireiros", "Oficinas & AutomÃ³veis", "ConstruÃ§Ã£o & Bricolage",
+  "Artigos para Casa & DecoraÃ§Ã£o", "Papelarias & Livrarias", "Floristas & Jardinagem",
+  "Petshops & VeterinÃ¡rios", "Tecnologia & InformÃ¡tica", "Desporto & Lazer",
+  "Ã“pticas", "Ourivesarias & Relojoarias", "Lavandarias & Engomadoria",
+  "Sapateiros & ReparaÃ§Ãµes", "EducaÃ§Ã£o & Centros de ExplicaÃ§Ãµes", "Outros"
+];
+
+const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSuccess }) => {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const [formData, setFormData] = useState({
+    name: '', responsibleName: '', phone: '', email: '', password: '', 
+    nif: '', cashbackPercent: '5', category: '', freguesia: '', zipCode: ''
+  });
+
+  if (!isOpen) return null;
+
+  const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let value = e.target.value.replace(/\D/g, '');
+    if (value.length > 4) value = value.substring(0, 4) + '-' + value.substring(4, 7);
+    setFormData({ ...formData, zipCode: value });
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.category) {
+      setError('POR FAVOR, SELECIONE UM SETOR DE ATIVIDADE.');
+      return;
+    }
+    const zipCodeRegex = /^\d{4}-\d{3}$/;
+    if (!zipCodeRegex.test(formData.zipCode)) {
+      setError('CÃ“DIGO POSTAL INVÃLIDO. USE O FORMATO 0000-000');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(provisionAuth, formData.email.trim(), formData.password);
+      
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        id: userCredential.user.uid,
+        name: formData.name.trim(), // Shop Name
+        shopName: formData.name.trim(), // Shop Name redundante para garantir
+        responsibleName: formData.responsibleName.trim(), // NOVO CAMPO
+        phone: formData.phone.trim(), // NOVO CAMPO
+        email: formData.email.toLowerCase().trim(),
+        nif: formData.nif.trim(),
+        role: 'merchant',
+        status: 'active',
+        category: formData.category,
+        cashbackPercent: Number(formData.cashbackPercent),
+        freguesia: formData.freguesia.trim(),
+        zipCode: formData.zipCode.trim(),
+        wallet: { available: 0, pending: 0 },
+        createdAt: serverTimestamp()
+      });
+
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setError(err.message || 'Erro ao criar parceiro.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+      <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-8">
+        <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+          <div className="flex items-center gap-3">
+            <Store className="text-[#00d66f]" size={24} />
+            <h2 className="font-black uppercase italic tracking-tighter text-xl">Novo Parceiro</h2>
+          </div>
+          <button onClick={onClose} className="hover:rotate-90 transition-transform">
+            <X size={24} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-8 space-y-4">
+          {error && <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-[10px] font-black uppercase border-2 border-red-100">{error}</div>}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label>
+              <div className="relative">
+                <Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome do ResponsÃ¡vel</label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.responsibleName} onChange={e => setFormData({...formData, responsibleName: e.target.value})} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label>
+              <div className="relative">
+                <Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required type="tel" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF</label>
+              <div className="relative">
+                <Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.nif} onChange={e => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor de Atividade</label>
+            <div className="relative">
+              <Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+              <select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={formData.category} onChange={e => setFormData({...formData, category: e.target.value})}>
+                <option value="">SELECIONE O SETOR...</option>
+                {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">E-mail de Acesso</label>
+            <div className="relative">
+              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+              <input required type="email" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Palavra-passe</label>
+              <input required type="password" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">% Cashback</label>
+              <div className="relative">
+                <Percent className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required type="number" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.cashbackPercent} onChange={e => setFormData({...formData, cashbackPercent: e.target.value})} />
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia</label>
+              <div className="relative">
+                <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.freguesia} onChange={e => setFormData({...formData, freguesia: e.target.value})} />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[10px] font-black uppercase mb-1 text-slate-400">CÃ³digo Postal</label>
+              <div className="relative">
+                <Locate className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                <input required maxLength={8} placeholder="0000-000" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.zipCode} onChange={handleZipCodeChange} />
+              </div>
+            </div>
+          </div>
+
+          <button disabled={loading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-all flex items-center justify-center gap-3 border-b-4 border-[#0a2540] mt-4">
+            {loading ? <Loader2 className="animate-spin" /> : 'Confirmar Registo'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+};
+
+export default MerchantModal;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\auth\ForgotPassword.tsx
+----------------------------------------
+
+import React, { useState } from 'react';
+import { Link } from 'react-router-dom';
+import { useStore } from '../../store/useStore';
+import { Mail, Key, ArrowLeft, AlertTriangle } from 'lucide-react';
+
+interface ForgotPasswordProps {
+  onBack?: () => void;
+}
+
+const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack }) => {
+  const [email, setEmail] = useState('');
+  const [sent, setSent] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const { resetPassword } = useStore();
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      await resetPassword(email);
+      setSent(true); // Ativa o Modal de Sucesso
+    } catch (err) {
+      alert("Erro ao enviar email. Verifica se o endereÃ§o estÃ¡ correto.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6">
+      
+      {/* MODAL DE AVISO DE SPAM */}
+      {sent ? (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in text-center p-8">
+            <AlertTriangle size={48} className="mx-auto text-amber-500 mb-4" />
+            <h3 className="font-black uppercase italic tracking-tighter text-[#0a2540] text-2xl mb-2">E-mail Enviado!</h3>
+            <p className="text-xs font-bold text-slate-500 mb-6">
+              Foi enviado um link de recuperaÃ§Ã£o para a sua caixa de entrada.
+            </p>
+            
+            <div className="bg-amber-50 border-2 border-amber-200 p-5 rounded-3xl mb-8">
+               <p className="text-[10px] font-black uppercase text-amber-800 tracking-widest mb-2">âš ï¸ AtenÃ§Ã£o Ã  pasta SPAM</p>
+               <p className="text-[10px] font-bold text-amber-700 leading-relaxed uppercase">
+                 O e-mail de recuperaÃ§Ã£o pode ir parar Ã  sua pasta de Lixo EletrÃ³nico (SPAM). Por favor, verifique essa pasta caso nÃ£o o encontre na caixa principal.
+               </p>
+            </div>
+            
+            <Link to="/login" className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 transition-transform shadow-lg">
+              Compreendi, Voltar ao Login
+            </Link>
+          </div>
+        </div>
+      ) : (
+        <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12">
+          <button 
+            onClick={() => onBack ? onBack() : window.history.back()}
+            className="inline-flex items-center gap-2 text-[10px] font-black uppercase text-slate-400 hover:text-[#0a2540] mb-8 transition-colors"
+          >
+            <ArrowLeft size={14} /> Voltar ao Login
+          </button>
+
+          <div className="text-center mb-10">
+            <div className="bg-amber-100 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 border-4 border-[#0a2540]">
+              <Key size={32} className="text-[#0a2540]" />
+            </div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Recuperar Acesso</h2>
+          </div>
+
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label className="text-[10px] font-black uppercase text-slate-400 ml-2">O teu email registado</label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} />
+                <input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold text-sm" placeholder="teu@email.com" />
+              </div>
+            </div>
+            <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all shadow-xl disabled:opacity-50">
+              {loading ? 'A enviar...' : 'Enviar Link de RecuperaÃ§Ã£o'}
+            </button>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default ForgotPassword;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\auth\LoginPage.tsx
+----------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { auth, db } from '../../config/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc, collection, addDoc, serverTimestamp } from 'firebase/firestore';
+import { useStore } from '../../store/useStore';
+import { 
+  LogIn, Mail, Lock, ArrowRight, Smartphone, ShieldCheck, 
+  Zap, Store, X, Loader2, AlertTriangle, Volume2, User, MapPin, Hash, Phone, Tag
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
+import { requestNotificationPermission, registerDeviceInFirebase } from '../../utils/notifications';
+
+interface LoginPageProps {
+  installPrompt: any;
+  onRegister?: () => void;
+  onForgotPassword?: () => void;
+}
+
+const MERCH_CATEGORIES = [
+  "RestauraÃ§Ã£o & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias", "Moda & AcessÃ³rios", "Outros"
+];
+
+const LoginPage: React.FC<LoginPageProps> = ({ installPrompt, onRegister, onForgotPassword }) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  
+  const [setupStep, setSetupStep] = useState(false);
+  const [tempUserId, setTempUserId] = useState('');
+  const [tempUserData, setTempUserData] = useState<any>(null);
+  const [diagError, setDiagError] = useState<string | null>(null);
+
+  const [showMerchantModal, setShowMerchantModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [submittingMerchant, setSubmittingMerchant] = useState(false);
+  const [merchantData, setMerchantData] = useState({
+    shopName: '', responsibleName: '', nif: '', email: '', phone: '', category: '', cashbackPercent: '5', zipCode: '', freguesia: ''
+  });
+
+  const { isInstallable, installApp } = usePWAInstall();
+  const navigate = useNavigate();
+  const { setCurrentUser } = useStore();
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    try {
+      const userCredential = await signInWithEmailAndPassword(auth, email.trim(), password);
+      const uid = userCredential.user.uid;
+      const userDoc = await getDoc(doc(db, 'users', uid));
+
+      if (userDoc.exists()) {
+        const userData = { id: userDoc.id, ...userDoc.data() } as any;
+        const hasNotif = Notification.permission === 'granted';
+        const isApp = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+        if (!hasNotif || (!isApp && isInstallable)) {
+          setTempUserId(uid);
+          setTempUserData(userData);
+          setSetupStep(true);
+          setLoading(false);
+          return;
+        }
+        finalizeLogin(userData);
+      }
+    } catch (error) { toast.error('EMAIL OU PASSWORD INCORRETOS.'); setLoading(false); }
+  };
+
+  const finalizeLogin = async (userData: any) => {
+    await registerDeviceInFirebase(userData.id, ""); 
+    setCurrentUser(userData);
+    if (userData.role === 'admin') navigate('/admin');
+    else if (userData.role === 'merchant') navigate('/merchant');
+    else navigate('/dashboard');
+  };
+
+  const handleMerchantRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmittingMerchant(true);
+    try {
+      await addDoc(collection(db, 'merchant_requests'), { 
+        ...merchantData, status: 'pending', createdAt: serverTimestamp() 
+      });
+      toast.success('PEDIDO ENVIADO! AGUARDE CONTACTO.');
+      setShowMerchantModal(false);
+    } catch (err) { toast.error('ERRO AO ENVIAR PEDIDO.'); } 
+    finally { setSubmittingMerchant(false); }
+  };
+
+  if (setupStep) {
+    return (
+      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-white">
+        <div className="w-full max-w-md bg-white text-[#0a2540] rounded-[40px] border-4 border-[#00d66f] shadow-[12px_12px_0px_#00d66f] p-8 text-center animate-in slide-in-from-bottom-10">
+            <div className="bg-amber-50 p-6 rounded-3xl mb-6 border-2 border-amber-200">
+                <AlertTriangle className="mx-auto text-amber-500 mb-3" size={40} />
+                <h2 className="text-xl font-black uppercase text-[#0a2540] mb-2 italic">AtenÃ§Ã£o!</h2>
+                <p className="text-[11px] font-bold text-amber-800 uppercase tracking-widest leading-relaxed">
+                  Para sua comodidade e nÃ£o perder alertas de saldo, ative as notificaÃ§Ãµes antes de entrar.
+                </p>
+            </div>
+            {diagError && (
+              <div className="bg-red-50 border-2 border-red-100 p-4 rounded-2xl mb-6 flex gap-3 text-left">
+                  <AlertTriangle className="text-red-500 shrink-0" size={20} />
+                  <p className="text-[9px] font-bold text-red-700 leading-tight uppercase">{diagError}</p>
+              </div>
+            )}
+            <div className="space-y-4 mb-8">
+                {isInstallable && (
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-[#00d66f] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-lg border-b-4 border-black/50 hover:scale-105 transition-transform">
+                        <Smartphone size={24} /> Instalar AplicaÃ§Ã£o
+                    </button>
+                )}
+                {Notification.permission !== 'granted' && (
+                  <button onClick={async () => {
+                      setDiagError(null);
+                      const res = await requestNotificationPermission(tempUserId);
+                      if(res.success) {
+                        toast.success("NotificaÃ§Ãµes Ativas!");
+                        setTimeout(() => finalizeLogin(tempUserData), 1000);
+                      } else { setDiagError(res.error || "Erro."); }
+                  }} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540] hover:scale-105 transition-transform">
+                      <Volume2 size={24} /> Permitir NotificaÃ§Ãµes
+                  </button>
+                )}
+            </div>
+            <button onClick={() => finalizeLogin(tempUserData)} className="w-full bg-slate-100 text-slate-500 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-slate-200 transition-colors flex items-center justify-center gap-2">
+              Entrar no meu Perfil <ArrowRight size={16} />
+            </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-4 md:p-8 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-[-10%] right-[-10%] w-[40%] h-[40%] bg-[#00d66f]/5 rounded-full blur-[100px]" />
+        <div className="absolute bottom-[-10%] left-[-10%] w-[40%] h-[40%] bg-[#0a2540]/5 rounded-full blur-[100px]" />
+      </div>
+
+      <div className="w-full max-w-md z-10">
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-[#0a2540] rounded-[32px] mb-6 shadow-2xl transform -rotate-6"><Zap className="text-[#00d66f]" size={40} fill="#00d66f" /></div>
+          <h1 className="text-4xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none mb-2">Vizinho<span className="text-[#00d66f]">Plus</span></h1>
+        </div>
+
+        <div className="bg-white rounded-[48px] p-8 md:p-10 shadow-2xl border-4 border-slate-100 relative overflow-hidden">
+          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic mb-8 flex items-center gap-3"><LogIn className="text-[#00d66f]" size={28} /> Entrar</h2>
+
+          <form onSubmit={handleLogin} className="space-y-6">
+            <div className="relative group"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} /><input type="email" required value={email} onChange={e => setEmail(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="teu@email.com" /></div>
+            <div className="relative group"><Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={20} /><input type="password" required value={password} onChange={e => setPassword(e.target.value)} className="w-full pl-12 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl outline-none focus:border-[#0a2540] font-bold" placeholder="â€¢â€¢â€¢â€¢â€¢â€¢â€¢â€¢" /></div>
+            <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl">{loading ? <Loader2 className="animate-spin" /> : <>Aceder Ã  conta <ArrowRight size={20} /></>}</button>
+          </form>
+
+          <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-50 space-y-4 text-center">
+            <Link to="/forgot-password" className="block text-slate-400 font-bold text-[10px] uppercase hover:text-[#0a2540] mb-4">Esqueci-me da Password</Link>
+            <Link to="/register" className="block text-[#0a2540] font-black uppercase italic text-xs hover:text-[#00d66f]">Criar conta Vizinho <ArrowRight className="inline ml-1" size={14} /></Link>
+            <button onClick={() => setShowMerchantModal(true)} className="w-full p-4 bg-[#00d66f]/10 text-[#0a2540] rounded-2xl font-black uppercase italic text-[10px] border-2 border-[#00d66f]/20 hover:bg-[#00d66f] transition-all mt-2">Sou Lojista / Quero Aderir</button>
+          </div>
+          
+          <div className="mt-6 text-center"><button onClick={() => setShowTermsModal(true)} className="text-[9px] text-slate-400 uppercase hover:underline font-bold">Termos e CondiÃ§Ãµes e RGPD</button></div>
+        </div>
+      </div>
+
+      {showMerchantModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
+          <div className="bg-white w-full max-w-xl rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in my-8">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3"><Store className="text-[#00d66f]" size={24} /><h2 className="font-black uppercase italic tracking-tighter text-xl">Aderir ao Vizinho+</h2></div>
+              <button onClick={() => setShowMerchantModal(false)}><X size={24} /></button>
+            </div>
+            <form onSubmit={handleMerchantRequest} className="p-8 space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome da Loja</label><div className="relative"><Store className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.shopName} onChange={e => setMerchantData({...merchantData, shopName: e.target.value})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Nome do ResponsÃ¡vel</label><div className="relative"><User className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.responsibleName} onChange={e => setMerchantData({...merchantData, responsibleName: e.target.value})} /></div></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Email Comercial</label><div className="relative"><Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required type="email" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.email} onChange={e => setMerchantData({...merchantData, email: e.target.value})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Telefone / Tlm</label><div className="relative"><Phone className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required type="tel" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.phone} onChange={e => setMerchantData({...merchantData, phone: e.target.value})} /></div></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">NIF Comercial</label><div className="relative"><Hash className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required maxLength={9} className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.nif} onChange={e => setMerchantData({...merchantData, nif: e.target.value.replace(/\D/g, '')})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Setor / Categoria</label><div className="relative"><Tag className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><select required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm appearance-none" value={merchantData.category} onChange={e => setMerchantData({...merchantData, category: e.target.value})}><option value="">SELECIONE O SETOR...</option>{MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}</select></div></div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">Freguesia / Localidade</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.freguesia} onChange={e => setMerchantData({...merchantData, freguesia: e.target.value})} /></div></div>
+                <div><label className="block text-[10px] font-black uppercase mb-1 text-slate-400">CÃ³digo Postal (CP4 ou CP7)</label><div className="relative"><MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} /><input required placeholder="Ex: 4000-000" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={merchantData.zipCode} onChange={e => setMerchantData({...merchantData, zipCode: e.target.value})} /></div></div>
+              </div>
+              <button disabled={submittingMerchant} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-5 rounded-2xl font-black uppercase flex justify-center gap-3 border-b-4 border-[#0a2540] mt-4">{submittingMerchant ? <Loader2 className="animate-spin" /> : 'Enviar Pedido de AdesÃ£o'}</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showTermsModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos de UtilizaÃ§Ã£o & RGPD</h3>
+              <button onClick={() => setShowTermsModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
+              <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma soluÃ§Ã£o tecnolÃ³gica facilitadora de atribuiÃ§Ã£o de saldo (cashback) local. O Vizinho+ Ã© uma ferramenta de mediaÃ§Ã£o tÃ©cnica, nÃ£o sendo parte integrante, interveniente ou responsÃ¡vel por qualquer transaÃ§Ã£o comercial direta entre Lojistas e Clientes.</p>
+              <p>Em conformidade com o Regulamento Geral de ProteÃ§Ã£o de Dados (RGPD), a entidade responsÃ¡vel pelo tratamento dos dados pessoais recolhidos Ã© a PanÃ³plia LÃ³gica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde. Os teus dados pessoais (Nome, Email, NIF e CÃ³digo Postal) sÃ£o recolhidos estritamente para o funcionamento da plataforma. O NIF Ã© solicitado especificamente para validar, processar e cruzar de forma fidedigna as compras efetuadas nas lojas aderentes.</p>
+              <p>Garantimos que os teus dados pessoais nÃ£o sÃ£o partilhados, cedidos ou vendidos a terceiros para fins publicitÃ¡rios ou de marketing externo.</p>
+              <p>O saldo de cashback acumulado na tua carteira digital Vizinho+ possui uma natureza exclusivamente promocional e nÃ£o tem valor fiduciÃ¡rio. Isto significa que o saldo nÃ£o pode ser levantado em numerÃ¡rio, transferido para contas bancÃ¡rias ou trocado por dinheiro vivo; serve unicamente como desconto acumulado nas lojas da rede.</p>
+              <p className="text-red-500">A tecnologia, o sistema de gestÃ£o de saldos, a interface grÃ¡fica, o design e a ideologia do programa Vizinho+ sÃ£o propriedade exclusiva da entidade gestora e estÃ£o protegidos por direitos de propriedade intelectual. Ã‰ estritamente proibida a reproduÃ§Ã£o, cÃ³pia, manipulaÃ§Ã£o de cÃ³digo ou engenharia reversa por qualquer entidade ou indivÃ­duo nÃ£o autorizado.</p>
+              <p>Para garantir o cumprimento das normas legais, nÃ£o serÃ£o aceites registos de menores de idade. Ao registares-te, declaras ter idade legal igual ou superior a 18 anos.</p>
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTermsModal(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default LoginPage;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\auth\RegisterPage.tsx
+----------------------------------------
+
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { auth, db } from '../../config/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2, AlertTriangle, ArrowLeft, X, ShieldCheck } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall'; 
+import { requestNotificationPermission } from '../../utils/notifications';
+
+interface RegisterPageProps {
+  onBack?: () => void;
+  onSuccess?: () => void;
+}
+
+const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const [confirmEmail, setConfirmEmail] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
+  const [loading, setLoading] = useState(false);
+  
+  const [showTermsModal, setShowTermsModal] = useState(false);
+  const [setupStep, setSetupStep] = useState(false);
+  const [registeredUserId, setRegisteredUserId] = useState('');
+  
+  const navigate = useNavigate();
+  const { isInstallable, installApp } = usePWAInstall();
+
+  const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, '');
+    if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
+    setFormData({ ...formData, zipCode: val });
+  };
+
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!acceptedTerms) { toast.error("TENS DE ACEITAR OS TERMOS."); return; }
+    
+    // VALIDAÃ‡Ã•ES RÃGIDAS DE CONFIRMAÃ‡ÃƒO DE EMAIL E PASS
+    if (formData.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) { 
+      toast.error("OS EMAILS NÃƒO COINCIDEM. VERIFIQUE."); 
+      return; 
+    }
+    if (formData.password !== confirmPassword) { 
+      toast.error("AS PASSWORDS NÃƒO COINCIDEM. VERIFIQUE."); 
+      return; 
+    }
+    
+    setLoading(true);
+
+    try {
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
+      const uid = userCredential.user.uid;
+      await setDoc(doc(db, 'users', uid), {
+        id: uid, name: formData.name.trim(), customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(), 
+        phone: formData.phone.trim(), zipCode: formData.zipCode, email: formData.email.toLowerCase().trim(),
+        birthDate: formData.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], createdAt: serverTimestamp()
+      });
+      setRegisteredUserId(uid);
+      setSetupStep(true);
+      if (onSuccess) onSuccess();
+    } catch (err: any) {
+      toast.error("ERRO AO CRIAR CONTA. O Email poderÃ¡ jÃ¡ estar em uso.");
+    } finally { setLoading(false); }
+  };
+
+  if (setupStep) {
+    return (
+      <div className="min-h-screen bg-[#0a2540] flex items-center justify-center p-6 text-white">
+        <div className="w-full max-w-md bg-white text-[#0a2540] rounded-[40px] border-4 border-[#00d66f] shadow-[12px_12px_0px_#00d66f] p-8 text-center animate-in zoom-in">
+            <div className="bg-[#00d66f] w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6 border-4 border-[#0a2540]"><CheckCircle2 size={40} className="text-[#0a2540]" /></div>
+            <h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Bem-vindo(a)!</h2>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Para sua comodidade, configure os alertas.</p>
+            
+            <div className="space-y-4 mt-8">
+                {isInstallable && (
+                    <button onClick={installApp} className="w-full bg-[#0a2540] text-[#00d66f] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-lg border-2 border-[#0a2540]">
+                        <Smartphone size={24} /> Instalar App
+                    </button>
+                )}
+                {Notification.permission !== 'granted' && (
+                  <button onClick={() => requestNotificationPermission(registeredUserId)} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 hover:scale-105 transition-all shadow-[4px_4px_0px_#0a2540]">
+                      <Volume2 size={24} /> Ativar NotificaÃ§Ãµes
+                  </button>
+                )}
+                <button onClick={() => navigate('/dashboard')} className="w-full bg-slate-100 text-slate-500 p-5 rounded-2xl font-black uppercase tracking-widest mt-4">Entrar no Painel <ArrowRight className="inline ml-2" size={20} /></button>
+            </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col items-center justify-center p-6 py-12 relative">
+      <button onClick={() => onBack ? onBack() : navigate('/login')} className="absolute top-8 left-8 p-4 bg-white border-4 border-slate-100 rounded-2xl text-[#0a2540] hover:border-[#00d66f] transition-all"><ArrowLeft size={24} /></button>
+      
+      <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
+        <div className="text-center mb-10"><h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Ser Vizinho+</h2></div>
+        
+        <form onSubmit={handleRegister} className="space-y-4">
+          <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold" placeholder="Nome Completo" />
+          
+          {/* CONFIRMAÃ‡ÃƒO DE EMAIL */}
+          <div className="grid grid-cols-1 gap-4">
+            <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Escreva o seu E-mail" />
+            <input type="email" required value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-4 border-[#00d66f] rounded-3xl font-black text-xs text-[#0a2540]" placeholder="Repita o E-mail" />
+          </div>
+          
+          {/* CONFIRMAÃ‡ÃƒO DE PASSWORD */}
+          <div className="grid grid-cols-2 gap-4">
+            <input type="password" required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Password" />
+            <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-4 border-[#00d66f] rounded-3xl font-bold text-xs" placeholder="Repita a Password" />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="relative">
+              <label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">Data de Nasc.</label>
+              <input type="date" required value={formData.birthDate} onChange={e => setFormData({...formData, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs outline-none" />
+            </div>
+            <div className="relative">
+              <label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">C. Postal</label>
+              <input type="text" maxLength={8} required value={formData.zipCode} onChange={handleZipCodeChange} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs outline-none" placeholder="0000-000" />
+            </div>
+          </div>
+          
+          <input type="tel" required value={formData.phone} onChange={e => setFormData({...formData, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="TelemÃ³vel" />
+          
+          <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100 mt-2">
+            <input type="checkbox" id="terms" checked={acceptedTerms} onChange={e => setAcceptedTerms(e.target.checked)} className="mt-1 w-5 h-5 accent-[#00d66f]" />
+            <label htmlFor="terms" className="text-[9px] font-bold uppercase text-slate-500 leading-tight">
+              Aceito os <button type="button" onClick={() => setShowTermsModal(true)} className="text-[#0a2540] underline">Termos de UtilizaÃ§Ã£o e Privacidade</button>.
+            </label>
+          </div>
+
+          <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-3xl font-black uppercase italic tracking-widest hover:scale-105 transition-all shadow-xl border-b-8 border-black/10 mt-4">
+            {loading ? 'A processar...' : 'Confirmar Registo'}
+          </button>
+        </form>
+      </div>
+
+      {showTermsModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3>
+              <button onClick={() => setShowTermsModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
+              <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma soluÃ§Ã£o tecnolÃ³gica facilitadora de atribuiÃ§Ã£o de saldo (cashback) local. O Vizinho+ Ã© uma ferramenta de mediaÃ§Ã£o tÃ©cnica, nÃ£o sendo parte integrante, interveniente ou responsÃ¡vel por qualquer transaÃ§Ã£o comercial direta entre Lojistas e Clientes.</p>
+              <p>Em conformidade com o Regulamento Geral de ProteÃ§Ã£o de Dados (RGPD), a entidade responsÃ¡vel pelo tratamento dos dados pessoais recolhidos Ã© a PanÃ³plia LÃ³gica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde. Os teus dados pessoais (Nome, Email, NIF e CÃ³digo Postal) sÃ£o recolhidos estritamente para o funcionamento da plataforma. O NIF Ã© solicitado especificamente para validar, processar e cruzar de forma fidedigna as compras efetuadas nas lojas aderentes.</p>
+              <p>Garantimos que os teus dados pessoais nÃ£o sÃ£o partilhados, cedidos ou vendidos a terceiros para fins publicitÃ¡rios ou de marketing externo.</p>
+              <p>O saldo de cashback acumulado na tua carteira digital Vizinho+ possui uma natureza exclusivamente promocional e nÃ£o tem valor fiduciÃ¡rio. Isto significa que o saldo nÃ£o pode ser levantado em numerÃ¡rio, transferido para contas bancÃ¡rias ou trocado por dinheiro vivo; serve unicamente como desconto acumulado nas lojas da rede.</p>
+              <p className="text-red-500">A tecnologia, o sistema de gestÃ£o de saldos, a interface grÃ¡fica, o design e a ideologia do programa Vizinho+ sÃ£o propriedade exclusiva da entidade gestora e estÃ£o protegidos por direitos de propriedade intelectual. Ã‰ estritamente proibida a reproduÃ§Ã£o, cÃ³pia, manipulaÃ§Ã£o de cÃ³digo ou engenharia reversa por qualquer entidade ou indivÃ­duo nÃ£o autorizado.</p>
+              <p>Para garantir o cumprimento das normas legais, nÃ£o serÃ£o aceites registos de menores de idade. Ao registares-te, declaras ter idade legal igual ou superior a 18 anos.</p>
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTermsModal(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default RegisterPage;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\merchant\MerchantDashboard.tsx
+----------------------------------------
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { useStore } from '../../store/useStore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { db } from '../../config/firebase';
+import { useNavigate } from 'react-router-dom';
+import { User as UserProfile } from '../../types';
+import { 
+  LogOut, Settings, History, Save, X, 
+  Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download, 
+  MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
+  Loader2, Trash2, BookOpen, Leaf
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+
+import MerchantTerminal from './components/MerchantTerminal';
+import QRScannerModal from './components/QRScannerModal';
+import BusinessIntelligence from './components/BusinessIntelligence';
+import MerchantSettings from './components/MerchantSettings';
+import MerchantMarketing from './components/MerchantMarketing'; 
+import { usePWAInstall } from '../../hooks/usePWAInstall'; 
+
+const MerchantDashboard: React.FC = () => {
+  const { currentUser, transactions, addTransaction, updateTransactionDocument, subscribeToTransactions, logout } = useStore();
+  const navigate = useNavigate();
+  const { isInstallable, installApp } = usePWAInstall();
+
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history' | 'marketing' | 'push_campaign' | 'anti_waste'>('terminal');
+  
+  const [adminMessages, setAdminMessages] = useState<any[]>([]);
+  const [showInbox, setShowInbox] = useState(false);
+  const [showRulesModal, setShowRulesModal] = useState(false); 
+
+  const [pushForm, setPushForm] = useState({ 
+    title: '', text: '', targetType: 'all' as 'all' | 'multiple_zip' | 'top' | 'birthDate', targetValue: '',
+    scheduledDate: '', scheduledTime: '10:00'
+  });
+  
+  const [pushSimulation, setPushSimulation] = useState<{ count: number, cost: number, scheduledFor: Date } | null>(null);
+  const [simulating, setSimulating] = useState(false);
+  const [pushPrices, setPushPrices] = useState({ perClient: 0.05, minService: 5.00 });
+
+  const [showScanner, setShowScanner] = useState(false);
+  const [cardNumber, setCardNumber] = useState('');
+  const [amount, setAmount] = useState('');
+  const [documentNumber, setDocumentNumber] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSearching, setIsSearching] = useState(false);
+  const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
+  const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
+  const [postInvoiceNum, setPostInvoiceNum] = useState('');
+
+  // NOVO: Estados de DesperdÃ­cio
+  const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00', targetZip: currentUser?.zipCode?.substring(0,4) || '' });
+  const [activeWasteOffers, setActiveWasteOffers] = useState<any[]>([]);
+  const [loadingWaste, setLoadingWaste] = useState(false);
+
+  const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
+  const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
+  const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
+
+  const previewCashbackValue = useMemo(() => {
+    const numAmount = parseFloat(amount) || 0;
+    const percent = currentUser?.cashbackPercent || 0;
+    return (numAmount * percent) / 100;
+  }, [amount, currentUser?.cashbackPercent]);
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+
+    const qMsg = query(collection(db, 'merchant_messages'), where('merchantId', '==', currentUser.id));
+    const unsubMsg = onSnapshot(qMsg, (snap) => setAdminMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+
+    const qWaste = query(collection(db, 'anti_waste'), where('merchantId', '==', currentUser.id));
+    const unsubWaste = onSnapshot(qWaste, (snap) => {
+        const now = new Date();
+        setActiveWasteOffers(snap.docs.map(d => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
+    });
+
+    const fetchPrices = async () => {
+      const configSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (configSnap.exists()) {
+        const data = configSnap.data();
+        setPushPrices({ perClient: parseFloat(data.push_cost_per_client) || 0.05, minService: parseFloat(data.push_min_cost) || 5.00 });
+      }
+    };
+    fetchPrices();
+
+    return () => { unsubMsg(); unsubWaste(); };
+  }, [currentUser?.id]);
+
+  useEffect(() => {
+    const searchClient = async () => {
+      if (!isNifValid) { setFoundClient(null); return; }
+      setIsSearching(true);
+      try {
+        const cleanNumber = cardNumber.replace(/\s/g, '');
+        let q = query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client'));
+        let snap = await getDocs(q);
+        if (snap.empty) {
+          q = query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client'));
+          snap = await getDocs(q);
+        }
+        if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
+        else setFoundClient(null);
+      } catch (err) { setFoundClient(null); } finally { setIsSearching(false); }
+    };
+    const timeoutId = setTimeout(() => searchClient(), 500);
+    return () => clearTimeout(timeoutId);
+  }, [cardNumber, isNifValid]);
+
+
+  const handleSimulatePush = async () => {
+    if (!pushForm.title || !pushForm.text || !pushForm.scheduledDate) return toast.error("PREENCHA TODOS OS CAMPOS.");
+    const scheduledDateTime = new Date(`${pushForm.scheduledDate}T${pushForm.scheduledTime}`);
+    if ((scheduledDateTime.getTime() - new Date().getTime()) / 3600000 < 2) return toast.error("A data/hora escolhida tem de ser com pelo menos 2 horas de antecedÃªncia.");
+    setSimulating(true);
+    try {
+      const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
+      let clients = snap.docs.map(d => d.data());
+      if (pushForm.targetType === 'multiple_zip') {
+        const zips = pushForm.targetValue.split(',').map(z => z.trim());
+        clients = clients.filter((c: any) => zips.some(z => (c.zipCode || '').startsWith(z)));
+      } else if (pushForm.targetType === 'top') {
+        clients = clients.filter((c: any) => c.storeWallets?.[currentUser?.id || ""]);
+      } else if (pushForm.targetType === 'birthDate') {
+        const cm = new Date().getMonth() + 1;
+        clients = clients.filter((c: any) => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
+      }
+      let totalCost = clients.length * pushPrices.perClient;
+      if (totalCost < pushPrices.minService && clients.length > 0) totalCost = pushPrices.minService;
+      if (clients.length === 0) totalCost = 0;
+      setPushSimulation({ count: clients.length, cost: totalCost, scheduledFor: scheduledDateTime });
+    } catch (e) { toast.error("ERRO AO CALCULAR ALCANCE."); } finally { setSimulating(false); }
+  };
+
+  const submitPushRequest = async () => {
+    if (!pushSimulation) return;
+    try {
+      await addDoc(collection(db, 'marketing_requests'), {
+        merchantId: currentUser?.id, merchantName: currentUser?.shopName || currentUser?.name,
+        type: 'push_notification', title: pushForm.title, text: pushForm.text,
+        targetType: pushForm.targetType, targetValue: pushForm.targetValue,
+        scheduledFor: pushSimulation.scheduledFor, targetCount: pushSimulation.count,
+        cost: pushSimulation.cost, status: 'pending', createdAt: serverTimestamp()
+      });
+      toast.success("PEDIDO ENVIADO!");
+      setPushSimulation(null); setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
+      setView('marketing'); 
+    } catch (e) { toast.error("ERRO."); }
+  };
+
+  const handleDeleteMessage = async (id: string) => {
+    try {
+      await deleteDoc(doc(db, 'merchant_messages', id));
+      toast.success("MENSAGEM APAGADA.");
+      if (adminMessages.length <= 1) setShowInbox(false);
+    } catch (e) { toast.error("ERRO."); }
+  };
+
+  const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
+    const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
+    setPendingAction({ type, val: val || 0, invAmount: parseFloat(amount) || 0 });
+    setShowConfirmModal(true);
+  };
+
+  const handleConfirm = async () => {
+    if (!pendingAction || !currentUser || !foundClient) return;
+    setShowConfirmModal(false); setIsLoading(true);
+    try {
+      const newTxId = await addTransaction({
+        clientId: foundClient.id, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name || 'Loja',
+        amount: pendingAction.val, invoiceAmount: pendingAction.invAmount, type: pendingAction.type, documentNumber: documentNumber,
+        clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
+      });
+      setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
+      toast.success('ConcluÃ­do!');
+    } catch (e) { toast.error("ERRO."); } finally { setIsLoading(false); }
+  };
+
+  // SUBMETER ANÃšNCIO DESPERDÃCIO
+  const handleWasteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if(activeWasteOffers.length > 0) return toast.error("SÃ³ Ã© permitida 1 publicaÃ§Ã£o por dia.");
+    if(!wasteForm.targetZip) return toast.error("Insira o CÃ³digo Postal alvo.");
+
+    setLoadingWaste(true);
+    try {
+        const [hours, minutes] = wasteForm.endTime.split(':');
+        const endDate = new Date();
+        endDate.setHours(Number(hours), Number(minutes), 0, 0);
+
+        if (endDate <= new Date()) {
+            setLoadingWaste(false);
+            return toast.error("A hora de fim tem que ser no futuro (hoje).");
+        }
+
+        await addDoc(collection(db, 'anti_waste'), {
+            merchantId: currentUser?.id,
+            merchantName: currentUser?.shopName || currentUser?.name,
+            address: currentUser?.address || currentUser?.freguesia || '',
+            productInfo: wasteForm.productInfo,
+            conditions: wasteForm.conditions,
+            targetZip: wasteForm.targetZip,
+            endTime: Timestamp.fromDate(endDate),
+            createdAt: serverTimestamp()
+        });
+        toast.success("AnÃºncio publicado com sucesso!");
+        setWasteForm({...wasteForm, productInfo: '', conditions: ''});
+    } catch(err) { toast.error("Erro ao publicar."); } finally { setLoadingWaste(false); }
+  };
+
+  if (!currentUser) return null;
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] flex flex-col pb-20">
+      
+      <header className="bg-[#0f172a] p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
+        <div className="flex items-center gap-6 text-white">
+          <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.shopName || currentUser.name}</h2>
+          
+          <button onClick={() => setShowInbox(true)} className="relative bg-white/10 p-3 rounded-2xl hover:bg-[#00d66f] hover:text-[#0a2540] transition-all">
+             <MessageSquare size={24} />
+             {adminMessages.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0f172a] animate-pulse">{adminMessages.length}</span>}
+          </button>
+        </div>
+        
+        <nav className="flex flex-wrap justify-center gap-2">
+          <button onClick={() => setView('terminal')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
+          <button onClick={() => setView('push_campaign')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'push_campaign' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BellRing size={16} className="inline mr-1" /> Push</button>
+          <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
+          <button onClick={() => setView('anti_waste')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'anti_waste' ? 'bg-green-500 text-white' : 'text-green-400 hover:bg-green-500/20'}`}><Leaf size={16} className="inline mr-1" /> DesperdÃ­cio</button>
+          <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
+          <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Loja</button>
+          <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
+        </nav>
+      </header>
+
+      <main className="max-w-7xl mx-auto p-4 w-full space-y-6">
+        
+        <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
+          <BookOpen size={20} /> Ler Regras de UtilizaÃ§Ã£o do Comerciante
+        </button>
+
+        {/* COMBATE AO DESPERDÃCIO */}
+        {view === 'anti_waste' && (
+           <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
+              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-green-500 shadow-[12px_12px_0px_#22c55e] space-y-6">
+                 <div>
+                    <h3 className="text-xl font-black uppercase italic text-green-700 flex items-center gap-2"><Leaf /> Combate ao DesperdÃ­cio</h3>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Anuncie gratuitamente produtos com validade curta ou sobras diÃ¡rias.</p>
+                 </div>
+                 
+                 <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100">
+                    <p className="text-[10px] font-black text-green-800 uppercase mb-1">Regras:</p>
+                    <ul className="text-[9px] font-bold text-green-700 space-y-1 ml-4 list-disc">
+                       <li>O anÃºncio Ã© vÃ¡lido apenas para o dia de hoje.</li>
+                       <li>SerÃ¡ apagado automaticamente na hora definida.</li>
+                       <li>SÃ³ pode ter um anÃºncio ativo por dia.</li>
+                    </ul>
+                 </div>
+
+                 <form onSubmit={handleWasteSubmit} className="space-y-4">
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Produtos / Sobras</label><input required placeholder="Ex: 5 caixas de pÃ£o, 3 bolos do dia..." value={wasteForm.productInfo} onChange={e=>setWasteForm({...wasteForm, productInfo: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">CondiÃ§Ãµes de AquisiÃ§Ã£o</label><input required placeholder="Ex: Tudo com 50% de desconto" value={wasteForm.conditions} onChange={e=>setWasteForm({...wasteForm, conditions: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
+                    <div className="grid grid-cols-2 gap-4">
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">Hora Limite (Hoje)</label><input required type="time" value={wasteForm.endTime} onChange={e=>setWasteForm({...wasteForm, endTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
+                       <div><label className="text-[10px] font-black uppercase text-slate-400">CÃ³digo Postal Alvo</label><input required type="text" placeholder="CP4 ou CP7" value={wasteForm.targetZip} onChange={e=>setWasteForm({...wasteForm, targetZip: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
+                    </div>
+                    <button type="submit" disabled={loadingWaste || activeWasteOffers.length > 0} className="w-full bg-green-500 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all shadow-lg flex justify-center gap-3 disabled:opacity-50">
+                       {loadingWaste ? <Loader2 className="animate-spin"/> : <><Send size={18}/> Publicar Imediatamente</>}
+                    </button>
+                 </form>
+              </div>
+
+              <div className="space-y-4">
+                 <h3 className="text-lg font-black uppercase text-slate-400">AnÃºncio Ativo Hoje</h3>
+                 {activeWasteOffers.map(o => (
+                    <div key={o.id} className="bg-white border-4 border-green-500 p-6 rounded-[30px] relative">
+                       <p className="font-black text-lg text-[#0a2540] uppercase">{o.merchantName}</p>
+                       <p className="text-[10px] font-bold text-slate-400 mb-4">{o.address} | CP: {o.targetZip}</p>
+                       <div className="space-y-2 bg-green-50 p-4 rounded-2xl border-2 border-green-100">
+                          <p className="text-sm font-bold text-green-900">{o.productInfo}</p>
+                          <p className="text-xs font-black text-green-700 bg-white inline-block px-3 py-1 rounded-lg shadow-sm">{o.conditions}</p>
+                       </div>
+                       <div className="mt-4 flex justify-between items-center">
+                          <p className="text-[9px] font-black uppercase text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border-2 border-slate-200">
+                             Expira Ã s: {o.endTime.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                          </p>
+                          <button onClick={() => deleteDoc(doc(db, 'anti_waste', o.id))} className="text-red-400 hover:text-red-600 bg-red-50 p-2 rounded-xl transition-colors"><Trash2 size={16}/></button>
+                       </div>
+                    </div>
+                 ))}
+                 {activeWasteOffers.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-300 text-sm uppercase">Nenhum anÃºncio ativo hoje.</p>}
+              </div>
+           </div>
+        )}
+
+        {view === 'push_campaign' && (
+          <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
+             <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl space-y-6">
+                <div>
+                   <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center gap-2"><Send className="text-[#00d66f]" /> Pedir Envio de NotificaÃ§Ãµes</h3>
+                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Desperte o telemÃ³vel dos seus clientes</p>
+                </div>
+                <div className="space-y-4">
+                   <input type="text" placeholder="TÃ­tulo (Ex: PromoÃ§Ã£o de VerÃ£o!)" value={pushForm.title} onChange={e=>setPushForm({...pushForm, title: e.target.value.toUpperCase()})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
+                   <textarea rows={4} placeholder="Mensagem curta e apelativa (MÃ¡x. 100 caracteres)..." value={pushForm.text} onChange={e=>setPushForm({...pushForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f] resize-none" maxLength={100} />
+                </div>
+                <div className="space-y-4">
+                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Quem deve receber?</label>
+                   <select value={pushForm.targetType} onChange={e=>setPushForm({...pushForm, targetType: e.target.value as any, targetValue: ''})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
+                      <option value="all">Todos na Base de Dados</option>
+                      <option value="multiple_zip">Por CÃ³digo Postal (CP4)</option>
+                      <option value="top">Meus Clientes (Top de Vendas)</option>
+                      <option value="birthDate">Aniversariantes do MÃªs</option>
+                   </select>
+                   {pushForm.targetType === 'multiple_zip' && <input type="text" placeholder="Insira CP4 separados por vÃ­rgula (Ex: 4620, 4400)" value={pushForm.targetValue} onChange={e=>setPushForm({...pushForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs" />}
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label><input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" /></div>
+                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label><select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">{availableHours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
+                </div>
+                <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">{simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}</button>
+             </div>
+
+             {pushSimulation && (
+               <div className="bg-[#00d66f] p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540] flex flex-col justify-center text-center animate-in zoom-in">
+                  <h4 className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest mb-6 opacity-60">OrÃ§amento Detalhado</h4>
+                  <div className="grid grid-cols-2 gap-4 mb-8">
+                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Clientes</span><span className="text-3xl font-black italic">{pushSimulation.count}</span></div>
+                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Investimento</span><span className="text-3xl font-black italic">{formatCurrency(pushSimulation.cost)}</span></div>
+                  </div>
+                  <div className="space-y-3">
+                     <button onClick={submitPushRequest} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl hover:scale-105 transition-transform">AvanÃ§ar com o Pedido</button>
+                     <button onClick={() => setPushSimulation(null)} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white/40">Anular / Corrigir</button>
+                  </div>
+                  <p className="mt-6 text-[8px] font-black uppercase text-[#0a2540]/60 italic">* Valor sujeito a aprovaÃ§Ã£o manual da administraÃ§Ã£o.</p>
+               </div>
+             )}
+          </div>
+        )}
+
+        {showInbox && (
+          <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
+             <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
+                <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da AdministraÃ§Ã£o</h3><button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button></div>
+                <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
+                   {adminMessages.length === 0 ? (<p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>) : adminMessages.map(msg => (
+                     <div key={msg.id} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 relative group transition-colors hover:border-blue-100 hover:bg-blue-50/30">
+                        <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                        <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
+                           <span className="text-[9px] font-black text-slate-400 uppercase">Enviada a: {msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : 'Recente'}</span>
+                           <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"><Trash2 size={14} /> Apagar</button>
+                        </div>
+                     </div>
+                   ))}
+                </div>
+             </div>
+          </div>
+        )}
+
+        {view === 'terminal' && (
+          <MerchantTerminal 
+            cardNumber={cardNumber} setCardNumber={setCardNumber}
+            isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
+            amount={amount} setAmount={setAmount}
+            previewCashback={previewCashbackValue}
+            documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
+            onOpenScanner={() => setShowScanner(true)}
+            onProcessAction={processAction}
+            isLoading={isLoading}
+            clientStoreBalance={foundClient?.storeWallets?.[currentUser.id]?.available || 0}
+            formatCurrency={formatCurrency}
+            isLeaving={currentUser.isLeaving}
+          />
+        )}
+
+        {showConfirmModal && foundClient && pendingAction && (
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
+            <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
+               <div className="bg-[#0a2540] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">ConfirmaÃ§Ã£o</h3></div>
+               <div className="p-8 text-center space-y-4">
+                 <p className="text-xs font-bold text-slate-500 uppercase">Cliente</p>
+                 <p className="text-lg font-black text-[#0a2540]">{foundClient.name}</p>
+                 <div className="border-t-2 border-dashed border-slate-100 my-4"></div>
+                 <p className="text-xs font-bold text-slate-500 uppercase">{pendingAction.type === 'earn' ? 'Fatura Base' : 'Valor a Descontar'}</p>
+                 <p className={`text-4xl font-black italic ${pendingAction.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>{formatCurrency(pendingAction.val)}</p>
+                 {pendingAction.type === 'redeem' && !currentUser.isLeaving && (
+                   <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest mt-2 border-t-2 border-green-100 pt-2">
+                     Novo Cashback a Gerar: {formatCurrency(Math.max(0, pendingAction.invAmount - pendingAction.val) * (Number(currentUser.cashbackPercent)/100))}
+                   </p>
+                 )}
+                 <div className="flex gap-4 mt-8">
+                   <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
+                   <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
+                 </div>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
+        {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
+        {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
+
+      </main>
+
+      <footer className="py-12 flex flex-col items-center gap-6 mt-20">
+        <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 â€¢ Tecnologia para o ComÃ©rcio Local</p>
+        <p className="text-slate-400/50 text-[7px] font-bold max-w-2xl leading-relaxed uppercase text-center px-4">A tecnologia, design e ideologia do programa Vizinho+ estÃ£o legalmente protegidos por direitos de autor e propriedade intelectual. Ã‰ estritamente proibida a sua reproduÃ§Ã£o, cÃ³pia ou adaptaÃ§Ã£o por entidades nÃ£o autorizadas, sob pena de instauraÃ§Ã£o de severos procedimentos civis e criminais.</p>
+      </footer>
+
+      {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
+      
+      {showRulesModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Regras para Lojistas</h3>
+              <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
+              
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. IsenÃ§Ã£o de Responsabilidade e Papel da Plataforma</u></h4>
+                <p>O Vizinho+ atua exclusivamente como intermediÃ¡rio tecnolÃ³gico de marketing e comunicaÃ§Ã£o. <strong><u>Isentamo-nos de qualquer responsabilidade civil ou comercial sobre litÃ­gios, devoluÃ§Ãµes ou atritos com os Clientes.</u></strong> A venda, o pÃ³s-venda e o respetivo suporte sÃ£o da sua exclusiva responsabilidade enquanto comerciante.</p>
+              </div>
+
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. ObrigaÃ§Ã£o de Registo</h4><p>O Lojista compromete-se a registar o movimento de atribuiÃ§Ã£o de saldo sempre que o Cliente apresentar a identificaÃ§Ã£o antes do pagamento.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Limites de Desconto (Regra dos 50%)</h4><p>O Lojista apenas deve aceitar o desconto de saldo atÃ© ao <strong>limite mÃ¡ximo de 50% do valor da nova fatura</strong>.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. EmissÃ£o de Faturas</h4><p>O Vizinho+ nÃ£o emite faturas comerciais. A venda, a fatura/recibo e o IVA sÃ£o da total responsabilidade do Lojista.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">5. GestÃ£o de AnulaÃ§Ãµes</h4><p>O Lojista pode anular movimentos em caso de erro, mas o uso abusivo resultarÃ¡ em suspensÃ£o.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">6. SaÃ­da da Plataforma</h4><p>Em caso de saÃ­da, a loja fica bloqueada de gerar novos saldos (Earn), mas Ã© obrigada a aceitar os resgates (Redeem) atÃ© Ã  data de desativaÃ§Ã£o.</p></div>
+              <div><h4 className="font-black text-red-600 mb-1 uppercase">7. PrevenÃ§Ã£o de Fraude e AutofaturaÃ§Ã£o</h4><p>Ã‰ rigorosamente proibida a autofaturaÃ§Ã£o, o registo de compras fictÃ­cias ou o conluio com clientes para adulteraÃ§Ã£o de saldos. Estes atos implicam bloqueio e aÃ§Ã£o legal.</p></div>
+
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
+              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600 transition-colors">Compreendi e Aceito as Regras</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MerchantDashboard;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\merchant\components\BusinessIntelligence.tsx
+----------------------------------------
+
+import React, { useMemo, useState, useEffect } from 'react';
+import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { Transaction, Feedback } from '../../../types';
+import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy } from 'lucide-react';
+
+interface BIProps {
+  merchantId: string;
+  transactions: Transaction[];
+}
+
+interface MonthStat {
+  label: string;
+  m: number;
+  y: number;
+  volume: number;
+  visits: number;
+  daysInMonth: number;
+}
+
+const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) => {
+  const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [loadingFeedbacks, setLoadingFeedbacks] = useState(true);
+
+  useEffect(() => {
+    const q = query(
+      collection(db, 'feedbacks'),
+      where('merchantId', '==', merchantId),
+      orderBy('createdAt', 'desc'),
+      limit(50)
+    );
+    
+    const unsubscribe = onSnapshot(q, (snap) => {
+      setFeedbacks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Feedback)));
+      setLoadingFeedbacks(false);
+    });
+
+    return () => unsubscribe();
+  }, [merchantId]);
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+
+  const parseDate = (createdAt: any) => {
+    if (!createdAt) return new Date();
+    if (createdAt.toDate) return createdAt.toDate();
+    if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
+    return new Date(createdAt);
+  };
+
+  const dayStats = useMemo(() => {
+    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'SÃ¡b'];
+    const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    transactions.forEach(t => {
+      const date = parseDate(t.createdAt);
+      if (date > oneYearAgo && t.type === 'earn' && t.status !== 'cancelled') {
+        const dayIdx = date.getDay();
+        const hour = date.getHours();
+        counts[dayIdx].count++;
+        counts[dayIdx].volume += Number(t.amount || 0); 
+        counts[dayIdx].hours[hour]++;
+      }
+    });
+
+    return counts.map(d => ({
+      ...d,
+      peakHour: d.count > 0 ? `${d.hours.indexOf(Math.max(...d.hours))}:00` : '--:--'
+    }));
+  }, [transactions]);
+
+  // CÃLCULO MENSAL, MÃ‰DIA DE COMPRAS POR DIA E TICKET MÃ‰DIO (VALOR DE VENDA / COMPRAS)
+  const monthStats = useMemo(() => {
+    const months: MonthStat[] = [];
+    
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date();
+      d.setMonth(d.getMonth() - i);
+      const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      
+      months.push({ 
+        label: d.toLocaleDateString('pt-PT', { month: 'short' }), 
+        m: d.getMonth(), 
+        y: d.getFullYear(), 
+        volume: 0,
+        visits: 0,
+        daysInMonth: daysInMonth
+      });
+    }
+
+    transactions.forEach(t => {
+      if (t.type === 'earn' && t.status !== 'cancelled') {
+        const date = parseDate(t.createdAt);
+        const idx = months.findIndex(m => m.m === date.getMonth() && m.y === date.getFullYear());
+        if (idx !== -1) {
+          months[idx].volume += Number(t.amount || 0);
+          months[idx].visits += 1;
+        }
+      }
+    });
+    return months;
+  }, [transactions]);
+
+  const topClients = useMemo(() => {
+    const oneYearAgo = new Date();
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+
+    const clientMap: Record<string, { name: string, card: string, birth: string, volume: number, visits: number }> = {};
+
+    transactions.forEach(t => {
+      const date = parseDate(t.createdAt);
+      if (date > oneYearAgo && t.type === 'earn' && t.status !== 'cancelled') {
+        if (!clientMap[t.clientId]) {
+          clientMap[t.clientId] = {
+            name: t.clientName || 'Desconhecido',
+            card: t.clientCardNumber || t.clientNif || '---',
+            birth: t.clientBirthDate || 'N/D',
+            volume: 0,
+            visits: 0
+          };
+        }
+        clientMap[t.clientId].volume += Number(t.amount);
+        clientMap[t.clientId].visits += 1;
+      }
+    });
+
+    const allClientsArr = Object.values(clientMap);
+    
+    return {
+      byVolume: [...allClientsArr].sort((a, b) => b.volume - a.volume).slice(0, 20),
+      byVisits: [...allClientsArr].sort((a, b) => b.visits - a.visits).slice(0, 20)
+    };
+  }, [transactions]);
+
+  const cashbackStats = useMemo(() => {
+    let emitted = 0, used = 0, available = 0;
+    
+    transactions.forEach(t => {
+      if (t.status === 'cancelled') return;
+      if (t.type === 'earn') {
+        emitted += t.cashbackAmount;
+        available += t.cashbackAmount; 
+      } else if (t.type === 'redeem') {
+        used += t.amount;
+        available -= t.amount;
+      }
+    });
+    return { emitted, used, available: Math.max(0, available) };
+  }, [transactions]);
+
+  const feedbackStats = useMemo(() => {
+    if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
+    const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
+    const promotersCount = feedbacks.filter(f => f.rating >= 4).length;
+    return {
+      avg: (sum / feedbacks.length).toFixed(1),
+      count: feedbacks.length,
+      promoters: ((promotersCount / feedbacks.length) * 100).toFixed(0)
+    };
+  }, [feedbacks]);
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-700">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
+              <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
+            </h3>
+            
+            <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
+              {dayStats.map((d, i) => {
+                const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
+                const heightPercentage = (d.volume / maxVol) * 100;
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
+                    <div className="w-full bg-[#0a2540] rounded-t-xl transition-all duration-1000 group-hover:bg-[#00d66f] relative" style={{ height: `${heightPercentage}%`, minHeight: d.volume > 0 ? '8px' : '2px' }}>
+                        {d.volume > 0 && <div className="absolute -top-6 left-1/2 -translate-x-1/2 text-[8px] font-black opacity-0 group-hover:opacity-100 transition-opacity bg-slate-800 text-white px-2 py-1 rounded-md whitespace-nowrap z-20">{formatCurrency(d.volume)}</div>}
+                    </div>
+                    <span className="text-[8px] font-black uppercase text-slate-400">{d.day}</span>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="space-y-3 pt-6 border-t-2 border-slate-100">
+              <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center mb-2">Horas de Ponta (12M)</p>
+              <div className="grid grid-cols-2 gap-2">
+                  {dayStats.filter(d => d.count > 0).slice(0, 4).map((d, i) => (
+                    <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold uppercase border border-slate-100">
+                      <span className="text-slate-500">{d.day}</span>
+                      <span className="text-[#0a2540] flex items-center gap-1"><Clock size={10} className="text-[#00d66f]"/> {d.peakHour}</span>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col">
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
+              <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
+            </h3>
+            <div className="space-y-5 mt-auto">
+              {monthStats.map((m, i) => {
+                  const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
+                  
+                  // Ticket MÃ©dio (Volume / TransaÃ§Ãµes do MÃªs)
+                  const avgTicket = m.visits > 0 ? m.volume / m.visits : 0;
+                  // MÃ©dia de TransaÃ§Ãµes (Vendas) por Dia
+                  const avgDailyVisits = m.visits / m.daysInMonth;
+
+                  return (
+                    <div key={i} className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
+                        <span className="text-slate-500">{m.label}</span>
+                        <span className="text-[#0a2540] italic">{formatCurrency(m.volume)}</span>
+                      </div>
+                      <div className="h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
+                        <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
+                      </div>
+                      <div className="flex justify-between text-[7px] font-bold text-slate-400 uppercase tracking-widest pt-1">
+                         <span title="Ticket MÃ©dio / Valor por Venda">Ticket MÃ©dio: {formatCurrency(avgTicket)}</span>
+                         <span title="MÃ©dia de TransaÃ§Ãµes/Compras DiÃ¡rias">{avgDailyVisits.toFixed(1)} Vendas/dia</span>
+                      </div>
+                    </div>
+                  );
+              })}
+            </div>
+          </div>
+
+          <div className="bg-[#0a2540] p-8 rounded-[40px] text-white shadow-2xl flex flex-col relative overflow-hidden border-4 border-[#0a2540]">
+            <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wallet size={120} /></div>
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
+              <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Wallet size={16} /></div> GestÃ£o de Saldo
+            </h3>
+            
+            <div className="space-y-8 flex-grow relative z-10 mt-auto">
+              <div className="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
+                <p className="text-[8px] font-black uppercase text-white/40 tracking-widest mb-2">Responsabilidade Total</p>
+                <span className="text-3xl font-black text-[#00d66f] italic tracking-tighter block">{formatCurrency(cashbackStats.available)}</span>
+              </div>
+
+              <div className="space-y-4 pt-6 border-t border-white/10">
+                <div className="flex justify-between items-end">
+                  <div>
+                      <p className="text-[8px] font-black uppercase text-white/30 tracking-widest mb-1">Total Emitido</p>
+                      <span className="text-lg font-black text-white italic">{formatCurrency(cashbackStats.emitted)}</span>
+                  </div>
+                  <div className="text-right">
+                      <p className="text-[8px] font-black uppercase text-white/30 tracking-widest mb-1">JÃ¡ Descontado</p>
+                      <span className="text-sm font-bold text-red-400">-{formatCurrency(cashbackStats.used)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col h-[480px]">
+            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6 shrink-0">
+              <div className="bg-amber-100 p-2 rounded-xl"><Star size={16} className="text-amber-500 fill-amber-500" /></div> SatisfaÃ§Ã£o
+            </h3>
+            
+            <div className="grid grid-cols-2 gap-4 mb-6 shrink-0">
+              <div className="bg-slate-50 p-4 rounded-3xl text-center border-2 border-slate-100 shadow-inner">
+                <p className="text-3xl font-black text-[#0a2540] italic tracking-tighter">{feedbackStats.avg}</p>
+                <p className="text-[7px] font-black uppercase text-slate-400 tracking-widest mt-1">Global ({feedbackStats.count})</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-3xl text-center border-2 border-green-200 shadow-inner">
+                <p className="text-3xl font-black text-[#00d66f] italic tracking-tighter">{feedbackStats.promoters}%</p>
+                <p className="text-[7px] font-black uppercase text-green-700 tracking-widest mt-1">Promotores</p>
+              </div>
+            </div>
+            
+            <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
+              <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">Ãšltimos ComentÃ¡rios</p>
+              
+              {loadingFeedbacks ? (
+                  <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
+              ) : feedbacks.length > 0 ? (
+                  feedbacks.map((f, i) => (
+                    <div key={i} className="p-4 bg-slate-50 rounded-2xl border-l-4 border-[#00d66f] group hover:bg-slate-100 transition-colors">
+                      <div className="flex gap-0.5 mb-2">
+                        {[...Array(5)].map((_, si) => (
+                            <Star key={si} size={10} fill={si < f.rating ? "#0a2540" : "none"} className={si < f.rating ? "text-[#0a2540]" : "text-slate-300"} />
+                        ))}
+                      </div>
+                      <p className="text-[10px] font-bold text-slate-500 italic leading-relaxed">"{f.comment || 'Sem comentÃ¡rio adicional.'}"</p>
+                    </div>
+                  ))
+              ) : (
+                  <div className="text-center p-6 bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                      <AlertCircle size={20} className="mx-auto text-slate-300 mb-2" />
+                      <p className="text-[9px] font-black uppercase text-slate-400 tracking-widest">Sem AvaliaÃ§Ãµes</p>
+                  </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* TABELAS TOP 20 CLIENTES */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f]">
+              <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
+                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Trophy size={16} className="text-[#00d66f]" /></div> Top 20 Clientes - Maior Volume (12 Meses)
+              </h3>
+              <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                    <thead>
+                       <tr className="border-b-2 border-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                          <th className="pb-3">Cliente</th>
+                          <th className="pb-3 text-center">Nascimento</th>
+                          <th className="pb-3 text-right">Volume</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                       {topClients.byVolume.map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                             <td className="py-4">
+                                <p className="font-black text-xs uppercase text-[#0a2540]">{c.name}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-0.5">{c.card}</p>
+                             </td>
+                             <td className="py-4 text-center text-[10px] font-bold text-slate-500">{c.birth}</td>
+                             <td className="py-4 text-right font-black text-[#00d66f]">{formatCurrency(c.volume)}</td>
+                          </tr>
+                       ))}
+                       {topClients.byVolume.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado.</td></tr>}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
+
+           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540]">
+              <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
+                <div className="bg-blue-50 p-2 rounded-xl"><Users size={16} className="text-blue-500" /></div> Top 20 Clientes - Mais Frequentes (12 Meses)
+              </h3>
+              <div className="overflow-x-auto">
+                 <table className="w-full text-left">
+                    <thead>
+                       <tr className="border-b-2 border-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                          <th className="pb-3">Cliente</th>
+                          <th className="pb-3 text-center">Nascimento</th>
+                          <th className="pb-3 text-right">Visitas</th>
+                       </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-50">
+                       {topClients.byVisits.map((c, i) => (
+                          <tr key={i} className="hover:bg-slate-50">
+                             <td className="py-4">
+                                <p className="font-black text-xs uppercase text-[#0a2540]">{c.name}</p>
+                                <p className="text-[9px] text-slate-400 font-mono mt-0.5">{c.card}</p>
+                             </td>
+                             <td className="py-4 text-center text-[10px] font-bold text-slate-500">{c.birth}</td>
+                             <td className="py-4 text-right font-black text-blue-500">{c.visits}x</td>
+                          </tr>
+                       ))}
+                       {topClients.byVisits.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado.</td></tr>}
+                    </tbody>
+                 </table>
+              </div>
+           </div>
+        </div>
+    </div>
+  );
+};
+
+export default BusinessIntelligence;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\merchant\components\MerchantMarketing.tsx
+----------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { db } from '../../../config/firebase';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc, getDocs } from 'firebase/firestore';
+import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, AlertCircle, Bell, Filter } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { LeafletCampaign, MarketingRequest } from '../../../types';
+
+interface Props {
+  merchantId: string;
+  merchantName: string;
+}
+
+const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName }) => {
+  const [activeTab, setActiveTab] = useState<'banner' | 'leaflet' | 'history'>('banner');
+  const [loading, setLoading] = useState(false);
+  const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
+  const [myRequests, setMyRequests] = useState<MarketingRequest[]>([]);
+  
+  const [prices, setPrices] = useState<any>({});
+
+  // ESTADOS DO BANNER RENOVADO
+  const [bannerForm, setBannerForm] = useState({ 
+    text: '', startDate: '', endDate: '', imageBase64: '', 
+    targetType: 'all', targetValue: '' 
+  });
+  const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
+  const [simulatingBanner, setSimulatingBanner] = useState(false);
+
+  const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
+
+  const formatEuro = (val: any) => {
+    if (!val || isNaN(val)) return null;
+    return new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
+  };
+
+  useEffect(() => {
+    const fetchPrices = async () => {
+      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+      if (docSnap.exists()) setPrices(docSnap.data());
+    };
+    fetchPrices();
+
+    const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
+    const unsubCam = onSnapshot(qCam, (snap) => {
+        const now = new Date();
+        const valid = snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign))
+                               .filter(c => c.limitDate.toDate() > now);
+        setCampaigns(valid);
+    });
+
+    const qReq = query(collection(db, 'marketing_requests'), where('merchantId', '==', merchantId));
+    const unsubReq = onSnapshot(qReq, (snap) => {
+        setMyRequests(
+          snap.docs
+            .map(d => ({id: d.id, ...d.data()} as MarketingRequest))
+            .sort((a, b) => {
+              const timeA = a.createdAt?.toDate().getTime() || 0;
+              const timeB = b.createdAt?.toDate().getTime() || 0;
+              return timeB - timeA;
+            })
+        );
+    });
+
+    return () => { unsubCam(); unsubReq(); };
+  }, [merchantId]);
+
+  const handleBannerImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string})) };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLeafletImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => { setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string})) };
+    reader.readAsDataURL(file);
+  };
+
+  const getPriceText = (key: string) => {
+      const p = formatEuro(prices[key]);
+      return p ? `(${p})` : '(PreÃ§o sob consulta)';
+  };
+
+  // CÃLCULO E SIMULAÃ‡ÃƒO DO BANNER
+  const handleSimulateBanner = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bannerForm.startDate || !bannerForm.endDate || !bannerForm.imageBase64) {
+        toast.error("Preencha as datas e insira a imagem do Banner.");
+        return;
+    }
+
+    const start = new Date(bannerForm.startDate);
+    const end = new Date(bannerForm.endDate);
+    const minDate = new Date();
+    minDate.setHours(minDate.getHours() + 48);
+
+    if (start < minDate) {
+        toast.error("A data de inÃ­cio tem de ter pelo menos 48h de antecedÃªncia.");
+        return;
+    }
+    if (end <= start) {
+        toast.error("A data de fim tem de ser posterior Ã  data de inÃ­cio.");
+        return;
+    }
+
+    const timeDiff = end.getTime() - start.getTime();
+    const days = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+    setSimulatingBanner(true);
+    try {
+        const usersRef = collection(db, 'users');
+        const snap = await getDocs(query(usersRef, where('role', '==', 'client'), where('status', '==', 'active')));
+        let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+
+        const targetType = bannerForm.targetType;
+        const targetVal = bannerForm.targetValue;
+
+        if (targetType === 'cp4' || targetType === 'cp7') {
+            const zips = targetVal.split(',').map(z => z.trim());
+            clients = clients.filter(c => zips.some(z => (c.zipCode || '').startsWith(z)));
+        } else if (targetType === 'birthDate') {
+            const currentMonth = new Date().getMonth() + 1;
+            clients = clients.filter(c => {
+                if (!c.birthDate) return false;
+                const month = parseInt(c.birthDate.split('-')[1]);
+                return month === currentMonth;
+            });
+        } else if (targetType === 'specific_clients') {
+            const identifiers = targetVal.split(',').map(i => i.trim());
+            clients = clients.filter(c => identifiers.includes(c.nif) || identifiers.includes(c.customerNumber));
+        } else if (targetType === 'top_20_volume' || targetType === 'top_20_visits') {
+            // Ir buscar as transaÃ§Ãµes da loja para ordenar os melhores clientes
+            const txSnap = await getDocs(query(collection(db, 'transactions'), where('merchantId', '==', merchantId)));
+            const txs = txSnap.docs.map(d => d.data()).filter(t => t.type === 'earn' && t.status !== 'cancelled');
+            
+            const stats: Record<string, {vol: number, vis: number}> = {};
+            txs.forEach(t => {
+                if(!stats[t.clientId]) stats[t.clientId] = {vol: 0, vis: 0};
+                stats[t.clientId].vol += Number(t.amount);
+                stats[t.clientId].vis += 1;
+            });
+
+            let sortedIds = Object.keys(stats);
+            if (targetType === 'top_20_volume') {
+                sortedIds.sort((a, b) => stats[b].vol - stats[a].vol);
+            } else {
+                sortedIds.sort((a, b) => stats[b].vis - stats[a].vis);
+            }
+            
+            const top20Ids = sortedIds.slice(0, 20);
+            clients = clients.filter(c => top20Ids.includes(c.id));
+        }
+
+        const count = clients.length;
+        const perClientDay = Number(prices.banner_cost_per_client) || 0.02;
+        const minCost = Number(prices.banner_min_cost) || 10;
+
+        let totalCost = count * perClientDay * days;
+        if (totalCost < minCost && count > 0) totalCost = minCost;
+        if (count === 0) totalCost = 0;
+
+        setBannerSimulation({ count, cost: totalCost, days });
+
+    } catch(err) {
+        toast.error("Erro ao simular alcance.");
+    } finally {
+        setSimulatingBanner(false);
+    }
+  };
+
+  const submitBannerRequest = async () => {
+    if (!bannerSimulation) return;
+    setLoading(true);
+    try {
+        await addDoc(collection(db, 'marketing_requests'), {
+            merchantId, merchantName, type: 'banner', status: 'pending',
+            text: bannerForm.text, 
+            imageUrl: bannerForm.imageBase64, 
+            requestedDate: `InÃ­cio: ${bannerForm.startDate} | Fim: ${bannerForm.endDate} (${bannerSimulation.days} dias)`, 
+            targetType: bannerForm.targetType,
+            targetValue: bannerForm.targetValue,
+            targetCount: bannerSimulation.count,
+            cost: bannerSimulation.cost,
+            createdAt: serverTimestamp()
+        });
+        toast.success("Pedido de Banner enviado com sucesso!");
+        setBannerSimulation(null);
+        setBannerForm({text:'', startDate:'', endDate:'', imageBase64:'', targetType: 'all', targetValue: ''});
+        
+        const fileInput = document.getElementById('bannerImageInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+        
+        setActiveTab('history');
+    } catch(err) { 
+        toast.error("Erro ao enviar pedido."); 
+    } finally { 
+        setLoading(false); 
+    }
+  };
+
+  const submitLeaflet = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leafletForm.campaignId) { toast.error("Selecione um folheto previsto."); return; }
+    if (!leafletForm.imageBase64) { toast.error("Por favor, adicione a imagem do produto."); return; }
+
+    const camp = campaigns.find(c => c.id === leafletForm.campaignId);
+
+    setLoading(true);
+    try {
+        await addDoc(collection(db, 'marketing_requests'), {
+            merchantId, merchantName, type: 'leaflet', status: 'pending',
+            leafletCampaignId: leafletForm.campaignId, 
+            leafletCampaignTitle: camp?.title,
+            spaceType: leafletForm.spaceType, 
+            description: leafletForm.description,
+            sellPrice: leafletForm.sellPrice, 
+            unit: leafletForm.unit,
+            promoPrice: leafletForm.promoPrice, 
+            promoType: leafletForm.promoType,
+            imageUrl: leafletForm.imageBase64,
+            createdAt: serverTimestamp()
+        });
+        toast.success("Pedido de espaÃ§o no Folheto enviado com sucesso!");
+        setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: ''});
+        
+        const fileInput = document.getElementById('leafletImageInput') as HTMLInputElement;
+        if (fileInput) fileInput.value = '';
+
+        setActiveTab('history');
+    } catch(err) { 
+        toast.error("Erro ao enviar pedido."); 
+    } finally { 
+        setLoading(false); 
+    }
+  };
+
+  return (
+    <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] animate-in fade-in">
+        <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">Pedir Publicidade</h3>
+        
+        <div className="flex gap-4 mb-8 overflow-x-auto pb-2 scrollbar-hide">
+            <button onClick={() => setActiveTab('banner')} className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all whitespace-nowrap border-4 ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-[#00d66f]'}`}>
+               <ImageIcon size={16} className="inline mr-2"/> Pedir Banner
+            </button>
+            <button onClick={() => setActiveTab('leaflet')} className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all whitespace-nowrap border-4 ${activeTab === 'leaflet' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-[#00d66f]'}`}>
+               <FileText size={16} className="inline mr-2"/> Entrar no Folheto
+            </button>
+            <button onClick={() => setActiveTab('history')} className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all whitespace-nowrap border-4 ${activeTab === 'history' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-[#00d66f]'}`}>
+               <Megaphone size={16} className="inline mr-2"/> Meus Pedidos
+            </button>
+        </div>
+
+        {activeTab === 'banner' && (
+            <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
+              <form onSubmit={handleSimulateBanner} className="space-y-6">
+                  <div className="bg-[#f0f7ff] p-6 rounded-[32px] border-2 border-blue-100 mb-6">
+                      <p className="text-[#0a2540] text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-3">
+                          <AlertCircle size={16} className="text-blue-500"/> Guia de Design Profissional
+                      </p>
+                      <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-tight">
+                          <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> ResoluÃ§Ã£o Ideal: <span className="text-[#0a2540]">1920 x 1080 px</span> (16:9)</li>
+                          <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> ConteÃºdo Seguro: <span className="text-[#0a2540]">Manter no CENTRO</span></li>
+                          <li className="flex items-center gap-2"><div className="w-1 h-1 bg-blue-400 rounded-full"/> Formato: MÃ¡ximo 200KB (.jpg / .webp)</li>
+                      </ul>
+                  </div>
+                  
+                  <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400">Data de InÃ­cio</label>
+                          <input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                      </div>
+                      <div>
+                          <label className="text-[10px] font-black uppercase text-slate-400">Data de Fim</label>
+                          <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                      </div>
+                  </div>
+
+                  {/* NOVOS CAMPOS DE SEGMENTAÃ‡ÃƒO DO BANNER */}
+                  <div className="space-y-4 pt-4 border-t-2 border-slate-100">
+                    <label className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest">SegmentaÃ§Ã£o / PÃºblico Alvo</label>
+                    <select required value={bannerForm.targetType} onChange={e=>setBannerForm({...bannerForm, targetType: e.target.value, targetValue: ''})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
+                        <option value="all">Todos os Clientes da Plataforma</option>
+                        <option value="cp4">Por CÃ³digo Postal (Ex: 4000)</option>
+                        <option value="cp7">Por CÃ³digo Postal Completo (Ex: 4000-123)</option>
+                        <option value="birthDate">Aniversariantes do MÃªs</option>
+                        <option value="top_20_volume">Meus Clientes: Top 20 (Maior Volume)</option>
+                        <option value="top_20_visits">Meus Clientes: Top 20 (Mais Visitas)</option>
+                        <option value="specific_clients">Clientes EspecÃ­ficos (Por NIF / CartÃ£o)</option>
+                    </select>
+
+                    {(bannerForm.targetType === 'cp4' || bannerForm.targetType === 'cp7' || bannerForm.targetType === 'specific_clients') && (
+                      <div className="animate-in slide-in-from-top-2">
+                        <label className="text-[9px] font-bold uppercase text-slate-400 mb-1 block">
+                          {bannerForm.targetType === 'cp4' ? 'Insira CP4 (Separe por vÃ­rgula. Ex: 4000, 4400)' : 
+                           bannerForm.targetType === 'cp7' ? 'Insira CP7 (Separe por vÃ­rgula. Ex: 4000-123, 4400-001)' :
+                           'Insira NIFs ou CartÃµes (Separe por vÃ­rgula)'}
+                        </label>
+                        <input required type="text" value={bannerForm.targetValue} onChange={e=>setBannerForm({...bannerForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
+                      </div>
+                    )}
+                  </div>
+
+                  <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Banner (16:9)</label><input id="bannerImageInput" required type="file" accept="image/*" onChange={handleBannerImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                  
+                  <button type="submit" disabled={simulatingBanner} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-black">
+                      {simulatingBanner ? <Loader2 className="animate-spin" /> : <Filter size={20}/>} Simular Alcance e Custo
+                  </button>
+              </form>
+
+              {/* RESULTADO DA SIMULAÃ‡ÃƒO DO BANNER */}
+              <div>
+                {bannerSimulation && (
+                  <div className="bg-[#00d66f] p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540] flex flex-col justify-center text-center animate-in zoom-in sticky top-10">
+                      <h4 className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest mb-6 opacity-60">OrÃ§amento do Banner</h4>
+                      
+                      <div className="grid grid-cols-2 gap-4 mb-4">
+                        <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10">
+                            <span className="text-[9px] font-black uppercase block mb-1">PÃºblico Alvo</span>
+                            <span className="text-3xl font-black italic">{bannerSimulation.count}</span>
+                        </div>
+                        <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10">
+                            <span className="text-[9px] font-black uppercase block mb-1">DuraÃ§Ã£o</span>
+                            <span className="text-3xl font-black italic">{bannerSimulation.days} <span className="text-sm">dias</span></span>
+                        </div>
+                      </div>
+
+                      <div className="bg-white/40 p-4 rounded-2xl border-2 border-[#0a2540]/10 mb-8">
+                        <span className="text-[9px] font-black uppercase block mb-1 text-[#0a2540]">Investimento Total</span>
+                        <span className="text-4xl font-black italic text-[#0a2540]">{formatEuro(bannerSimulation.cost)}</span>
+                      </div>
+
+                      <div className="space-y-3">
+                        <button onClick={submitBannerRequest} disabled={loading} className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl flex justify-center items-center gap-2">
+                          {loading ? <Loader2 className="animate-spin" /> : 'AvanÃ§ar com Pedido'}
+                        </button>
+                        <button onClick={() => setBannerSimulation(null)} disabled={loading} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white/40">Anular / Corrigir</button>
+                      </div>
+                      <p className="mt-6 text-[8px] font-black uppercase text-[#0a2540]/60 italic">* Valor sujeito a aprovaÃ§Ã£o manual da administraÃ§Ã£o.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+        )}
+
+        {activeTab === 'leaflet' && (
+            <form onSubmit={submitLeaflet} className="space-y-6 animate-in fade-in max-w-2xl mx-auto">
+                <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400">Selecione o Folheto</label>
+                    <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
+                        <option value="">(Escolha um Folheto Futuro)</option>
+                        {campaigns.map(c => <option key={c.id} value={c.id}>{c.title} (Fecha a: {c.limitDate.toDate().toLocaleDateString()})</option>)}
+                    </select>
+                </div>
+                <div>
+                    <label className="text-[10px] font-black uppercase text-slate-400">EspaÃ§o Pretendido</label>
+                    <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
+                        <option value="leaflet_capa_destaque">Capa Principal - Destaque {getPriceText('leaflet_capa_destaque')}</option>
+                        <option value="leaflet_capa_normal">Capa - Tamanho Normal {getPriceText('leaflet_capa_normal')}</option>
+                        <option value="leaflet_contracapa">Contracapa - Parte Traseira {getPriceText('leaflet_contracapa')}</option>
+                        <option value="leaflet_interior_full">Interior - PÃ¡gina Inteira {getPriceText('leaflet_interior_full')}</option>
+                        <option value="leaflet_interior_1_2">Interior - 1/2 (Meia PÃ¡gina) {getPriceText('leaflet_interior_1_2')}</option>
+                        <option value="leaflet_interior_1_4">Interior - 1/4 (Quarto de PÃ¡gina) {getPriceText('leaflet_interior_1_4')}</option>
+                    </select>
+                </div>
+                <div><label className="text-[10px] font-black uppercase text-slate-400">DescriÃ§Ã£o do Produto</label><input required type="text" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">PreÃ§o de Venda (â‚¬)</label><input required type="text" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Unidade (ex: kg, uni)</label><input required type="text" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">PreÃ§o Promocional (â‚¬ - Opcional)</label><input type="text" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Tipo Campanha (Ex: L3P2)</label><input type="text" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                </div>
+                
+                <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem do Produto</label><input id="leafletImageInput" required type="file" accept="image/*" onChange={handleLeafletImageChange} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                
+                <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
+                    {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido
+                </button>
+            </form>
+        )}
+
+        {activeTab === 'history' && (
+            <div className="space-y-4 animate-in fade-in">
+                {myRequests.map(r => (
+                    <div key={r.id} className="p-6 border-4 border-slate-100 rounded-[30px] flex flex-col md:flex-row justify-between items-start gap-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                        <div className="flex-1 w-full">
+                            <div className="flex justify-between items-start mb-4">
+                                <div>
+                                    <p className="font-black uppercase text-[#0a2540] text-lg leading-none">
+                                        {r.type === 'banner' ? 'Banner na App' : r.type === 'push_notification' ? 'NotificaÃ§Ã£o Push (App)' : `Folheto: ${r.leafletCampaignTitle}`}
+                                    </p>
+                                    <p className="text-[10px] font-black tracking-widest text-slate-400 uppercase mt-2">Enviado a: {r.createdAt?.toDate().toLocaleDateString()}</p>
+                                </div>
+                                <span className={`px-4 py-2 rounded-full text-[9px] font-black uppercase tracking-widest shadow-sm ${r.status === 'approved' ? 'bg-green-100 text-green-700' : r.status === 'rejected' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
+                                    {r.status === 'approved' ? 'Aprovado' : r.status === 'rejected' ? 'Rejeitado' : 'Em AnÃ¡lise'}
+                                </span>
+                            </div>
+                            
+                            <div className="bg-white p-4 rounded-2xl border-2 border-slate-100 text-[11px] font-bold text-slate-500 space-y-2">
+                                {r.type === 'banner' ? (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Datas:</span> <span className="text-[#0a2540]">{r.requestedDate}</span></p>
+                                        {r.text && <p className="flex justify-between"><span className="text-slate-400 uppercase">Texto:</span> <span className="text-[#0a2540]">{r.text}</span></p>}
+                                        <p className="flex justify-between border-b border-slate-50 pb-2">
+                                          <span className="text-slate-400 uppercase">Alvo:</span> 
+                                          <span className="text-[#0a2540]">
+                                            {r.targetType === 'all' ? 'Todos' : r.targetType === 'cp4' || r.targetType === 'cp7' ? `CPs: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : r.targetType === 'specific_clients' ? `NIFs/CartÃµes: ${r.targetValue}` : 'Top 20'}
+                                          </span>
+                                        </p>
+                                        <p className="flex justify-between"><span className="text-slate-400 uppercase">Custo / Alcance:</span> <span className="text-blue-500">{formatEuro(r.cost)} ({r.targetCount} Clientes)</span></p>
+                                    </>
+                                ) : r.type === 'push_notification' ? (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">TÃ­tulo:</span> <span className="text-[#0a2540]">{r.title}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Mensagem:</span> <span className="text-[#0a2540]">{r.text}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2">
+                                          <span className="text-slate-400 uppercase">Alvo:</span> 
+                                          <span className="text-[#0a2540]">
+                                            {r.targetType === 'all' ? 'Todos' : r.targetType === 'multiple_zip' ? `CP: ${r.targetValue}` : r.targetType === 'birthDate' ? 'Aniversariantes' : 'Meus Clientes'}
+                                          </span>
+                                        </p>
+                                        <p className="flex justify-between"><span className="text-slate-400 uppercase">Custo / Alcance:</span> <span className="text-blue-500">{formatEuro(r.cost)} ({r.targetCount} Clientes)</span></p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">Produto:</span> <span className="text-[#0a2540]">{r.description}</span></p>
+                                        <p className="flex justify-between border-b border-slate-50 pb-2"><span className="text-slate-400 uppercase">EspaÃ§o:</span> <span className="text-[#0a2540]">{r.spaceType?.replace(/_/g, ' ')}</span></p>
+                                        <p className="flex justify-between"><span className="text-slate-400 uppercase">PreÃ§o Venda:</span> <span className="text-[#0a2540]">{r.sellPrice} / {r.unit}</span></p>
+                                        {r.promoPrice && <p className="flex justify-between"><span className="text-slate-400 uppercase">PromoÃ§Ã£o:</span> <span className="text-blue-500">{r.promoPrice} ({r.promoType})</span></p>}
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                        
+                        {r.imageUrl ? (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-slate-100 overflow-hidden flex items-center justify-center p-2 shadow-sm">
+                                <img src={r.imageUrl} className="w-full h-full object-contain" alt="Preview da Campanha" />
+                            </div>
+                        ) : (
+                            <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300">
+                                {r.type === 'push_notification' ? <Bell size={24} /> : <ImageIcon size={24} />}
+                                <span className="text-[8px] font-black uppercase mt-2">{r.type === 'push_notification' ? 'Push FCM' : 'S/ Imagem'}</span>
+                            </div>
+                        )}
+                    </div>
+                ))}
+                {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-[30px]">Sem pedidos efetuados.</p>}
+            </div>
+        )}
+    </div>
+  );
+};
+
+export default MerchantMarketing;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\merchant\components\MerchantSettings.tsx
+----------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { User as UserProfile } from '../../../types';
+import { doc, updateDoc } from 'firebase/firestore';
+import { db } from '../../../config/firebase';
+import { CheckCircle2, XCircle, Globe, Mail } from 'lucide-react';
+
+interface MerchantSettingsProps {
+  currentUser: UserProfile;
+}
+
+const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
+  const [cashbackPercent, setCashbackPercent] = useState<string>(currentUser.cashbackPercent?.toString() || '0');
+  const [websiteUrl, setWebsiteUrl] = useState<string>(currentUser.websiteUrl || '');
+  const [publicEmail, setPublicEmail] = useState<string>(currentUser.publicEmail || '');
+  const [isLoading, setIsLoading] = useState(false);
+  const [message, setMessage] = useState({ type: '', text: '' });
+
+  useEffect(() => {
+    setCashbackPercent(currentUser.cashbackPercent?.toString() || '0');
+    setWebsiteUrl(currentUser.websiteUrl || '');
+    setPublicEmail(currentUser.publicEmail || '');
+  }, [currentUser]);
+
+  const handleSaveData = async () => {
+    setIsLoading(true);
+    setMessage({ type: '', text: '' });
+    try {
+      const percent = parseFloat(cashbackPercent);
+      if (isNaN(percent) || percent < 0 || percent > 100) {
+        setMessage({ type: 'error', text: 'Insira um valor de cashback vÃ¡lido entre 0 e 100.' });
+        return;
+      }
+
+      const merchantRef = doc(db, 'users', currentUser.id);
+      await updateDoc(merchantRef, {
+        cashbackPercent: percent,
+        websiteUrl: websiteUrl.trim(),
+        publicEmail: publicEmail.trim()
+      });
+
+      setMessage({ type: 'success', text: 'Dados atualizados com sucesso!' });
+    } catch (e) {
+      setMessage({ type: 'error', text: 'Erro ao atualizar dados. Tente novamente.' });
+    } finally {
+      setIsLoading(false);
+      setTimeout(() => setMessage({ type: '', text: '' }), 4000);
+    }
+  };
+
+  return (
+    <div className="bg-white rounded-[40px] shadow-[12px_12px_0px_#0a2540] border-4 border-[#0a2540] p-8 md:p-12 mb-8 animate-in fade-in">
+      <h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8">DefiniÃ§Ãµes da Loja</h2>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+          <div>
+            <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">Percentagem de Cashback (%)</label>
+            <input
+              type="number"
+              className="w-full p-4 rounded-2xl bg-slate-50 border-4 border-slate-100 focus:outline-none focus:border-[#00d66f] font-black text-xl text-[#0a2540]"
+              value={cashbackPercent} onChange={(e) => setCashbackPercent(e.target.value)}
+              min="0" max="100" step="0.1" disabled={isLoading}
+            />
+          </div>
+
+          <div className="space-y-4">
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">Website da Loja (Opcional)</label>
+                <div className="relative">
+                    <Globe size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <input
+                      type="url" placeholder="https://"
+                      className="w-full p-4 pl-12 rounded-2xl bg-slate-50 border-4 border-slate-100 focus:outline-none focus:border-[#00d66f] font-bold text-sm text-[#0a2540]"
+                      value={websiteUrl} onChange={(e) => setWebsiteUrl(e.target.value)} disabled={isLoading}
+                    />
+                </div>
+              </div>
+              <div>
+                <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">Email para Clientes (Opcional)</label>
+                <div className="relative">
+                    <Mail size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" />
+                    <input
+                      type="email" placeholder="loja@email.com"
+                      className="w-full p-4 pl-12 rounded-2xl bg-slate-50 border-4 border-slate-100 focus:outline-none focus:border-[#00d66f] font-bold text-sm text-[#0a2540]"
+                      value={publicEmail} onChange={(e) => setPublicEmail(e.target.value)} disabled={isLoading}
+                    />
+                </div>
+              </div>
+          </div>
+      </div>
+
+      <button
+        onClick={handleSaveData}
+        disabled={isLoading}
+        className="w-full bg-[#00d66f] text-[#0a2540] font-black uppercase text-xs py-6 rounded-3xl shadow-xl hover:bg-[#00c263] border-b-4 border-[#0a2540] transition-all disabled:opacity-50 flex justify-center"
+      >
+        {isLoading ? 'A Guardar...' : 'Guardar AlteraÃ§Ãµes da Loja'}
+      </button>
+
+      {message.text && (
+        <div className={`mt-8 p-5 rounded-2xl font-black text-center text-[10px] uppercase flex items-center justify-center gap-3 animate-in zoom-in border-4 ${message.type === 'success' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>
+          {message.type === 'success' ? <CheckCircle2 size={16} /> : <XCircle size={16} />}
+          {message.text}
+        </div>
+      )}
+    </div>
+  );
+};
+
+export default MerchantSettings;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\merchant\components\MerchantTerminal.tsx
+----------------------------------------
+
+import React, { useState } from 'react';
+import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
+import { User as UserProfile } from '../../../types';
+
+interface MerchantTerminalProps {
+  cardNumber: string;
+  setCardNumber: (val: string) => void;
+  isNifValid: boolean;
+  isSearching: boolean;
+  foundClient: UserProfile | null;
+  amount: string;
+  setAmount: (val: string) => void;
+  previewCashback: number;
+  documentNumber: string;
+  setDocumentNumber: (val: string) => void;
+  onOpenScanner: () => void;
+  onProcessAction: (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => void;
+  isLoading: boolean;
+  clientStoreBalance: number;
+  formatCurrency: (val: number) => string;
+  isLeaving?: boolean; // NOVO: Flag de bloqueio
+}
+
+const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
+  cardNumber, setCardNumber, isNifValid, foundClient,
+  amount, setAmount, previewCashback,
+  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching, isLeaving
+}) => {
+
+  const [customRedeem, setCustomRedeem] = useState<string>('');
+
+  const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    let val = e.target.value.replace(/\D/g, ''); 
+    if (val.length > 9) val = val.substring(0, 9);
+    let formatted = val;
+    if (val.length > 6) formatted = `${val.substring(0, 3)} ${val.substring(3, 6)} ${val.substring(6, 9)}`;
+    else if (val.length > 3) formatted = `${val.substring(0, 3)} ${val.substring(3, 6)}`;
+    setCardNumber(formatted);
+  };
+
+  const invoiceAmount = Number(amount) || 0;
+  
+  const maxDiscountAllowed = invoiceAmount * 0.5;
+  const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
+
+  // Se a loja estÃ¡ a fechar (isLeaving), bloqueia o Earn
+  const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0 && !isLeaving;
+  
+  const redeemVal = parseFloat(customRedeem);
+  const canProcessRedeem = !isLoading && 
+                          foundClient !== null && 
+                          invoiceAmount > 0 && 
+                          !isNaN(redeemVal) && 
+                          redeemVal > 0 && 
+                          redeemVal <= (actualDiscountToApply + 0.01); 
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
+      
+      <div className="lg:col-span-2 bg-white p-8 md:p-12 rounded-[40px] shadow-[12px_12px_0px_0px_#0a2540] border-4 border-[#0a2540] relative overflow-hidden">
+        <div className="space-y-10 relative z-10">
+          
+          <div className="space-y-4">
+            <div className="flex justify-between items-center ml-2">
+               <label className="flex items-center gap-3 text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                 <Search size={16} /> Identificar Cliente
+               </label>
+               <span className="text-[9px] font-bold text-[#00d66f] bg-green-50 px-3 py-1 rounded-lg uppercase">
+                 Ler CartÃ£o Antes do Pagamento
+               </span>
+            </div>
+            
+            <div className="flex flex-col sm:flex-row gap-4">
+              <input 
+                type="text" inputMode="numeric" value={cardNumber} onChange={handleNifChange} placeholder="000 000 000" 
+                className={`flex-grow p-6 bg-slate-50 border-4 rounded-3xl text-3xl font-black text-[#0a2540] outline-none transition-all shadow-inner tracking-widest text-center sm:text-left ${isNifValid ? 'border-[#00d66f] bg-green-50/30' : 'border-slate-100 focus:border-[#0a2540]'}`}
+              />
+              <button 
+                onClick={onOpenScanner} 
+                className="bg-[#0a2540] px-6 py-4 rounded-3xl text-[#00d66f] hover:bg-black transition-all shadow-[6px_6px_0px_0px_#00d66f] border-2 border-[#00d66f] active:translate-y-1 active:shadow-none flex items-center justify-center gap-3 whitespace-nowrap"
+              >
+                <Camera size={28} />
+                <span className="font-black uppercase text-xs tracking-widest">Ler QR Code</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Nova Fatura (â‚¬)</label>
+            <input 
+              type="number" step="0.01" min="0" value={amount} onChange={e => { setAmount(e.target.value); setCustomRedeem(''); }} placeholder="0.00" 
+              className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl text-4xl font-black text-[#0a2540] outline-none focus:border-[#0a2540] shadow-inner" 
+            />
+            
+            {invoiceAmount > 0 && !isLeaving && (
+              <div className="flex flex-col gap-2 animate-in zoom-in">
+                <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
+                  <ArrowRight size={16} className="text-[#00d66f]" />
+                  <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
+                    Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {isLeaving && (
+              <div className="bg-red-50 p-4 rounded-2xl border-2 border-red-200 flex items-center gap-3 text-red-600 font-bold text-[10px] uppercase">
+                <AlertTriangle size={16} /> Loja em Processo de SaÃ­da: O botÃ£o de atribuir Cashback estÃ¡ desativado. Apenas pode aceitar resgates de saldo.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-4">
+        <div className={`p-6 rounded-[35px] border-4 transition-all flex flex-col items-center gap-3 justify-center shadow-lg ${foundClient ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-300 border-dashed'}`}>
+          {foundClient ? (
+            <>
+              <div className="p-3 bg-white/30 rounded-2xl mb-1 border-2 border-[#0a2540]/10"><UserIcon size={24} className="text-[#0a2540]" strokeWidth={3} /></div>
+              <h4 className="font-black uppercase text-center text-sm tracking-tighter italic">{foundClient.name}</h4>
+              <div className="bg-[#0a2540] px-4 py-2 rounded-xl text-center w-full mt-2 shadow-inner border border-[#0a2540]">
+                <p className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest mb-1">Saldo nesta Loja</p>
+                <p className="text-xl font-black text-white italic">{formatCurrency(clientStoreBalance)}</p>
+              </div>
+            </>
+          ) : (
+            <>
+               <Search size={32} className="opacity-50" />
+               <p className="text-[10px] font-black uppercase tracking-widest text-center">{isSearching ? 'A pesquisar...' : 'Aguardando Cliente...'}</p>
+            </>
+          )}
+        </div>
+
+        <button onClick={() => onProcessAction('earn')} disabled={!canProcessEarn} className="flex-1 bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100">
+          <Coins size={32} className="text-[#00d66f]" />
+          <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback</span>
+        </button>
+
+        {clientStoreBalance > 0 && invoiceAmount > 0 && (
+           <div className="bg-blue-50 p-4 rounded-3xl border-2 border-blue-200 animate-in fade-in">
+              <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
+                 <AlertTriangle size={14} /> MÃ¡ximo a descontar (Regra 50%): <span className="font-bold text-lg">{formatCurrency(actualDiscountToApply)}</span>
+              </p>
+              <input 
+                type="number" step="0.01" min="0" max={actualDiscountToApply}
+                value={customRedeem} onChange={e => setCustomRedeem(e.target.value)} 
+                placeholder="Qual o valor a descontar?" 
+                className="w-full p-4 bg-white border-2 border-blue-300 rounded-2xl text-center font-black text-blue-900 outline-none focus:border-blue-500 mb-2" 
+              />
+              <button 
+                onClick={() => onProcessAction('redeem', Number(customRedeem))} 
+                disabled={!canProcessRedeem} 
+                className="w-full bg-white p-4 rounded-2xl text-[#0a2540] border-4 border-[#0a2540] transition-all hover:bg-slate-50 hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-1 disabled:opacity-40 disabled:hover:scale-100"
+              >
+                <Gift size={24} className="text-[#0a2540]" />
+                <span className="font-black text-[10px] uppercase tracking-[0.2em]">Confirmar Desconto</span>
+              </button>
+           </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default MerchantTerminal;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\merchant\components\QRScannerModal.tsx
+----------------------------------------
+
+import React, { useState } from 'react';
+import { Scanner } from '@yudiel/react-qr-scanner';
+import { X, Camera, AlertTriangle } from 'lucide-react';
+
+interface QRScannerModalProps {
+  onScan: (text: string) => void;
+  onClose: () => void;
+}
+
+const QRScannerModal: React.FC<QRScannerModalProps> = ({ onScan, onClose }) => {
+  const [error, setError] = useState<string | null>(null);
+
+  const handleScan = (result: any) => {
+    if (result && result.length > 0 && result[0].rawValue) {
+      onScan(result[0].rawValue);
+    }
+  };
+
+  const handleError = (err: any) => {
+    console.error("Erro da CÃ¢mara:", err);
+    if (err?.message?.includes('No MultiFormat Readers')) return;
+    setError("Ocorreu um erro ao aceder Ã  cÃ¢mara. Por favor, verifique as permissÃµes do seu navegador.");
+  };
+
+  return (
+    <div className="fixed inset-0 bg-[#0f172a]/95 backdrop-blur-xl z-[200] p-6 flex flex-col items-center justify-center">
+      <div className="bg-white p-6 md:p-10 rounded-[40px] w-full max-w-lg relative border-4 border-[#00d66f] shadow-2xl animate-in zoom-in">
+        
+        <button 
+            onClick={onClose} 
+            className="absolute -top-5 -right-5 bg-red-500 text-white p-3 rounded-full border-4 border-[#0f172a] shadow-lg hover:scale-110 transition-transform z-50"
+        >
+            <X size={24} strokeWidth={3} />
+        </button>
+
+        <div className="text-center mb-6">
+            <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center justify-center gap-2">
+                <Camera className="text-[#00d66f]" size={24} /> Ler CartÃ£o
+            </h3>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Aponte a cÃ¢mara para o QR Code do Cliente</p>
+        </div>
+
+        {error ? (
+            <div className="bg-red-50 border-2 border-red-200 p-6 rounded-3xl text-center text-red-600 flex flex-col items-center gap-3">
+                <AlertTriangle size={32} />
+                <p className="text-xs font-bold uppercase">{error}</p>
+                <button onClick={onClose} className="mt-4 bg-red-500 text-white px-6 py-2 rounded-xl font-black text-[10px] uppercase">Fechar</button>
+            </div>
+        ) : (
+            <div className="w-full overflow-hidden rounded-3xl border-4 border-slate-100 bg-black relative shadow-inner">
+               <Scanner 
+                 onScan={handleScan}
+                 onError={handleError}
+                 components={{
+                   torch: true,
+                   zoom: true,
+                   finder: true
+                 }}
+                 styles={{
+                   container: { width: '100%', paddingTop: '100%' },
+                   video: { objectFit: 'cover' }
+                 }}
+               />
+            </div>
+        )}
+
+      </div>
+    </div>
+  );
+};
+
+export default QRScannerModal;
+-e 
+
+
+PASTA/FICHEIRO: \src\features\profile\ProfileSettings.tsx
+----------------------------------------
+
+import React, { useState, useEffect } from 'react';
+import { useStore } from '../../store/useStore';
+import { db, auth } from '../../config/firebase';
+import { doc, updateDoc, getDoc } from 'firebase/firestore';
+import { deleteUser } from 'firebase/auth';
+import { 
+  ArrowLeft, User as UserIcon, Phone, MapPin, Tag, Save, 
+  ShieldCheck, Trash2, AlertTriangle, RefreshCw, Mail, IdCard, Bell, BellOff 
+} from 'lucide-react';
+import { getLocalDeviceId, removeCurrentDeviceNotification } from '../../utils/notifications';
+import toast from 'react-hot-toast';
+
+const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
+  const { currentUser, deleteUserWithHistory, logout } = useStore();
+  
+  const [loading, setLoading] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [rgpdDeleted, setRgpdDeleted] = useState(false);
+
+  const [isThisDeviceLinked, setIsThisDeviceLinked] = useState(false);
+
+  const [formData, setFormData] = useState({
+    name: currentUser?.name || '',
+    phone: currentUser?.phone || '',
+    address: currentUser?.address || '',
+    category: currentUser?.category || '',
+    zipCode: currentUser?.zipCode || '',
+    freguesia: currentUser?.freguesia || '',
+    nif: currentUser?.nif || '' 
+  });
+
+  useEffect(() => {
+    const checkDevice = async () => {
+      if (!currentUser?.id) return;
+      const deviceId = getLocalDeviceId();
+      const userSnap = await getDoc(doc(db, 'users', currentUser.id));
+      if (userSnap.exists()) {
+        const devices = userSnap.data().devices || [];
+        setIsThisDeviceLinked(devices.some((d: any) => d.deviceId === deviceId));
+      }
+    };
+    checkDevice();
+  }, [currentUser]);
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser?.id) return;
+
+    setLoading(true);
+    try {
+      const userRef = doc(db, 'users', currentUser.id);
+      await updateDoc(userRef, formData);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      toast.success("PERFIL ATUALIZADO!");
+    } catch (error) {
+      toast.error("ERRO AO GUARDAR.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDisableNotifications = async () => {
+    if (!currentUser?.id) return;
+
+    const confirm1 = window.confirm(
+      "ATENÃ‡ÃƒO: NÃ£o Ã© recomendÃ¡vel desativar as notificaÃ§Ãµes. \n\nSem elas, nÃ£o receberÃ¡s confirmaÃ§Ãµes de cashback em tempo real nem ofertas exclusivas. Desejas continuar?"
+    );
+
+    if (confirm1) {
+      const confirm2 = window.confirm(
+        "CONFIRMAÃ‡ÃƒO FINAL: Tens a certeza que queres desligar os alertas NESTE equipamento?"
+      );
+
+      if (confirm2) {
+        setLoading(true);
+        const success = await removeCurrentDeviceNotification(currentUser.id);
+        if (success) {
+          setIsThisDeviceLinked(false);
+          toast.success("Alertas desativados neste aparelho.");
+        } else {
+          toast.error("Erro ao desativar notificaÃ§Ãµes.");
+        }
+        setLoading(false);
+      }
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!currentUser?.id) return;
+
+    const confirm1 = window.confirm("Desejas eliminar a tua conta permanentemente? Esta aÃ§Ã£o nÃ£o pode ser desfeita.");
+    if (!confirm1) return;
+
+    const confirm2 = window.confirm("ÃšLTIMO AVISO: Todos os teus dados, saldos e histÃ³rico serÃ£o apagados do servidor agora. Confirmas?");
+    if (confirm2) {
+      setIsDeleting(true);
+      try {
+        const userId = currentUser.id;
+        const role = currentUser.role as 'client' | 'merchant';
+        
+        await deleteUserWithHistory(userId, role);
+        
+        const user = auth.currentUser;
+        if (user) {
+          await deleteUser(user);
+        }
+        
+        setRgpdDeleted(true);
+      } catch (error: any) {
+        if (error.code === 'auth/requires-recent-login') {
+          alert("Por seguranÃ§a, precisas de fazer login novamente antes de eliminar a conta.");
+        } else {
+          toast.error("Erro ao eliminar conta.");
+        }
+        console.error(error);
+      } finally {
+        setIsDeleting(false);
+      }
+    }
+  };
+
+  if (rgpdDeleted) {
+    return (
+      <div className="min-h-screen bg-[#f8fafc] flex items-center justify-center p-6 text-center">
+        <div className="bg-white p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl max-w-sm animate-in zoom-in">
+           <ShieldCheck size={60} className="text-[#00d66f] mx-auto mb-6" />
+           <h2 className="text-2xl font-black uppercase text-[#0a2540] mb-4">Direito ao Esquecimento</h2>
+           <p className="text-sm text-slate-500 font-bold mb-8">A tua conta e todos os teus dados foram eliminados permanentemente dos nossos servidores.</p>
+           <button onClick={() => window.location.href = '/'} className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-lg hover:bg-black transition-all">Sair</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[#f8fafc] pb-20">
+      <header className="bg-[#0a2540] p-6 text-white flex items-center gap-4 border-b-8 border-[#00d66f] shadow-lg">
+        <button onClick={onBack} className="p-2 hover:bg-white/10 rounded-full transition-colors"><ArrowLeft /></button>
+        <h1 className="text-xl font-black uppercase italic tracking-tighter">ConfiguraÃ§Ãµes</h1>
+      </header>
+
+      <main className="max-w-xl mx-auto p-6 space-y-6 mt-4">
+        <form onSubmit={handleSave} className="space-y-6">
+          
+          <div className="bg-white p-6 rounded-[30px] border-2 border-slate-100 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+               <div className="flex items-center gap-3">
+                  {isThisDeviceLinked ? <Bell className="text-[#00d66f]" size={20} /> : <BellOff className="text-slate-300" size={20} />}
+                  <h3 className="font-black uppercase text-xs text-[#0a2540]">Alertas neste aparelho</h3>
+               </div>
+               {isThisDeviceLinked ? (
+                 <button type="button" onClick={handleDisableNotifications} className="text-[10px] font-black text-red-500 uppercase hover:underline transition-all">Desativar</button>
+               ) : (
+                 <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inativo</span>
+               )}
+            </div>
+            <p className="text-[10px] text-slate-500 font-bold leading-tight">
+               {isThisDeviceLinked 
+                 ? "Este telemÃ³vel estÃ¡ configurado para receber notificaÃ§Ãµes Cloud Messaging." 
+                 : "As notificaÃ§Ãµes estÃ£o desligadas. Faz login novamente ou ative no painel principal para ligar."}
+            </p>
+          </div>
+
+          <div className="bg-white p-8 rounded-[40px] shadow-sm border-2 border-slate-100">
+            <div className="flex items-center gap-3 mb-6">
+              <UserIcon className="text-[#0a2540]" size={20} />
+              <h3 className="font-black text-[#0a2540] uppercase text-xs">Dados de Perfil</h3>
+            </div>
+            <div className="space-y-4">
+              <input type="text" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} placeholder="Nome Completo" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold text-sm focus:border-[#00d66f] outline-none transition-colors" required />
+              <input type="text" maxLength={9} value={formData.nif} onChange={(e) => setFormData({...formData, nif: e.target.value.replace(/\D/g, '')})} placeholder="NIF (Para faturas)" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold text-sm focus:border-[#00d66f] outline-none transition-colors" />
+              <input type="tel" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} placeholder="TelemÃ³vel" className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 font-bold text-sm focus:border-[#00d66f] outline-none transition-colors" />
+              <div className="flex items-center gap-3 p-4 bg-slate-100 rounded-2xl opacity-60 cursor-not-allowed">
+                <Mail size={18} className="text-slate-400" />
+                <span className="text-sm font-bold text-slate-500 truncate">{currentUser?.email}</span>
+              </div>
+            </div>
+          </div>
+
+          <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase text-sm tracking-widest flex items-center justify-center gap-3 shadow-xl hover:bg-black hover:scale-[1.02] active:scale-95 transition-all border-b-4 border-black/40">
+            {loading ? <RefreshCw className="animate-spin" /> : <><Save size={20} /> Guardar AlteraÃ§Ãµes</>}
+          </button>
+
+          <div className="pt-10">
+            <div className="bg-red-50 p-6 rounded-[30px] border-2 border-red-100">
+              <div className="flex items-center gap-2 mb-4 text-red-600">
+                <AlertTriangle size={20} />
+                <h4 className="text-xs font-black uppercase tracking-widest">Zona de Perigo</h4>
+              </div>
+              <button type="button" onClick={handleDeleteAccount} disabled={isDeleting} className="w-full py-4 bg-white border-2 border-red-200 text-red-500 font-black uppercase text-[10px] tracking-widest rounded-2xl hover:bg-red-500 hover:text-white transition-all flex items-center justify-center gap-2 shadow-sm">
+                {isDeleting ? <RefreshCw className="animate-spin" size={16} /> : <Trash2 size={16} />} Eliminar Conta Permanentemente
+              </button>
+            </div>
+          </div>
+        </form>
+      </main>
+    </div>
+  );
+};
+
+export default ProfileSettings;
+-e 
+

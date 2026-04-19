@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
-import { UserPlus, ArrowRight, Smartphone, Volume2, CheckCircle2, AlertTriangle, ArrowLeft, X, ShieldCheck } from 'lucide-react';
+import { ArrowRight, Smartphone, Volume2, CheckCircle2, ArrowLeft, X, ShieldCheck } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { requestNotificationPermission } from '../../utils/notifications';
+import { useStore } from '../../store/useStore';
 
 interface RegisterPageProps {
   onBack?: () => void;
@@ -14,7 +15,8 @@ interface RegisterPageProps {
 }
 
 const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
-  const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', zipCode: '' });
+  const { locations } = useStore();
+  const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [acceptedTerms, setAcceptedTerms] = useState(false);
@@ -27,6 +29,10 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
+  const distritos = Object.keys(locations || {}).sort();
+  const formConcelhos = formData.distrito ? Object.keys(locations[formData.distrito] || {}).sort() : [];
+  const formFreguesias = formData.distrito && formData.concelho ? (locations[formData.distrito][formData.concelho] || []).sort() : [];
+
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, '');
     if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
@@ -36,25 +42,18 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!acceptedTerms) { toast.error("TENS DE ACEITAR OS TERMOS."); return; }
-    
-    // VALIDAÇÕES RÍGIDAS DE CONFIRMAÇÃO DE EMAIL E PASS
-    if (formData.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) { 
-      toast.error("OS EMAILS NÃO COINCIDEM. VERIFIQUE."); 
-      return; 
-    }
-    if (formData.password !== confirmPassword) { 
-      toast.error("AS PASSWORDS NÃO COINCIDEM. VERIFIQUE."); 
-      return; 
-    }
-    
-    setLoading(true);
+    if (formData.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) return toast.error("OS EMAILS NÃO COINCIDEM. VERIFIQUE."); 
+    if (formData.password !== confirmPassword) return toast.error("AS PASSWORDS NÃO COINCIDEM. VERIFIQUE."); 
+    if (!formData.distrito || !formData.concelho || !formData.freguesia) return toast.error("Preencha a sua morada (Distrito, Concelho e Freguesia).");
 
+    setLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
       const uid = userCredential.user.uid;
       await setDoc(doc(db, 'users', uid), {
         id: uid, name: formData.name.trim(), customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(), 
         phone: formData.phone.trim(), zipCode: formData.zipCode, email: formData.email.toLowerCase().trim(),
+        distrito: formData.distrito, concelho: formData.concelho, freguesia: formData.freguesia,
         birthDate: formData.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], createdAt: serverTimestamp()
       });
       setRegisteredUserId(uid);
@@ -96,21 +95,36 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
       <button onClick={() => onBack ? onBack() : navigate('/login')} className="absolute top-8 left-8 p-4 bg-white border-4 border-slate-100 rounded-2xl text-[#0a2540] hover:border-[#00d66f] transition-all"><ArrowLeft size={24} /></button>
       
       <div className="w-full max-w-md bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#00d66f] p-8 md:p-12 mt-8">
-        <div className="text-center mb-10"><h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Ser Vizinho+</h2></div>
+        <div className="text-center mb-10"><h2 className="text-3xl font-black uppercase italic tracking-tighter text-[#0a2540]">Cliente - adesão gratuita</h2></div>
         
         <form onSubmit={handleRegister} className="space-y-4">
           <input type="text" required value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold" placeholder="Nome Completo" />
           
-          {/* CONFIRMAÇÃO DE EMAIL */}
           <div className="grid grid-cols-1 gap-4">
             <input type="email" required value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Escreva o seu E-mail" />
             <input type="email" required value={confirmEmail} onChange={e => setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-4 border-[#00d66f] rounded-3xl font-black text-xs text-[#0a2540]" placeholder="Repita o E-mail" />
           </div>
           
-          {/* CONFIRMAÇÃO DE PASSWORD */}
           <div className="grid grid-cols-2 gap-4">
             <input type="password" required value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-xs" placeholder="Password" />
             <input type="password" required value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-4 border-[#00d66f] rounded-3xl font-bold text-xs" placeholder="Repita a Password" />
+          </div>
+
+          {/* NOVOS DADOS ZONAS */}
+          <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+              <p className="text-[10px] font-black uppercase text-slate-400">Sua Morada (Acesso à rede local)</p>
+              <select required value={formData.distrito} onChange={e=>setFormData({...formData, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540]">
+                <option value="">Distrito</option>
+                {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+              </select>
+              <select required disabled={!formData.distrito} value={formData.concelho} onChange={e=>setFormData({...formData, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540] disabled:opacity-50">
+                <option value="">Concelho</option>
+                {formConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+              <select required disabled={!formData.concelho} value={formData.freguesia} onChange={e=>setFormData({...formData, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540] disabled:opacity-50">
+                <option value="">Freguesia</option>
+                {formFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+              </select>
           </div>
           
           <div className="grid grid-cols-2 gap-4">

@@ -11,9 +11,7 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-// CORREÇÃO: O import do Smartphone foi garantido aqui na linha abaixo.
 import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, Leaf, MapPin, Store, Smartphone } from 'lucide-react';
-
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -77,7 +75,13 @@ const UserDashboard: React.FC = () => {
         .filter(l => {
           const start = l.startDate && typeof l.startDate.toDate === 'function' ? l.startDate.toDate() : new Date();
           const end = l.endDate && typeof l.endDate.toDate === 'function' ? l.endDate.toDate() : new Date();
-          return (now >= start && now <= end) && (!l.targetZipCodes?.length || l.targetZipCodes.includes(userZipBase!));
+          
+          const inTime = now >= start && now <= end;
+          const targetZones = (l as any).targetZones || [];
+          // Verifica se a zona do cliente bate certo com os alvos do folheto
+          const inZone = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
+
+          return inTime && inZone;
         });
       setActiveLeaflets(valid);
     });
@@ -99,8 +103,11 @@ const UserDashboard: React.FC = () => {
         let matches = false;
         if (notif.targetType === 'all') matches = true;
         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue?.toLowerCase()) matches = true;
-        else if (notif.targetType === 'zipCode' && currentUser.zipCode?.startsWith(notif.targetValue)) matches = true;
         else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
+        else if (notif.targetType === 'zonas') {
+           const zones = (notif as any).targetZones || [];
+           matches = zones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
+        }
         
         if (matches) {
           setAppNotification(notif);
@@ -112,14 +119,14 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const userZipBase = currentUser.zipCode?.substring(0, 4);
     const q = query(collection(db, 'events'), where('status', '==', 'approved'), orderBy('startDate', 'asc'));
     return onSnapshot(q, (snap) => {
       const now = new Date();
       const validEvents = snap.docs.map(d => ({id: d.id, ...d.data()} as AppEvent))
         .filter(e => {
             const isFuture = e.endDate.toDate() >= now;
-            const matchZip = !e.targetZips?.length || e.targetZips.includes(userZipBase!);
+            const targetZones = (e as any).targetZones || [];
+            const matchZip = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
             return isFuture && matchZip;
         });
       setEvents(validEvents);
@@ -128,8 +135,6 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const userZipBase = currentUser.zipCode?.substring(0, 4);
-    const userZipFull = currentUser.zipCode;
     const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
     
     return onSnapshot(q, (snap) => {
@@ -137,7 +142,9 @@ const UserDashboard: React.FC = () => {
       const active = snap.docs.map(d => ({id: d.id, ...d.data()} as AntiWasteItem))
         .filter(w => {
             const isFuture = w.endTime.toDate() > now;
-            const matchZip = w.targetZip === userZipBase || w.targetZip === userZipFull;
+            const targetZones = (w as any).targetZones || [];
+            // O desperdício agora tem Concelhos associados
+            const matchZip = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.concelho || ''));
             return isFuture && matchZip;
         });
       setWasteItems(active);
@@ -316,21 +323,22 @@ const UserDashboard: React.FC = () => {
         )}
 
         <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
+          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
             <Wallet size={18} /> O meu Saldo
           </button>
-          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
-            {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">{pendingEvaluations.length}</span>}
+          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
+            {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
             <MessageSquare size={18} /> Avaliar Lojas
           </button>
 
-          <button onClick={() => setView(view === 'events' ? 'home' : 'events')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#3b82f6] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
+          <button onClick={() => setView(view === 'events' ? 'home' : 'events')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#3b82f6] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
              {events.length > 0 && <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{events.length}</span>}
              <CalendarPlus size={18} className={view === 'events' ? 'text-white' : 'text-blue-500'} /> Eventos Locais
           </button>
-          <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#22c55e] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm'}`}>
-             {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
-             <Leaf size={18} className={view === 'anti_waste' ? 'text-white' : 'text-green-500'} /> Oportunidades 24h
+          
+          <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-[#00d66f] border-[#00d66f] text-white shadow-sm hover:scale-[1.02]'}`}>
+             {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
+             <Leaf size={18} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-white'} /> Zero Desperdício
           </button>
         </div>
 
@@ -367,12 +375,12 @@ const UserDashboard: React.FC = () => {
 
         {view === 'anti_waste' && (
            <div className="space-y-4 animate-in fade-in duration-500">
-              <div className="bg-green-500 text-white p-6 rounded-[30px] shadow-lg mb-6">
+              <div className="bg-[#00d66f] text-[#0a2540] p-6 rounded-[30px] shadow-lg mb-6 border-4 border-[#0a2540]">
                  <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite (Desperdício)</h3>
                  <p className="text-xs font-bold opacity-90 mt-2">Os lojistas anunciam sobras do dia com descontos acentuados. Válido apenas nas lojas, sujeito ao stock existente.</p>
               </div>
               {wasteItems.map(w => (
-                 <div key={w.id} className="bg-white border-4 border-green-500 rounded-[30px] p-6 shadow-lg relative overflow-hidden">
+                 <div key={w.id} className="bg-white border-4 border-[#00d66f] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
                     <div className="flex justify-between items-start mb-4 border-b-2 border-slate-100 pb-4">
                        <div>
                           <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#00d66f]"/> {w.merchantName}</h4>
@@ -470,13 +478,13 @@ const UserDashboard: React.FC = () => {
 
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300 border-4 border-[#00d66f]">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <Mail className="text-[#00d66f]" size={20} />
                 <h2 className="font-black uppercase italic tracking-tighter text-lg">Apoio ao Cliente</h2>
               </div>
-              <button onClick={() => setShowContactModal(false)}><X size={20} /></button>
+              <button onClick={() => setShowContactModal(false)}><X size={20} className="hover:text-[#00d66f]" /></button>
             </div>
             <div className="p-8 space-y-6 text-center">
               <p className="text-sm font-bold text-slate-500">Equipa pronta a ajudar.</p>

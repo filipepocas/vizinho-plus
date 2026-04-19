@@ -73,7 +73,6 @@ export interface Feedback {
   id: string; merchantId: string; clientId: string; userName: string; rating: number; comment: string; createdAt: any;
 }
 
-// NOVO: Eventos Comunitários
 export interface AppEvent {
   id?: string;
   entityName: string; contactName: string; phone: string; email: string;
@@ -82,10 +81,12 @@ export interface AppEvent {
   status: 'pending' | 'approved'; targetZips?: string[]; createdAt: any;
 }
 
-// NOVO: Combate ao Desperdício
 export interface AntiWasteItem {
   id?: string;
   merchantId: string; merchantName: string; address: string;
   productInfo: string; conditions: string; targetZip: string;
   endTime: any; createdAt: any;
 }
+
+// NOVO TIPO: Zonas (Distritos > Concelhos > Freguesias)
+export type LocationsMap = Record<string, Record<string, string[]>>;

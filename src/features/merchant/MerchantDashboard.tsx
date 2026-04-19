@@ -5,10 +5,10 @@ import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile } from '../../types';
 import { 
-  LogOut, Settings, History, Save, X, 
-  Smartphone, AlertTriangle, CheckCircle2, Megaphone, Download, 
+  LogOut, Settings, X, 
+  Smartphone, AlertTriangle, Megaphone, 
   MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
-  Loader2, Trash2, BookOpen, Leaf
+  Loader2, Trash2, BookOpen, Leaf, ArrowRight
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -20,24 +20,16 @@ import MerchantMarketing from './components/MerchantMarketing';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const MerchantDashboard: React.FC = () => {
-  const { currentUser, transactions, addTransaction, updateTransactionDocument, subscribeToTransactions, logout } = useStore();
+  const { currentUser, addTransaction, logout, locations } = useStore();
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'history' | 'marketing' | 'push_campaign' | 'anti_waste'>('terminal');
+  const [view, setView] = useState<'terminal' | 'bi' | 'settings' | 'marketing' | 'push_campaign' | 'anti_waste'>('terminal');
   
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
-
-  const [pushForm, setPushForm] = useState({ 
-    title: '', text: '', targetType: 'all' as 'all' | 'multiple_zip' | 'top' | 'birthDate', targetValue: '',
-    scheduledDate: '', scheduledTime: '10:00'
-  });
-  
-  const [pushSimulation, setPushSimulation] = useState<{ count: number, cost: number, scheduledFor: Date } | null>(null);
-  const [simulating, setSimulating] = useState(false);
-  const [pushPrices, setPushPrices] = useState({ perClient: 0.05, minService: 5.00 });
+  const [merchantTermsText, setMerchantTermsText] = useState('A carregar regras...');
 
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
@@ -47,17 +39,20 @@ const MerchantDashboard: React.FC = () => {
   const [isSearching, setIsSearching] = useState(false);
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
-  const [postTxModal, setPostTxModal] = useState<{isOpen: boolean, txId: string, needsInvoice: boolean}>({ isOpen: false, txId: '', needsInvoice: false });
-  const [postInvoiceNum, setPostInvoiceNum] = useState('');
 
-  // NOVO: Estados de Desperdício
-  const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00', targetZip: currentUser?.zipCode?.substring(0,4) || '' });
+  // Estados de Desperdício (Limite 2 Concelhos)
+  const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00' });
+  const [wasteDistrito, setWasteDistrito] = useState('');
+  const [wasteConcelho, setWasteConcelho] = useState('');
+  const [wasteZones, setWasteZones] = useState<string[]>([]);
   const [activeWasteOffers, setActiveWasteOffers] = useState<any[]>([]);
   const [loadingWaste, setLoadingWaste] = useState(false);
 
-  const formatCurrency = (value: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
+  const distritos = Object.keys(locations || {}).sort();
+  const concelhos = wasteDistrito ? Object.keys(locations[wasteDistrito] || {}).sort() : [];
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
   const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
@@ -70,6 +65,15 @@ const MerchantDashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
 
+    // Buscar Regras
+    const fetchRules = async () => {
+      const configSnap = await getDoc(doc(db, 'system', 'config'));
+      if (configSnap.exists() && configSnap.data().merchantTerms) {
+        setMerchantTermsText(configSnap.data().merchantTerms);
+      }
+    };
+    fetchRules();
+
     const qMsg = query(collection(db, 'merchant_messages'), where('merchantId', '==', currentUser.id));
     const unsubMsg = onSnapshot(qMsg, (snap) => setAdminMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
 
@@ -78,15 +82,6 @@ const MerchantDashboard: React.FC = () => {
         const now = new Date();
         setActiveWasteOffers(snap.docs.map(d => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
     });
-
-    const fetchPrices = async () => {
-      const configSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
-      if (configSnap.exists()) {
-        const data = configSnap.data();
-        setPushPrices({ perClient: parseFloat(data.push_cost_per_client) || 0.05, minService: parseFloat(data.push_min_cost) || 5.00 });
-      }
-    };
-    fetchPrices();
 
     return () => { unsubMsg(); unsubWaste(); };
   }, [currentUser?.id]);
@@ -111,53 +106,8 @@ const MerchantDashboard: React.FC = () => {
     return () => clearTimeout(timeoutId);
   }, [cardNumber, isNifValid]);
 
-
-  const handleSimulatePush = async () => {
-    if (!pushForm.title || !pushForm.text || !pushForm.scheduledDate) return toast.error("PREENCHA TODOS OS CAMPOS.");
-    const scheduledDateTime = new Date(`${pushForm.scheduledDate}T${pushForm.scheduledTime}`);
-    if ((scheduledDateTime.getTime() - new Date().getTime()) / 3600000 < 2) return toast.error("A data/hora escolhida tem de ser com pelo menos 2 horas de antecedência.");
-    setSimulating(true);
-    try {
-      const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
-      let clients = snap.docs.map(d => d.data());
-      if (pushForm.targetType === 'multiple_zip') {
-        const zips = pushForm.targetValue.split(',').map(z => z.trim());
-        clients = clients.filter((c: any) => zips.some(z => (c.zipCode || '').startsWith(z)));
-      } else if (pushForm.targetType === 'top') {
-        clients = clients.filter((c: any) => c.storeWallets?.[currentUser?.id || ""]);
-      } else if (pushForm.targetType === 'birthDate') {
-        const cm = new Date().getMonth() + 1;
-        clients = clients.filter((c: any) => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
-      }
-      let totalCost = clients.length * pushPrices.perClient;
-      if (totalCost < pushPrices.minService && clients.length > 0) totalCost = pushPrices.minService;
-      if (clients.length === 0) totalCost = 0;
-      setPushSimulation({ count: clients.length, cost: totalCost, scheduledFor: scheduledDateTime });
-    } catch (e) { toast.error("ERRO AO CALCULAR ALCANCE."); } finally { setSimulating(false); }
-  };
-
-  const submitPushRequest = async () => {
-    if (!pushSimulation) return;
-    try {
-      await addDoc(collection(db, 'marketing_requests'), {
-        merchantId: currentUser?.id, merchantName: currentUser?.shopName || currentUser?.name,
-        type: 'push_notification', title: pushForm.title, text: pushForm.text,
-        targetType: pushForm.targetType, targetValue: pushForm.targetValue,
-        scheduledFor: pushSimulation.scheduledFor, targetCount: pushSimulation.count,
-        cost: pushSimulation.cost, status: 'pending', createdAt: serverTimestamp()
-      });
-      toast.success("PEDIDO ENVIADO!");
-      setPushSimulation(null); setPushForm({ title: '', text: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
-      setView('marketing'); 
-    } catch (e) { toast.error("ERRO."); }
-  };
-
   const handleDeleteMessage = async (id: string) => {
-    try {
-      await deleteDoc(doc(db, 'merchant_messages', id));
-      toast.success("MENSAGEM APAGADA.");
-      if (adminMessages.length <= 1) setShowInbox(false);
-    } catch (e) { toast.error("ERRO."); }
+    try { await deleteDoc(doc(db, 'merchant_messages', id)); toast.success("MENSAGEM APAGADA."); if (adminMessages.length <= 1) setShowInbox(false); } catch (e) { toast.error("ERRO."); }
   };
 
   const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
@@ -170,21 +120,30 @@ const MerchantDashboard: React.FC = () => {
     if (!pendingAction || !currentUser || !foundClient) return;
     setShowConfirmModal(false); setIsLoading(true);
     try {
-      const newTxId = await addTransaction({
+      await addTransaction({
         clientId: foundClient.id, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name || 'Loja',
         amount: pendingAction.val, invoiceAmount: pendingAction.invAmount, type: pendingAction.type, documentNumber: documentNumber,
         clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
       });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
-      toast.success('Concluído!');
     } catch (e) { toast.error("ERRO."); } finally { setIsLoading(false); }
   };
 
-  // SUBMETER ANÚNCIO DESPERDÍCIO
+  // DESPERDÍCIO MÁXIMO 2 CONCELHOS
+  const handleAddWasteZone = () => {
+    if (wasteZones.length >= 2) return toast.error("Só pode anunciar no máximo em 2 Concelhos.");
+    if (!wasteConcelho) return toast.error("Selecione o Concelho.");
+    const zoneStr = `${wasteConcelho} (${wasteDistrito})`;
+    if (!wasteZones.includes(zoneStr)) {
+       setWasteZones([...wasteZones, zoneStr]);
+       setWasteConcelho('');
+    }
+  };
+
   const handleWasteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(activeWasteOffers.length > 0) return toast.error("Só é permitida 1 publicação por dia.");
-    if(!wasteForm.targetZip) return toast.error("Insira o Código Postal alvo.");
+    if(activeWasteOffers.length > 0) return toast.error("Só é permitida 1 publicação ativa de desperdício.");
+    if(wasteZones.length === 0) return toast.error("Adicione pelo menos 1 Concelho de destino.");
 
     setLoadingWaste(true);
     try {
@@ -203,12 +162,13 @@ const MerchantDashboard: React.FC = () => {
             address: currentUser?.address || currentUser?.freguesia || '',
             productInfo: wasteForm.productInfo,
             conditions: wasteForm.conditions,
-            targetZip: wasteForm.targetZip,
+            targetZones: wasteZones, // Guarda Array de concelhos
             endTime: Timestamp.fromDate(endDate),
             createdAt: serverTimestamp()
         });
         toast.success("Anúncio publicado com sucesso!");
         setWasteForm({...wasteForm, productInfo: '', conditions: ''});
+        setWasteZones([]); setWasteDistrito('');
     } catch(err) { toast.error("Erro ao publicar."); } finally { setLoadingWaste(false); }
   };
 
@@ -216,7 +176,6 @@ const MerchantDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col pb-20">
-      
       <header className="bg-[#0f172a] p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
         <div className="flex items-center gap-6 text-white">
           <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.shopName || currentUser.name}</h2>
@@ -229,11 +188,10 @@ const MerchantDashboard: React.FC = () => {
         
         <nav className="flex flex-wrap justify-center gap-2">
           <button onClick={() => setView('terminal')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
-          <button onClick={() => setView('push_campaign')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'push_campaign' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><BellRing size={16} className="inline mr-1" /> Push</button>
-          <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
+          <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${(view === 'marketing' || view === 'push_campaign') ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing e Push</button>
           <button onClick={() => setView('anti_waste')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'anti_waste' ? 'bg-green-500 text-white' : 'text-green-400 hover:bg-green-500/20'}`}><Leaf size={16} className="inline mr-1" /> Desperdício</button>
           <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
-          <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Loja</button>
+          <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Definições</button>
           <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
         </nav>
       </header>
@@ -241,10 +199,9 @@ const MerchantDashboard: React.FC = () => {
       <main className="max-w-7xl mx-auto p-4 w-full space-y-6">
         
         <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
-          <BookOpen size={20} /> Ler Regras de Utilização do Comerciante
+          <BookOpen size={20} /> Ler Condições de Adesão
         </button>
 
-        {/* COMBATE AO DESPERDÍCIO */}
         {view === 'anti_waste' && (
            <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
               <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-green-500 shadow-[12px_12px_0px_#22c55e] space-y-6">
@@ -257,19 +214,43 @@ const MerchantDashboard: React.FC = () => {
                     <p className="text-[10px] font-black text-green-800 uppercase mb-1">Regras:</p>
                     <ul className="text-[9px] font-bold text-green-700 space-y-1 ml-4 list-disc">
                        <li>O anúncio é válido apenas para o dia de hoje.</li>
-                       <li>Será apagado automaticamente na hora definida.</li>
                        <li>Só pode ter um anúncio ativo por dia.</li>
+                       <li><strong>Pode anunciar num máximo de 2 Concelhos à escolha.</strong></li>
                     </ul>
                  </div>
 
                  <form onSubmit={handleWasteSubmit} className="space-y-4">
-                    <div><label className="text-[10px] font-black uppercase text-slate-400">Produtos / Sobras</label><input required placeholder="Ex: 5 caixas de pão, 3 bolos do dia..." value={wasteForm.productInfo} onChange={e=>setWasteForm({...wasteForm, productInfo: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
-                    <div><label className="text-[10px] font-black uppercase text-slate-400">Condições de Aquisição</label><input required placeholder="Ex: Tudo com 50% de desconto" value={wasteForm.conditions} onChange={e=>setWasteForm({...wasteForm, conditions: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
-                    <div className="grid grid-cols-2 gap-4">
-                       <div><label className="text-[10px] font-black uppercase text-slate-400">Hora Limite (Hoje)</label><input required type="time" value={wasteForm.endTime} onChange={e=>setWasteForm({...wasteForm, endTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
-                       <div><label className="text-[10px] font-black uppercase text-slate-400">Código Postal Alvo</label><input required type="text" placeholder="CP4 ou CP7" value={wasteForm.targetZip} onChange={e=>setWasteForm({...wasteForm, targetZip: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Produtos / Sobras</label><input required placeholder="Ex: 5 caixas de pão, 3 bolos..." value={wasteForm.productInfo} onChange={e=>setWasteForm({...wasteForm, productInfo: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
+                    <div><label className="text-[10px] font-black uppercase text-slate-400">Condições (Ex: 50% desc)</label><input required placeholder="Ex: Tudo com 50% de desconto" value={wasteForm.conditions} onChange={e=>setWasteForm({...wasteForm, conditions: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-green-500" /></div>
+                    
+                    <div className="space-y-2 border-t-2 border-slate-100 pt-4">
+                      <label className="text-[10px] font-black uppercase text-slate-400">Onde vai Anunciar? (Máx 2 Concelhos)</label>
+                      <select value={wasteDistrito} onChange={e=>{setWasteDistrito(e.target.value); setWasteConcelho('');}} className="w-full p-3 rounded-xl font-bold text-xs outline-none border-2 border-slate-200 focus:border-green-500">
+                         <option value="">Escolha o Distrito</option>
+                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                      </select>
+                      <select disabled={!wasteDistrito} value={wasteConcelho} onChange={e=>setWasteConcelho(e.target.value)} className="w-full p-3 rounded-xl font-bold text-xs outline-none border-2 border-slate-200 focus:border-green-500 disabled:opacity-50">
+                         <option value="">Escolha o Concelho</option>
+                         {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                      <button type="button" onClick={handleAddWasteZone} disabled={!wasteConcelho} className="w-full bg-green-100 text-green-700 border-2 border-green-200 p-3 rounded-xl font-black uppercase text-[10px] hover:bg-green-200 transition-colors disabled:opacity-50">
+                        + Adicionar este Concelho
+                      </button>
+                      
+                      {wasteZones.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mt-2">
+                          {wasteZones.map((z, idx) => (
+                            <span key={idx} className="bg-green-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 shadow-sm">
+                              {z} <X size={14} className="cursor-pointer hover:text-red-200" onClick={() => setWasteZones(wasteZones.filter((_, i) => i !== idx))}/>
+                            </span>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                    <button type="submit" disabled={loadingWaste || activeWasteOffers.length > 0} className="w-full bg-green-500 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all shadow-lg flex justify-center gap-3 disabled:opacity-50">
+
+                    <div><label className="text-[10px] font-black uppercase text-slate-400 mt-2">Hora Limite (Hoje)</label><input required type="time" value={wasteForm.endTime} onChange={e=>setWasteForm({...wasteForm, endTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
+                    
+                    <button type="submit" disabled={loadingWaste || activeWasteOffers.length > 0} className="w-full bg-green-500 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all shadow-lg flex justify-center gap-3 disabled:opacity-50 border-b-4 border-green-700">
                        {loadingWaste ? <Loader2 className="animate-spin"/> : <><Send size={18}/> Publicar Imediatamente</>}
                     </button>
                  </form>
@@ -280,12 +261,17 @@ const MerchantDashboard: React.FC = () => {
                  {activeWasteOffers.map(o => (
                     <div key={o.id} className="bg-white border-4 border-green-500 p-6 rounded-[30px] relative">
                        <p className="font-black text-lg text-[#0a2540] uppercase">{o.merchantName}</p>
-                       <p className="text-[10px] font-bold text-slate-400 mb-4">{o.address} | CP: {o.targetZip}</p>
-                       <div className="space-y-2 bg-green-50 p-4 rounded-2xl border-2 border-green-100">
+                       <p className="text-[10px] font-bold text-slate-400 mb-4">{o.address}</p>
+                       <div className="space-y-2 bg-green-50 p-4 rounded-2xl border-2 border-green-100 mb-4">
                           <p className="text-sm font-bold text-green-900">{o.productInfo}</p>
                           <p className="text-xs font-black text-green-700 bg-white inline-block px-3 py-1 rounded-lg shadow-sm">{o.conditions}</p>
                        </div>
-                       <div className="mt-4 flex justify-between items-center">
+                       <p className="text-[9px] font-black uppercase text-green-800 mb-2">Visível em:</p>
+                       <div className="flex flex-wrap gap-1 mb-4">
+                         {(o.targetZones || []).map((z:string, i:number) => <span key={i} className="text-[8px] font-bold text-green-700 bg-green-100 px-2 py-1 rounded border border-green-200">{z}</span>)}
+                       </div>
+
+                       <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
                           <p className="text-[9px] font-black uppercase text-slate-500 bg-slate-100 px-3 py-1.5 rounded-xl border-2 border-slate-200">
                              Expira às: {o.endTime.toDate().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                           </p>
@@ -298,50 +284,7 @@ const MerchantDashboard: React.FC = () => {
            </div>
         )}
 
-        {view === 'push_campaign' && (
-          <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
-             <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-xl space-y-6">
-                <div>
-                   <h3 className="text-xl font-black uppercase italic text-[#0a2540] flex items-center gap-2"><Send className="text-[#00d66f]" /> Pedir Envio de Notificações</h3>
-                   <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Desperte o telemóvel dos seus clientes</p>
-                </div>
-                <div className="space-y-4">
-                   <input type="text" placeholder="Título (Ex: Promoção de Verão!)" value={pushForm.title} onChange={e=>setPushForm({...pushForm, title: e.target.value.toUpperCase()})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" />
-                   <textarea rows={4} placeholder="Mensagem curta e apelativa (Máx. 100 caracteres)..." value={pushForm.text} onChange={e=>setPushForm({...pushForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f] resize-none" maxLength={100} />
-                </div>
-                <div className="space-y-4">
-                   <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Quem deve receber?</label>
-                   <select value={pushForm.targetType} onChange={e=>setPushForm({...pushForm, targetType: e.target.value as any, targetValue: ''})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">
-                      <option value="all">Todos na Base de Dados</option>
-                      <option value="multiple_zip">Por Código Postal (CP4)</option>
-                      <option value="top">Meus Clientes (Top de Vendas)</option>
-                      <option value="birthDate">Aniversariantes do Mês</option>
-                   </select>
-                   {pushForm.targetType === 'multiple_zip' && <input type="text" placeholder="Insira CP4 separados por vírgula (Ex: 4620, 4400)" value={pushForm.targetValue} onChange={e=>setPushForm({...pushForm, targetValue: e.target.value})} className="w-full p-4 bg-blue-50 border-4 border-blue-100 rounded-2xl font-black text-xs" />}
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Data de Envio</label><input type="date" required value={pushForm.scheduledDate} onChange={e=>setPushForm({...pushForm, scheduledDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-[#00d66f]" /></div>
-                  <div><label className="text-[10px] font-black uppercase text-slate-400 ml-2">Hora (Exata)</label><select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">{availableHours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
-                </div>
-                <button onClick={handleSimulatePush} disabled={simulating} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-black transition-all shadow-lg flex items-center justify-center gap-3">{simulating ? <Loader2 className="animate-spin" /> : <><Filter size={18} /> Simular Alcance e Custo</>}</button>
-             </div>
-
-             {pushSimulation && (
-               <div className="bg-[#00d66f] p-8 md:p-10 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540] flex flex-col justify-center text-center animate-in zoom-in">
-                  <h4 className="text-[10px] font-black uppercase text-[#0a2540] tracking-widest mb-6 opacity-60">Orçamento Detalhado</h4>
-                  <div className="grid grid-cols-2 gap-4 mb-8">
-                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Clientes</span><span className="text-3xl font-black italic">{pushSimulation.count}</span></div>
-                     <div className="bg-white/20 p-6 rounded-3xl border-2 border-[#0a2540]/10"><span className="text-[9px] font-black uppercase block mb-1">Investimento</span><span className="text-3xl font-black italic">{formatCurrency(pushSimulation.cost)}</span></div>
-                  </div>
-                  <div className="space-y-3">
-                     <button onClick={submitPushRequest} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl hover:scale-105 transition-transform">Avançar com o Pedido</button>
-                     <button onClick={() => setPushSimulation(null)} className="w-full bg-white/20 text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-white/40">Anular / Corrigir</button>
-                  </div>
-                  <p className="mt-6 text-[8px] font-black uppercase text-[#0a2540]/60 italic">* Valor sujeito a aprovação manual da administração.</p>
-               </div>
-             )}
-          </div>
-        )}
+        {(view === 'marketing' || view === 'push_campaign') && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} initialTab={view === 'push_campaign' ? 'push' : 'banner'} />}
 
         {showInbox && (
           <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
@@ -402,15 +345,14 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
-        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
-        {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
+        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={[]} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-6 mt-20">
         <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-        <p className="text-slate-400/50 text-[7px] font-bold max-w-2xl leading-relaxed uppercase text-center px-4">A tecnologia, design e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia ou adaptação por entidades não autorizadas, sob pena de instauração de severos procedimentos civis e criminais.</p>
+        <p className="text-slate-400/50 text-[7px] font-bold max-w-2xl leading-relaxed uppercase text-center px-4">A tecnologia, design e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia ou adaptação por entidades não autorizadas.</p>
       </footer>
 
       {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
@@ -419,26 +361,14 @@ const MerchantDashboard: React.FC = () => {
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Regras para Lojistas</h3>
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Condições de Adesão Lojistas</h3>
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
-            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
-              
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade e Papel da Plataforma</u></h4>
-                <p>O Vizinho+ atua exclusivamente como intermediário tecnológico de marketing e comunicação. <strong><u>Isentamo-nos de qualquer responsabilidade civil ou comercial sobre litígios, devoluções ou atritos com os Clientes.</u></strong> A venda, o pós-venda e o respetivo suporte são da sua exclusiva responsabilidade enquanto comerciante.</p>
-              </div>
-
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Obrigação de Registo</h4><p>O Lojista compromete-se a registar o movimento de atribuição de saldo sempre que o Cliente apresentar a identificação antes do pagamento.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Limites de Desconto (Regra dos 50%)</h4><p>O Lojista apenas deve aceitar o desconto de saldo até ao <strong>limite máximo de 50% do valor da nova fatura</strong>.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Emissão de Faturas</h4><p>O Vizinho+ não emite faturas comerciais. A venda, a fatura/recibo e o IVA são da total responsabilidade do Lojista.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Gestão de Anulações</h4><p>O Lojista pode anular movimentos em caso de erro, mas o uso abusivo resultará em suspensão.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">6. Saída da Plataforma</h4><p>Em caso de saída, a loja fica bloqueada de gerar novos saldos (Earn), mas é obrigada a aceitar os resgates (Redeem) até à data de desativação.</p></div>
-              <div><h4 className="font-black text-red-600 mb-1 uppercase">7. Prevenção de Fraude e Autofaturação</h4><p>É rigorosamente proibida a autofaturação, o registo de compras fictícias ou o conluio com clientes para adulteração de saldos. Estes atos implicam bloqueio e ação legal.</p></div>
-
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {merchantTermsText}
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600 transition-colors">Compreendi e Aceito as Regras</button>
+              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600 transition-colors">Compreendi as Regras</button>
             </div>
           </div>
         </div>

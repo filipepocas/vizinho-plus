@@ -1,15 +1,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
-import { Crown, MapPin, Globe, Star, Search } from 'lucide-react';
+import { Crown, MapPin, Globe, Star, Search, X } from 'lucide-react';
 import { Vantagem } from '../../types';
+import toast from 'react-hot-toast';
 
 const VantagensPage: React.FC = () => {
   const [vantagens, setVantagens] = useState<Vantagem[]>([]);
-  const [searchZip, setSearchZip] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
+
+  const [searchName, setSearchName] = useState('');
+  const [selectedConcelhos, setSelectedConcelhos] = useState<string[]>([]);
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
 
   useEffect(() => {
     const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
@@ -19,23 +21,44 @@ const VantagensPage: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const categories = useMemo(() => {
-    const cats = new Set(vantagens.map(v => v.category).filter(Boolean));
-    return ['all', ...Array.from(cats)];
+  const availableCats = useMemo(() => Array.from(new Set(vantagens.map(v => v.category).filter(Boolean))), [vantagens]);
+  const availableConcelhos = useMemo(() => {
+    const allZones = vantagens.flatMap((v:any) => v.targetZones || []);
+    // Extrai apenas o nome dos concelhos das strings "Concelho: Nome (Distrito)"
+    const concelhosList = allZones.map(z => {
+      if(z.includes('Concelho:')) return z.split('Concelho:')[1].split('(')[0].trim();
+      return null;
+    }).filter(Boolean);
+    return Array.from(new Set(concelhosList));
   }, [vantagens]);
 
+  const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (!val || selectedConcelhos.includes(val)) return;
+    if (selectedConcelhos.length >= 2) return toast.error("Máximo de 2 concelhos permitidos.");
+    setSelectedConcelhos([...selectedConcelhos, val]);
+  };
+
+  const handleAddCat = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    if (!val || selectedCats.includes(val)) return;
+    setSelectedCats([...selectedCats, val]);
+  };
+
   const filtered = useMemo(() => {
-    return vantagens.filter(v => {
-      const matchZip = !searchZip || (v.zipCode || '').startsWith(searchZip);
-      const matchCat = selectedCategory === 'all' || v.category === selectedCategory;
-      return matchZip && matchCat;
+    return vantagens.filter((v:any) => {
+      const matchName = searchName === '' || v.partnerName.toLowerCase().includes(searchName.toLowerCase());
+      const matchCat = selectedCats.length === 0 || selectedCats.includes(v.category || '');
+      
+      const zones = v.targetZones || [];
+      const matchConcelho = selectedConcelhos.length === 0 || selectedConcelhos.some(sc => zones.some((z:string) => z.includes(sc)));
+
+      return matchName && matchCat && matchConcelho;
     });
-  }, [vantagens, searchZip, selectedCategory]);
+  }, [vantagens, searchName, selectedCats, selectedConcelhos]);
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540] pb-24">
-      
-      {/* NAVEGAÇÃO */}
       <nav className="bg-[#0a2540] py-6 px-8 rounded-b-[40px] shadow-2xl border-b-8 border-amber-500">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
             <img src={logoPath} alt="Vizinho+" className="h-12 w-auto object-contain" />
@@ -47,38 +70,57 @@ const VantagensPage: React.FC = () => {
       </nav>
 
       <main className="max-w-6xl mx-auto px-6 pt-12">
-        
         <div className="text-center mb-12 animate-in fade-in zoom-in duration-700">
           <h1 className="text-4xl md:text-5xl font-black text-[#0a2540] leading-tight tracking-tighter uppercase italic mb-4">
             Vantagens <span className="text-amber-500">Exclusivas</span>
           </h1>
-          <p className="text-slate-500 font-bold max-w-2xl mx-auto">
-            Benefícios, descontos e ofertas especiais reservadas apenas para membros da comunidade Vizinho+. Apresente o seu Cartão Digital na loja para usufruir.
-          </p>
+          <p className="text-slate-500 font-bold max-w-2xl mx-auto">Benefícios e descontos reservados apenas para membros da comunidade Vizinho+. Apresente o seu Cartão na loja para usufruir.</p>
         </div>
 
-        {/* FILTROS */}
-        <div className="bg-white p-6 md:p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] mb-12 flex flex-col md:flex-row gap-4 relative z-20">
-            <div className="flex-1 relative">
+        {/* FILTROS AVANÇADOS */}
+        <div className="bg-white p-6 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] mb-12 space-y-4 relative z-20">
+            <div className="relative">
                 <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20}/>
                 <input 
-                    type="text" maxLength={4} placeholder="FILTRAR POR CÓDIGO POSTAL (4 DÍGITOS)" 
-                    value={searchZip} onChange={e=>setSearchZip(e.target.value.replace(/\D/g, ''))}
-                    className="w-full pl-14 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-amber-500 transition-all"
+                    placeholder="PESQUISAR PARCEIRO VIP..." value={searchName} onChange={e=>setSearchName(e.target.value)}
+                    className="w-full pl-14 p-5 bg-slate-50 border-2 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-amber-500 transition-all"
                 />
             </div>
-            <select 
-                value={selectedCategory} onChange={e=>setSelectedCategory(e.target.value)}
-                className="md:w-1/3 p-5 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black text-xs uppercase outline-none focus:border-amber-500 transition-all appearance-none"
-            >
-                <option value="all">TODAS AS CATEGORIAS</option>
-                {categories.filter(c => c !== 'all').map(c => (
-                    <option key={c} value={c}>{c.toUpperCase()}</option>
-                ))}
-            </select>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <select value="" onChange={handleAddConcelho} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-[10px] uppercase outline-none focus:border-amber-500 appearance-none">
+                  <option value="">FILTRAR CONCELHOS (Máx 2)</option>
+                  {availableConcelhos.map((c:any) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                {selectedConcelhos.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedConcelhos.map(c => (
+                      <span key={c} className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-blue-200">
+                        {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => setSelectedConcelhos(selectedConcelhos.filter(x => x !== c))}/>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+              
+              <div className="space-y-2">
+                <select value="" onChange={handleAddCat} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-[10px] uppercase outline-none focus:border-amber-500 appearance-none">
+                  <option value="">FILTRAR CATEGORIAS (Múltiplas)</option>
+                  {availableCats.map((c:any) => <option key={c} value={c}>{c}</option>)}
+                </select>
+                {selectedCats.length > 0 && (
+                  <div className="flex flex-wrap gap-1">
+                    {selectedCats.map(c => (
+                      <span key={c} className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-amber-200">
+                        {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => setSelectedCats(selectedCats.filter(x => x !== c))}/>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
         </div>
 
-        {/* GRID DE PARCEIROS VIP */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {filtered.map(v => (
                 <div key={v.id} className="bg-white rounded-[40px] overflow-hidden border-4 border-slate-100 shadow-xl flex flex-col hover:border-amber-500 hover:-translate-y-2 transition-all duration-300 group">
@@ -88,10 +130,8 @@ const VantagensPage: React.FC = () => {
                             <Star size={12} fill="currentColor" /> {v.category}
                         </div>
                     </div>
-                    
                     <div className="p-8 flex flex-col flex-grow">
                         <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 leading-none">{v.partnerName}</h3>
-                        
                         <div className="space-y-3 mb-6">
                             {(v.address || v.zipCode) && (
                                 <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-start gap-2">
@@ -104,14 +144,12 @@ const VantagensPage: React.FC = () => {
                                 </a>
                             )}
                         </div>
-
                         <div className="bg-amber-50 p-6 rounded-3xl border-2 border-amber-100 mt-auto">
                             <p className="text-xs font-bold text-amber-900 leading-relaxed whitespace-pre-wrap">{v.description}</p>
                         </div>
                     </div>
                 </div>
             ))}
-            
             {filtered.length === 0 && (
                 <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-200">
                     <Crown size={48} className="mx-auto text-slate-200 mb-4" />
@@ -119,7 +157,6 @@ const VantagensPage: React.FC = () => {
                 </div>
             )}
         </div>
-
       </main>
     </div>
   );

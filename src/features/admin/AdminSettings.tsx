@@ -2,24 +2,25 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText } from 'lucide-react';
 import { SystemConfig } from '../../types';
 
 const AdminSettings: React.FC = () => {
   const { currentUser, setCurrentUser } = useStore();
   
-  const [activeTab, setActiveTab] = useState<'system' | 'security'>('system');
+  const [activeTab, setActiveTab] = useState<'system' | 'security' | 'legal'>('system');
   const [newEmail, setNewEmail] = useState(currentUser?.email || '');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  const [sysConfig, setSysConfig] = useState<SystemConfig>({
+  const [sysConfig, setSysConfig] = useState<SystemConfig & { merchantTerms?: string }>({
     globalServiceFee: 0,
     maturationHours: 0,
     minRedeemAmount: 5.00,
     platformStatus: 'active',
     supportEmail: 'ajuda@vizinho-plus.pt',
-    vantagensUrl: '' 
+    vantagensUrl: '',
+    merchantTerms: ''
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -31,8 +32,12 @@ const AdminSettings: React.FC = () => {
         const docRef = doc(db, 'system', 'config');
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
-          const data = docSnap.data() as SystemConfig;
-          setSysConfig({ ...data, supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt' });
+          const data = docSnap.data() as any;
+          setSysConfig({ 
+            ...data, 
+            supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt',
+            merchantTerms: data.merchantTerms || 'Escreva aqui as condições...'
+          });
         }
       } catch (e) {
         console.error("Erro:", e);
@@ -68,21 +73,22 @@ const AdminSettings: React.FC = () => {
     
     try {
       await setDoc(doc(db, 'system', 'config'), { ...sysConfig, updatedAt: serverTimestamp(), lastChangeBy: currentUser?.id || 'admin' }, { merge: true });
-      setMessage({ type: 'success', text: 'Configurações globais aplicadas!' });
+      setMessage({ type: 'success', text: 'Configurações gravadas com sucesso!' });
     } catch (e) { setMessage({ type: 'error', text: 'Falha ao gravar.' }); } finally { setIsSaving(false); }
   };
 
   return (
-    <div className="font-sans text-[#0a2540] animate-in fade-in duration-500">
+    <div className="font-sans text-[#0a2540] animate-in fade-in duration-500 pb-20">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-8 mb-8">
           <div>
             <h2 className="text-3xl font-black uppercase italic tracking-tighter leading-none">Definições <span className="text-[#00d66f]">Master</span></h2>
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-3 flex items-center gap-2"><Database size={12} /> Ajustes Globais da Plataforma</p>
           </div>
 
-          <div className="flex bg-[#0a2540] border-4 border-[#0a2540] p-1 rounded-3xl shadow-[6px_6px_0px_0px_#00d66f]">
-            <button onClick={() => setActiveTab('system')} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Plataforma</button>
-            <button onClick={() => setActiveTab('security')} className={`px-8 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'security' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Segurança</button>
+          <div className="flex flex-wrap bg-[#0a2540] border-4 border-[#0a2540] p-1 rounded-3xl shadow-[6px_6px_0px_0px_#00d66f]">
+            <button onClick={() => setActiveTab('system')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Plataforma</button>
+            <button onClick={() => setActiveTab('legal')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'legal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Textos Legais</button>
+            <button onClick={() => setActiveTab('security')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'security' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Segurança</button>
           </div>
         </div>
 
@@ -98,24 +104,47 @@ const AdminSettings: React.FC = () => {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
-                    <Mail size={16} className="text-[#00d66f]" /> E-mail Apoio ao Cliente (Aparece no Rodapé)
+                    <Mail size={16} className="text-[#00d66f]" /> E-mail Apoio ao Cliente (Rodapé)
                   </label>
-                  <input type="email" value={sysConfig.supportEmail} onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black" />
+                  <input type="email" value={sysConfig.supportEmail} onChange={e => setSysConfig({...sysConfig, supportEmail: e.target.value})} className="w-full p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-black outline-none focus:border-[#00d66f]" />
                 </div>
 
                 <div className="space-y-4 bg-amber-50 p-6 rounded-3xl border-4 border-amber-200">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-amber-700 ml-1">
-                    <Star size={16} className="text-amber-500 fill-amber-500" /> Link para "Vantagens VIP" (App Clientes)
+                    <Star size={16} className="text-amber-500 fill-amber-500" /> Link "Vantagens VIP" (App Clientes)
                   </label>
                   <div className="relative">
-                    <input type="url" placeholder="https://..." value={sysConfig.vantagensUrl} onChange={e => setSysConfig({...sysConfig, vantagensUrl: e.target.value})} className="w-full p-6 bg-white border-4 border-amber-300 rounded-3xl font-black" />
+                    <input type="url" placeholder="https://..." value={sysConfig.vantagensUrl} onChange={e => setSysConfig({...sysConfig, vantagensUrl: e.target.value})} className="w-full p-6 bg-white border-4 border-amber-300 rounded-3xl font-black outline-none focus:border-amber-500" />
                     <ExternalLink className="absolute right-6 top-1/2 -translate-y-1/2 text-amber-400" size={24} />
                   </div>
                 </div>
               </div>
 
-              <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#00c265] transition-all shadow-xl border-b-8 border-black/10">
-                <Save size={20} /> Gravar Configurações Globais
+              <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#00c265] transition-all shadow-xl border-b-8 border-black/10 flex justify-center gap-2">
+                <Save size={20} /> Gravar Configurações
+              </button>
+            </form>
+          </div>
+        )}
+
+        {activeTab === 'legal' && (
+          <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12">
+            <form onSubmit={handleUpdateSystem} className="space-y-6">
+              <div className="flex items-center gap-3 mb-4">
+                 <div className="bg-amber-100 p-3 rounded-2xl text-amber-600"><ScrollText size={24} /></div>
+                 <div>
+                    <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Condições de Adesão - Lojistas</h3>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">Este texto aparecerá no registo e no painel do Comerciante.</p>
+                 </div>
+              </div>
+              <textarea 
+                value={sysConfig.merchantTerms} 
+                onChange={e => setSysConfig({...sysConfig, merchantTerms: e.target.value})} 
+                className="w-full h-96 p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-sm outline-none focus:border-amber-400 custom-scrollbar resize-none"
+                placeholder="Escreva aqui as regras de negócio..."
+              />
+              <button type="submit" disabled={isSaving} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-xl flex justify-center gap-2 border-b-4 border-black/50">
+                <Save size={20} /> Gravar Textos Legais
               </button>
             </form>
           </div>
