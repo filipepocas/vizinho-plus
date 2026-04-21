@@ -15,9 +15,8 @@ const VantagensPage: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
-    // Correção: Adicionado (snap: any)
+    // CORREÇÃO: Adicionado (snap: any) e (d: any) para TS Strict
     const unsubscribe = onSnapshot(q, (snap: any) => {
-      // Correção: Adicionado (d: any)
       setVantagens(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Vantagem)));
     });
     return () => unsubscribe();
@@ -26,6 +25,7 @@ const VantagensPage: React.FC = () => {
   const availableCats = useMemo(() => Array.from(new Set(vantagens.map(v => v.category).filter(Boolean))), [vantagens]);
   const availableConcelhos = useMemo(() => {
     const allZones = vantagens.flatMap((v:any) => v.targetZones || []);
+    // Extrai apenas o nome dos concelhos das strings "Concelho: Nome (Distrito)"
     const concelhosList = allZones.map(z => {
       if(z.includes('Concelho:')) return z.split('Concelho:')[1].split('(')[0].trim();
       return null;
@@ -78,6 +78,7 @@ const VantagensPage: React.FC = () => {
           <p className="text-slate-500 font-bold max-w-2xl mx-auto">Benefícios e descontos reservados apenas para membros da comunidade Vizinho+. Apresente o seu Cartão na loja para usufruir.</p>
         </div>
 
+        {/* FILTROS AVANÇADOS */}
         <div className="bg-white p-6 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] mb-12 space-y-4 relative z-20">
             <div className="relative">
                 <Search className="absolute left-6 top-1/2 -translate-y-1/2 text-slate-300" size={20}/>
@@ -150,6 +151,12 @@ const VantagensPage: React.FC = () => {
                     </div>
                 </div>
             ))}
+            {filtered.length === 0 && (
+                <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-200">
+                    <Crown size={48} className="mx-auto text-slate-200 mb-4" />
+                    <p className="font-black uppercase tracking-widest text-xs text-slate-400">Nenhum parceiro VIP encontrado nesta pesquisa.</p>
+                </div>
+            )}
         </div>
       </main>
     </div>
