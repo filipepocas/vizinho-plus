@@ -10,16 +10,18 @@ interface QRScannerModalProps {
 const QRScannerModal: React.FC<QRScannerModalProps> = ({ onScan, onClose }) => {
   const [error, setError] = useState<string | null>(null);
 
+  // Correção: Adicionado tipo (result: any)
   const handleScan = (result: any) => {
     if (result && result.length > 0 && result[0].rawValue) {
       onScan(result[0].rawValue);
     }
   };
 
+  // Correção: Adicionado tipo (err: any)
   const handleError = (err: any) => {
     console.error("Erro da Câmara:", err);
     if (err?.message?.includes('No MultiFormat Readers')) return;
-    setError("Ocorreu um erro ao aceder à câmara. Por favor, verifique as permissões do seu navegador.");
+    setError("Ocorreu um erro ao aceder à câmara. Por favor, verifique as permissões.");
   };
 
   return (

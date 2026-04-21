@@ -18,7 +18,7 @@ interface MerchantTerminalProps {
   isLoading: boolean;
   clientStoreBalance: number;
   formatCurrency: (val: number) => string;
-  isLeaving?: boolean; // NOVO: Flag de bloqueio
+  isLeaving?: boolean;
 }
 
 const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
@@ -29,6 +29,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
 
   const [customRedeem, setCustomRedeem] = useState<string>('');
 
+  // Correção: Adicionado (e: any) para TS Strict Mode
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let val = e.target.value.replace(/\D/g, ''); 
     if (val.length > 9) val = val.substring(0, 9);
@@ -39,11 +40,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   };
 
   const invoiceAmount = Number(amount) || 0;
-  
   const maxDiscountAllowed = invoiceAmount * 0.5;
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
 
-  // Se a loja está a fechar (isLeaving), bloqueia o Earn
   const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0 && !isLeaving;
   
   const redeemVal = parseFloat(customRedeem);
@@ -66,7 +65,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
                  <Search size={16} /> Identificar Cliente
                </label>
                <span className="text-[9px] font-bold text-[#00d66f] bg-green-50 px-3 py-1 rounded-lg uppercase">
-                 Ler Cartão Antes do Pagamento
+                 Apresentar cartão antes do pagamento
                </span>
             </div>
             
@@ -105,7 +104,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
 
             {isLeaving && (
               <div className="bg-red-50 p-4 rounded-2xl border-2 border-red-200 flex items-center gap-3 text-red-600 font-bold text-[10px] uppercase">
-                <AlertTriangle size={16} /> Loja em Processo de Saída: O botão de atribuir Cashback está desativado. Apenas pode aceitar resgates de saldo.
+                <AlertTriangle size={16} /> Loja em Saída: Apenas resgates de saldo permitidos.
               </div>
             )}
           </div>
@@ -139,12 +138,12 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
         {clientStoreBalance > 0 && invoiceAmount > 0 && (
            <div className="bg-blue-50 p-4 rounded-3xl border-2 border-blue-200 animate-in fade-in">
               <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
-                 <AlertTriangle size={14} /> Máximo a descontar (Regra 50%): <span className="font-bold text-lg">{formatCurrency(actualDiscountToApply)}</span>
+                 <AlertTriangle size={14} /> Máximo a descontar (50%): <span className="font-bold text-lg">{formatCurrency(actualDiscountToApply)}</span>
               </p>
               <input 
                 type="number" step="0.01" min="0" max={actualDiscountToApply}
                 value={customRedeem} onChange={e => setCustomRedeem(e.target.value)} 
-                placeholder="Qual o valor a descontar?" 
+                placeholder="Valor a descontar" 
                 className="w-full p-4 bg-white border-2 border-blue-300 rounded-2xl text-center font-black text-blue-900 outline-none focus:border-blue-500 mb-2" 
               />
               <button 

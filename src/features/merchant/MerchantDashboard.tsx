@@ -8,7 +8,7 @@ import {
   LogOut, Settings, X, 
   Smartphone, AlertTriangle, Megaphone, 
   MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
-  Loader2, Trash2, BookOpen, Leaf, ArrowRight
+  Loader2, Trash2, BookOpen, Leaf, ArrowRight, HelpCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -29,7 +29,8 @@ const MerchantDashboard: React.FC = () => {
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
-  const [merchantTermsText, setMerchantTermsText] = useState('A carregar regras...');
+  const [showFaqModal, setShowFaqModal] = useState(false); // NOVO: Estado para Guia Passo-a-Passo
+  const [sysConfig, setSysConfig] = useState({ merchantTerms: 'A carregar...', merchantFaqs: 'A carregar guia...' });
 
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
@@ -41,7 +42,7 @@ const MerchantDashboard: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
 
-  // Estados de Desperdício (Limite 2 Concelhos)
+  // Estados de Desperdício
   const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00' });
   const [wasteDistrito, setWasteDistrito] = useState('');
   const [wasteConcelho, setWasteConcelho] = useState('');
@@ -54,7 +55,6 @@ const MerchantDashboard: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
-  const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
@@ -65,22 +65,26 @@ const MerchantDashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
 
-    // Buscar Regras
-    const fetchRules = async () => {
+    // Buscar Regras e FAQs do Admin
+    const fetchConfig = async () => {
       const configSnap = await getDoc(doc(db, 'system', 'config'));
-      if (configSnap.exists() && configSnap.data().merchantTerms) {
-        setMerchantTermsText(configSnap.data().merchantTerms);
+      if (configSnap.exists()) {
+        const data = configSnap.data() as any;
+        setSysConfig({ 
+          merchantTerms: data.merchantTerms || '', 
+          merchantFaqs: data.merchantFaqs || '' 
+        });
       }
     };
-    fetchRules();
+    fetchConfig();
 
     const qMsg = query(collection(db, 'merchant_messages'), where('merchantId', '==', currentUser.id));
-    const unsubMsg = onSnapshot(qMsg, (snap) => setAdminMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubMsg = onSnapshot(qMsg, (snap: any) => setAdminMessages(snap.docs.map((d: any) => ({ id: d.id, ...d.data() }))));
 
     const qWaste = query(collection(db, 'anti_waste'), where('merchantId', '==', currentUser.id));
-    const unsubWaste = onSnapshot(qWaste, (snap) => {
+    const unsubWaste = onSnapshot(qWaste, (snap: any) => {
         const now = new Date();
-        setActiveWasteOffers(snap.docs.map(d => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
+        setActiveWasteOffers(snap.docs.map((d: any) => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
     });
 
     return () => { unsubMsg(); unsubWaste(); };
@@ -126,56 +130,42 @@ const MerchantDashboard: React.FC = () => {
         clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
       });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
-    } catch (e) { toast.error("ERRO."); } finally { setIsLoading(false); }
+    } catch (e) { toast.error("ERRO NO REGISTO."); } finally { setIsLoading(false); }
   };
 
-  // DESPERDÍCIO MÁXIMO 2 CONCELHOS
   const handleAddWasteZone = () => {
-    if (wasteZones.length >= 2) return toast.error("Só pode anunciar no máximo em 2 Concelhos.");
+    if (wasteZones.length >= 2) return toast.error("Máximo de 2 concelhos permitidos.");
     if (!wasteConcelho) return toast.error("Selecione o Concelho.");
     const zoneStr = `${wasteConcelho} (${wasteDistrito})`;
-    if (!wasteZones.includes(zoneStr)) {
-       setWasteZones([...wasteZones, zoneStr]);
-       setWasteConcelho('');
-    }
+    if (!wasteZones.includes(zoneStr)) { setWasteZones([...wasteZones, zoneStr]); setWasteConcelho(''); }
   };
 
   const handleWasteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(activeWasteOffers.length > 0) return toast.error("Só é permitida 1 publicação ativa de desperdício.");
-    if(wasteZones.length === 0) return toast.error("Adicione pelo menos 1 Concelho de destino.");
-
+    if(activeWasteOffers.length > 0) return toast.error("Só pode ter 1 anúncio ativo.");
+    if(wasteZones.length === 0) return toast.error("Selecione pelo menos 1 Concelho.");
     setLoadingWaste(true);
     try {
         const [hours, minutes] = wasteForm.endTime.split(':');
         const endDate = new Date();
         endDate.setHours(Number(hours), Number(minutes), 0, 0);
-
-        if (endDate <= new Date()) {
-            setLoadingWaste(false);
-            return toast.error("A hora de fim tem que ser no futuro (hoje).");
-        }
-
+        if (endDate <= new Date()) { setLoadingWaste(false); return toast.error("A hora de fim tem que ser no futuro."); }
         await addDoc(collection(db, 'anti_waste'), {
-            merchantId: currentUser?.id,
-            merchantName: currentUser?.shopName || currentUser?.name,
+            merchantId: currentUser?.id, merchantName: currentUser?.shopName || currentUser?.name,
             address: currentUser?.address || currentUser?.freguesia || '',
-            productInfo: wasteForm.productInfo,
-            conditions: wasteForm.conditions,
-            targetZones: wasteZones, // Guarda Array de concelhos
-            endTime: Timestamp.fromDate(endDate),
-            createdAt: serverTimestamp()
+            productInfo: wasteForm.productInfo, conditions: wasteForm.conditions,
+            targetZones: wasteZones, endTime: Timestamp.fromDate(endDate), createdAt: serverTimestamp()
         });
-        toast.success("Anúncio publicado com sucesso!");
+        toast.success("Anúncio publicado!");
         setWasteForm({...wasteForm, productInfo: '', conditions: ''});
         setWasteZones([]); setWasteDistrito('');
     } catch(err) { toast.error("Erro ao publicar."); } finally { setLoadingWaste(false); }
   };
-
   if (!currentUser) return null;
 
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col pb-20">
+      
       <header className="bg-[#0f172a] p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
         <div className="flex items-center gap-6 text-white">
           <h2 className="text-2xl font-black uppercase italic tracking-tighter">{currentUser.shopName || currentUser.name}</h2>
@@ -187,24 +177,32 @@ const MerchantDashboard: React.FC = () => {
         </div>
         
         <nav className="flex flex-wrap justify-center gap-2">
-          <button onClick={() => setView('terminal')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
-          <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${(view === 'marketing' || view === 'push_campaign') ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>Marketing e Push</button>
-          <button onClick={() => setView('anti_waste')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'anti_waste' ? 'bg-green-500 text-white' : 'text-green-400 hover:bg-green-500/20'}`}><Leaf size={16} className="inline mr-1" /> Desperdício</button>
-          <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
-          <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0f172a]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Definições</button>
+          <button onClick={() => setView('terminal')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
+          <button onClick={() => setView('marketing')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${(view === 'marketing' || view === 'push_campaign') ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Marketing e Push</button>
+          <button onClick={() => setView('anti_waste')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'anti_waste' ? 'bg-[#22c55e] text-white' : 'text-green-400 hover:bg-green-500/20'}`}><Leaf size={16} className="inline mr-1" /> Desperdício</button>
+          <button onClick={() => setView('bi')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>B.I.</button>
+          <button onClick={() => setView('settings')} className={`px-5 py-3 rounded-xl font-black text-[11px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Settings size={16} className="inline mr-1" /> Definições</button>
           <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
         </nav>
       </header>
 
       <main className="max-w-7xl mx-auto p-4 w-full space-y-6">
         
-        <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
-          <BookOpen size={20} /> Ler Condições de Adesão
-        </button>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           {/* PONTO 8: BOTÃO GUIA PASSO-A-PASSO */}
+           <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors">
+             <HelpCircle size={20} /> Guia Passo-a-Passo da App
+           </button>
 
+           <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
+             <BookOpen size={20} /> Ler Condições de Adesão
+           </button>
+        </div>
+
+        {/* COMBATE AO DESPERDÍCIO */}
         {view === 'anti_waste' && (
            <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">
-              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-green-500 shadow-[12px_12px_0px_#22c55e] space-y-6">
+              <div className="bg-white p-8 md:p-10 rounded-[40px] border-4 border-[#22c55e] shadow-[12px_12px_0px_#22c55e] space-y-6">
                  <div>
                     <h3 className="text-xl font-black uppercase italic text-green-700 flex items-center gap-2"><Leaf /> Combate ao Desperdício</h3>
                     <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Anuncie gratuitamente produtos com validade curta ou sobras diárias.</p>
@@ -240,7 +238,7 @@ const MerchantDashboard: React.FC = () => {
                       {wasteZones.length > 0 && (
                         <div className="flex flex-wrap gap-2 mt-2">
                           {wasteZones.map((z, idx) => (
-                            <span key={idx} className="bg-green-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 shadow-sm">
+                            <span key={idx} className="bg-[#22c55e] text-white px-3 py-1.5 rounded-lg text-[10px] font-black uppercase flex items-center gap-2 shadow-sm">
                               {z} <X size={14} className="cursor-pointer hover:text-red-200" onClick={() => setWasteZones(wasteZones.filter((_, i) => i !== idx))}/>
                             </span>
                           ))}
@@ -250,7 +248,7 @@ const MerchantDashboard: React.FC = () => {
 
                     <div><label className="text-[10px] font-black uppercase text-slate-400 mt-2">Hora Limite (Hoje)</label><input required type="time" value={wasteForm.endTime} onChange={e=>setWasteForm({...wasteForm, endTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs outline-none focus:border-green-500" /></div>
                     
-                    <button type="submit" disabled={loadingWaste || activeWasteOffers.length > 0} className="w-full bg-green-500 text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all shadow-lg flex justify-center gap-3 disabled:opacity-50 border-b-4 border-green-700">
+                    <button type="submit" disabled={loadingWaste || activeWasteOffers.length > 0} className="w-full bg-[#22c55e] text-white p-6 rounded-3xl font-black uppercase tracking-widest text-xs hover:bg-green-600 transition-all shadow-lg flex justify-center gap-3 disabled:opacity-50 border-b-4 border-green-800">
                        {loadingWaste ? <Loader2 className="animate-spin"/> : <><Send size={18}/> Publicar Imediatamente</>}
                     </button>
                  </form>
@@ -258,15 +256,15 @@ const MerchantDashboard: React.FC = () => {
 
               <div className="space-y-4">
                  <h3 className="text-lg font-black uppercase text-slate-400">Anúncio Ativo Hoje</h3>
-                 {activeWasteOffers.map(o => (
-                    <div key={o.id} className="bg-white border-4 border-green-500 p-6 rounded-[30px] relative">
+                 {activeWasteOffers.map((o: any) => (
+                    <div key={o.id} className="bg-white border-4 border-[#22c55e] p-6 rounded-[30px] relative">
                        <p className="font-black text-lg text-[#0a2540] uppercase">{o.merchantName}</p>
                        <p className="text-[10px] font-bold text-slate-400 mb-4">{o.address}</p>
-                       <div className="space-y-2 bg-green-50 p-4 rounded-2xl border-2 border-green-100 mb-4">
+                       <div className="space-y-2 bg-green-50 p-4 rounded-2xl border-2 border-green-100">
                           <p className="text-sm font-bold text-green-900">{o.productInfo}</p>
                           <p className="text-xs font-black text-green-700 bg-white inline-block px-3 py-1 rounded-lg shadow-sm">{o.conditions}</p>
                        </div>
-                       <p className="text-[9px] font-black uppercase text-green-800 mb-2">Visível em:</p>
+                       <p className="text-[9px] font-black uppercase text-green-800 mb-2 mt-4">Visível em:</p>
                        <div className="flex flex-wrap gap-1 mb-4">
                          {(o.targetZones || []).map((z:string, i:number) => <span key={i} className="text-[8px] font-bold text-green-700 bg-green-100 px-2 py-1 rounded border border-green-200">{z}</span>)}
                        </div>
@@ -284,14 +282,16 @@ const MerchantDashboard: React.FC = () => {
            </div>
         )}
 
+        {/* MARKETING E PUSH */}
         {(view === 'marketing' || view === 'push_campaign') && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} initialTab={view === 'push_campaign' ? 'push' : 'banner'} />}
 
+        {/* MENSAGENS ADMIN */}
         {showInbox && (
           <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
              <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
                 <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3><button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button></div>
                 <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
-                   {adminMessages.length === 0 ? (<p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>) : adminMessages.map(msg => (
+                   {adminMessages.length === 0 ? (<p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>) : adminMessages.map((msg: any) => (
                      <div key={msg.id} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 relative group transition-colors hover:border-blue-100 hover:bg-blue-50/30">
                         <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
                         <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
@@ -305,6 +305,7 @@ const MerchantDashboard: React.FC = () => {
           </div>
         )}
 
+        {/* TERMINAL QR */}
         {view === 'terminal' && (
           <MerchantTerminal 
             cardNumber={cardNumber} setCardNumber={setCardNumber}
@@ -321,6 +322,7 @@ const MerchantDashboard: React.FC = () => {
           />
         )}
 
+        {/* CONFIRMAÇÃO TRANSAÇÃO */}
         {showConfirmModal && foundClient && pendingAction && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
             <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
@@ -351,24 +353,42 @@ const MerchantDashboard: React.FC = () => {
       </main>
 
       <footer className="py-12 flex flex-col items-center gap-6 mt-20">
-        <p className="text-slate-400 text-[9px] font-black uppercase tracking-widest">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-        <p className="text-slate-400/50 text-[7px] font-bold max-w-2xl leading-relaxed uppercase text-center px-4">A tecnologia, design e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia ou adaptação por entidades não autorizadas.</p>
+        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
 
-      {showScanner && <QRScannerModal onScan={(text) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
+      {showScanner && <QRScannerModal onScan={(text: string) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
       
+      {/* MODAL REGRAS */}
       {showRulesModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Condições de Adesão Lojistas</h3>
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Condições de Adesão</h3>
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
-            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
-              {merchantTermsText}
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {sysConfig.merchantTerms}
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600 transition-colors">Compreendi as Regras</button>
+              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi as Regras</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* PONTO 8: MODAL GUIA PASSO-A-PASSO */}
+      {showFaqModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
+              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {sysConfig.merchantFaqs}
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
+              <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Fechar Guia</button>
             </div>
           </div>
         </div>

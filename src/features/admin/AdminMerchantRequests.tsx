@@ -12,16 +12,20 @@ const AdminMerchantRequests: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'merchant_requests'));
-    const unsub = onSnapshot(q, (snap) => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as MerchantRequest)));
+    // Correção: Adicionado (snap: any) para o modo estrito
+    const unsub = onSnapshot(q, (snap: any) => {
+      // Correção: Adicionado (d: any) para o modo estrito
+      setRequests(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MerchantRequest)));
     });
     return () => unsub();
   }, []);
 
   const handleApprove = async (req: MerchantRequest) => {
-    if (!window.confirm(`Aprovar a loja ${req.shopName} e criar conta com ${req.cashbackPercent}% de cashback?`)) return;
+    if (!window.confirm(`Aprovar a loja ${req.shopName} e criar conta definitiva?`)) return;
     setLoadingId(req.id!);
     try {
+      // O lojista já definiu a password no registo (Landing Page), aqui usamos a que ele escolheu
+      // Se por algum motivo não houver, usamos a padrão de segurança
       const userCredential = await createUserWithEmailAndPassword(provisionAuth, req.email.trim(), req.password || 'Mudar1234!');
       
       await setDoc(doc(db, 'users', userCredential.user.uid), {
@@ -33,9 +37,12 @@ const AdminMerchantRequests: React.FC = () => {
         email: req.email.toLowerCase().trim(),
         nif: req.nif.trim(),
         role: 'merchant',
-        status: 'active',
+        status: 'active', // Passa a estar ativo após aprovação do admin
         category: req.category,
-        cashbackPercent: Number(req.cashbackPercent) || 5, // Usa o que o Lojista pediu
+        cashbackPercent: Number(req.cashbackPercent) || 5,
+        // PONTO 1: Gravação das Zonas Oficiais
+        distrito: (req as any).distrito || '',
+        concelho: (req as any).concelho || '',
         freguesia: req.freguesia.trim(),
         zipCode: req.zipCode.trim(),
         wallet: { available: 0, pending: 0 },
@@ -89,17 +96,16 @@ const AdminMerchantRequests: React.FC = () => {
 
               <div className="space-y-3 mb-8 bg-slate-50 p-6 rounded-3xl border-2 border-slate-100">
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Tag size={16} className="text-[#00d66f]" /> Categoria: {req.category}</div>
-                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Percent size={16} className="text-[#00d66f]" /> Cashback Desejado: {req.cashbackPercent}%</div>
                 <div className="my-2 border-b border-slate-200"></div>
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Mail size={16} className="text-[#00d66f]" /> {req.email}</div>
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Phone size={16} className="text-[#00d66f]" /> {req.phone}</div>
                 <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><Hash size={16} className="text-[#00d66f]" /> NIF: {req.nif}</div>
-                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><MapPin size={16} className="text-[#00d66f]" /> {req.freguesia} ({req.zipCode})</div>
+                <div className="flex items-center gap-3 text-slate-600 font-bold text-[11px] uppercase"><MapPin size={16} className="text-[#00d66f]" /> {(req as any).distrito} &gt; {(req as any).concelho} &gt; {req.freguesia} ({req.zipCode})</div>
               </div>
 
               <div className="flex gap-4">
                 <button onClick={() => handleApprove(req)} disabled={loadingId === req.id} className="flex-1 bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-[4px_4px_0px_#0a2540] hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-2 border-[#0a2540]">
-                  {loadingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle2 size={16} strokeWidth={3} /> Aprovar Lojista</>}
+                  {loadingId === req.id ? <Loader2 size={16} className="animate-spin" /> : <><CheckCircle2 size={16} strokeWidth={3} /> Aprovar e Ativar Loja</>}
                 </button>
                 <button onClick={() => handleReject(req.id!)} disabled={loadingId === req.id} className="px-6 bg-white text-red-500 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-red-50 shadow-sm border-2 border-red-200 transition-all flex items-center justify-center gap-2">
                    <XCircle size={16} strokeWidth={3} /> Rejeitar
