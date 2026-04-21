@@ -15,8 +15,8 @@ const AdminBilling: React.FC = () => {
   useEffect(() => {
     // Carrega APENAS os pedidos que foram APROVADOS no menu de Comunicações
     const q = query(collection(db, 'marketing_requests'), where('status', '==', 'approved'), orderBy('createdAt', 'desc'));
-    const unsub = onSnapshot(q, (snap) => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as MarketingRequest)));
+    const unsub = onSnapshot(q, (snap: any) => {
+      setRequests(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MarketingRequest)));
     });
     return () => unsub();
   }, []);

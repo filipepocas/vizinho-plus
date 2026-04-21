@@ -66,11 +66,9 @@ export const requestNotificationPermission = async (userId: string): Promise<{su
     
     if (permission === 'granted') {
       try {
-        // Regista o SW e ESPERA que esteja 100% ativo (Resolve Erro da 1ª e 2ª Imagem)
         const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
         await navigator.serviceWorker.ready; 
 
-        // Pede o token usando a VAPID_KEY do config (Resolve Erro da 3ª Imagem)
         const currentToken = await getToken(messaging, { 
           vapidKey: VAPID_KEY,
           serviceWorkerRegistration: registration 
@@ -82,7 +80,6 @@ export const requestNotificationPermission = async (userId: string): Promise<{su
         }
         return { success: false, error: "Token da Google não gerado. Verifique a chave VAPID_KEY." };
       } catch (swError: any) {
-        console.error("Erro SW/FCM:", swError);
         return { success: false, error: "Falha de comunicação: " + swError.message };
       }
     } else {
@@ -114,7 +111,6 @@ export const removeCurrentDeviceNotification = async (userId: string) => {
     }
     return false;
   } catch (e) {
-    console.error(e);
     return false;
   }
 };
@@ -122,5 +118,5 @@ export const removeCurrentDeviceNotification = async (userId: string) => {
 export const onMessageListener = () =>
   new Promise((resolve) => {
     if (!messaging) return;
-    onMessage(messaging, (payload) => resolve(payload));
+    onMessage(messaging, (payload: any) => resolve(payload));
   });

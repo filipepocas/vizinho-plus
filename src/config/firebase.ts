@@ -17,7 +17,7 @@ export const firebaseConfig = {
   measurementId: "G-9MCBEED7FB"
 };
 
-// Chave VAPID (Substitui pelo valor que encontrares na consola do Firebase)
+// Chave VAPID
 export const VAPID_KEY = "BFch8QBtlRHM4JDH-wZ5MxfDJDZDzXTs49J14ic8a2qH5sgUiaYJsQQ_KAeoJwrjQER_DpPR27GWt4KsRuxSIIY";
 
 // Inicialização segura da App
@@ -31,10 +31,10 @@ export const storage = getStorage(app);
 export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
 export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
 
-// Exportação para o provisionamento
+// Exportação para o provisionamento (Com tipo "any" declarado para evitar erros de TS)
 export const provisionAuth = (() => {
   const name = 'provision';
-  const provisionApp = getApps().some(a => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
+  const provisionApp = getApps().some((a: any) => a.name === name) ? getApp(name) : initializeApp(firebaseConfig, name);
   return getAuth(provisionApp);
 })();
 

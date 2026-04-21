@@ -11,7 +11,6 @@ const AdminEvents: React.FC = () => {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [loadingId, setLoadingId] = useState<string | null>(null);
 
-  // Estados para seleção de zonas (Aprovação)
   const [distrito, setDistrito] = useState('');
   const [concelho, setConcelho] = useState('');
   const [freguesia, setFreguesia] = useState('');
@@ -19,12 +18,12 @@ const AdminEvents: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      const evs = snap.docs.map(d => ({id: d.id, ...d.data()} as AppEvent));
+    return onSnapshot(q, (snap: any) => {
+      const evs = snap.docs.map((d: any) => ({id: d.id, ...d.data()} as AppEvent));
       setEvents(evs);
       
       const initialZones: Record<string, string[]> = {};
-      evs.forEach(ev => {
+      evs.forEach((ev: AppEvent) => {
         if (ev.status === 'pending' && !editingZones[ev.id!]) {
           initialZones[ev.id!] = (ev as any).targetZones || [];
         }
@@ -91,7 +90,7 @@ const AdminEvents: React.FC = () => {
            <div className="grid gap-6">
               {events.map(ev => {
                   const currentZones = editingZones[ev.id!] || [];
-                  const imageUrl = ev.imageUrl || (ev as any).imageBase64; // Correção da Imagem
+                  const imageUrl = ev.imageUrl || (ev as any).imageBase64;
 
                   return (
                     <div key={ev.id} className={`p-6 border-4 rounded-[30px] flex flex-col md:flex-row gap-6 ${ev.status === 'pending' ? 'border-blue-400 bg-blue-50 shadow-lg' : 'border-slate-200 bg-white'}`}>
