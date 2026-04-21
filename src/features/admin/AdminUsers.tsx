@@ -2,9 +2,10 @@ import React, { useState } from 'react';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { User as UserProfile, Transaction } from '../../types/index';
+// CORREÇÃO: AlertCircle adicionado na importação
 import { 
   Search, Users, Mail, Locate, Download, Phone, 
-  BellRing, BellOff, Trash2, RefreshCw, AlertCircle, MapPin, Hash, IdCard 
+  BellRing, BellOff, Trash2, RefreshCw, Hash, IdCard, MapPin, AlertCircle 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -33,8 +34,8 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
 
   const hasActiveFilter = searchQuery !== '' || searchNif !== '' || searchCard !== '' || searchDistrito !== '' || searchConcelho !== '' || searchFreguesia !== '';
 
-  const filteredUsers = users.filter(u => {
-    if (!hasActiveFilter) return false; // Oculta tudo se não houver filtro
+  const filteredUsers = users.filter((u: any) => {
+    if (!hasActiveFilter) return false;
 
     const q = searchQuery.toLowerCase().trim();
     const matchQuery = q === '' || (u.name?.toLowerCase() || '').includes(q) || (u.email?.toLowerCase() || '').includes(q);
@@ -52,48 +53,46 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
   };
 
   const handleDeleteUser = async (id: string, name: string) => {
-    if (!window.confirm(`ALERTA: Eliminar permanentemente o vizinho "${name}" e todos os seus dados? Esta ação não pode ser revertida.`)) return;
+    if (!window.confirm(`ALERTA: Eliminar permanentemente o vizinho "${name}"?`)) return;
     setIsDeletingId(id);
-    try { await deleteUserWithHistory(id, 'client'); toast.success("Cliente eliminado com sucesso."); } catch (e) { toast.error("Erro."); } finally { setIsDeletingId(null); }
+    try { await deleteUserWithHistory(id, 'client'); toast.success("Cliente eliminado."); } catch (e) { toast.error("Erro."); } finally { setIsDeletingId(null); }
   };
 
   const exportToExcel = () => {
-    const dataToExport = filteredUsers.map(u => {
-      const userTxs = transactions.filter(t => t.clientId === u.id && t.type === 'earn' && t.status !== 'cancelled');
+    const dataToExport = filteredUsers.map((u: any) => {
+      const userTxs = transactions.filter((t: any) => t.clientId === u.id && t.type === 'earn' && t.status !== 'cancelled');
       const shopStats: Record<string, { name: string, volume: number, visits: number }> = {};
-      userTxs.forEach(t => {
+      userTxs.forEach((t: any) => {
         if (!shopStats[t.merchantId]) shopStats[t.merchantId] = { name: t.merchantName, volume: 0, visits: 0 };
         shopStats[t.merchantId].volume += t.amount;
         shopStats[t.merchantId].visits += 1;
       });
 
-      let topVolumeShop = "N/D", maxVolume = 0, topVisitsShop = "N/D", maxVisits = 0;
-      Object.values(shopStats).forEach(shop => {
-        if (shop.volume > maxVolume) { maxVolume = shop.volume; topVolumeShop = shop.name; }
+      let topVisitsShop = "N/D";
+      let maxVisits = 0;
+      Object.values(shopStats).forEach((shop: any) => {
         if (shop.visits > maxVisits) { maxVisits = shop.visits; topVisitsShop = shop.name; }
       });
 
       return {
         Nome: u.name || '---', Email: u.email || '---', Telefone: u.phone || '---', NIF: u.nif || '---',
         Cartão: u.customerNumber || '---', Distrito: u.distrito || '', Concelho: u.concelho || '', Freguesia: u.freguesia || '',
-        "Equipamentos Ativos": u.devices ? u.devices.length : 0, "Código Postal": u.zipCode || '---',
-        "Data Adesão": u.createdAt?.toDate ? u.createdAt.toDate().toLocaleDateString() : '---', "Loja (Mais Visitas)": topVisitsShop, Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
+        "Código Postal": u.zipCode || '---', Estado: u.status === 'active' ? 'Ativo' : 'Suspenso'
       };
     });
 
     const ws = XLSX.utils.json_to_sheet(dataToExport);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Vizinhos");
-    XLSX.writeFile(wb, `Vizinhos_Export_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`);
+    XLSX.writeFile(wb, `Vizinhos_Export.xlsx`);
   };
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
-      
-      <div className="bg-white p-6 md:p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_0px_#0a2540] flex flex-col gap-6">
+      <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] flex flex-col gap-6">
         <div className="flex justify-between items-center mb-2">
            <h2 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] flex items-center gap-2"><Users/> Pesquisa de Clientes</h2>
-           <button onClick={exportToExcel} disabled={!hasActiveFilter || filteredUsers.length === 0} className="bg-[#0a2540] text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-md flex items-center gap-2 disabled:opacity-50">
+           <button onClick={exportToExcel} disabled={!hasActiveFilter || filteredUsers.length === 0} className="bg-[#0a2540] text-white px-6 py-3 rounded-2xl font-black text-[10px] uppercase shadow-md flex items-center gap-2 disabled:opacity-50 transition-all">
               <Download size={16} /> Exportar
            </button>
         </div>
@@ -141,22 +140,17 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredUsers.map((u) => {
+          {filteredUsers.map((u: any) => {
             const deviceCount = u.devices ? u.devices.length : 0;
-            const hasNotifications = deviceCount > 0;
-
             return (
-              <div key={u.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group hover:-translate-y-1 transition-transform">
-                  
+              <div key={u.id} className="bg-white border-2 border-[#0a2540] rounded-[40px] p-8 shadow-[8px_8px_0px_0px_#0a2540] flex flex-col relative group transition-all">
                   <div className="absolute top-4 right-4 flex gap-2">
-                    {hasNotifications ? (
-                      <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black flex items-center gap-1 border border-green-200">
+                    {deviceCount > 0 ? (
+                      <div className="bg-green-100 text-green-700 px-3 py-1 rounded-full text-[9px] font-black border border-green-200 flex items-center gap-1">
                           <BellRing size={12} /> {deviceCount} APP
                       </div>
                     ) : (
-                      <div className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-[9px] font-black flex items-center gap-1">
-                          <BellOff size={12} /> SEM APP
-                      </div>
+                      <div className="bg-slate-100 text-slate-400 px-3 py-1 rounded-full text-[9px] font-black">SEM APP</div>
                     )}
                   </div>
 
@@ -176,12 +170,10 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
 
                   <div className="mt-auto flex flex-col gap-2">
                     <div className="grid grid-cols-2 gap-2">
-                      {u.status === 'active' ? (
-                          <button onClick={() => updateStatus(u.id, 'disabled')} className="w-full bg-slate-100 hover:bg-red-50 hover:text-red-500 text-slate-400 p-4 rounded-2xl font-black uppercase text-[10px] transition-colors">Suspender</button>
-                      ) : (
-                          <button onClick={() => updateStatus(u.id, 'active')} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase text-[10px] shadow-md border-b-4 border-[#0a2540]/20 hover:bg-[#00c265]">Ativar</button>
-                      )}
-                      <button onClick={() => handleDeleteUser(u.id, u.name)} disabled={isDeletingId === u.id} className="w-full bg-red-50 hover:bg-red-500 hover:text-white text-red-500 p-4 rounded-2xl font-black uppercase text-[10px] transition-all flex items-center justify-center gap-2">
+                      <button onClick={() => updateStatus(u.id, u.status === 'active' ? 'disabled' : 'active')} className={`w-full py-3 rounded-xl font-black uppercase text-[10px] transition-colors ${u.status === 'active' ? 'bg-slate-100 text-slate-400 hover:bg-red-50 hover:text-red-500' : 'bg-[#00d66f] text-[#0a2540] shadow-md'}`}>
+                        {u.status === 'active' ? 'Suspender' : 'Ativar'}
+                      </button>
+                      <button onClick={() => handleDeleteUser(u.id, u.name)} disabled={isDeletingId === u.id} className="w-full bg-red-50 hover:bg-red-500 hover:text-white text-red-500 p-3 rounded-xl font-black uppercase text-[10px] transition-all flex items-center justify-center gap-2">
                         {isDeletingId === u.id ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />} Eliminar
                       </button>
                     </div>

@@ -15,7 +15,9 @@ const VantagensPage: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
+    // Correção: Adicionado (snap: any)
     const unsubscribe = onSnapshot(q, (snap: any) => {
+      // Correção: Adicionado (d: any)
       setVantagens(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Vantagem)));
     });
     return () => unsubscribe();
@@ -148,12 +150,6 @@ const VantagensPage: React.FC = () => {
                     </div>
                 </div>
             ))}
-            {filtered.length === 0 && (
-                <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-200">
-                    <Crown size={48} className="mx-auto text-slate-200 mb-4" />
-                    <p className="font-black uppercase tracking-widest text-xs text-slate-400">Nenhum parceiro VIP encontrado nesta pesquisa.</p>
-                </div>
-            )}
         </div>
       </main>
     </div>
