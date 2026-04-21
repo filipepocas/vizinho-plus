@@ -36,8 +36,10 @@ const FeedbackList: React.FC = () => {
   useEffect(() => {
     const q = query(collection(db, 'feedbacks'), orderBy('createdAt', 'desc'));
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
+    // Adicionado (snapshot: any) para resolver erro de TS
+    const unsubscribe = onSnapshot(q, (snapshot: any) => {
+      // Adicionado (doc: any) para resolver erro de TS
+      const data = snapshot.docs.map((doc: any) => ({
         id: doc.id,
         ...doc.data()
       })) as Feedback[];
@@ -154,7 +156,7 @@ const FeedbackList: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <Calendar size={14} className="text-[#0f172a]" />
-                <span>{f.createdAt?.toDate().toLocaleDateString()}</span>
+                <span>{f.createdAt?.toDate ? f.createdAt.toDate().toLocaleDateString() : 'Recente'}</span>
               </div>
             </div>
 
