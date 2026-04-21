@@ -1,3 +1,5 @@
+// src/store/useStore.ts
+
 import { create } from 'zustand';
 import { 
   collection, 
@@ -12,7 +14,8 @@ import {
   getDoc, 
   limit, 
   updateDoc, 
-  arrayUnion 
+  setDoc,
+  arrayUnion
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -22,7 +25,7 @@ import toast from 'react-hot-toast';
 interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
-  locations: LocationsMap; // NOVO: Armazena as zonas globalmente
+  locations: LocationsMap;
   isLoading: boolean;
   isInitialized: boolean;
   setCurrentUser: (user: UserProfile | null) => void;
@@ -43,7 +46,7 @@ interface StoreState {
 export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
-  locations: {}, // Estado inicial vazio
+  locations: {},
   isLoading: true,
   isInitialized: false,
 
@@ -98,13 +101,15 @@ export const useStore = create<StoreState>((set, get) => ({
     return !snap.empty;
   },
 
-  addTransaction: async (tx) => {
+  addTransaction: async (tx: TransactionCreate) => {
     const { currentUser } = get();
     if (!currentUser) return;
+    
     try {
+      // Usamos setDoc com um novo ID gerado para criar o documento
       const newTxRef = doc(collection(db, 'transactions'));
       
-      await updateDoc(newTxRef, {
+      const txData = {
         clientId: tx.clientId,
         merchantId: currentUser.id,
         merchantName: currentUser.shopName || currentUser.name,
@@ -118,39 +123,18 @@ export const useStore = create<StoreState>((set, get) => ({
         clientName: tx.clientName || "Desconhecido",
         clientCardNumber: tx.clientCardNumber || "---",
         clientBirthDate: tx.clientBirthDate || ""
-      });
+      };
 
+      await setDoc(newTxRef, txData);
       toast.success("MOVIMENTO ENVIADO PARA PROCESSAMENTO!");
       return newTxRef.id;
     } catch (e) { 
-      try {
-        const newTxRef = doc(collection(db, 'transactions'));
-        const batch = writeBatch(db);
-        batch.set(newTxRef, {
-          clientId: tx.clientId,
-          merchantId: currentUser.id,
-          merchantName: currentUser.shopName || currentUser.name,
-          amount: Number(tx.amount),
-          invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
-          type: tx.type,
-          status: 'pending',
-          createdAt: serverTimestamp(),
-          clientNif: tx.documentNumber || "", 
-          documentNumber: tx.documentNumber || "",
-          clientName: tx.clientName || "Desconhecido",
-          clientCardNumber: tx.clientCardNumber || "---",
-          clientBirthDate: tx.clientBirthDate || ""
-        });
-        await batch.commit();
-        toast.success("MOVIMENTO REGISTADO!");
-        return newTxRef.id;
-      } catch(err2) {
-        toast.error("ERRO NO REGISTO.");
-      }
+      console.error("Erro ao criar transação:", e);
+      toast.error("ERRO NO REGISTO.");
     }
   },
 
-  updateTransactionDocument: async (transactionId, documentNumber) => {
+  updateTransactionDocument: async (transactionId: string, documentNumber: string) => {
     try {
         const txRef = doc(db, 'transactions', transactionId);
         await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
@@ -160,7 +144,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  cancelTransaction: async (id) => {
+  cancelTransaction: async (id: string) => {
     try {
       const txRef = doc(db, 'transactions', id);
       await updateDoc(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
@@ -170,41 +154,47 @@ export const useStore = create<StoreState>((set, get) => ({
     }
   },
 
-  subscribeToTransactions: (role, id) => {
+  subscribeToTransactions: (role?: string, id?: string) => {
     if (!id && role !== 'admin') return () => {};
-    const q = role === 'admin' 
-      ? query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))
-      : query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
     
-    return onSnapshot(q, (snap) => {
-      set({ transactions: snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)) });
-    }, (err) => console.error("Transactions sub error:", err));
+    let q: any;
+    if (role === 'admin') {
+      q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
+    } else if (role === 'merchant') {
+      q = query(collection(db, 'transactions'), where('merchantId', '==', id), orderBy('createdAt', 'desc'), limit(150));
+    } else {
+      q = query(collection(db, 'transactions'), where('clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
+    }
+    
+    return onSnapshot(q, (snap: any) => {
+      set({ transactions: snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)) });
+    }, (err: any) => console.error("Transactions sub error:", err));
   },
 
   initializeAuth: () => {
     let unsubProfile: (() => void) | null = null;
     
-    // NOVO: Carregar Zonas da Base de Dados assim que a app arranca
-    const unsubLocations = onSnapshot(doc(db, 'system', 'locations'), (docSnap) => {
-      if (docSnap.exists() && docSnap.data().data) {
+    // Carregar Zonas da Base de Dados
+    const unsubLocations = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => {
+      if (docSnap.exists() && docSnap.data()?.data) {
         set({ locations: docSnap.data().data });
       } else {
         set({ locations: {} });
       }
     });
 
-    const unsubAuth = onAuthStateChanged(auth, (user) => {
+    const unsubAuth = onAuthStateChanged(auth, (user: any) => {
       if (unsubProfile) { unsubProfile(); unsubProfile = null; }
 
       if (user) {
         set({ isLoading: true });
-        unsubProfile = onSnapshot(doc(db, 'users', user.uid), (d) => {
+        unsubProfile = onSnapshot(doc(db, 'users', user.uid), (d: any) => {
           if (d.exists()) {
             set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
           } else {
             set({ currentUser: null, isLoading: false, isInitialized: true });
           }
-        }, (err) => {
+        }, (err: any) => {
           set({ isLoading: false, isInitialized: true });
         });
       } else {
@@ -219,12 +209,12 @@ export const useStore = create<StoreState>((set, get) => ({
     };
   },
 
-  deleteUserWithHistory: async (userId, role) => {
+  deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {
     try {
       const q = query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId));
       const snap = await getDocs(q);
       const batch = writeBatch(db);
-      snap.docs.forEach(d => batch.delete(d.ref));
+      snap.docs.forEach((d: any) => batch.delete(d.ref));
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
       toast.success("DADOS APAGADOS.");

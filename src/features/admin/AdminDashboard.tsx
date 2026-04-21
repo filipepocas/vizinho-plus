@@ -1,9 +1,27 @@
+// src/features/admin/AdminDashboard.tsx
+
 import React, { useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, getDocs, deleteDoc } from 'firebase/firestore';
+import { 
+  collection, 
+  query, 
+  where, 
+  onSnapshot, 
+  orderBy, 
+  doc, 
+  writeBatch, 
+  limit, 
+  getDocs, 
+  deleteDoc
+} from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt, CalendarPlus, Leaf, MapPin, Image as ImageIcon, LayoutDashboard, Euro } from 'lucide-react';
+import { 
+  ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, 
+  MessageSquare, CheckSquare, Bell, Megaphone, Crown, 
+  FileText, Receipt, CalendarPlus, Leaf, MapPin, 
+  Image as ImageIcon, LayoutDashboard, Euro 
+} from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -42,15 +60,25 @@ const AdminDashboard: React.FC = () => {
   const [badFeedbacks, setBadFeedbacks] = useState(0);
 
   useEffect(() => {
+    // 1. Ouvir Transações
     const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
-    const unsubTx = onSnapshot(qTx, (snap: any) => setGlobalTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction))));
+    const unsubTx = onSnapshot(qTx, (snap: any) => {
+      setGlobalTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+    });
     
+    // 2. Ouvir Lojistas
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
-    const unsubMerchants = onSnapshot(qMerchants, (snap: any) => setGlobalMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile))));
+    const unsubMerchants = onSnapshot(qMerchants, (snap: any) => {
+      setGlobalMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
+    });
     
+    // 3. Ouvir Clientes (Vizinhos)
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
-    const unsubClients = onSnapshot(qClients, (snap: any) => setGlobalClients(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile))));
+    const unsubClients = onSnapshot(qClients, (snap: any) => {
+      setGlobalClients(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
+    });
 
+    // 4. Ouvir Contadores de Pedidos Pendentes
     const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMerchants(snap.size));
     const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMarketing(snap.size));
     const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), (snap: any) => setPendingEvents(snap.size));
@@ -59,22 +87,35 @@ const AdminDashboard: React.FC = () => {
         setBadFeedbacks(bad);
     });
     
+    // 5. Cleanup de dados expirados
     const cleanupExpiredData = async () => {
        const now = new Date();
        const eventsSnap = await getDocs(collection(db, 'events'));
        eventsSnap.forEach((docSnap: any) => {
           const ev = docSnap.data();
-          if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
+          if (ev.endDate && ev.endDate.toDate() < now) {
+            deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
+          }
        });
        const wasteSnap = await getDocs(collection(db, 'anti_waste'));
        wasteSnap.forEach((docSnap: any) => {
           const w = docSnap.data();
-          if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
+          if (w.endTime && w.endTime.toDate() < now) {
+            deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
+          }
        });
     };
     cleanupExpiredData();
 
-    return () => { unsubTx(); unsubMerchants(); unsubClients(); unsub1(); unsub2(); unsub3(); unsub4(); };
+    return () => { 
+      unsubTx(); 
+      unsubMerchants(); 
+      unsubClients(); 
+      unsub1(); 
+      unsub2(); 
+      unsub3(); 
+      unsub4(); 
+    };
   }, []);
 
   const hasGestaoAlert = pendingMerchants > 0;
