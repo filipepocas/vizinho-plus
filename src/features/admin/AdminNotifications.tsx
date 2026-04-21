@@ -26,7 +26,7 @@ const AdminNotifications: React.FC = () => {
   const [freguesia, setFreguesia] = useState('');
   const [targetZones, setTargetZones] = useState<string[]>([]);
 
-  // Gera intervalos de 30 minutos
+  // PONTO 10: Gera intervalos de 30 minutos
   const availableHours = Array.from({ length: 48 }, (_, i) => {
     const h = Math.floor(i / 2).toString().padStart(2, '0');
     const m = i % 2 === 0 ? '00' : '30';
@@ -39,8 +39,10 @@ const AdminNotifications: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      setRequests(snap.docs.map(d => ({ id: d.id, ...d.data() } as NotificationRequest)));
+    // CORREÇÃO: Adicionado (snap: any) para TS Strict
+    return onSnapshot(q, (snap: any) => {
+      // CORREÇÃO: Adicionado (d: any) para TS Strict
+      setRequests(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as NotificationRequest)));
     });
   }, []);
 
@@ -80,7 +82,7 @@ const AdminNotifications: React.FC = () => {
         createdAt: serverTimestamp()
       });
 
-      toast.success("Notificação Cloud Messaging agendada!");
+      toast.success("Notificação Push agendada!");
       setFormData({ title: '', message: '', targetType: 'all', targetValue: '', scheduledDate: '', scheduledTime: '10:00' });
       setTargetZones([]);
       setSendImmediate(true);
@@ -95,7 +97,7 @@ const AdminNotifications: React.FC = () => {
         toast.success("Pedido eliminado.");
       } else {
         await updateDoc(doc(db, 'notifications', id), { status: 'approved', approvedAt: serverTimestamp() });
-        toast.success("Notificação aprovada para envio!");
+        toast.success("Notificação aprovada!");
       }
     } catch (err) { toast.error("Erro na operação."); }
   };
@@ -109,7 +111,7 @@ const AdminNotifications: React.FC = () => {
           </div>
           <div>
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Novo Push Cloud Messaging</h3>
-            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Firebase Cloud Messaging (FCM) Direto aos Telemóveis</p>
+            <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Envio Direto aos Telemóveis (FCM)</p>
           </div>
         </div>
         
@@ -130,9 +132,9 @@ const AdminNotifications: React.FC = () => {
               <label className="block text-[10px] font-black uppercase text-[#0a2540] mb-4">Segmentação de Clientes</label>
               <select className="w-full p-4 bg-white border-2 border-slate-200 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#0a2540] mb-4" value={formData.targetType} onChange={e => setFormData({...formData, targetType: e.target.value})}>
                 <option value="all">TODOS OS DISPOSITIVOS</option>
-                <option value="zonas">POR ZONA GEOGRÁFICA (DISTRITO/CONCELHO/FREGUESIA)</option>
-                <option value="email">UM EMAIL ESPECÍFICO</option>
-                <option value="birthDate">ANIVERSARIANTES DO MÊS (EX: 04 PARA ABRIL)</option>
+                <option value="zonas">FILTRO GEOGRÁFICO (ZONAS)</option>
+                <option value="email">EMAIL ESPECÍFICO</option>
+                <option value="birthDate">ANIVERSARIANTES DO MÊS</option>
               </select>
 
               {formData.targetType === 'zonas' && (
@@ -142,18 +144,18 @@ const AdminNotifications: React.FC = () => {
                     {distritos.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
                   <select disabled={!distrito} value={concelho} onChange={e=>{setConcelho(e.target.value); setFreguesia('');}} className="w-full p-3 rounded-xl font-bold text-xs outline-none border-2 border-blue-200 focus:border-blue-500 disabled:opacity-50">
-                    <option value="">Todo o Distrito (Ou selecione Concelho)</option>
+                    <option value="">Todo o Distrito</option>
                     {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
                   </select>
                   <select disabled={!concelho} value={freguesia} onChange={e=>setFreguesia(e.target.value)} className="w-full p-3 rounded-xl font-bold text-xs outline-none border-2 border-blue-200 focus:border-blue-500 disabled:opacity-50">
-                    <option value="">Todo o Concelho (Ou selecione Freguesia)</option>
+                    <option value="">Todo o Concelho</option>
                     {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
                   </select>
                   <button type="button" onClick={handleAddZone} disabled={!distrito} className="w-full bg-blue-500 text-white p-3 rounded-xl font-black uppercase text-[10px] disabled:opacity-50">Adicionar Zona</button>
                   {targetZones.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2 p-2 bg-blue-50 rounded-lg">
+                    <div className="flex flex-wrap gap-1 mt-2 p-2 bg-white rounded-lg border border-blue-100">
                       {targetZones.map((z, idx) => (
-                        <span key={idx} className="bg-white text-blue-700 px-2 py-1 rounded text-[8px] font-black uppercase flex items-center gap-1 border border-blue-200">
+                        <span key={idx} className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-[8px] font-black uppercase flex items-center gap-1 border border-blue-200">
                           {z} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => setTargetZones(targetZones.filter((_, i) => i !== idx))}/>
                         </span>
                       ))}
@@ -181,9 +183,8 @@ const AdminNotifications: React.FC = () => {
                     <input type="date" required={!sendImmediate} className="w-full p-4 bg-white border-2 border-amber-200 rounded-2xl font-black text-xs outline-none focus:border-amber-500" value={formData.scheduledDate} onChange={e => setFormData({...formData, scheduledDate: e.target.value})} />
                   </div>
                   <div>
-                    <label className="block text-[9px] font-black uppercase text-amber-700 mb-2 ml-2">Hora (A cada 30min)</label>
+                    <label className="block text-[9px] font-black uppercase text-amber-700 mb-2 ml-2">Hora (30 min)</label>
                     <select required={!sendImmediate} className="w-full p-4 bg-white border-2 border-amber-200 rounded-2xl font-black text-xs uppercase outline-none focus:border-amber-500" value={formData.scheduledTime} onChange={e => setFormData({...formData, scheduledTime: e.target.value})}>
-                      <option value="">Hora</option>
                       {availableHours.map(h => <option key={h} value={h}>{h}</option>)}
                     </select>
                   </div>
@@ -200,11 +201,11 @@ const AdminNotifications: React.FC = () => {
 
       <div className="space-y-6">
         <h3 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] ml-2 flex items-center gap-2">
-          <Clock size={20} className="text-[#00d66f]" /> Histórico e Fila de Espera
+          <Clock size={20} className="text-[#00d66f]" /> Histórico de Envios
         </h3>
 
         <div className="grid grid-cols-1 gap-4">
-          {requests.map(req => {
+          {requests.map((req: any) => {
             const scheduledForDate = req.scheduledFor instanceof Date ? req.scheduledFor : req.scheduledFor?.toDate();
             const zones = req.targetZones || [];
             
@@ -216,7 +217,7 @@ const AdminNotifications: React.FC = () => {
                       {req.type === 'admin_broadcast' ? 'ADMIN' : `LOJISTA: ${req.senderName}`}
                     </span>
                     {req.status === 'pending' && (
-                      <span className="text-[9px] font-black uppercase bg-orange-100 text-orange-600 px-3 py-1 rounded-full animate-pulse border border-orange-200">Aguardando Aprovação</span>
+                      <span className="text-[9px] font-black uppercase bg-orange-100 text-orange-600 px-3 py-1 rounded-full animate-pulse">Pendente</span>
                     )}
                   </div>
                   
@@ -226,11 +227,10 @@ const AdminNotifications: React.FC = () => {
                   </div>
 
                   <div className="flex flex-wrap gap-3">
-                    <div className="flex flex-col gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-4 py-3 rounded-xl border border-slate-100">
-                      <span className="flex items-center gap-1 font-black text-[#0a2540]"><Users size={12} className="text-[#00d66f]" /> Alvo:</span>
-                      {req.targetType === 'all' ? 'Todos' : req.targetType === 'zonas' ? zones.map((z,i)=><span key={i} className="bg-white px-2 py-0.5 rounded border">{z}</span>) : req.targetValue}
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
+                      <Users size={12} className="text-[#00d66f]" /> Alvo: {req.targetType === 'all' ? 'Todos' : req.targetType === 'zonas' ? zones.join(' | ') : req.targetValue}
                     </div>
-                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-4 py-3 rounded-xl border border-slate-100">
+                    <div className="flex items-center gap-1 text-[10px] font-bold text-slate-400 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-100">
                       <Clock size={12} className="text-[#0a2540]" /> Agendado: {scheduledForDate ? scheduledForDate.toLocaleString() : 'Imediato'}
                     </div>
                   </div>
@@ -239,7 +239,7 @@ const AdminNotifications: React.FC = () => {
                 <div className="flex gap-2 w-full md:w-auto">
                   {req.status === 'pending' ? (
                     <>
-                      <button onClick={() => handleAction(req.id!, 'approve')} className="flex-1 md:flex-none bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl hover:scale-105 transition-transform flex items-center justify-center gap-2 font-black uppercase text-xs shadow-md">
+                      <button onClick={() => handleAction(req.id!, 'approve')} className="flex-1 md:flex-none bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl flex items-center justify-center gap-2 font-black uppercase text-xs">
                         <CheckCircle size={18} /> Aceitar
                       </button>
                       <button onClick={() => handleAction(req.id!, 'reject')} className="flex-1 md:flex-none bg-red-100 text-red-600 p-4 rounded-2xl hover:bg-red-600 hover:text-white transition-all flex items-center justify-center gap-2 font-black uppercase text-xs">
@@ -247,7 +247,7 @@ const AdminNotifications: React.FC = () => {
                       </button>
                     </>
                   ) : (
-                    <button onClick={() => handleAction(req.id!, 'reject')} className="bg-slate-100 text-slate-400 p-4 rounded-2xl hover:bg-red-50 text-red-500 transition-all border-2 border-transparent hover:border-red-200">
+                    <button onClick={() => handleAction(req.id!, 'reject')} className="bg-slate-100 text-slate-400 p-4 rounded-2xl hover:bg-red-50 text-red-500 transition-all">
                       <Trash2 size={20} />
                     </button>
                   )}
@@ -255,12 +255,6 @@ const AdminNotifications: React.FC = () => {
               </div>
             )
           })}
-          {requests.length === 0 && (
-            <div className="text-center py-20 bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-200">
-              <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
-              <p className="font-black text-xs uppercase text-slate-400 tracking-widest">Nenhuma notificação no sistema</p>
-            </div>
-          )}
         </div>
       </div>
     </div>
