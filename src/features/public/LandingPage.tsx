@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail, AlertCircle, Image as ImageIcon
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -29,7 +29,7 @@ const LandingPage: React.FC = () => {
   const [membersCount, setMembersCount] = useState(0);
 
   const [showTerms, setShowTerms] = useState(false);
-  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt' });
+  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', showMemberCount: true });
 
   const distritos = Object.keys(locations || {}).sort();
 
@@ -42,6 +42,7 @@ const LandingPage: React.FC = () => {
   });
 
   const [bannerSimulation, setBannerSimulation] = useState<{ count: number, cost: number, days: number } | null>(null);
+  
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
 
@@ -118,6 +119,11 @@ const LandingPage: React.FC = () => {
 
     const start = new Date(bannerForm.startDate);
     const end = new Date(bannerForm.endDate);
+    
+    // Regra das 24 Horas exigida no Ponto 2
+    const minDate = new Date();
+    minDate.setHours(minDate.getHours() + 24);
+    if (start < minDate) return toast.error("Os pedidos de publicidade devem ser feitos com pelo menos 24 horas de antecedência.");
     if (end <= start) return toast.error("A data de fim tem de ser posterior à data de início.");
 
     const timeDiff = end.getTime() - start.getTime();
@@ -133,7 +139,7 @@ const LandingPage: React.FC = () => {
         else if (bannerForm.distrito) clients = clients.filter(c => c.distrito === bannerForm.distrito);
 
         const count = clients.length;
-        const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5;
+        const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5; // Exemplo de markup externo
         const minCost = (Number(prices.banner_min_cost) || 10) * 1.5;
 
         let totalCost = count * perClientDay * days;
@@ -197,15 +203,12 @@ const LandingPage: React.FC = () => {
     if (!partnerForm.distrito || !partnerForm.concelho || !partnerForm.freguesia) {
       return toast.error("Por favor, preencha a localização completa.");
     }
-    // EXIGÊNCIA CP7
     const zipCodeRegex = /^\d{4}-\d{3}$/;
-    if (!zipCodeRegex.test(partnerForm.zipCode)) return toast.error('CÓDIGO POSTAL DA LOJA INVÁLIDO. USE O FORMATO 0000-000');
+    if (!zipCodeRegex.test(partnerForm.zipCode)) return toast.error('CÓDIGO POSTAL INVÁLIDO. USE O FORMATO 0000-000');
 
     setLoadingPartner(true);
     try {
-      // Cria a conta do Lojista com a password escolhida
       const userCredential = await createUserWithEmailAndPassword(auth, partnerForm.email.trim(), partnerForm.password);
-      // Logout imediato pois ele só entra após validação do Admin
       await signOut(auth); 
       
       await setDoc(doc(db, 'users', userCredential.user.uid), {
@@ -216,7 +219,7 @@ const LandingPage: React.FC = () => {
         phone: partnerForm.phone.trim(),
         email: partnerForm.email.toLowerCase().trim(),
         role: 'merchant',
-        status: 'pending', // Bloqueado até validação
+        status: 'pending',
         category: partnerForm.category,
         cashbackPercent: 5,
         distrito: partnerForm.distrito,
@@ -232,15 +235,14 @@ const LandingPage: React.FC = () => {
         shopName: partnerForm.shopName, responsibleName: partnerForm.responsibleName,
         email: partnerForm.email, phone: partnerForm.phone, 
         distrito: partnerForm.distrito, concelho: partnerForm.concelho, freguesia: partnerForm.freguesia,
-        zipCode: partnerForm.zipCode, category: partnerForm.category,
+        zipCode: partnerForm.zipCode, category: partnerForm.category, cashbackPercent: 5,
         status: 'pending', createdAt: serverTimestamp()
       });
 
-      toast.success("Registo concluído! A nossa equipa irá validar o seu acesso em breve.");
+      toast.success("Registo concluído! Aguarde a nossa avaliação.");
       setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
     } catch (e: any) { 
-      if(e.code === 'auth/email-already-in-use') toast.error("Este e-mail já está registado.");
-      else toast.error("Erro ao registar comerciante."); 
+      toast.error("Erro ao registar comerciante."); 
     } finally { setLoadingPartner(false); }
   };
 
@@ -248,7 +250,7 @@ const LandingPage: React.FC = () => {
     e.preventDefault();
     if (clientForm.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) return toast.error("OS EMAILS NÃO COINCIDEM.");
     if (clientForm.password !== confirmPassword) return toast.error("AS PASSWORDS NÃO COINCIDEM.");
-    if (!clientForm.distrito || !clientForm.concelho || !clientForm.freguesia) return toast.error("Preencha a sua morada completa.");
+    if (!clientForm.distrito || !clientForm.concelho || !clientForm.freguesia) return toast.error("Preencha a sua morada.");
 
     setClientLoading(true);
     try {
@@ -267,19 +269,25 @@ const LandingPage: React.FC = () => {
       
       toast.success("Bem-vindo ao Vizinho+!");
       navigate('/login');
-    } catch (err: any) { toast.error("Erro ao criar conta. Email já em uso?"); } finally { setClientLoading(false); }
+    } catch (err: any) { toast.error("Erro ao criar conta."); } finally { setClientLoading(false); }
   };
 
   const handleEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if(!eventForm.imageBase64) return toast.error("A imagem do cartaz é obrigatória.");
     if(eventTargets.length === 0) return toast.error("Adicione pelo menos um Local de Destino.");
+    
+    // Corrigido erro de Data/Hora (juntando as duas)
+    const startDate = new Date(eventForm.startDate);
+    const [hours, minutes] = eventForm.startTime.split(':');
+    startDate.setHours(Number(hours), Number(minutes));
+
     setLoadingEvent(true);
     try {
       await addDoc(collection(db, 'events'), {
         ...eventForm,
         targetZones: eventTargets,
-        startDate: new Date(eventForm.startDate),
+        startDate: startDate,
         endDate: new Date(eventForm.endDate),
         status: 'pending',
         createdAt: serverTimestamp()
@@ -302,7 +310,6 @@ const LandingPage: React.FC = () => {
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
-  // Variaveis de Localização em Cascata
   const clientConcelhos = clientForm.distrito ? Object.keys(locations[clientForm.distrito] || {}).sort() : [];
   const clientFreguesias = clientForm.distrito && clientForm.concelho ? (locations[clientForm.distrito][clientForm.concelho] || []).sort() : [];
 
@@ -318,10 +325,9 @@ const LandingPage: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
-      {/* AVISOS TOPO */}
       {campaigns.length > 0 && (
         <div className="bg-[#0a2540] text-[#00d66f] text-center p-3 text-[10px] font-black uppercase tracking-widest cursor-pointer hover:bg-black transition-colors" onClick={() => navigate('/login')}>
-          🔥 Campanhas Exclusivas em Vigor! Descubra as novidades nos Folhetos Digitais. Clique para Entrar. 🔥
+          🔥 Campanhas Exclusivas em Vigor! Descobre nos Folhetos Digitais. Clique para Entrar. 🔥
         </div>
       )}
       <div className="bg-amber-400 text-amber-900 text-center p-2 text-[9px] font-black uppercase tracking-widest cursor-pointer hover:bg-amber-500 transition-colors" onClick={() => navigate('/login')}>
@@ -339,9 +345,12 @@ const LandingPage: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
         
-        <div className="bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-full font-black uppercase text-xl md:text-3xl italic tracking-tighter shadow-[8px_8px_0px_#0a2540] mb-12 animate-in slide-in-from-top-10">
-          Já somos {membersCount} membros! Junte-se a nós.<br /> <span className="text-white drop-shadow-md">Aqui todos ganhamos!</span>
-        </div>
+        {/* Ponto 3: Ocultar o Contador */}
+        {sysConfig.showMemberCount !== false && (
+          <div className="bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-full font-black uppercase text-xl md:text-3xl italic tracking-tighter shadow-[8px_8px_0px_#0a2540] mb-12 animate-in slide-in-from-top-10">
+            Já somos {membersCount} membros! Junte-se a nós.<br /> <span className="text-white drop-shadow-md">Aqui todos ganhamos!</span>
+          </div>
+        )}
 
         <div className="mb-12 animate-in fade-in zoom-in duration-1000">
           <img src={logoPath} alt="Vizinho+" className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" />
@@ -355,34 +364,28 @@ const LandingPage: React.FC = () => {
             A plataforma de fidelização que une os vizinhos e fortalece a economia local. Acumule cashback real em todas as lojas aderentes.
           </p>
         </div>
+        
         <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20 z-10">
           Entrar / Recuperar Password
           <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
         </button>
-
         <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl text-left">
-            {/* QUADRO CLIENTE */}
             <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] flex flex-col">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Adesão Gratuita Cliente</h2>
-              <p className="text-sm font-bold text-slate-500 mb-8">Registe-se em 1 minuto para aceder ao seu cartão digital gratuito e começar a poupar.</p>
-              
               <form onSubmit={handleClientRegister} className="space-y-4 flex-grow">
                   <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-sm" />
-                  
                   <div className="grid grid-cols-1 gap-4">
                      <input required type="email" placeholder="E-mail" value={clientForm.email} onChange={e=>setClientForm({...clientForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                      <input required type="email" placeholder="Repita o E-mail" value={confirmEmail} onChange={e=>setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-2 border-[#00d66f] rounded-2xl font-black text-[#0a2540] focus:border-[#0a2540] outline-none text-xs" />
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
-                     <input required type="password" placeholder="Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                     <input required type="password" placeholder="Repita Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f] rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                     <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                     <input required type="password" placeholder="Repita a Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f] rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
-
                   <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
-                     <p className="text-[10px] font-black uppercase text-slate-400">Onde reside? (Acesso à sua rede local)</p>
+                     <p className="text-[10px] font-black uppercase text-slate-400">Morada (Acesso à rede local)</p>
                      <select required value={clientForm.distrito} onChange={e=>setClientForm({...clientForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
-                        <option value="">Escolha Distrito</option>
+                        <option value="">Distrito</option>
                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
                      </select>
                      <select required disabled={!clientForm.distrito} value={clientForm.concelho} onChange={e=>setClientForm({...clientForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
@@ -394,44 +397,34 @@ const LandingPage: React.FC = () => {
                         {clientFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                      </select>
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                      <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">Data Nasc.</label><input required type="date" value={clientForm.birthDate} onChange={e=>setClientForm({...clientForm, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none" /></div>
                      <input required type="text" maxLength={8} placeholder="Cód. Postal" value={clientForm.zipCode} onChange={e=>setClientForm({...clientForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
-                  
                   <input required type="tel" placeholder="Telemóvel" value={clientForm.phone} onChange={e=>setClientForm({...clientForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-
-                  <p className="text-[9px] font-bold text-slate-400 mt-2">Ao registar, aceita os <button type="button" onClick={()=>setShowTerms(true)} className="text-[#0a2540] underline">Termos e Condições e RGPD</button>.</p>
-
                   <button disabled={clientLoading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-transform flex justify-center items-center gap-3 mt-6 border-b-4 border-[#0a2540]">
                     {clientLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> Aderir à Comunidade</>}
                   </button>
               </form>
             </div>
 
-            {/* QUADRO LOJISTA */}
-            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#00d66f] flex flex-col text-left">
+            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#0a2540] flex flex-col text-left">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
-              <p className="text-sm font-bold text-slate-500 mb-8">Aumente as suas vendas e fidelize os seus vizinhos. Registe os seus dados comerciais.</p>
-              
               <form onSubmit={handlePartnerSubmit} className="space-y-4 flex-grow">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input required type="text" placeholder="Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
-                    <input required type="text" placeholder="Nome Responsável" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="text" placeholder="Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                    <input required type="text" placeholder="Nome do Responsável" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input required type="tel" placeholder="Telefone / Tlm" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
-                    <input required type="email" placeholder="E-mail Comercial" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="tel" placeholder="Telefone / Tlm" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                    <input required type="email" placeholder="E-mail Comercial" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
-                  
                   <div className="grid grid-cols-1 gap-4">
-                    <input required type="password" placeholder="Defina Password de Acesso" value={partnerForm.password} onChange={e=>setPartnerForm({...partnerForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                    <input required type="text" placeholder="Setor de Atividade (Ex: Padaria, Café)" value={partnerForm.category} onChange={e=>setPartnerForm({...partnerForm, category: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#00d66f] outline-none text-xs" />
+                    <input required type="password" placeholder="Password de Acesso" value={partnerForm.password} onChange={e=>setPartnerForm({...partnerForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                    <input required type="text" placeholder="Categoria (Ex: Padaria)" value={partnerForm.category} onChange={e=>setPartnerForm({...partnerForm, category: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
                   </div>
-
                   <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
-                     <p className="text-[10px] font-black uppercase text-slate-400">Localização da Loja Física</p>
+                     <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
                      <select required value={partnerForm.distrito} onChange={e=>setPartnerForm({...partnerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
                         <option value="">Distrito</option>
                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
@@ -445,12 +438,11 @@ const LandingPage: React.FC = () => {
                         {partnerFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                      </select>
                      <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> {
-                        let val = e.target.value.replace(/\D/g, '');
-                        if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
-                        setPartnerForm({...partnerForm, zipCode: val});
+                       let val = e.target.value.replace(/\D/g, '');
+                       if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
+                       setPartnerForm({...partnerForm, zipCode: val});
                      }} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
                   </div>
-                  
                   <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
                     {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
                   </button>
@@ -464,13 +456,9 @@ const LandingPage: React.FC = () => {
           <button onClick={() => setShowContactModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors flex items-center gap-2"><Mail size={16}/> Apoio / Contacto</button>
           <button onClick={() => setShowTerms(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Termos & Privacidade</button>
         </div>
-        <div className="text-center px-6">
-          <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas, sob pena de instauração de procedimentos civis e criminais.</p>
-        </div>
+        <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
 
-      {/* MODAL CONTACTO */}
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#00d66f]">
@@ -479,14 +467,13 @@ const LandingPage: React.FC = () => {
               <button onClick={() => setShowContactModal(false)}><X size={20} /></button>
             </div>
             <div className="p-8 space-y-4 text-center">
-              <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3"><Send size={16} className="text-[#00d66f]"/> Abrir App de Email</button>
+              <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-lg"><Send size={16} className="text-[#00d66f]"/> Abrir App de Email</button>
               <button onClick={handleCopyEmail} className="w-full bg-slate-50 text-[#0a2540] p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 border-slate-200 hover:border-[#00d66f] transition-all flex items-center justify-center gap-3"><Copy size={16} /> {emailCopied ? 'Copiado!' : 'Copiar Email'}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL COMUNIDADE */}
       {showCommunityModal && (
          <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
              <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#0a2540] animate-in zoom-in">
@@ -503,12 +490,12 @@ const LandingPage: React.FC = () => {
          </div>
       )}
 
-      {/* MODAL EVENTOS */}
       {showEventModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
           <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-blue-500 shadow-2xl overflow-hidden animate-in zoom-in relative my-8">
             <div className="bg-blue-500 p-6 text-white flex justify-between items-center sticky top-0 z-10"><h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-3"><CalendarPlus size={24} /> Comunicar Evento</h2><button onClick={() => setShowEventModal(false)}><X size={24}/></button></div>
             <div className="p-8">
+              {/* Ponto 1: Correção do Formulário de Eventos */}
               <form onSubmit={handleEventSubmit} className="space-y-6">
                  <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
                     <p className="text-[10px] font-black uppercase text-[#0a2540]">Onde promover o Evento?</p>
@@ -527,85 +514,189 @@ const LandingPage: React.FC = () => {
                     <button type="button" onClick={handleAddEventTarget} disabled={!eventForm.distrito} className="bg-blue-500 text-white p-3 rounded-xl font-black uppercase text-[10px] disabled:opacity-50">Adicionar Zona Alvo</button>
                     <div className="flex flex-wrap gap-1"> {eventTargets.map((t, idx) => <span key={idx} className="bg-white text-blue-700 px-2 py-1 rounded text-[8px] font-black uppercase flex items-center gap-1 border border-blue-200">{t} <X size={10} className="cursor-pointer" onClick={() => setEventTargets(eventTargets.filter((_, i) => i !== idx))}/></span>)} </div>
                  </div>
-                 <input required placeholder="Nome Entidade" value={eventForm.entityName} onChange={e=>setEventForm({...eventForm, entityName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                 <input required placeholder="Título Evento" value={eventForm.title} onChange={e=>setEventForm({...eventForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" />
-                 <textarea required placeholder="Descrição" rows={4} value={eventForm.description} onChange={e=>setEventForm({...eventForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 resize-none" />
-                 <div className="bg-slate-100 p-4 rounded-2xl"><p className="text-[10px] font-black uppercase text-slate-500 mb-2">Cartaz Evento</p><input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'event')} className="w-full text-xs font-bold" /></div>
-                 <button type="submit" disabled={loadingEvent} className="w-full bg-blue-500 text-white py-4 rounded-xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4 hover:bg-blue-600 transition-colors shadow-lg">{loadingEvent ? <Loader2 className="animate-spin"/> : 'Submeter Evento Grátis'}</button>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Nome Entidade/Organizador</label><input required value={eventForm.entityName} onChange={e=>setEventForm({...eventForm, entityName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Nome do Responsável</label><input required value={eventForm.contactName} onChange={e=>setEventForm({...eventForm, contactName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                 </div>
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Telefone Contato</label><input required type="tel" value={eventForm.phone} onChange={e=>setEventForm({...eventForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">E-mail</label><input required type="email" value={eventForm.email} onChange={e=>setEventForm({...eventForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                 </div>
+
+                 <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Título do Evento</label><input required value={eventForm.title} onChange={e=>setEventForm({...eventForm, title: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500" /></div>
+                 <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Local da Realização</label><input required value={eventForm.location} onChange={e=>setEventForm({...eventForm, location: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                 
+                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="relative">
+                       <label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Tipo de Evento</label>
+                       <select required value={eventForm.eventType} onChange={e=>setEventForm({...eventForm, eventType: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs uppercase outline-none focus:border-blue-500">
+                          <option value="">Selecione...</option>
+                          <option value="Desporto">Desporto</option>
+                          <option value="Cultura / Artes">Cultura / Artes</option>
+                          <option value="Festa / Música">Festa / Música</option>
+                          <option value="Feira / Mercado">Feira / Mercado</option>
+                          <option value="Outro">Outro</option>
+                       </select>
+                    </div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Preço Bilhete (Escreva "Grátis" ou valor)</label><input required value={eventForm.ticketPrice} onChange={e=>setEventForm({...eventForm, ticketPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                 </div>
+
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data de Início</label><input required type="date" value={eventForm.startDate} onChange={e=>setEventForm({...eventForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Data de Fim</label><input required type="date" value={eventForm.endDate} onChange={e=>setEventForm({...eventForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                    <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Hora de Início</label><input required type="time" value={eventForm.startTime} onChange={e=>setEventForm({...eventForm, startTime: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-blue-500" /></div>
+                 </div>
+
+                 <div className="relative">
+                    <label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-blue-500">Descrição Completa</label>
+                    <textarea required rows={4} value={eventForm.description} onChange={e=>setEventForm({...eventForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-blue-500 resize-none" />
+                 </div>
+
+                 <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
+                    <div className="flex-1">
+                       <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Cartaz / Imagem do Evento</p>
+                       <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">A imagem ideal deve ser quadrada (Ex: Formato Instagram) ou retangular vertical. Evite fotografias muito pesadas (Máx. recomendável 1MB).</p>
+                       <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'event')} className="w-full text-xs font-bold" />
+                    </div>
+                    {eventForm.imageBase64 && (
+                       <div className="w-24 h-24 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
+                          <img src={eventForm.imageBase64} alt="Pré-visualização" className="w-full h-full object-contain" />
+                       </div>
+                    )}
+                 </div>
+
+                 <button type="submit" disabled={loadingEvent} className="w-full bg-blue-500 text-white py-5 rounded-2xl font-black uppercase text-xs flex justify-center items-center gap-2 mt-4 hover:bg-blue-600 transition-colors shadow-lg border-b-4 border-blue-700">{loadingEvent ? <Loader2 className="animate-spin"/> : 'Submeter Evento Grátis'}</button>
               </form>
             </div>
           </div>
         </div>
       )}
 
-      {/* MODAL MARKETING EXTERNO */}
+      {/* Ponto 2: MODAL MARKETING EXTERNO CORRIGIDO */}
       {showExternalModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
           <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-2xl overflow-hidden animate-in zoom-in relative my-8">
-            <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center sticky top-0 z-10"><h2 className="font-black uppercase italic tracking-tighter text-xl">Promova os seus serviços</h2><button onClick={() => setShowExternalModal(false)}><X size={24}/></button></div>
+            <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center sticky top-0 z-10"><h2 className="font-black uppercase italic tracking-tighter text-xl">Promova os seus serviços</h2><button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}}><X size={24}/></button></div>
             <div className="p-8">
-              <form onSubmit={simulateBanner} className="space-y-6">
-                   <input required placeholder="Nome da Empresa" value={extForm.companyName} onChange={e=>setExtForm({...extForm, companyName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm" />
-                   <div className="grid grid-cols-2 gap-4">
-                      <input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
-                      <input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
-                   </div>
-                   <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 grid grid-cols-1 gap-3">
-                      <p className="text-[10px] font-black uppercase text-[#0a2540]">Onde promover este Banner?</p>
-                      <select required value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
-                         <option value="">Distrito</option>
-                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                      </select>
-                      <select disabled={!bannerForm.distrito} value={bannerForm.concelho} onChange={e=>setBannerForm({...bannerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                         <option value="">Todo o Distrito</option>
-                         {extConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
-                      <select disabled={!bannerForm.concelho} value={bannerForm.freguesia} onChange={e=>setBannerForm({...bannerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                         <option value="">Todo o Concelho</option>
-                         {extFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                      </select>
-                   </div>
-                   <div className="bg-slate-100 p-4 rounded-2xl"><p className="text-[10px] font-black uppercase text-slate-500 mb-2">Upload Imagem (1920x1080px)</p><input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" /></div>
-                   {!bannerSimulation ? (
-                     <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-4 rounded-xl font-black uppercase text-xs shadow-lg">{loading ? <Loader2 className="animate-spin"/> : 'Calcular Orçamento'}</button>
-                   ) : (
-                     <div className="bg-[#00d66f] p-6 rounded-2xl text-center"><p className="text-3xl font-black italic text-[#0a2540]">{formatEuro(bannerSimulation.cost)}</p><button type="button" onClick={() => submitExternalRequest('banner')} className="w-full mt-4 py-3 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[10px] shadow-lg border-b-4 border-black/40">Avançar com Pedido</button></div>
-                   )}
-              </form>
+              
+              {!bannerSimulation && !leafletSimulation ? (
+                  <form onSubmit={activeTab === 'banner' ? simulateBanner : simulateLeaflet} className="space-y-6">
+                      <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">1. Dados da Empresa / Faturação</h3>
+                      <div className="grid grid-cols-2 gap-4 mb-8">
+                          <input required placeholder="Nome da Empresa" value={extForm.companyName} onChange={e=>setExtForm({...extForm, companyName: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                          <input required placeholder="Pessoa de Contacto" value={extForm.contactName} onChange={e=>setExtForm({...extForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                          <input required placeholder="NIF" maxLength={9} value={extForm.nif} onChange={e=>setExtForm({...extForm, nif: e.target.value.replace(/\D/g, '')})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                          <input required type="email" placeholder="Email de Contato" value={extForm.email} onChange={e=>setExtForm({...extForm, email: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                          <input required type="tel" placeholder="Telefone" value={extForm.phone} onChange={e=>setExtForm({...extForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                      </div>
+                      
+                      <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">2. O que deseja anunciar?</h3>
+                      <div className="flex gap-2 mb-6">
+                         <button type="button" onClick={() => {setActiveTab('banner'); setLeafletSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Banner Digital (App)</button>
+                         <button type="button" onClick={() => {setActiveTab('leaflet'); setBannerSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'leaflet' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Folheto Físico/Digital</button>
+                      </div>
+
+                      {activeTab === 'banner' && (
+                        <div className="space-y-4 animate-in fade-in">
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#0a2540]">Início (Mín: 24h)</label><input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]" /></div>
+                              <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#0a2540]">Fim da Campanha</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]" /></div>
+                           </div>
+                           <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 grid grid-cols-1 gap-3">
+                              <p className="text-[10px] font-black uppercase text-[#0a2540]">Quem vai ver este Banner?</p>
+                              <select required value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
+                                 <option value="">Distrito</option>
+                                 {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                              <select disabled={!bannerForm.distrito} value={bannerForm.concelho} onChange={e=>setBannerForm({...bannerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                                 <option value="">Todo o Distrito (Ou selecione Concelho)</option>
+                                 {extConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <select disabled={!bannerForm.concelho} value={bannerForm.freguesia} onChange={e=>setBannerForm({...bannerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                                 <option value="">Todo o Concelho (Ou selecione Freguesia)</option>
+                                 {extFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                           </div>
+                           <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
+                              <div className="flex-1">
+                                 <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Anúncio (Formato Banner)</p>
+                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor qualidade possível na App, a imagem deve ser larga/horizontal (Proporção 16:9, idêntica a um ecrã de TV). Se tiver texto, mantenha-o no centro da imagem para não ser cortado.</p>
+                                 <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
+                              </div>
+                              {bannerForm.imageBase64 && (
+                                <div className="w-24 h-16 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
+                                  <img src={bannerForm.imageBase64} alt="Preview" className="w-full h-full object-cover" />
+                                </div>
+                              )}
+                           </div>
+                           <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Calcular Orçamento'}</button>
+                        </div>
+                      )}
+
+                      {activeTab === 'leaflet' && (
+                        <div className="space-y-4 animate-in fade-in">
+                           <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
+                                <option value="">(Escolha a Edição do Folheto)</option>
+                                {campaigns.map(c => <option key={c.id} value={c.id}>{c.title}</option>)}
+                           </select>
+                           <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-xl text-center">
+                              <p className="text-[10px] font-black uppercase text-amber-800">Espaço Fixo para Entidades Externas:</p>
+                              <p className="text-sm font-black uppercase text-amber-900">Rodapé das Páginas Interiores</p>
+                           </div>
+                           <input required type="text" placeholder="Nome / Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                           <div className="grid grid-cols-2 gap-4">
+                              <input required type="text" placeholder="Preço (€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                              <input required type="text" placeholder="Unidade (ex: kg, uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                              <input type="text" placeholder="Preço Riscado (Opcional)" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                              <input type="text" placeholder="Destaque (Opcional)" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
+                           </div>
+                           <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
+                              <div className="flex-1">
+                                 <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Produto</p>
+                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor apresentação no folheto, utilize uma fotografia do seu produto com fundo branco ou transparente.</p>
+                                 <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
+                              </div>
+                              {leafletForm.imageBase64 && (
+                                <div className="w-20 h-20 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
+                                  <img src={leafletForm.imageBase64} alt="Preview" className="w-full h-full object-contain" />
+                                </div>
+                              )}
+                           </div>
+                           <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Ver Preço do Espaço'}</button>
+                        </div>
+                      )}
+                  </form>
+              ) : (
+                  <div className="bg-[#00d66f] p-8 rounded-[30px] text-center border-4 border-[#0a2540] animate-in zoom-in">
+                     <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2 opacity-70">Orçamento Pré-Calculado</p>
+                     <p className="text-4xl font-black italic text-[#0a2540] mb-6">{formatEuro(bannerSimulation ? bannerSimulation.cost : leafletSimulation?.cost)}</p>
+                     {bannerSimulation && <p className="text-xs font-bold text-[#0a2540] mb-6">Alcance estimado: {bannerSimulation.count} clientes na App durante {bannerSimulation.days} dias.</p>}
+                     <div className="grid grid-cols-2 gap-3">
+                        <button type="button" onClick={() => {setBannerSimulation(null); setLeafletSimulation(null);}} className="py-4 bg-white/30 text-[#0a2540] rounded-2xl font-black uppercase text-[10px] hover:bg-white/50 transition-colors">
+                           Voltar a Editar
+                        </button>
+                        <button type="button" onClick={() => submitExternalRequest(activeTab)} className="py-4 bg-[#0a2540] text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-transform border-b-4 border-black/40">
+                           Confirmar Pedido
+                        </button>
+                     </div>
+                  </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* TERMOS E CONDIÇÕES COMPLETOS */}
       {showTerms && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3>
-              <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
-            </div>
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3><button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button></div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Natureza da Plataforma</h4>
-                <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de atribuição de saldo (cashback) local. O Vizinho+ é uma ferramenta de mediação técnica, não sendo parte integrante, interveniente ou responsável por qualquer transação comercial direta entre Lojistas e Clientes.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Entidade Responsável e Compromisso de Privacidade</h4>
-                <p>O Vizinho+ respeita a tua privacidade e compromete-se a protegê-la. Em conformidade com o Regulamento Geral de Proteção de Dados (RGPD), a entidade responsável pelo tratamento dos dados pessoais recolhidos é a Panóplia Lógica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde. Estabelecemos medidas de segurança técnica e organizacionais rigorosas para garantir que o processamento dos teus dados é realizado de forma segura.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Recolha e Utilização de Dados Pessoais</h4>
-                <p>A recolha de dados ocorre de forma voluntária quando utilizas os nossos serviços ou entras em contacto connosco. Estes dados (Nome, Email, NIF e Código Postal) são recolhidos estritamente para o funcionamento da plataforma. O NIF é solicitado especificamente para validar, processar e cruzar de forma fidedigna as compras efetuadas nas lojas aderentes.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Natureza do Saldo (Cashback)</h4>
-                <p>O saldo de cashback acumulado na tua carteira digital Vizinho+ possui uma natureza exclusivamente promocional e não tem valor fiduciário. Não pode ser levantado em numerário, transferido para contas bancárias ou trocado por dinheiro vivo; serve unicamente como desconto acumulado na rede de lojas aderentes.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-red-500 mb-1 uppercase">5. Proteção de Propriedade Intelectual</h4>
-                <p>A tecnologia, o sistema de gestão de saldos, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora e estão protegidos por direitos de propriedade intelectual. É estritamente proibida a reprodução, cópia, manipulação de código ou engenharia reversa por qualquer indivíduo não autorizado.</p>
-              </div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Natureza da Plataforma</h4><p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de atribuição de saldo (cashback) local. O Vizinho+ é uma ferramenta de mediação técnica, não sendo parte integrante, interveniente ou responsável por qualquer transação comercial direta entre Lojistas e Clientes.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Entidade Responsável e Compromisso de Privacidade</h4><p>O Vizinho+ respeita a tua privacidade e compromete-se a protegê-la. Em conformidade com o Regulamento Geral de Proteção de Dados (RGPD), a entidade responsável pelo tratamento dos dados pessoais recolhidos é a Panóplia Lógica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Recolha e Utilização de Dados Pessoais</h4><p>A recolha de dados ocorre de forma voluntária quando utilizas os nossos serviços ou entras em contacto connosco. Estes dados (Nome, Email, NIF e Código Postal) são recolhidos estritamente para o funcionamento da plataforma. O NIF é solicitado especificamente para validar as transações.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Natureza do Saldo (Cashback)</h4><p>O saldo acumulado na tua carteira digital possui uma natureza exclusivamente promocional e não tem valor fiduciário. Não pode ser levantado em numerário nem trocado por dinheiro vivo; serve unicamente como desconto acumulado na rede de lojas aderentes.</p></div>
+              <div><h4 className="font-black text-red-500 mb-1 uppercase">5. Proteção de Propriedade Intelectual</h4><p>A tecnologia, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora. É estritamente proibida a reprodução, cópia, manipulação de código ou engenharia reversa.</p></div>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>

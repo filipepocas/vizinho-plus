@@ -2,8 +2,50 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText, HelpCircle } from 'lucide-react';
 import { SystemConfig } from '../../types';
+
+const defaultMerchantFaqs = `GUIA PASSO-A-PASSO PARA LOJISTAS:
+
+1. TERMINAL DE VENDAS (Dar e Descontar Saldo)
+- Peça ao cliente o NIF ou Número de Cartão Vizinho+.
+- Insira o número na caixa ou clique no botão "Ler QR Code" para usar a câmara.
+- Digite o valor TOTAL da fatura.
+- Se for para dar saldo, clique em "Atribuir Cashback".
+- Se o cliente tiver saldo e quiser usar, o sistema avisa. Escreva o valor a descontar (máximo 50% da fatura) e clique em "Confirmar Desconto".
+
+2. MARKETING E PUSH
+- Crie Banners ou Notificações Push para promover a sua loja.
+- Selecione o Público Alvo (ex: Todos, Aniversariantes, Top Clientes).
+- A simulação mostrará o custo. O pedido vai para aprovação do Admin.
+
+3. DESPERDÍCIO ZERO
+- Anuncie sobras do dia (Ex: pão, bolos, pratos do dia) a preços de desconto.
+- Pode selecionar no máximo 2 Concelhos para o anúncio.
+- O anúncio expira no próprio dia, à hora que definir.
+
+4. DEFINIÇÕES DA LOJA
+- Altere a sua Password de acesso.
+- Atualize a sua percentagem de cashback a qualquer momento.`;
+
+const defaultClientFaqs = `GUIA PASSO-A-PASSO PARA VIZINHOS:
+
+1. O MEU SALDO E CARTÃO DIGITAL
+- No painel "O meu Saldo", encontra o seu Cartão Digital com QR Code.
+- Apresente este QR Code (ou diga o seu NIF/Nº Cartão) ANTES de pagar na loja.
+- O saldo ganho na Loja A só pode ser descontado na Loja A.
+
+2. AVALIAR LOJAS
+- Depois de fazer uma compra, vá a "Avaliar Lojas".
+- Dê uma nota de 1 a 5 estrelas e diga-nos como foi o serviço.
+
+3. EXPLORAR LOJAS E VANTAGENS
+- Use a pesquisa para encontrar Lojas Parceiras ou Vantagens VIP.
+- Pode filtrar por Distrito, Concelho e Categorias.
+
+4. ZERO DESPERDÍCIO E EVENTOS
+- Fique atento à secção "Zero Desperdício" para oportunidades de última hora nos lojistas locais.
+- Acompanhe a "Agenda da Freguesia" para eventos culturais e desportivos.`;
 
 const AdminSettings: React.FC = () => {
   const { currentUser, setCurrentUser } = useStore();
@@ -13,14 +55,10 @@ const AdminSettings: React.FC = () => {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  const [sysConfig, setSysConfig] = useState<SystemConfig & { merchantTerms?: string }>({
-    globalServiceFee: 0,
-    maturationHours: 0,
-    minRedeemAmount: 5.00,
-    platformStatus: 'active',
-    supportEmail: 'ajuda@vizinho-plus.pt',
-    vantagensUrl: '',
-    merchantTerms: ''
+  const [sysConfig, setSysConfig] = useState<SystemConfig>({
+    globalServiceFee: 0, maturationHours: 0, minRedeemAmount: 5.00,
+    platformStatus: 'active', supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', merchantTerms: '',
+    clientFaqs: '', merchantFaqs: '', showMemberCount: true
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -36,7 +74,10 @@ const AdminSettings: React.FC = () => {
           setSysConfig({ 
             ...data, 
             supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt',
-            merchantTerms: data.merchantTerms || 'Escreva aqui as condições...'
+            merchantTerms: data.merchantTerms || 'Escreva aqui as condições...',
+            clientFaqs: data.clientFaqs || defaultClientFaqs,
+            merchantFaqs: data.merchantFaqs || defaultMerchantFaqs,
+            showMemberCount: data.showMemberCount !== false // Default é true
           });
         }
       } catch (e) {
@@ -48,19 +89,12 @@ const AdminSettings: React.FC = () => {
 
   const handleUpdateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword && newPassword !== confirmPassword) {
-      setMessage({ type: 'error', text: 'As passwords não coincidem!' });
-      return;
-    }
-    
-    setIsSaving(true);
-    setMessage({ type: '', text: '' });
-
+    if (newPassword && newPassword !== confirmPassword) { setMessage({ type: 'error', text: 'As passwords não coincidem!' }); return; }
+    setIsSaving(true); setMessage({ type: '', text: '' });
     try {
       const adminRef = doc(db, 'users', currentUser?.id || 'admin');
       await setDoc(adminRef, { email: newEmail.toLowerCase().trim(), updatedAt: serverTimestamp() }, { merge: true });
       if (currentUser) setCurrentUser({ ...currentUser, email: newEmail });
-      
       setMessage({ type: 'success', text: 'Credenciais atualizadas!' });
       setNewPassword(''); setConfirmPassword('');
     } catch (error) { setMessage({ type: 'error', text: 'Erro ao atualizar.' }); } finally { setIsSaving(false); }
@@ -68,9 +102,7 @@ const AdminSettings: React.FC = () => {
 
   const handleUpdateSystem = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSaving(true);
-    setMessage({ type: '', text: '' });
-    
+    setIsSaving(true); setMessage({ type: '', text: '' });
     try {
       await setDoc(doc(db, 'system', 'config'), { ...sysConfig, updatedAt: serverTimestamp(), lastChangeBy: currentUser?.id || 'admin' }, { merge: true });
       setMessage({ type: 'success', text: 'Configurações gravadas com sucesso!' });
@@ -87,7 +119,7 @@ const AdminSettings: React.FC = () => {
 
           <div className="flex flex-wrap bg-[#0a2540] border-4 border-[#0a2540] p-1 rounded-3xl shadow-[6px_6px_0px_0px_#00d66f]">
             <button onClick={() => setActiveTab('system')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Plataforma</button>
-            <button onClick={() => setActiveTab('legal')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'legal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Textos Legais</button>
+            <button onClick={() => setActiveTab('legal')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'legal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Textos & FAQs</button>
             <button onClick={() => setActiveTab('security')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'security' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Segurança</button>
           </div>
         </div>
@@ -102,6 +134,20 @@ const AdminSettings: React.FC = () => {
           <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12">
             <form onSubmit={handleUpdateSystem} className="space-y-10">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                
+                <div className="space-y-4 md:col-span-2 bg-blue-50 p-6 rounded-3xl border-4 border-blue-100">
+                  <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={sysConfig.showMemberCount} 
+                      onChange={e => setSysConfig({...sysConfig, showMemberCount: e.target.checked})} 
+                      className="w-6 h-6 accent-[#00d66f] cursor-pointer" 
+                    />
+                    Mostrar Contador "Já somos X membros" na Landing Page
+                  </label>
+                  <p className="text-[10px] font-bold text-slate-500 ml-9">Se desativar esta opção, o quadro verde que diz quantos membros tem a plataforma ficará oculto na página principal.</p>
+                </div>
+
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
                     <Mail size={16} className="text-[#00d66f]" /> E-mail Apoio ao Cliente (Rodapé)
@@ -129,22 +175,61 @@ const AdminSettings: React.FC = () => {
 
         {activeTab === 'legal' && (
           <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12">
-            <form onSubmit={handleUpdateSystem} className="space-y-6">
-              <div className="flex items-center gap-3 mb-4">
-                 <div className="bg-amber-100 p-3 rounded-2xl text-amber-600"><ScrollText size={24} /></div>
-                 <div>
-                    <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Condições de Adesão - Lojistas</h3>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase">Este texto aparecerá no registo e no painel do Comerciante.</p>
-                 </div>
+            <form onSubmit={handleUpdateSystem} className="space-y-10">
+              
+              {/* TERMOS DE ADESÃO */}
+              <div className="space-y-4">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-amber-100 p-3 rounded-2xl text-amber-600"><ScrollText size={24} /></div>
+                    <div>
+                        <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Condições de Adesão Comerciais</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Este texto aparecerá no registo e no painel do Comerciante.</p>
+                    </div>
+                  </div>
+                  <textarea 
+                    value={sysConfig.merchantTerms} 
+                    onChange={e => setSysConfig({...sysConfig, merchantTerms: e.target.value})} 
+                    className="w-full h-64 p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-sm outline-none focus:border-amber-400 custom-scrollbar resize-none"
+                    placeholder="Escreva aqui as regras de negócio..."
+                  />
               </div>
-              <textarea 
-                value={sysConfig.merchantTerms} 
-                onChange={e => setSysConfig({...sysConfig, merchantTerms: e.target.value})} 
-                className="w-full h-96 p-6 bg-slate-50 border-4 border-slate-100 rounded-3xl font-bold text-sm outline-none focus:border-amber-400 custom-scrollbar resize-none"
-                placeholder="Escreva aqui as regras de negócio..."
-              />
+
+              {/* FAQs COMERCIANTE */}
+              <div className="space-y-4 pt-8 border-t-4 border-slate-100">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-blue-100 p-3 rounded-2xl text-blue-600"><HelpCircle size={24} /></div>
+                    <div>
+                        <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Guia / FAQs Lojista</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Instruções de como usar a App. Visível no Painel do Lojista.</p>
+                    </div>
+                  </div>
+                  <textarea 
+                    value={sysConfig.merchantFaqs} 
+                    onChange={e => setSysConfig({...sysConfig, merchantFaqs: e.target.value})} 
+                    className="w-full h-64 p-6 bg-blue-50 border-4 border-blue-100 rounded-3xl font-bold text-sm outline-none focus:border-blue-400 custom-scrollbar resize-none"
+                    placeholder="Escreva aqui o passo-a-passo..."
+                  />
+              </div>
+
+              {/* FAQs CLIENTE */}
+              <div className="space-y-4 pt-8 border-t-4 border-slate-100">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-green-100 p-3 rounded-2xl text-green-600"><HelpCircle size={24} /></div>
+                    <div>
+                        <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Guia / FAQs Vizinho (Cliente)</h3>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase">Instruções de como usar a App. Visível no Painel do Cliente.</p>
+                    </div>
+                  </div>
+                  <textarea 
+                    value={sysConfig.clientFaqs} 
+                    onChange={e => setSysConfig({...sysConfig, clientFaqs: e.target.value})} 
+                    className="w-full h-64 p-6 bg-green-50 border-4 border-green-100 rounded-3xl font-bold text-sm outline-none focus:border-green-400 custom-scrollbar resize-none"
+                    placeholder="Escreva aqui o passo-a-passo..."
+                  />
+              </div>
+
               <button type="submit" disabled={isSaving} className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all shadow-xl flex justify-center gap-2 border-b-4 border-black/50">
-                <Save size={20} /> Gravar Textos Legais
+                <Save size={20} /> Gravar Textos e Guias
               </button>
             </form>
           </div>

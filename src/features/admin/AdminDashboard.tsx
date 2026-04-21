@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, 
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt, CalendarPlus, Leaf, MapPin, ImageIcon, LayoutDashboard } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt, CalendarPlus, Leaf, MapPin, ImageIcon, LayoutDashboard, Euro } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -22,12 +22,14 @@ import AdminEvents from './AdminEvents';
 import AdminAntiWaste from './AdminAntiWaste'; 
 import AdminLocations from './AdminLocations'; 
 import BannerManager from './BannerManager';
+import AdminPricing from './AdminPricing'; // NOVO IMPORT: Motor de Preços
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
   
   const [activeMenu, setActiveMenu] = useState<'gestao' | 'marketing'>('gestao');
+  // NOVO: 'pricing' adicionado às views
   const [currentView, setCurrentView] = useState<string>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
@@ -35,7 +37,6 @@ const AdminDashboard: React.FC = () => {
   const [globalClients, setGlobalClients] = useState<UserProfile[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Estados para as etiquetas "NOVO" a piscar
   const [pendingMerchants, setPendingMerchants] = useState(0);
   const [pendingMarketing, setPendingMarketing] = useState(0);
   const [pendingEvents, setPendingEvents] = useState(0);
@@ -51,12 +52,10 @@ const AdminDashboard: React.FC = () => {
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
     const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
 
-    // Monitores de Pendentes (Etiqueta NOVO)
     const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), snap => setPendingMerchants(snap.size));
     const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), snap => setPendingMarketing(snap.size));
     const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), snap => setPendingEvents(snap.size));
     const unsub4 = onSnapshot(query(collection(db, 'feedbacks'), where('status', '==', 'new')), snap => {
-        // Feedback só avisa se for inferior a 3 estrelas
         const bad = snap.docs.filter(d => d.data().rating < 3).length;
         setBadFeedbacks(bad);
     });
@@ -88,6 +87,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'merchants', label: 'Lojas', icon: Store },
     { id: 'users', label: 'Vizinhos', icon: Users },
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
+    { id: 'pricing', label: 'Motor Preços', icon: Euro }, // PONTO 10 e 13: NOVO BOTÃO
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -130,7 +130,6 @@ const AdminDashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* BOTÕES PRINCIPAIS DE NAVEGAÇÃO */}
           <div className="flex gap-4 border-b-2 border-white/10 pb-4 mb-4">
               <button onClick={() => {setActiveMenu('gestao'); setCurrentView('overview');}} className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 transition-all ${activeMenu === 'gestao' ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
                  <LayoutDashboard size={20} /> GESTÃO
@@ -142,7 +141,6 @@ const AdminDashboard: React.FC = () => {
               </button>
           </div>
 
-          {/* SUB-MENUS */}
           <div className="-mx-6 px-6 md:mx-0 md:px-0">
             <nav className="flex overflow-x-auto gap-2 bg-black/20 p-2 md:rounded-[25px] border border-white/5 scrollbar-hide">
               {currentMenuItems.map(item => (
@@ -176,6 +174,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'settings' && <AdminSettings />}
         {currentView === 'locations' && <AdminLocations />} 
+        {currentView === 'pricing' && <AdminPricing />} {/* COMPONENTE RENDERIZADO */}
         {currentView === 'banners' && <BannerManager />} 
         {currentView === 'admin_msg' && (
            <div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-200 text-center">

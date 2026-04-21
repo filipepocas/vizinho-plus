@@ -2,7 +2,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { Transaction, Feedback } from '../../../types';
-import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy } from 'lucide-react';
+import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy, Activity } from 'lucide-react';
 
 interface BIProps {
   merchantId: string;
@@ -70,22 +70,17 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     }));
   }, [transactions]);
 
-  // CÁLCULO MENSAL, MÉDIA DE COMPRAS POR DIA E TICKET MÉDIO (VALOR DE VENDA / COMPRAS)
   const monthStats = useMemo(() => {
     const months: MonthStat[] = [];
-    
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);
       const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
-      
       months.push({ 
         label: d.toLocaleDateString('pt-PT', { month: 'short' }), 
         m: d.getMonth(), 
         y: d.getFullYear(), 
-        volume: 0,
-        visits: 0,
-        daysInMonth: daysInMonth
+        volume: 0, visits: 0, daysInMonth: daysInMonth
       });
     }
 
@@ -102,22 +97,61 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return months;
   }, [transactions]);
 
+  // PONTO 7: Ticket Médio e Média de Vendas Diárias (6 Meses Acumulados vs Mês Atual)
+  const performanceStats = useMemo(() => {
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+
+    const currentMonthStart = new Date();
+    currentMonthStart.setDate(1);
+    currentMonthStart.setHours(0, 0, 0, 0);
+
+    let vol6m = 0, visits6m = 0;
+    let vol1m = 0, visits1m = 0;
+
+    transactions.forEach(t => {
+      if (t.type === 'earn' && t.status !== 'cancelled') {
+        const d = parseDate(t.createdAt);
+        if (d >= sixMonthsAgo) {
+          vol6m += Number(t.amount || 0);
+          visits6m++;
+        }
+        if (d >= currentMonthStart) {
+          vol1m += Number(t.amount || 0);
+          visits1m++;
+        }
+      }
+    });
+
+    // Dias decorridos no mês atual
+    const elapsedDaysCurrentMonth = Math.max(1, new Date().getDate());
+    // Dias nos últimos 6 meses (aprox 180)
+    const elapsedDays6Months = 180;
+
+    return {
+      ticket6m: visits6m > 0 ? vol6m / visits6m : 0,
+      daily6m: visits6m / elapsedDays6Months,
+      ticket1m: visits1m > 0 ? vol1m / visits1m : 0,
+      daily1m: visits1m / elapsedDaysCurrentMonth,
+    };
+  }, [transactions]);
+
+  // PONTO 7: Top 20 Clientes (Últimos 6 Meses)
   const topClients = useMemo(() => {
-    const oneYearAgo = new Date();
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const clientMap: Record<string, { name: string, card: string, birth: string, volume: number, visits: number }> = {};
 
     transactions.forEach(t => {
       const date = parseDate(t.createdAt);
-      if (date > oneYearAgo && t.type === 'earn' && t.status !== 'cancelled') {
+      if (date >= sixMonthsAgo && t.type === 'earn' && t.status !== 'cancelled') {
         if (!clientMap[t.clientId]) {
           clientMap[t.clientId] = {
             name: t.clientName || 'Desconhecido',
             card: t.clientCardNumber || t.clientNif || '---',
             birth: t.clientBirthDate || 'N/D',
-            volume: 0,
-            visits: 0
+            volume: 0, visits: 0
           };
         }
         clientMap[t.clientId].volume += Number(t.amount);
@@ -126,7 +160,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     });
 
     const allClientsArr = Object.values(clientMap);
-    
     return {
       byVolume: [...allClientsArr].sort((a, b) => b.volume - a.volume).slice(0, 20),
       byVisits: [...allClientsArr].sort((a, b) => b.visits - a.visits).slice(0, 20)
@@ -135,16 +168,10 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const cashbackStats = useMemo(() => {
     let emitted = 0, used = 0, available = 0;
-    
     transactions.forEach(t => {
       if (t.status === 'cancelled') return;
-      if (t.type === 'earn') {
-        emitted += t.cashbackAmount;
-        available += t.cashbackAmount; 
-      } else if (t.type === 'redeem') {
-        used += t.amount;
-        available -= t.amount;
-      }
+      if (t.type === 'earn') { emitted += t.cashbackAmount; available += t.cashbackAmount; } 
+      else if (t.type === 'redeem') { used += t.amount; available -= t.amount; }
     });
     return { emitted, used, available: Math.max(0, available) };
   }, [transactions]);
@@ -153,22 +180,52 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
     const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
     const promotersCount = feedbacks.filter(f => f.rating >= 4).length;
-    return {
-      avg: (sum / feedbacks.length).toFixed(1),
-      count: feedbacks.length,
-      promoters: ((promotersCount / feedbacks.length) * 100).toFixed(0)
-    };
+    return { avg: (sum / feedbacks.length).toFixed(1), count: feedbacks.length, promoters: ((promotersCount / feedbacks.length) * 100).toFixed(0) };
   }, [feedbacks]);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
+
+        {/* NOVO QUADRO DE DESEMPENHO MÉDIO (Ponto 7) */}
+        <div className="bg-[#0a2540] p-8 rounded-[40px] border-4 border-[#00d66f] shadow-[8px_8px_0px_#00d66f] text-white">
+           <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-6">
+              <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Activity size={16} /></div> Saúde do Negócio: Últimos 6 Meses vs Mês Atual
+           </h3>
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-white/10 p-6 rounded-3xl border-2 border-white/10">
+                 <p className="text-[10px] font-black uppercase text-slate-400 mb-4">Ticket Médio (Valor por Cliente)</p>
+                 <div className="flex items-end justify-between">
+                    <div>
+                      <p className="text-3xl font-black italic">{formatCurrency(performanceStats.ticket1m)}</p>
+                      <p className="text-[9px] font-bold text-[#00d66f] uppercase">Mês Atual</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-slate-300">{formatCurrency(performanceStats.ticket6m)}</p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase">Média 6 Meses</p>
+                    </div>
+                 </div>
+              </div>
+              <div className="bg-white/10 p-6 rounded-3xl border-2 border-white/10">
+                 <p className="text-[10px] font-black uppercase text-slate-400 mb-4">Frequência (Transações por Dia)</p>
+                 <div className="flex items-end justify-between">
+                    <div>
+                      <p className="text-3xl font-black italic">{performanceStats.daily1m.toFixed(1)} <span className="text-sm font-bold text-slate-400">/dia</span></p>
+                      <p className="text-[9px] font-bold text-[#00d66f] uppercase">Mês Atual</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xl font-bold text-slate-300">{performanceStats.daily6m.toFixed(1)} <span className="text-xs font-bold text-slate-400">/dia</span></p>
+                      <p className="text-[8px] font-bold text-slate-400 uppercase">Média 6 Meses</p>
+                    </div>
+                 </div>
+              </div>
+           </div>
+        </div>
+
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
-          
-          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f] flex flex-col relative overflow-hidden">
+          <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col relative overflow-hidden">
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
               <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
             </h3>
-            
             <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
               {dayStats.map((d, i) => {
                 const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
@@ -183,7 +240,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                 );
               })}
             </div>
-            
             <div className="space-y-3 pt-6 border-t-2 border-slate-100">
               <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center mb-2">Horas de Ponta (12M)</p>
               <div className="grid grid-cols-2 gap-2">
@@ -204,12 +260,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             <div className="space-y-5 mt-auto">
               {monthStats.map((m, i) => {
                   const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
-                  
-                  // Ticket Médio (Volume / Transações do Mês)
-                  const avgTicket = m.visits > 0 ? m.volume / m.visits : 0;
-                  // Média de Transações (Vendas) por Dia
-                  const avgDailyVisits = m.visits / m.daysInMonth;
-
                   return (
                     <div key={i} className="space-y-1">
                       <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
@@ -218,10 +268,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                       </div>
                       <div className="h-2 bg-slate-100 rounded-full overflow-hidden shadow-inner">
                         <div className="h-full bg-[#00d66f] transition-all duration-1000 rounded-full" style={{ width: `${(m.volume / maxVol) * 100}%` }} />
-                      </div>
-                      <div className="flex justify-between text-[7px] font-bold text-slate-400 uppercase tracking-widest pt-1">
-                         <span title="Ticket Médio / Valor por Venda">Ticket Médio: {formatCurrency(avgTicket)}</span>
-                         <span title="Média de Transações/Compras Diárias">{avgDailyVisits.toFixed(1)} Vendas/dia</span>
                       </div>
                     </div>
                   );
@@ -234,13 +280,11 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
               <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Wallet size={16} /></div> Gestão de Saldo
             </h3>
-            
             <div className="space-y-8 flex-grow relative z-10 mt-auto">
               <div className="bg-white/5 p-6 rounded-3xl border border-white/10 backdrop-blur-sm">
                 <p className="text-[8px] font-black uppercase text-white/40 tracking-widest mb-2">Responsabilidade Total</p>
                 <span className="text-3xl font-black text-[#00d66f] italic tracking-tighter block">{formatCurrency(cashbackStats.available)}</span>
               </div>
-
               <div className="space-y-4 pt-6 border-t border-white/10">
                 <div className="flex justify-between items-end">
                   <div>
@@ -274,7 +318,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             
             <div className="flex-grow overflow-y-auto space-y-3 pr-2 scrollbar-thin scrollbar-thumb-slate-200">
               <p className="text-[8px] font-black uppercase text-slate-300 tracking-widest sticky top-0 bg-white pb-2 z-10 pt-1">Últimos Comentários</p>
-              
               {loadingFeedbacks ? (
                   <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
               ) : feedbacks.length > 0 ? (
@@ -298,11 +341,11 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
           </div>
         </div>
 
-        {/* TABELAS TOP 20 CLIENTES */}
+        {/* TABELAS TOP 20 CLIENTES (6 MESES) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f]">
               <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
-                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Trophy size={16} className="text-[#00d66f]" /></div> Top 20 Clientes - Maior Volume (12 Meses)
+                <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Trophy size={16} className="text-[#00d66f]" /></div> Top 20 Clientes (Últimos 6 Meses)
               </h3>
               <div className="overflow-x-auto">
                  <table className="w-full text-left">
@@ -324,7 +367,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                              <td className="py-4 text-right font-black text-[#00d66f]">{formatCurrency(c.volume)}</td>
                           </tr>
                        ))}
-                       {topClients.byVolume.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado.</td></tr>}
+                       {topClients.byVolume.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado nos últimos 6 meses.</td></tr>}
                     </tbody>
                  </table>
               </div>
@@ -332,7 +375,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540]">
               <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">
-                <div className="bg-blue-50 p-2 rounded-xl"><Users size={16} className="text-blue-500" /></div> Top 20 Clientes - Mais Frequentes (12 Meses)
+                <div className="bg-blue-50 p-2 rounded-xl"><Users size={16} className="text-blue-500" /></div> Clientes + Frequentes (Últimos 6 Meses)
               </h3>
               <div className="overflow-x-auto">
                  <table className="w-full text-left">
@@ -354,7 +397,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                              <td className="py-4 text-right font-black text-blue-500">{c.visits}x</td>
                           </tr>
                        ))}
-                       {topClients.byVisits.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado.</td></tr>}
+                       {topClients.byVisits.length === 0 && <tr><td colSpan={3} className="py-6 text-center text-xs text-slate-400">Nenhum dado nos últimos 6 meses.</td></tr>}
                     </tbody>
                  </table>
               </div>

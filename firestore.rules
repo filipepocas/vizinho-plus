@@ -31,6 +31,7 @@ service cloud.firestore {
     match /leaflets/{leafletId} { allow read: if true; allow write: if isAdmin(); }
     match /leaflet_campaigns/{campaignId} { allow read: if true; allow write: if isAdmin(); }
     match /system/{document=**} { allow read: if true; allow write: if isAdmin(); }
+    match /pricing_rules/{ruleId} { allow read: if isAuthenticated(); allow write: if isAdmin(); } // NOVA REGRA
 
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
@@ -44,27 +45,28 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
 
+    // NOVA REGRA: MENSAGENS DE ADMIN PARA LOJISTAS E CLIENTES (Global)
     match /merchant_messages/{msgId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.targetId == request.auth.uid) || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
       allow create: if isAdmin();
-      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
+      allow update, delete: if isAdmin() || (isAuthenticated() && (resource.data.targetId == request.auth.uid || resource.data.merchantId == request.auth.uid));
     }
 
     match /notifications/{notifId} {
       allow read: if isAuthenticated(); allow create: if isAdmin(); allow update, delete: if isAdmin();
     }
 
-    // NOVAS REGRAS
     match /events/{eventId} {
       allow read: if isAuthenticated() || isAdmin();
-      allow create: if true; // Visitantes podem pedir
-      allow update, delete: if isAdmin();
+      allow create: if true; 
+      allow update: if isAdmin(); // ADMIN PODE EDITAR
+      allow delete: if isAdmin();
     }
 
     match /anti_waste/{itemId} {
       allow read: if isAuthenticated() || isAdmin();
       allow create: if isAuthenticated() && request.resource.data.merchantId == request.auth.uid;
-      allow update: if isAdmin();
+      allow update: if isAdmin(); // ADMIN PODE EDITAR
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
     }
   }

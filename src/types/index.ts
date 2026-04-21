@@ -3,7 +3,7 @@ export interface User {
   nif?: string; phone?: string; zipCode?: string; status?: string; createdAt?: any;
   customerNumber?: string; birthDate?: string; cashbackPercent?: number;
   shopName?: string; responsibleName?: string; 
-  distrito?: string; concelho?: string; freguesia?: string; // <- CAMPOS ADICIONADOS AQUI
+  distrito?: string; concelho?: string; freguesia?: string; 
   category?: string; address?: string; city?: string; 
   fcmTokens?: string[]; notificationsEnabled?: boolean; 
   notificationsUpdatedAt?: any; lastTokenUpdate?: any; 
@@ -64,6 +64,7 @@ export interface AppNotification {
 export interface SystemConfig {
   id?: string; globalServiceFee: number; maturationHours: number; minRedeemAmount: number;
   platformStatus: string; supportEmail: string; vantagensUrl: string; merchantTerms?: string; 
+  clientFaqs?: string; merchantFaqs?: string; showMemberCount?: boolean;
   updatedAt?: any; appVersion?: string;
 }
 
@@ -92,5 +93,19 @@ export interface AntiWasteItem {
   endTime: any; createdAt: any;
 }
 
-// NOVO TIPO: Zonas (Distritos > Concelhos > Freguesias)
+// TIPO: Zonas Geográficas
 export type LocationsMap = Record<string, Record<string, string[]>>;
+
+// NOVO TIPO: Regras de Preços de Publicidade
+export interface PricingRule {
+  id?: string;
+  tool: 'banner' | 'push' | 'leaflet';
+  chargeType: 'per_day' | 'per_client' | 'fixed';
+  zoneLevel: 'global' | 'distrito' | 'concelho' | 'freguesia';
+  zoneName: string; // 'Geral' ou o nome do distrito/concelho/freguesia
+  leafletId?: string; // 'all' ou ID de campanha especifica
+  spaceType?: string; // Para folhetos (ex: capa, interior)
+  price: number;
+  minPrice: number;
+  createdAt?: any;
+}

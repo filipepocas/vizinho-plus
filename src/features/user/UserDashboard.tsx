@@ -11,7 +11,7 @@ import UserHistory from './components/UserHistory';
 import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, Leaf, MapPin, Store, Smartphone } from 'lucide-react';
+import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, Leaf, MapPin, Store, Smartphone, HelpCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
@@ -23,13 +23,16 @@ const UserDashboard: React.FC = () => {
 
   const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore' | 'events' | 'anti_waste'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
-  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '' });
+  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: 'A carregar guia...' });
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
+  
   const [showContactModal, setShowContactModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
+  const [showFaqModal, setShowFaqModal] = useState(false); // NOVO: Estado para FAQs
+  
   const [emailCopied, setEmailCopied] = useState(false);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
 
@@ -57,6 +60,7 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser?.id) return;
+    // Carrega IDs das transações que já foram avaliadas
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
     return onSnapshot(q, (snapshot) => {
       setEvaluatedIds(snapshot.docs.map(doc => doc.data().transactionId));
@@ -65,7 +69,6 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const userZipBase = currentUser.zipCode?.substring(0, 4);
     const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
     
     return onSnapshot(q, (snap) => {
@@ -75,12 +78,9 @@ const UserDashboard: React.FC = () => {
         .filter(l => {
           const start = l.startDate && typeof l.startDate.toDate === 'function' ? l.startDate.toDate() : new Date();
           const end = l.endDate && typeof l.endDate.toDate === 'function' ? l.endDate.toDate() : new Date();
-          
           const inTime = now >= start && now <= end;
           const targetZones = (l as any).targetZones || [];
-          // Verifica se a zona do cliente bate certo com os alvos do folheto
           const inZone = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
-
           return inTime && inZone;
         });
       setActiveLeaflets(valid);
@@ -143,7 +143,6 @@ const UserDashboard: React.FC = () => {
         .filter(w => {
             const isFuture = w.endTime.toDate() > now;
             const targetZones = (w as any).targetZones || [];
-            // O desperdício agora tem Concelhos associados
             const matchZip = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.concelho || ''));
             return isFuture && matchZip;
         });
@@ -275,7 +274,13 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
         
-        <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] animate-pulse shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
+        {/* BOTÃO FAQs / GUIA PASSO-A-PASSO */}
+        <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors animate-in fade-in">
+          <HelpCircle size={20} /> Guia Passo-a-Passo da App
+        </button>
+
+        {/* BOTÃO LER REGRAS */}
+        <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
           <BookOpen size={20} /> Ler Regras de Utilização
         </button>
         
@@ -321,12 +326,12 @@ const UserDashboard: React.FC = () => {
             <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={16} /></button>
           </div>
         )}
-
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
             <Wallet size={18} /> O meu Saldo
           </button>
-          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
+          
+          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
             {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
             <MessageSquare size={18} /> Avaliar Lojas
           </button>
@@ -336,9 +341,9 @@ const UserDashboard: React.FC = () => {
              <CalendarPlus size={18} className={view === 'events' ? 'text-white' : 'text-blue-500'} /> Eventos Locais
           </button>
           
-          <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-[#00d66f] border-[#00d66f] text-white shadow-sm hover:scale-[1.02]'}`}>
+          <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[9px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-[#22c55e] border-[#22c55e] text-white shadow-sm hover:scale-[1.02]'}`}>
              {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
-             <Leaf size={18} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-white'} /> Zero Desperdício
+             <Leaf size={16} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-white'} /> Desperdício Zero - Oportunidades
           </button>
         </div>
 
@@ -375,15 +380,15 @@ const UserDashboard: React.FC = () => {
 
         {view === 'anti_waste' && (
            <div className="space-y-4 animate-in fade-in duration-500">
-              <div className="bg-[#00d66f] text-[#0a2540] p-6 rounded-[30px] shadow-lg mb-6 border-4 border-[#0a2540]">
+              <div className="bg-[#22c55e] text-white p-6 rounded-[30px] shadow-lg mb-6 border-4 border-[#22c55e]">
                  <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite (Desperdício)</h3>
                  <p className="text-xs font-bold opacity-90 mt-2">Os lojistas anunciam sobras do dia com descontos acentuados. Válido apenas nas lojas, sujeito ao stock existente.</p>
               </div>
               {wasteItems.map(w => (
-                 <div key={w.id} className="bg-white border-4 border-[#00d66f] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
+                 <div key={w.id} className="bg-white border-4 border-[#22c55e] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
                     <div className="flex justify-between items-start mb-4 border-b-2 border-slate-100 pb-4">
                        <div>
-                          <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#00d66f]"/> {w.merchantName}</h4>
+                          <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#22c55e]"/> {w.merchantName}</h4>
                           <p className="text-[10px] font-bold text-slate-400 mt-1">{w.address}</p>
                        </div>
                     </div>
@@ -478,13 +483,13 @@ const UserDashboard: React.FC = () => {
 
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300 border-4 border-[#00d66f]">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <div className="flex items-center gap-3">
                 <Mail className="text-[#00d66f]" size={20} />
                 <h2 className="font-black uppercase italic tracking-tighter text-lg">Apoio ao Cliente</h2>
               </div>
-              <button onClick={() => setShowContactModal(false)}><X size={20} className="hover:text-[#00d66f]" /></button>
+              <button onClick={() => setShowContactModal(false)}><X size={20} /></button>
             </div>
             <div className="p-8 space-y-6 text-center">
               <p className="text-sm font-bold text-slate-500">Equipa pronta a ajudar.</p>
@@ -510,45 +515,31 @@ const UserDashboard: React.FC = () => {
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
-              
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade e Papel da Plataforma</u></h4>
-                <p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico, fornecendo ferramentas de marketing, comunicação e gestão de fidelização (cashback). <strong><u>O Vizinho+ isenta-se de qualquer responsabilidade sobre eventuais litígios, atritos, defeitos de produtos ou falhas na prestação de serviços que ocorram entre o Cliente e o Comerciante.</u></strong> Qualquer reclamação comercial deve ser resolvida diretamente entre as duas partes envolvidas na compra.</p>
-              </div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade e Papel da Plataforma</u></h4><p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico. <strong><u>O Vizinho+ isenta-se de qualquer responsabilidade sobre litígios.</u></strong></p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4><p>O saldo não possui valor fiduciário. Não pode ser trocado por dinheiro vivo.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4><p>O Cliente <strong>deve apresentar o Cartão Digital</strong> ao lojista <strong>antes</strong> do pagamento.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4><p>O valor a descontar <strong>nunca poderá ser superior a 50% do valor total da nova compra</strong>.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4><p>Quando utiliza saldo, gera um novo cashback sobre o valor remanescente pago por si.</p></div>
+              <div><h4 className="font-black text-red-600 mb-1 uppercase">6. Prevenção de Fraude</h4><p>A tentativa de uso de dados de terceiros ou NIFs falsos resultará no bloqueio imediato e perda de saldo.</p></div>
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi e Aceito as Regras</button></div>
+          </div>
+        </div>
+      )}
 
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4>
-                <p>O saldo acumulado na sua conta Vizinho+ é um benefício exclusivo e não possui valor fiduciário. Não pode ser trocado por dinheiro vivo, nem transferido para contas bancárias. O saldo serve unicamente como desconto em compras nas lojas da rede aderente.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4>
-                <p>Para acumular ou descontar saldo, o Cliente <strong>deve obrigatoriamente apresentar o seu Cartão Digital ou fornecer o NIF/Número de Cliente</strong> ao lojista <strong>antes</strong> do registo do pagamento. Após a fatura estar encerrada ou o pagamento efetuado, o lojista não é obrigado a atribuir o cashback.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4>
-                <p>Ao utilizar o seu saldo acumulado numa loja para obter um desconto, o valor a descontar <strong>nunca poderá ser superior a 50% do valor total da nova compra</strong>, independentemente de o seu saldo total ser maior. <em>(Exemplo: Numa compra de 10€, o desconto máximo aplicável será de 5€).</em></p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4>
-                <p>Quando utiliza saldo para obter um desconto, o Lojista irá gerar um novo cashback sobre o valor remanescente que foi efetivamente pago por si. <em>(Exemplo: Compra de 10€, onde desconta 5€ de saldo. Irá ganhar a percentagem de cashback correspondente aos 5€ que pagou).</em></p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">6. Lojas em Processo de Saída</h4>
-                <p>Se uma loja decidir abandonar a rede Vizinho+, será notificado no perfil da mesma. Durante o período de transição, a loja deixará de atribuir novos cashbacks, mas é obrigada a aceitar o desconto do saldo que já acumulou nessa loja, até à data de encerramento estipulada.</p>
-              </div>
-
-              <div>
-                <h4 className="font-black text-red-600 mb-1 uppercase">7. Prevenção de Fraude</h4>
-                <p>O seu cartão digital e o saldo associado são estritamente pessoais e intransmissíveis. A tentativa de uso de dados de terceiros, NIFs falsos, ou conluio para gerar saldos fictícios resultará no bloqueio imediato e permanente da sua conta, bem como na perda de todo o saldo acumulado.</p>
-              </div>
-
+      {/* NOVO: MODAL DE FAQs / GUIA DA APP */}
+      {showFaqModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
+              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/20 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {sysConfig.clientFaqs}
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-              <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600 transition-colors">Compreendi e Aceito as Regras</button>
+              <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-blue-600">Fechar Guia</button>
             </div>
           </div>
         </div>

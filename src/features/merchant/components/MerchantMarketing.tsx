@@ -3,7 +3,7 @@ import { db } from '../../../config/firebase';
 import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc, getDocs } from 'firebase/firestore';
 import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, AlertCircle, Bell, Filter, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { LeafletCampaign, MarketingRequest } from '../../../types';
+import { LeafletCampaign, MarketingRequest, PricingRule } from '../../../types';
 import { useStore } from '../../../store/useStore';
 
 interface Props {
@@ -18,7 +18,9 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
   const [myRequests, setMyRequests] = useState<MarketingRequest[]>([]);
-  const [prices, setPrices] = useState<any>({});
+  
+  // NOVO MOTOR DE PREÇOS
+  const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
 
   // Estados de Zonas para Banner e Push
   const [distrito, setDistrito] = useState('');
@@ -49,14 +51,17 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const [pushSimulation, setPushSimulation] = useState<{ count: number, cost: number, scheduledFor: Date } | null>(null);
 
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
-  
+  const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
+
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
   const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
   useEffect(() => {
+    // Carregar todas as Regras de Preços (NOVO MOTOR)
     const fetchPrices = async () => {
-      const docSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
-      if (docSnap.exists()) setPrices(docSnap.data());
+      const q = query(collection(db, 'pricing_rules'));
+      const snap = await getDocs(q);
+      setPricingRules(snap.docs.map(d => d.data() as PricingRule));
     };
     fetchPrices();
 
@@ -85,7 +90,41 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
     reader.readAsDataURL(file);
   };
 
-  // ----- SIMULAÇÃO BANNER E PUSH COM ZONAS -----
+  // ----- FUNÇÃO QUE CALCULA O PREÇO EXATO COM BASE NAS REGRAS DO ADMIN -----
+  const calculatePrice = (tool: 'banner' | 'push' | 'leaflet', count: number, days: number = 1) => {
+    let applicableRules = pricingRules.filter(r => r.tool === tool);
+    
+    // Para folhetos, filtra pelo ID da campanha e Espaço
+    if (tool === 'leaflet') {
+       const specificLeaflet = applicableRules.filter(r => r.leafletId === leafletForm.campaignId && r.spaceType === leafletForm.spaceType);
+       if (specificLeaflet.length > 0) applicableRules = specificLeaflet;
+       else applicableRules = applicableRules.filter(r => r.leafletId === 'all' && (r.spaceType === 'all' || r.spaceType === leafletForm.spaceType));
+    }
+
+    // Se houver zonas selecionadas (para Banner ou Push), tenta encontrar a regra mais específica
+    if (targetZones.length > 0) {
+      const zoneRule = applicableRules.find(r => targetZones.some(z => z.includes(r.zoneName) && z.toLowerCase().includes(r.zoneLevel)));
+      if (zoneRule) applicableRules = [zoneRule];
+    } else {
+      applicableRules = applicableRules.filter(r => r.zoneLevel === 'global');
+    }
+
+    // Se mesmo assim não houver regra, usa um valor padrão de segurança
+    if (applicableRules.length === 0) return { cost: 0, foundRule: false };
+
+    const rule = applicableRules[0]; // Apanha a primeira regra válida que sobrou (a mais forte)
+    let totalCost = 0;
+
+    if (rule.chargeType === 'per_day') totalCost = rule.price * days;
+    else if (rule.chargeType === 'per_client') totalCost = rule.price * count;
+    else if (rule.chargeType === 'fixed') totalCost = rule.price;
+
+    if (totalCost < rule.minPrice && (count > 0 || rule.chargeType === 'fixed')) totalCost = rule.minPrice;
+    if (count === 0 && rule.chargeType !== 'fixed') totalCost = 0;
+
+    return { cost: totalCost, foundRule: true };
+  };
+
   const simulateMarketing = async (type: 'banner' | 'push') => {
     let days = 1;
     let scheduledDateTime = new Date();
@@ -94,6 +133,11 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
       if (!bannerForm.startDate || !bannerForm.endDate || !bannerForm.imageBase64) return toast.error("Preencha datas e insira a imagem.");
       const start = new Date(bannerForm.startDate);
       const end = new Date(bannerForm.endDate);
+      
+      const minDate = new Date();
+      minDate.setHours(minDate.getHours() + 24);
+      if (start < minDate) return toast.error("Os pedidos devem ser feitos com pelo menos 24 horas de antecedência.");
+      
       if (end <= start) return toast.error("Data de fim inválida.");
       days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
     } else {
@@ -111,10 +155,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
         let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
 
         if (targetType === 'zonas') {
-            // Se as zonas contêm a Freguesia do cliente, OK. Senão vê se o Concelho ou o Distrito do cliente fazem match exato na string.
-            clients = clients.filter(c => {
-               return targetZones.some(z => z.includes(`Freguesia: ${c.freguesia}`) || z.includes(`Concelho: ${c.concelho}`) || z.includes(`Distrito: ${c.distrito}`));
-            });
+            clients = clients.filter(c => targetZones.some(z => z.includes(`Freguesia: ${c.freguesia}`) || z.includes(`Concelho: ${c.concelho}`) || z.includes(`Distrito: ${c.distrito}`)));
         } else if (targetType === 'birthDate') {
             const cm = new Date().getMonth() + 1;
             clients = clients.filter(c => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
@@ -133,23 +174,30 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
 
         const count = clients.length;
         
-        if (type === 'banner') {
-          const perClientDay = Number(prices.banner_cost_per_client) || 0.02;
-          const minCost = Number(prices.banner_min_cost) || 10;
-          let totalCost = count * perClientDay * days;
-          if (totalCost < minCost && count > 0) totalCost = minCost;
-          setBannerSimulation({ count, cost: count === 0 ? 0 : totalCost, days });
-        } else {
-          const perClient = Number(prices.push_cost_per_client) || 0.05;
-          const minCost = Number(prices.push_min_cost) || 5;
-          let totalCost = count * perClient;
-          if (totalCost < minCost && count > 0) totalCost = minCost;
-          setPushSimulation({ count, cost: count === 0 ? 0 : totalCost, scheduledFor: scheduledDateTime });
+        // PONTO 10: Usa o novo Motor de Preços para simular
+        const pricing = calculatePrice(type, count, days);
+        if (!pricing.foundRule) {
+           toast.error("O Administrador ainda não definiu um preço para esta zona/ferramenta. Orçamento a zeros.", { duration: 5000 });
         }
+
+        if (type === 'banner') setBannerSimulation({ count, cost: pricing.cost, days });
+        else setPushSimulation({ count, cost: pricing.cost, scheduledFor: scheduledDateTime });
+
     } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
   };
 
-  const submitMarketing = async (type: 'banner' | 'push') => {
+  const simulateLeafletCost = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!leafletForm.campaignId || !leafletForm.imageBase64) return toast.error("Selecione o folheto e insira a imagem.");
+    
+    // PONTO 10: Usa o novo Motor de Preços para o Folheto
+    const pricing = calculatePrice('leaflet', 0, 1);
+    if (!pricing.foundRule) toast.error("Sem preço tabelado para este espaço.", { duration: 4000 });
+    
+    setLeafletSimulation({ cost: pricing.cost });
+  };
+
+  const submitMarketing = async (type: 'banner' | 'push' | 'leaflet') => {
     setLoading(true);
     try {
         const baseData = { merchantId, merchantName, status: 'pending', createdAt: serverTimestamp() };
@@ -162,6 +210,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                 targetCount: bannerSimulation.count, cost: bannerSimulation.cost
             });
             setBannerSimulation(null); setBannerForm({text:'', startDate:'', endDate:'', imageBase64:'', targetType: 'all'});
+            setTargetZones([]);
         } else if (type === 'push' && pushSimulation) {
             await addDoc(collection(db, 'marketing_requests'), {
                 ...baseData, type: 'push_notification', title: pushForm.title, text: pushForm.text,
@@ -169,32 +218,25 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                 scheduledFor: pushSimulation.scheduledFor, targetCount: pushSimulation.count, cost: pushSimulation.cost
             });
             setPushSimulation(null); setPushForm({ title: '', text: '', targetType: 'all', scheduledDate: '', scheduledTime: '10:00' });
+            setTargetZones([]);
+        } else if (type === 'leaflet' && leafletSimulation) {
+            const camp = campaigns.find(c => c.id === leafletForm.campaignId);
+            await addDoc(collection(db, 'marketing_requests'), {
+                ...baseData, type: 'leaflet',
+                leafletCampaignId: leafletForm.campaignId, leafletCampaignTitle: camp?.title,
+                spaceType: leafletForm.spaceType, description: leafletForm.description,
+                sellPrice: leafletForm.sellPrice, unit: leafletForm.unit,
+                promoPrice: leafletForm.promoPrice, promoType: leafletForm.promoType,
+                imageUrl: leafletForm.imageBase64, cost: leafletSimulation.cost
+            });
+            setLeafletSimulation(null); setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: ''});
+            const fileInput = document.getElementById('leafletImageInput') as HTMLInputElement;
+            if (fileInput) fileInput.value = '';
         }
         
-        setTargetZones([]);
         toast.success("Pedido enviado com sucesso!");
         setActiveTab('history');
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
-  };
-
-  const submitLeaflet = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!leafletForm.campaignId || !leafletForm.imageBase64) return toast.error("Folheto e Imagem obrigatórios.");
-    const camp = campaigns.find(c => c.id === leafletForm.campaignId);
-    setLoading(true);
-    try {
-        await addDoc(collection(db, 'marketing_requests'), {
-            merchantId, merchantName, type: 'leaflet', status: 'pending',
-            leafletCampaignId: leafletForm.campaignId, leafletCampaignTitle: camp?.title,
-            spaceType: leafletForm.spaceType, description: leafletForm.description,
-            sellPrice: leafletForm.sellPrice, unit: leafletForm.unit,
-            promoPrice: leafletForm.promoPrice, promoType: leafletForm.promoType,
-            imageUrl: leafletForm.imageBase64, createdAt: serverTimestamp()
-        });
-        toast.success("Pedido submetido!");
-        setLeafletForm({campaignId: '', spaceType: 'leaflet_capa_normal', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: ''});
-        setActiveTab('history');
-    } catch(err) { toast.error("Erro."); } finally { setLoading(false); }
   };
 
   return (
@@ -211,10 +253,11 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
         {/* ===================== BANNER ===================== */}
         {activeTab === 'banner' && (
             <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
+              {/* O formulário mantém os dados e só é sobreposto visualmente pela simulação no ecrã mobile, não desaparece */}
               <form onSubmit={(e) => { e.preventDefault(); simulateMarketing('banner'); }} className="space-y-6">
                   <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <div><label className="text-[10px] font-black uppercase text-slate-400">Início</label><input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
+                      <div><label className="text-[10px] font-black uppercase text-slate-400">Início (Min 24h)</label><input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                       <div><label className="text-[10px] font-black uppercase text-slate-400">Fim</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                   </div>
 
@@ -257,22 +300,38 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                     )}
                   </div>
 
-                  <div><label className="text-[10px] font-black uppercase text-slate-400">Imagem (1920x1080px)</label><input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full p-4 border-4 border-dashed border-slate-200 rounded-2xl font-bold text-xs"/></div>
+                  <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center border-4 border-dashed border-slate-200">
+                      <div className="flex-1">
+                          <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Anúncio (Banner)</p>
+                          <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor qualidade possível na App, a imagem deve ser retangular/larga (Proporção 16:9, idêntica a um ecrã de TV/Computador). Se tiver texto, coloque-o no centro da imagem.</p>
+                          <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
+                      </div>
+                      {bannerForm.imageBase64 && (
+                        <div className="w-24 h-16 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
+                          <img src={bannerForm.imageBase64} alt="Preview" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                  </div>
                   
-                  {!bannerSimulation ? (
-                    <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase text-sm flex justify-center items-center gap-2 border-b-4 border-black">{loading ? <Loader2 className="animate-spin"/> : <Filter size={20}/>} Simular Alcance e Custo</button>
-                  ) : (
-                    <div className="bg-[#00d66f] p-6 rounded-2xl text-center">
-                       <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento Calculado</p>
-                       <p className="text-3xl font-black italic text-[#0a2540]">{formatEuro(bannerSimulation.cost)}</p>
-                       <p className="text-[10px] font-bold text-[#0a2540] mb-4">Alcance: {bannerSimulation.count} clientes durante {bannerSimulation.days} dias.</p>
-                       <div className="flex gap-2">
-                          <button type="button" onClick={() => setBannerSimulation(null)} className="flex-1 py-3 bg-white/40 text-[#0a2540] rounded-xl font-black uppercase text-[10px]">Cancelar</button>
-                          <button type="button" onClick={() => submitMarketing('banner')} className="flex-1 py-3 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[10px]">Avançar com Pedido</button>
-                       </div>
-                    </div>
-                  )}
+                  {/* BOTÃO MÁGICO: Agora não desaparece, apenas recalcula se editar */}
+                  <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase text-sm flex justify-center items-center gap-2 border-b-4 border-black">
+                     {loading ? <Loader2 className="animate-spin"/> : <Filter size={20}/>} {bannerSimulation ? 'Recalcular Orçamento' : 'Simular Alcance e Custo'}
+                  </button>
               </form>
+
+              {bannerSimulation && (
+                <div className="bg-[#00d66f] p-6 md:p-8 rounded-3xl text-center shadow-lg sticky top-8 h-fit animate-in slide-in-from-right">
+                   <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento Calculado</p>
+                   <p className="text-4xl font-black italic text-[#0a2540] mb-2">{formatEuro(bannerSimulation.cost)}</p>
+                   <p className="text-[10px] font-bold text-[#0a2540] mb-6">Alcance: {bannerSimulation.count} clientes na App durante {bannerSimulation.days} dias.</p>
+                   
+                   <p className="text-[9px] font-bold text-teal-900 mb-4 bg-teal-100 p-2 rounded-lg">Se alterar algo no formulário, clique em Recalcular. Se estiver pronto, clique abaixo.</p>
+                   
+                   <div className="flex gap-2">
+                      <button type="button" onClick={() => submitMarketing('banner')} className="w-full py-4 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[11px] shadow-lg border-b-4 border-black/40 hover:scale-105 transition-transform">Confirmar Pedido</button>
+                   </div>
+                </div>
+              )}
             </div>
         )}
 
@@ -327,55 +386,78 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                     <div><label className="text-[10px] font-black uppercase text-slate-400">Hora Exata</label><select required value={pushForm.scheduledTime} onChange={e=>setPushForm({...pushForm, scheduledTime: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-xs uppercase outline-none focus:border-[#00d66f]">{availableHours.map(h => <option key={h} value={h}>{h}</option>)}</select></div>
                   </div>
 
-                  {!pushSimulation ? (
-                    <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase text-sm flex justify-center items-center gap-2 border-b-4 border-black">{loading ? <Loader2 className="animate-spin"/> : <Filter size={20}/>} Simular Alcance e Custo</button>
-                  ) : (
-                    <div className="bg-[#00d66f] p-6 rounded-2xl text-center">
-                       <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento da Mensagem</p>
-                       <p className="text-3xl font-black italic text-[#0a2540]">{formatEuro(pushSimulation.cost)}</p>
-                       <p className="text-[10px] font-bold text-[#0a2540] mb-4">Alcance Imediato: {pushSimulation.count} ecrãs de clientes.</p>
-                       <div className="flex gap-2">
-                          <button type="button" onClick={() => setPushSimulation(null)} className="flex-1 py-3 bg-white/40 text-[#0a2540] rounded-xl font-black uppercase text-[10px]">Cancelar</button>
-                          <button type="button" onClick={() => submitMarketing('push')} className="flex-1 py-3 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[10px]">Avançar com Pedido</button>
-                       </div>
-                    </div>
-                  )}
+                  <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase text-sm flex justify-center items-center gap-2 border-b-4 border-black">
+                     {loading ? <Loader2 className="animate-spin"/> : <Filter size={20}/>} {pushSimulation ? 'Recalcular Custo' : 'Simular Alcance e Custo'}
+                  </button>
               </form>
+
+              {pushSimulation && (
+                <div className="bg-[#00d66f] p-6 md:p-8 rounded-3xl text-center shadow-lg sticky top-8 h-fit animate-in slide-in-from-right">
+                   <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento da Mensagem</p>
+                   <p className="text-4xl font-black italic text-[#0a2540] mb-2">{formatEuro(pushSimulation.cost)}</p>
+                   <p className="text-[10px] font-bold text-[#0a2540] mb-6">Alcance Imediato: {pushSimulation.count} ecrãs de clientes.</p>
+                   <div className="flex gap-2">
+                      <button type="button" onClick={() => submitMarketing('push')} className="w-full py-4 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[11px] shadow-lg border-b-4 border-black/40 hover:scale-105 transition-transform">Confirmar Pedido</button>
+                   </div>
+                </div>
+              )}
             </div>
         )}
 
         {/* ===================== FOLHETO ===================== */}
         {activeTab === 'leaflet' && (
-            <form onSubmit={submitLeaflet} className="space-y-6 animate-in fade-in max-w-2xl mx-auto">
-                <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-xl mb-4">
-                    <p className="text-[10px] font-black uppercase text-amber-800">Nota de Exclusividade:</p>
-                    <p className="text-xs font-bold text-amber-900 mt-1">Só tem acesso aos folhetos distribuídos no seu Concelho ou num concelho vizinho.</p>
+            <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
+              <form onSubmit={simulateLeafletCost} className="space-y-6 max-w-2xl mx-auto w-full">
+                  <div className="bg-amber-50 border-2 border-amber-200 p-4 rounded-xl mb-4">
+                      <p className="text-[10px] font-black uppercase text-amber-800">Nota de Exclusividade:</p>
+                      <p className="text-xs font-bold text-amber-900 mt-1">Só tem acesso aos folhetos distribuídos no seu Concelho ou num concelho vizinho.</p>
+                  </div>
+                  <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
+                      <option value="">(Escolha um Folheto Futuro)</option>
+                      {campaigns.map(c => <option key={c.id} value={c.id}>{c.title} (Fecha a: {c.limitDate.toDate().toLocaleDateString()})</option>)}
+                  </select>
+                  <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
+                      <option value="leaflet_capa_destaque">Capa Principal - Destaque (Consulte Preço)</option>
+                      <option value="leaflet_capa_normal">Capa - Tamanho Normal (Consulte Preço)</option>
+                      <option value="leaflet_contracapa">Contracapa - Parte Traseira (Consulte Preço)</option>
+                      <option value="leaflet_interior_full">Interior - Página Inteira (Consulte Preço)</option>
+                      <option value="leaflet_interior_1_2">Interior - Meia Página (Consulte Preço)</option>
+                      <option value="leaflet_interior_1_4">Interior - Quarto de Página (Consulte Preço)</option>
+                  </select>
+                  <input required type="text" placeholder="Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                  <div className="grid grid-cols-2 gap-4">
+                      <input required type="text" placeholder="Preço (Ex: 10€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                      <input required type="text" placeholder="Unidade (Ex: Kg, Uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                  </div>
+                  
+                  <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center border-4 border-dashed border-slate-200">
+                      <div className="flex-1">
+                          <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Produto</p>
+                          <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor apresentação gráfica no folheto, utilize uma fotografia centrada do seu produto com fundo branco ou transparente.</p>
+                          <input id="leafletImageInput" required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
+                      </div>
+                      {leafletForm.imageBase64 && (
+                        <div className="w-20 h-20 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
+                          <img src={leafletForm.imageBase64} alt="Preview" className="w-full h-full object-contain" />
+                        </div>
+                      )}
+                  </div>
+                  
+                  <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
+                      {loading ? <Loader2 className="animate-spin" /> : <><Filter size={20}/> {leafletSimulation ? 'Recalcular Preço do Espaço' : 'Ver Preço do Espaço'}</>}
+                  </button>
+              </form>
+
+              {leafletSimulation && (
+                <div className="bg-[#00d66f] p-6 md:p-8 rounded-3xl text-center shadow-lg sticky top-8 h-fit animate-in slide-in-from-right">
+                   <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2">Orçamento Fixo (Folheto)</p>
+                   <p className="text-4xl font-black italic text-[#0a2540] mb-6">{formatEuro(leafletSimulation.cost)}</p>
+                   <div className="flex gap-2">
+                      <button type="button" onClick={() => submitMarketing('leaflet')} className="w-full py-4 bg-[#0a2540] text-white rounded-xl font-black uppercase text-[11px] shadow-lg border-b-4 border-black/40 hover:scale-105 transition-transform">Avançar com Pedido</button>
+                   </div>
                 </div>
-                <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
-                    <option value="">(Escolha um Folheto Futuro)</option>
-                    {campaigns.map(c => <option key={c.id} value={c.id}>{c.title} (Fecha a: {c.limitDate.toDate().toLocaleDateString()})</option>)}
-                </select>
-                <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
-                    <option value="leaflet_capa_destaque">Capa Principal - Destaque (Consulte Preço)</option>
-                    <option value="leaflet_capa_normal">Capa - Tamanho Normal (Consulte Preço)</option>
-                    <option value="leaflet_contracapa">Contracapa - Parte Traseira (Consulte Preço)</option>
-                    <option value="leaflet_interior_full">Interior - Página Inteira (Consulte Preço)</option>
-                    <option value="leaflet_interior_1_2">Interior - Meia Página (Consulte Preço)</option>
-                    <option value="leaflet_interior_1_4">Interior - Quarto de Página (Consulte Preço)</option>
-                </select>
-                <input required type="text" placeholder="Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
-                <div className="grid grid-cols-2 gap-4">
-                    <input required type="text" placeholder="Preço (Ex: 10€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
-                    <input required type="text" placeholder="Unidade (Ex: Kg, Uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
-                </div>
-                <div className="bg-slate-100 p-4 rounded-2xl">
-                    <p className="text-[10px] font-black uppercase text-slate-500 mb-2">Imagem do Produto (Fundo Branco/Transp)</p>
-                    <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
-                </div>
-                <button type="submit" disabled={loading} className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
-                    {loading ? <Loader2 className="animate-spin" /> : <Send size={20}/>} Enviar Pedido para o Folheto
-                </button>
-            </form>
+              )}
+            </div>
         )}
 
         {/* ===================== HISTORY ===================== */}
