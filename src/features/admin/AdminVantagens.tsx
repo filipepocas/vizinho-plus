@@ -26,8 +26,8 @@ const AdminVantagens: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      setVantagens(snap.docs.map(d => ({ id: d.id, ...d.data() } as Vantagem)));
+    return onSnapshot(q, (snap: any) => {
+      setVantagens(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Vantagem)));
     });
   }, []);
 
