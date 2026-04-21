@@ -1,3 +1,5 @@
+// src/features/public/LandingPage.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
@@ -78,9 +80,9 @@ const LandingPage: React.FC = () => {
     fetchData();
 
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
-    const unsubCam = onSnapshot(qCam, (snap) => {
+    const unsubCam = onSnapshot(qCam, (snap: any) => {
         const now = new Date();
-        setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign)).filter(c => c.limitDate.toDate() > now));
+        setCampaigns(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now));
     });
     return () => unsubCam();
   }, []);
@@ -120,7 +122,6 @@ const LandingPage: React.FC = () => {
     const start = new Date(bannerForm.startDate);
     const end = new Date(bannerForm.endDate);
     
-    // Regra das 24 Horas exigida no Ponto 2
     const minDate = new Date();
     minDate.setHours(minDate.getHours() + 24);
     if (start < minDate) return toast.error("Os pedidos de publicidade devem ser feitos com pelo menos 24 horas de antecedência.");
@@ -132,14 +133,14 @@ const LandingPage: React.FC = () => {
     setLoading(true);
     try {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
-        let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
 
-        if (bannerForm.freguesia) clients = clients.filter(c => c.freguesia === bannerForm.freguesia);
-        else if (bannerForm.concelho) clients = clients.filter(c => c.concelho === bannerForm.concelho);
-        else if (bannerForm.distrito) clients = clients.filter(c => c.distrito === bannerForm.distrito);
+        if (bannerForm.freguesia) clients = clients.filter((c: any) => c.freguesia === bannerForm.freguesia);
+        else if (bannerForm.concelho) clients = clients.filter((c: any) => c.concelho === bannerForm.concelho);
+        else if (bannerForm.distrito) clients = clients.filter((c: any) => c.distrito === bannerForm.distrito);
 
         const count = clients.length;
-        const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5; // Exemplo de markup externo
+        const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5; 
         const minCost = (Number(prices.banner_min_cost) || 10) * 1.5;
 
         let totalCost = count * perClientDay * days;
@@ -149,6 +150,7 @@ const LandingPage: React.FC = () => {
         setBannerSimulation({ count, cost: totalCost, days });
     } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
   };
+
   const simulateLeaflet = (e: React.FormEvent) => {
     e.preventDefault();
     if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa.");
@@ -277,7 +279,6 @@ const LandingPage: React.FC = () => {
     if(!eventForm.imageBase64) return toast.error("A imagem do cartaz é obrigatória.");
     if(eventTargets.length === 0) return toast.error("Adicione pelo menos um Local de Destino.");
     
-    // Corrigido erro de Data/Hora (juntando as duas)
     const startDate = new Date(eventForm.startDate);
     const [hours, minutes] = eventForm.startTime.split(':');
     startDate.setHours(Number(hours), Number(minutes));
@@ -345,7 +346,6 @@ const LandingPage: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
         
-        {/* Ponto 3: Ocultar o Contador */}
         {sysConfig.showMemberCount !== false && (
           <div className="bg-[#00d66f] text-[#0a2540] px-8 py-4 rounded-full font-black uppercase text-xl md:text-3xl italic tracking-tighter shadow-[8px_8px_0px_#0a2540] mb-12 animate-in slide-in-from-top-10">
             Já somos {membersCount} membros! Junte-se a nós.<br /> <span className="text-white drop-shadow-md">Aqui todos ganhamos!</span>
@@ -476,7 +476,7 @@ const LandingPage: React.FC = () => {
 
       {showCommunityModal && (
          <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
-             <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#0a2540] animate-in zoom-in">
+             <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#00d66f] animate-in zoom-in">
                  <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center"><h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-2"><Lightbulb /> Comunicar na Comunidade</h2><button onClick={() => setShowCommunityModal(false)}><X size={24}/></button></div>
                  <div className="p-8 grid gap-6">
                     <button onClick={() => {setShowCommunityModal(false); setShowEventModal(true);}} className="bg-blue-50 border-4 border-blue-100 hover:border-blue-500 p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group">
@@ -495,7 +495,6 @@ const LandingPage: React.FC = () => {
           <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-blue-500 shadow-2xl overflow-hidden animate-in zoom-in relative my-8">
             <div className="bg-blue-500 p-6 text-white flex justify-between items-center sticky top-0 z-10"><h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-3"><CalendarPlus size={24} /> Comunicar Evento</h2><button onClick={() => setShowEventModal(false)}><X size={24}/></button></div>
             <div className="p-8">
-              {/* Ponto 1: Correção do Formulário de Eventos */}
               <form onSubmit={handleEventSubmit} className="space-y-6">
                  <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
                     <p className="text-[10px] font-black uppercase text-[#0a2540]">Onde promover o Evento?</p>
@@ -556,7 +555,7 @@ const LandingPage: React.FC = () => {
                  <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
                     <div className="flex-1">
                        <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Cartaz / Imagem do Evento</p>
-                       <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">A imagem ideal deve ser quadrada (Ex: Formato Instagram) ou retangular vertical. Evite fotografias muito pesadas (Máx. recomendável 1MB).</p>
+                       <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">A imagem ideal deve ser quadrada ou retangular vertical. Evite fotografias muito pesadas (Máx. recomendável 1MB).</p>
                        <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'event')} className="w-full text-xs font-bold" />
                     </div>
                     {eventForm.imageBase64 && (
@@ -573,7 +572,6 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* Ponto 2: MODAL MARKETING EXTERNO CORRIGIDO */}
       {showExternalModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
           <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-2xl overflow-hidden animate-in zoom-in relative my-8">
@@ -621,7 +619,7 @@ const LandingPage: React.FC = () => {
                            <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
                               <div className="flex-1">
                                  <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Anúncio (Formato Banner)</p>
-                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor qualidade possível na App, a imagem deve ser larga/horizontal (Proporção 16:9, idêntica a um ecrã de TV). Se tiver texto, mantenha-o no centro da imagem para não ser cortado.</p>
+                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor qualidade possível na App, a imagem deve ser horizontal (Proporção 16:9). Se tiver texto, mantenha-o no centro.</p>
                                  <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
                               </div>
                               {bannerForm.imageBase64 && (
@@ -648,13 +646,11 @@ const LandingPage: React.FC = () => {
                            <div className="grid grid-cols-2 gap-4">
                               <input required type="text" placeholder="Preço (€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                               <input required type="text" placeholder="Unidade (ex: kg, uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
-                              <input type="text" placeholder="Preço Riscado (Opcional)" value={leafletForm.promoPrice} onChange={e=>setLeafletForm({...leafletForm, promoPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
-                              <input type="text" placeholder="Destaque (Opcional)" value={leafletForm.promoType} onChange={e=>setLeafletForm({...leafletForm, promoType: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" />
                            </div>
                            <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
                               <div className="flex-1">
                                  <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Produto</p>
-                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor apresentação no folheto, utilize uma fotografia do seu produto com fundo branco ou transparente.</p>
+                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Utilize uma fotografia do seu produto com fundo branco ou transparente.</p>
                                  <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
                               </div>
                               {leafletForm.imageBase64 && (
@@ -692,11 +688,9 @@ const LandingPage: React.FC = () => {
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3><button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button></div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Natureza da Plataforma</h4><p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de atribuição de saldo (cashback) local. O Vizinho+ é uma ferramenta de mediação técnica, não sendo parte integrante, interveniente ou responsável por qualquer transação comercial direta entre Lojistas e Clientes.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Entidade Responsável e Compromisso de Privacidade</h4><p>O Vizinho+ respeita a tua privacidade e compromete-se a protegê-la. Em conformidade com o Regulamento Geral de Proteção de Dados (RGPD), a entidade responsável pelo tratamento dos dados pessoais recolhidos é a Panóplia Lógica Unipessoal Lda, com sede em Rua da Caselha 170, 4620-421 Nevogilde.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Recolha e Utilização de Dados Pessoais</h4><p>A recolha de dados ocorre de forma voluntária quando utilizas os nossos serviços ou entras em contacto connosco. Estes dados (Nome, Email, NIF e Código Postal) são recolhidos estritamente para o funcionamento da plataforma. O NIF é solicitado especificamente para validar as transações.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Natureza do Saldo (Cashback)</h4><p>O saldo acumulado na tua carteira digital possui uma natureza exclusivamente promocional e não tem valor fiduciário. Não pode ser levantado em numerário nem trocado por dinheiro vivo; serve unicamente como desconto acumulado na rede de lojas aderentes.</p></div>
-              <div><h4 className="font-black text-red-500 mb-1 uppercase">5. Proteção de Propriedade Intelectual</h4><p>A tecnologia, a interface gráfica, o design e a ideologia do programa Vizinho+ são propriedade exclusiva da entidade gestora. É estritamente proibida a reprodução, cópia, manipulação de código ou engenharia reversa.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Natureza da Plataforma</h4><p>O Vizinho+ atua exclusivamente como facilitador de cashback local.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Privacidade</h4><p>O Vizinho+ cumpre o RGPD através da Panóplia Lógica Unipessoal Lda.</p></div>
+              <div><h4 className="font-black text-red-500 mb-1 uppercase">3. Propriedade Intelectual</h4><p>A tecnologia e design são exclusivos da entidade gestora.</p></div>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>

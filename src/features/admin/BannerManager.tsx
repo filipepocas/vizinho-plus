@@ -1,3 +1,5 @@
+// src/features/admin/BannerManager.tsx
+
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../config/firebase';
 import { 
@@ -24,17 +26,7 @@ import {
   Eye
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-
-interface Banner {
-  id: string;
-  title: string;
-  imageUrl: string;
-  targetType: 'all' | 'zip' | 'birthday';
-  targetValue?: string;
-  maxImpressions?: number;
-  startDate: any;
-  endDate: any;
-}
+import { Banner } from '../../types';
 
 const BannerManager = () => {
   const [banners, setBanners] = useState<Banner[]>([]);
@@ -44,7 +36,7 @@ const BannerManager = () => {
   // Estados do formulário
   const [title, setTitle] = useState('');
   const [image, setImage] = useState<File | null>(null);
-  const [targetType, setTargetType] = useState<'all' | 'zip' | 'birthday'>('all');
+  const [targetType, setTargetType] = useState<'all' | 'zip' | 'birthday' | 'zonas'>('all');
   const [targetValue, setTargetValue] = useState('');
   const [maxImpressions, setMaxImpressions] = useState('1000');
   const [endDate, setEndDate] = useState('');
@@ -56,7 +48,8 @@ const BannerManager = () => {
   const fetchBanners = async () => {
     const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    setBanners(snap.docs.map(d => ({ id: d.id, ...d.data() } as Banner)));
+    // Correção: Adicionado (d: any) para evitar erro TS7006
+    setBanners(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Banner)));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -124,7 +117,7 @@ const BannerManager = () => {
         {/* FORMULÁRIO DE CRIAÇÃO */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] p-8">
           
-          {/* GUIA DE DESIGN (REPLICADO DO LOJISTA) */}
+          {/* GUIA DE DESIGN */}
           <div className="bg-[#f0f7ff] p-6 rounded-[32px] border-2 border-blue-100 mb-8">
               <p className="text-[#0a2540] text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-3">
                   <AlertCircle size={16} className="text-blue-500"/> Guia de Design Profissional
@@ -174,7 +167,6 @@ const BannerManager = () => {
               </div>
             </div>
 
-            {/* CAMPOS DINÂMICOS CONFORME A ESCOLHA */}
             {targetType === 'zip' && (
               <div className="space-y-2 animate-in slide-in-from-top-2">
                 <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Códigos Postais (separados por vírgula)</label>
@@ -246,7 +238,6 @@ const BannerManager = () => {
           
           <div className="grid gap-6 overflow-y-auto max-h-[800px] pr-2 custom-scrollbar pb-10">
             {banners.map(banner => {
-              // Proteção contra Timestamps (ServerTimestamp) nulos logo após criar
               const end = banner.endDate && typeof banner.endDate.toDate === 'function' ? banner.endDate.toDate() : new Date();
 
               return (

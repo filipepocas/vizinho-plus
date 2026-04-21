@@ -1,3 +1,5 @@
+// src/features/user/UserDashboard.tsx
+
 import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
@@ -31,7 +33,7 @@ const UserDashboard: React.FC = () => {
   
   const [showContactModal, setShowContactModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
-  const [showFaqModal, setShowFaqModal] = useState(false); // NOVO: Estado para FAQs
+  const [showFaqModal, setShowFaqModal] = useState(false); 
   
   const [emailCopied, setEmailCopied] = useState(false);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
@@ -52,7 +54,7 @@ const UserDashboard: React.FC = () => {
 
         const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
         const merchantsSnap = await getDocs(q);
-        setAllMerchants(merchantsSnap.docs.map(d => ({ id: d.id, ...d.data() })) as UserProfile[]);
+        setAllMerchants(merchantsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as UserProfile[]);
       } catch (err) {}
     };
     fetchData();
@@ -60,10 +62,9 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser?.id) return;
-    // Carrega IDs das transações que já foram avaliadas
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
-    return onSnapshot(q, (snapshot) => {
-      setEvaluatedIds(snapshot.docs.map(doc => doc.data().transactionId));
+    return onSnapshot(q, (snapshot: any) => {
+      setEvaluatedIds(snapshot.docs.map((doc: any) => doc.data().transactionId));
     });
   }, [currentUser?.id]);
 
@@ -71,16 +72,16 @@ const UserDashboard: React.FC = () => {
     if (!currentUser) return;
     const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
     
-    return onSnapshot(q, (snap) => {
+    return onSnapshot(q, (snap: any) => {
       const now = new Date();
       const valid = snap.docs
-        .map(d => ({ id: d.id, ...d.data() } as Leaflet))
-        .filter(l => {
+        .map((d: any) => ({ id: d.id, ...d.data() } as Leaflet))
+        .filter((l: any) => {
           const start = l.startDate && typeof l.startDate.toDate === 'function' ? l.startDate.toDate() : new Date();
           const end = l.endDate && typeof l.endDate.toDate === 'function' ? l.endDate.toDate() : new Date();
           const inTime = now >= start && now <= end;
           const targetZones = (l as any).targetZones || [];
-          const inZone = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
+          const inZone = targetZones.length === 0 || targetZones.some((z: string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
           return inTime && inZone;
         });
       setActiveLeaflets(valid);
@@ -93,8 +94,8 @@ const UserDashboard: React.FC = () => {
     yesterday.setDate(yesterday.getDate() - 1);
     
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => {
-      const docs = snap.docs.map(d => ({id: d.id, ...d.data()} as AppNotification));
+    return onSnapshot(q, (snap: any) => {
+      const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AppNotification));
       for (let notif of docs) {
         if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
         const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
@@ -106,7 +107,7 @@ const UserDashboard: React.FC = () => {
         else if (notif.targetType === 'birthDate' && currentUser.birthDate === notif.targetValue) matches = true;
         else if (notif.targetType === 'zonas') {
            const zones = (notif as any).targetZones || [];
-           matches = zones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
+           matches = zones.some((z: string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
         }
         
         if (matches) {
@@ -120,13 +121,13 @@ const UserDashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, 'events'), where('status', '==', 'approved'), orderBy('startDate', 'asc'));
-    return onSnapshot(q, (snap) => {
+    return onSnapshot(q, (snap: any) => {
       const now = new Date();
-      const validEvents = snap.docs.map(d => ({id: d.id, ...d.data()} as AppEvent))
-        .filter(e => {
+      const validEvents = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AppEvent))
+        .filter((e: any) => {
             const isFuture = e.endDate.toDate() >= now;
             const targetZones = (e as any).targetZones || [];
-            const matchZip = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
+            const matchZip = targetZones.length === 0 || targetZones.some((z: string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
             return isFuture && matchZip;
         });
       setEvents(validEvents);
@@ -137,13 +138,13 @@ const UserDashboard: React.FC = () => {
     if (!currentUser) return;
     const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
     
-    return onSnapshot(q, (snap) => {
+    return onSnapshot(q, (snap: any) => {
       const now = new Date();
-      const active = snap.docs.map(d => ({id: d.id, ...d.data()} as AntiWasteItem))
-        .filter(w => {
+      const active = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AntiWasteItem))
+        .filter((w: any) => {
             const isFuture = w.endTime.toDate() > now;
             const targetZones = (w as any).targetZones || [];
-            const matchZip = targetZones.length === 0 || targetZones.some((z:string) => z.includes(currentUser.concelho || ''));
+            const matchZip = targetZones.length === 0 || targetZones.some((z: string) => z.includes(currentUser.concelho || ''));
             return isFuture && matchZip;
         });
       setWasteItems(active);
@@ -274,12 +275,10 @@ const UserDashboard: React.FC = () => {
 
       <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
         
-        {/* BOTÃO FAQs / GUIA PASSO-A-PASSO */}
         <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors animate-in fade-in">
           <HelpCircle size={20} /> Guia Passo-a-Passo da App
         </button>
 
-        {/* BOTÃO LER REGRAS */}
         <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
           <BookOpen size={20} /> Ler Regras de Utilização
         </button>
@@ -343,7 +342,7 @@ const UserDashboard: React.FC = () => {
           
           <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[9px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-[#22c55e] border-[#22c55e] text-white shadow-sm hover:scale-[1.02]'}`}>
              {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
-             <Leaf size={16} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-white'} /> Desperdício Zero - Oportunidades
+             <Leaf size={16} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-white'} /> Desperdício Zero
           </button>
         </div>
 
@@ -353,7 +352,7 @@ const UserDashboard: React.FC = () => {
         {view === 'events' && (
            <div className="space-y-4 animate-in fade-in duration-500">
               <h3 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-4 flex items-center gap-2"><CalendarPlus className="text-blue-500" /> Agenda da Freguesia</h3>
-              {events.map(ev => (
+              {events.map((ev: any) => (
                  <div key={ev.id} className="bg-white border-4 border-blue-500 rounded-[30px] p-6 shadow-lg flex flex-col md:flex-row gap-6">
                     <div className="w-full md:w-48 shrink-0 bg-slate-100 rounded-2xl border-2 border-slate-200 overflow-hidden flex items-center justify-center p-2">
                        <img src={ev.imageUrl} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
@@ -384,7 +383,7 @@ const UserDashboard: React.FC = () => {
                  <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite (Desperdício)</h3>
                  <p className="text-xs font-bold opacity-90 mt-2">Os lojistas anunciam sobras do dia com descontos acentuados. Válido apenas nas lojas, sujeito ao stock existente.</p>
               </div>
-              {wasteItems.map(w => (
+              {wasteItems.map((w: any) => (
                  <div key={w.id} className="bg-white border-4 border-[#22c55e] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
                     <div className="flex justify-between items-start mb-4 border-b-2 border-slate-100 pb-4">
                        <div>
@@ -475,7 +474,7 @@ const UserDashboard: React.FC = () => {
         </div>
         <div className="text-center px-6">
           <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas, sob pena de instauração de procedimentos civis e criminais.</p>
+          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas.</p>
         </div>
       </footer>
 
@@ -506,7 +505,6 @@ const UserDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DE REGRAS DO CLIENTE */}
       {showRulesModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -515,25 +513,22 @@ const UserDashboard: React.FC = () => {
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade e Papel da Plataforma</u></h4><p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico. <strong><u>O Vizinho+ isenta-se de qualquer responsabilidade sobre litígios.</u></strong></p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4><p>O saldo não possui valor fiduciário. Não pode ser trocado por dinheiro vivo.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4><p>O Cliente <strong>deve apresentar o Cartão Digital</strong> ao lojista <strong>antes</strong> do pagamento.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4><p>O valor a descontar <strong>nunca poderá ser superior a 50% do valor total da nova compra</strong>.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4><p>Quando utiliza saldo, gera um novo cashback sobre o valor remanescente pago por si.</p></div>
-              <div><h4 className="font-black text-red-600 mb-1 uppercase">6. Prevenção de Fraude</h4><p>A tentativa de uso de dados de terceiros ou NIFs falsos resultará no bloqueio imediato e perda de saldo.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade</u></h4><p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo</h4><p>O saldo não possui valor fiduciário.</p></div>
+              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4><p>O Cliente deve apresentar o Cartão Digital ao lojista antes do pagamento.</p></div>
+              <div><h4 className="font-black text-red-600 mb-1 uppercase">4. Prevenção de Fraude</h4><p>A tentativa de uso de dados de terceiros resultará no bloqueio imediato.</p></div>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi e Aceito as Regras</button></div>
           </div>
         </div>
       )}
 
-      {/* NOVO: MODAL DE FAQs / GUIA DA APP */}
       {showFaqModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
               <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
-              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/20 rounded-full"><X /></button>
+              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
               {sysConfig.clientFaqs}
