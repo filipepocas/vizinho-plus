@@ -3,7 +3,7 @@ import { collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, 
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
 import { useNavigate } from 'react-router-dom';
-import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt, CalendarPlus, Leaf, MapPin, ImageIcon, LayoutDashboard, Euro } from 'lucide-react';
+import { ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, MessageSquare, CheckSquare, Bell, Megaphone, Crown, FileText, Receipt, CalendarPlus, Leaf, MapPin, Image as ImageIcon, LayoutDashboard, Euro } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
 import AdminTransactions from './AdminTransactions';
@@ -22,14 +22,13 @@ import AdminEvents from './AdminEvents';
 import AdminAntiWaste from './AdminAntiWaste'; 
 import AdminLocations from './AdminLocations'; 
 import BannerManager from './BannerManager';
-import AdminPricing from './AdminPricing'; // NOVO IMPORT: Motor de Preços
+import AdminPricing from './AdminPricing';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
   const navigate = useNavigate();
   
   const [activeMenu, setActiveMenu] = useState<'gestao' | 'marketing'>('gestao');
-  // NOVO: 'pricing' adicionado às views
   const [currentView, setCurrentView] = useState<string>('overview');
   
   const [globalTransactions, setGlobalTransactions] = useState<Transaction[]>([]);
@@ -44,31 +43,31 @@ const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
-    const unsubTx = onSnapshot(qTx, (snap) => setGlobalTransactions(snap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))));
+    const unsubTx = onSnapshot(qTx, (snap: any) => setGlobalTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction))));
     
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
-    const unsubMerchants = onSnapshot(qMerchants, (snap) => setGlobalMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
+    const unsubMerchants = onSnapshot(qMerchants, (snap: any) => setGlobalMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile))));
     
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
-    const unsubClients = onSnapshot(qClients, (snap) => setGlobalClients(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile))));
+    const unsubClients = onSnapshot(qClients, (snap: any) => setGlobalClients(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile))));
 
-    const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), snap => setPendingMerchants(snap.size));
-    const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), snap => setPendingMarketing(snap.size));
-    const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), snap => setPendingEvents(snap.size));
-    const unsub4 = onSnapshot(query(collection(db, 'feedbacks'), where('status', '==', 'new')), snap => {
-        const bad = snap.docs.filter(d => d.data().rating < 3).length;
+    const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMerchants(snap.size));
+    const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMarketing(snap.size));
+    const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), (snap: any) => setPendingEvents(snap.size));
+    const unsub4 = onSnapshot(query(collection(db, 'feedbacks'), where('status', '==', 'new')), (snap: any) => {
+        const bad = snap.docs.filter((d: any) => d.data().rating < 3).length;
         setBadFeedbacks(bad);
     });
     
     const cleanupExpiredData = async () => {
        const now = new Date();
        const eventsSnap = await getDocs(collection(db, 'events'));
-       eventsSnap.forEach(docSnap => {
+       eventsSnap.forEach((docSnap: any) => {
           const ev = docSnap.data();
           if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
        });
        const wasteSnap = await getDocs(collection(db, 'anti_waste'));
-       wasteSnap.forEach(docSnap => {
+       wasteSnap.forEach((docSnap: any) => {
           const w = docSnap.data();
           if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
        });
@@ -87,7 +86,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'merchants', label: 'Lojas', icon: Store },
     { id: 'users', label: 'Vizinhos', icon: Users },
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
-    { id: 'pricing', label: 'Motor Preços', icon: Euro }, // PONTO 10 e 13: NOVO BOTÃO
+    { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -174,7 +173,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'reviews' && <FeedbackList />}
         {currentView === 'settings' && <AdminSettings />}
         {currentView === 'locations' && <AdminLocations />} 
-        {currentView === 'pricing' && <AdminPricing />} {/* COMPONENTE RENDERIZADO */}
+        {currentView === 'pricing' && <AdminPricing />} 
         {currentView === 'banners' && <BannerManager />} 
         {currentView === 'admin_msg' && (
            <div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-200 text-center">

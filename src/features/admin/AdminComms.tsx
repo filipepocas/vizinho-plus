@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, addDoc, serverTimestamp } from 'firebase/firestore';
-import { Trash2, Users, CheckSquare, MessageSquare, Send, MapPin, Phone, Mail, Image as ImageIcon, Bell, X } from 'lucide-react';
+import { Trash2, Users, CheckSquare, MessageSquare, Send, MapPin, Phone, Mail, Image as ImageIcon, Bell, X, Loader2, Search } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MarketingRequest, User as UserProfile } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -26,17 +26,18 @@ const AdminComms: React.FC = () => {
 
   useEffect(() => {
     const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'));
-    const unsubReq = onSnapshot(qReq, (snap) => {
-        setRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest)).filter(r => r.status !== 'approved'));
+    const unsubReq = onSnapshot(qReq, (snap: any) => {
+        const allReqs = snap.docs.map((d: any) => ({id: d.id, ...d.data()} as MarketingRequest));
+        setRequests(allReqs.filter((r: any) => r.status !== 'approved'));
     });
 
-    const unsubMerchants = onSnapshot(collection(db, 'users'), (snap) => {
-        setMerchants(snap.docs.map(d => ({ id: d.id, ...d.data() } as UserProfile)));
+    const unsubMerchants = onSnapshot(collection(db, 'users'), (snap: any) => {
+        setMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
     });
 
     // Lê histórico de Mensagens de Admin (Caixa de Entrada)
     const qMsg = query(collection(db, 'merchant_messages'), orderBy('createdAt', 'desc'));
-    const unsubMsg = onSnapshot(qMsg, (snap) => setAdminMessages(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubMsg = onSnapshot(qMsg, (snap: any) => setAdminMessages(snap.docs.map((d: any) => ({ id: d.id, ...d.data() }))));
 
     return () => { unsubReq(); unsubMerchants(); unsubMsg(); };
   }, []);
@@ -65,8 +66,6 @@ const AdminComms: React.FC = () => {
       else if (msgForm.targetType === 'clients') targetsToSave = ['Apenas Clientes'];
       else if (msgForm.targetType === 'merchants') targetsToSave = ['Apenas Lojistas'];
 
-      // PONTO 11: Em vez de criar um doc por pessoa (o que bloqueia o Firebase se houver 5.000 pessoas),
-      // Criamos UM único documento Global. A App do utilizador vai ler este documento e filtrar se lhe pertence.
       await addDoc(collection(db, 'merchant_messages'), {
         title: msgForm.title,
         message: msgForm.message,
@@ -159,7 +158,7 @@ const AdminComms: React.FC = () => {
               <div className="bg-slate-50 border-4 border-slate-100 rounded-3xl p-6 flex flex-col h-[500px]">
                  <h4 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-200 pb-2">Histórico de Enviados</h4>
                  <div className="flex-1 overflow-y-auto space-y-3 pr-2 custom-scrollbar">
-                    {adminMessages.map(m => (
+                    {adminMessages.map((m: any) => (
                        <div key={m.id} className="bg-white p-4 rounded-2xl border-2 border-slate-100 shadow-sm relative group">
                           <button onClick={() => handleDeleteMessage(m.id)} className="absolute top-4 right-4 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16}/></button>
                           <p className="font-black text-sm uppercase text-[#0a2540] pr-8">{m.title}</p>
@@ -177,7 +176,7 @@ const AdminComms: React.FC = () => {
            </div>
         </div>
 
-        {/* APROVAÇÃO MARKETING (Já existia na Fase 3.2, mantemos intacto) */}
+        {/* APROVAÇÃO MARKETING */}
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 flex items-center gap-3">
               <CheckSquare className="text-[#00d66f]" size={28}/> Aprovação de Campanhas Publicitárias
@@ -185,14 +184,16 @@ const AdminComms: React.FC = () => {
             <p className="text-[10px] font-bold text-slate-400 uppercase mb-8 tracking-widest border-b-2 border-slate-100 pb-4">
               NOTA: Ao aprovar um pedido, ele é movido para o menu "Cobranças".
             </p>
+            
             <div className="grid grid-cols-1 gap-8">
-                {requests.map(r => {
+                {requests.map((r: any) => {
                     const merch = r.isExternal ? null : getMerchantDetails(r.merchantId || '');
-                    const targetZones = (r as any).targetZones || [];
+                    const targetZones = (r as any).targetZones || []; 
 
                     return (
                       <div key={r.id} className={`bg-white border-4 p-8 rounded-[40px] flex flex-col md:flex-row gap-8 items-start transition-all ${r.status === 'rejected' ? 'border-red-200 opacity-70 bg-red-50' : r.isExternal ? 'border-purple-600 shadow-[8px_8px_0px_#9333ea] hover:shadow-none hover:translate-y-1' : 'border-blue-400 shadow-[8px_8px_0px_#60a5fa] hover:shadow-none hover:translate-y-1'}`}>
                           
+                          {/* Coluna Esquerda: Dados do Solicitante */}
                           <div className="md:w-1/3 w-full shrink-0 border-b-2 md:border-b-0 md:border-r-2 border-slate-100 pb-6 md:pb-0 md:pr-6">
                               <div className="flex items-center gap-2 mb-3">
                                 {r.isExternal && <span className="bg-purple-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">EXTERNO</span>}
@@ -211,33 +212,34 @@ const AdminComms: React.FC = () => {
                               </div>
                           </div>
 
+                          {/* Coluna Central: Detalhes Técnicos do Pedido */}
                           <div className="flex-1 w-full flex flex-col h-full">
                               <div className="text-xs font-bold text-slate-500 space-y-3 bg-white p-6 rounded-3xl border-2 border-slate-100 mb-6 shadow-sm flex-grow">
                                   {r.type === 'push_notification' ? (
                                       <>
                                           <p className="flex justify-between border-b border-slate-50 pb-2"><strong className="text-[#0a2540] uppercase text-[10px] tracking-widest">Título:</strong> <span className="text-right text-[#0a2540] italic">{r.title}</span></p>
                                           <p className="flex justify-between border-b border-slate-50 pb-2"><strong className="text-[#0a2540] uppercase text-[10px] tracking-widest shrink-0">Mensagem:</strong> <span className="text-right break-words ml-4">{r.text}</span></p>
-                                          <p className="flex justify-between border-b border-slate-50 pb-2">
+                                          <div className="flex justify-between border-b border-slate-50 pb-2">
                                             <strong className="text-[#0a2540] uppercase text-[10px] tracking-widest shrink-0">Destino:</strong> 
                                             <div className="text-right flex flex-col gap-1 items-end">
                                               <span className="bg-slate-100 px-2 py-1 rounded text-[9px] uppercase font-black">{r.targetType === 'zonas' ? 'Por Zonas Geográficas' : r.targetType === 'all' ? 'Todos os Clientes' : r.targetType === 'birthDate' ? 'Aniversariantes' : 'Meus Clientes'}</span>
                                               {targetZones.map((z:string, i:number) => <span key={i} className="text-[8px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">{z}</span>)}
                                             </div>
-                                          </p>
+                                          </div>
                                           <p className="text-[#00d66f] border-t-2 border-slate-200 pt-3 mt-3 flex justify-between items-center bg-slate-50 p-3 rounded-xl"><strong className="text-[#0a2540] uppercase text-[10px] tracking-widest">Orçamento Validado:</strong> <span className="text-lg font-black">{formatEuro(r.cost)}</span></p>
                                       </>
                                   ) : r.type === 'banner' ? (
                                       <>
                                           <p className="flex justify-between border-b border-slate-50 pb-2"><strong className="text-[#0a2540] uppercase text-[10px] tracking-widest">Período:</strong> <span className="text-right">{r.requestedDate}</span></p>
                                           {r.text && <p className="flex justify-between border-b border-slate-50 pb-2"><strong className="text-[#0a2540] uppercase text-[10px] tracking-widest shrink-0">Texto:</strong> <span className="text-right">{r.text}</span></p>}
-                                          <p className="flex justify-between border-b border-slate-50 pb-2">
+                                          <div className="flex justify-between border-b border-slate-50 pb-2">
                                             <strong className="text-[#0a2540] uppercase text-[10px] tracking-widest shrink-0">Destino:</strong> 
                                             <div className="text-right flex flex-col gap-1 items-end">
                                               <span className="bg-slate-100 px-2 py-1 rounded text-[9px] uppercase font-black">{r.targetType === 'zonas' ? 'Por Zonas Geográficas' : r.targetType === 'all' ? 'Todos os Clientes' : r.targetType === 'birthDate' ? 'Aniversariantes' : r.targetType === 'specific_clients' ? 'NIFs Específicos' : 'Top Clientes'}</span>
                                               {targetZones.map((z:string, i:number) => <span key={i} className="text-[8px] bg-blue-50 text-blue-700 px-2 py-0.5 rounded border border-blue-200">{z}</span>)}
                                               {r.targetValue && <span className="text-[9px] text-slate-400 font-mono">{r.targetValue}</span>}
                                             </div>
-                                          </p>
+                                          </div>
                                           <p className="text-[#00d66f] border-t-2 border-slate-200 pt-3 mt-3 flex justify-between items-center bg-slate-50 p-3 rounded-xl"><strong className="text-[#0a2540] uppercase text-[10px] tracking-widest">Orçamento Validado:</strong> <span className="text-lg font-black flex items-center gap-2">{r.isExternal && <span className="bg-purple-100 text-purple-700 text-[8px] px-2 py-1 rounded uppercase tracking-widest">Agravamento Externo</span>}{formatEuro(r.cost)}</span></p>
                                       </>
                                   ) : (
@@ -263,16 +265,25 @@ const AdminComms: React.FC = () => {
                               </div>
                           </div>
                           
+                          {/* Coluna Direita: Imagem */}
                           {r.imageUrl ? (
-                            <div className="w-full md:w-48 h-48 shrink-0 bg-slate-50 rounded-[30px] border-4 border-slate-200 overflow-hidden flex items-center justify-center p-3 shadow-inner"><img src={r.imageUrl} className="w-full h-full object-contain" alt="Design Associado" /></div>
+                            <div className="w-full md:w-48 h-48 shrink-0 bg-slate-50 rounded-[30px] border-4 border-slate-200 overflow-hidden flex items-center justify-center p-3 shadow-inner">
+                                <img src={r.imageUrl} className="w-full h-full object-contain" alt="Design Associado" />
+                            </div>
                           ) : (
-                            <div className="w-full md:w-48 h-48 shrink-0 bg-slate-50 rounded-[30px] border-4 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300"><Bell size={32} className="mb-2"/><span className="text-[10px] font-black uppercase tracking-widest">Sem Imagem / Push</span></div>
+                            <div className="w-full md:w-48 h-48 shrink-0 bg-slate-50 rounded-[30px] border-4 border-dashed border-slate-200 flex flex-col items-center justify-center text-slate-300">
+                                {r.type === 'push_notification' ? <Bell size={32} className="mb-2"/> : <ImageIcon size={32} className="mb-2"/>}
+                                <span className="text-[10px] font-black uppercase tracking-widest">Sem Imagem / Push</span>
+                            </div>
                           )}
                       </div>
                     )
                 })}
                 {requests.length === 0 && (
-                  <div className="text-center p-20 bg-white rounded-[40px] border-4 border-dashed border-slate-200"><Search size={48} className="mx-auto text-slate-300 mb-4" /><p className="font-black text-[11px] uppercase tracking-widest text-slate-400">Nenhum pedido de marketing pendente para análise.</p></div>
+                  <div className="text-center p-20 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
+                     <Search size={48} className="mx-auto text-slate-300 mb-4" />
+                     <p className="font-black text-[11px] uppercase tracking-widest text-slate-400">Nenhum pedido de marketing pendente para análise.</p>
+                  </div>
                 )}
             </div>
         </div>

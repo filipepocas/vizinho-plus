@@ -34,10 +34,10 @@ const AdminPricing: React.FC = () => {
 
   useEffect(() => {
     const qRules = query(collection(db, 'pricing_rules'), orderBy('createdAt', 'desc'));
-    const unsubRules = onSnapshot(qRules, (snap) => setRules(snap.docs.map(d => ({id: d.id, ...d.data()} as PricingRule))));
+    const unsubRules = onSnapshot(qRules, (snap: any) => setRules(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as PricingRule))));
     
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
-    const unsubCam = onSnapshot(qCam, (snap) => setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign))));
+    const unsubCam = onSnapshot(qCam, (snap: any) => setCampaigns(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign))));
 
     return () => { unsubRules(); unsubCam(); };
   }, []);
@@ -213,7 +213,7 @@ const AdminPricing: React.FC = () => {
                      <tr key={r.id} className="hover:bg-slate-50 transition-colors">
                        <td className="py-4 font-black uppercase text-[#0a2540] text-xs">
                           {r.tool === 'banner' ? 'Banner' : r.tool === 'push' ? 'Push FCM' : 'Folheto'}
-                          {r.tool === 'leaflet' && <span className="block text-[8px] font-bold text-slate-400 mt-1">{r.leafletId === 'all' ? 'Todas as Edições' : 'Edição Específica'} | {r.spaceType === 'all' ? 'Qualquer Espaço' : r.spaceType.replace('leaflet_', '')}</span>}
+                          {r.tool === 'leaflet' && <span className="block text-[8px] font-bold text-slate-400 mt-1">{r.leafletId === 'all' ? 'Todas as Edições' : 'Edição Específica'} | {r.spaceType === 'all' || !r.spaceType ? 'Qualquer Espaço' : r.spaceType.replace('leaflet_', '')}</span>}
                        </td>
                        <td className="py-4">
                           <span className={`px-2 py-1 rounded-md text-[8px] font-black uppercase ${r.zoneLevel === 'global' ? 'bg-slate-800 text-white' : r.zoneLevel === 'concelho' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}`}>

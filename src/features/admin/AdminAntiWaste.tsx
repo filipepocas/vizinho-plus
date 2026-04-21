@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
-import { Leaf, Trash2, MapPin, Store, Edit3, Save, X } from 'lucide-react';
+import { Leaf, Trash2, MapPin, Store, Edit3, Save, X, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AntiWasteItem } from '../../types';
 
@@ -13,7 +13,7 @@ const AdminAntiWaste: React.FC = () => {
 
   useEffect(() => {
     const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap) => setItems(snap.docs.map(d => ({id: d.id, ...d.data()} as AntiWasteItem))));
+    return onSnapshot(q, (snap: any) => setItems(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as AntiWasteItem))));
   }, []);
 
   const handleDelete = async (id: string) => {
@@ -55,7 +55,7 @@ const AdminAntiWaste: React.FC = () => {
            </div>
 
            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {items.map(i => {
+              {items.map((i: any) => {
                   const isExpired = i.endTime.toDate() < new Date();
                   const targetZones = (i as any).targetZones || [];
                   const isEditing = editingId === i.id;
