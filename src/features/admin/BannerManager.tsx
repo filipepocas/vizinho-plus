@@ -10,7 +10,8 @@ import {
   doc, 
   serverTimestamp,
   query,
-  orderBy 
+  orderBy,
+  where
 } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
@@ -23,12 +24,18 @@ import {
   Cake, 
   Calendar,
   AlertCircle,
-  Eye
+  Eye,
+  CheckCircle2,
+  XCircle,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Banner } from '../../types';
+import { useStore } from '../../store/useStore';
 
 const BannerManager = () => {
+  const { locations } = useStore();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -36,10 +43,22 @@ const BannerManager = () => {
   // Estados do formulário
   const [title, setTitle] = useState('');
   const [image, setImage] = useState<File | null>(null);
-  const [targetType, setTargetType] = useState<'all' | 'zip' | 'birthday' | 'zonas'>('all');
-  const [targetValue, setTargetValue] = useState('');
+  const [targetType, setTargetType] = useState<'all' | 'birthday' | 'zonas'>('all');
   const [maxImpressions, setMaxImpressions] = useState('1000');
   const [endDate, setEndDate] = useState('');
+
+  // Estados Geográficos
+  const [distrito, setDistrito] = useState('');
+  const [concelho, setConcelho] = useState('');
+  const [freguesia, setFreguesia] = useState('');
+
+  // Estados de Simulação/Confirmação
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [simulatedCount, setSimulatedCount] = useState(0);
+
+  const distritos = Object.keys(locations || {}).sort();
+  const concelhos = distrito ? Object.keys(locations[distrito] || {}).sort() : [];
+  const freguesias = distrito && concelho ? (locations[distrito][concelho] || []).sort() : [];
 
   useEffect(() => {
     fetchBanners();
@@ -48,17 +67,42 @@ const BannerManager = () => {
   const fetchBanners = async () => {
     const q = query(collection(db, 'banners'), orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
-    // Correção: Adicionado (d: any) para evitar erro TS7006
     setBanners(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Banner)));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Função para simular audiência antes de gravar
+  const handleStartCreation = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!image || !title || !endDate) {
-      toast.error("PREENCHE TODOS OS CAMPOS OBRIGATÓRIOS!");
-      return;
-    }
+    if (!image || !title || !endDate) return toast.error("PREENCHA TODOS OS CAMPOS!");
+    if (targetType === 'zonas' && !distrito) return toast.error("SELECIONE PELO MENOS O DISTRITO.");
 
+    setLoading(true);
+    try {
+      // Simulação de audiência baseada em clientes ativos
+      const q = query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active'));
+      const snap = await getDocs(q);
+      let clients = snap.docs.map((d: any) => d.data());
+
+      if (targetType === 'zonas') {
+        if (freguesia) clients = clients.filter((c: any) => c.freguesia === freguesia);
+        else if (concelho) clients = clients.filter((c: any) => c.concelho === concelho);
+        else if (distrito) clients = clients.filter((c: any) => c.distrito === distrito);
+      } else if (targetType === 'birthday') {
+        const currentMonth = (new Date().getMonth() + 1).toString().padStart(2, '0');
+        clients = clients.filter((c: any) => c.birthDate && c.birthDate.split('-')[1] === currentMonth);
+      }
+
+      setSimulatedCount(clients.length);
+      setShowConfirm(true);
+    } catch (err) {
+      toast.error("Erro ao calcular audiência.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinalPublish = async () => {
+    if (!image) return;
     setUploading(true);
     try {
       // 1. Upload da Imagem
@@ -66,30 +110,52 @@ const BannerManager = () => {
       await uploadBytes(imageRef, image);
       const imageUrl = await getDownloadURL(imageRef);
 
-      // 2. Guardar no Firestore
+      // 2. Definir valor do target
+      let targetValue = 'Global';
+      if (targetType === 'zonas') {
+        targetValue = distrito;
+        if (concelho) targetValue += ` > ${concelho}`;
+        if (freguesia) targetValue += ` > ${freguesia}`;
+      } else if (targetType === 'birthday') {
+        targetValue = 'Aniversariantes do Mês';
+      }
+
+      // 3. Guardar no Firestore
       await addDoc(collection(db, 'banners'), {
         title: title.toUpperCase(),
         imageUrl,
         targetType,
-        targetValue: targetValue.trim(),
+        targetValue,
         maxImpressions: Number(maxImpressions),
         startDate: serverTimestamp(),
         endDate: new Date(endDate),
         createdAt: serverTimestamp(),
-        active: true
+        active: true,
+        // Guardar campos geográficos para filtros na App
+        distrito: distrito || null,
+        concelho: concelho || null,
+        freguesia: freguesia || null
       });
 
-      toast.success("BANNER CRIADO COM SUCESSO!");
-      setTitle('');
-      setImage(null);
-      setTargetValue('');
-      setEndDate('');
+      toast.success("BANNER PUBLICADO!");
+      resetForm();
       fetchBanners();
     } catch (e) {
       toast.error("ERRO AO CRIAR BANNER.");
     } finally {
       setUploading(false);
+      setShowConfirm(false);
     }
+  };
+
+  const resetForm = () => {
+    setTitle('');
+    setImage(null);
+    setEndDate('');
+    setDistrito('');
+    setConcelho('');
+    setFreguesia('');
+    setTargetType('all');
   };
 
   const handleDelete = async (id: string) => {
@@ -102,14 +168,13 @@ const BannerManager = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
       
-      {/* TÍTULO DA SECÇÃO */}
       <div className="flex items-center gap-4 mb-8">
         <div className="bg-[#00d66f] p-3 rounded-2xl border-4 border-[#0a2540] shadow-[4px_4px_0px_0px_#0a2540]">
           <Target className="text-[#0a2540]" size={24} />
         </div>
         <div>
           <h2 className="text-2xl font-black text-[#0a2540] uppercase italic tracking-tighter">Gestão de Banners</h2>
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Segmentação e Publicidade Direta</p>
+          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Segmentação Local e Publicidade Direta</p>
         </div>
       </div>
 
@@ -117,20 +182,7 @@ const BannerManager = () => {
         {/* FORMULÁRIO DE CRIAÇÃO */}
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#0a2540] p-8">
           
-          {/* GUIA DE DESIGN */}
-          <div className="bg-[#f0f7ff] p-6 rounded-[32px] border-2 border-blue-100 mb-8">
-              <p className="text-[#0a2540] text-xs font-black uppercase tracking-widest flex items-center gap-2 mb-3">
-                  <AlertCircle size={16} className="text-blue-500"/> Guia de Design Profissional
-              </p>
-              <ul className="space-y-2 text-[10px] text-slate-600 font-bold uppercase tracking-tight">
-                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Resolução Ideal: <span className="text-[#0a2540]">1920 x 1080 px</span> (Proporção 16:9)</li>
-                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Conteúdo Seguro: <span className="text-[#0a2540]">Manter textos e produtos no CENTRO da imagem</span></li>
-                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Margens: Evite detalhes importantes nos 80px superiores e 40px inferiores</li>
-                  <li className="flex items-center gap-2"><div className="w-1.5 h-1.5 bg-blue-400 rounded-full"/> Formato: Máximo 200KB (.jpg ou .webp)</li>
-              </ul>
-          </div>
-
-          <form onSubmit={handleSubmit} className="space-y-6">
+          <form onSubmit={handleStartCreation} className="space-y-6">
             <div className="space-y-2">
               <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Título do Banner</label>
               <input
@@ -147,11 +199,14 @@ const BannerManager = () => {
                 <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Quem vai ver?</label>
                 <select 
                   value={targetType}
-                  onChange={(e) => setTargetType(e.target.value as any)}
+                  onChange={(e) => {
+                    setTargetType(e.target.value as any);
+                    setDistrito(''); setConcelho(''); setFreguesia('');
+                  }}
                   className="w-full bg-slate-50 border-4 border-slate-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-black text-[#0a2540] text-xs uppercase"
                 >
                   <option value="all">TODOS OS CLIENTES</option>
-                  <option value="zip">POR CÓDIGO POSTAL</option>
+                  <option value="zonas">POR ÁREA GEOGRÁFICA</option>
                   <option value="birthday">ANIVERSARIANTES</option>
                 </select>
               </div>
@@ -167,29 +222,27 @@ const BannerManager = () => {
               </div>
             </div>
 
-            {targetType === 'zip' && (
-              <div className="space-y-2 animate-in slide-in-from-top-2">
-                <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Códigos Postais (separados por vírgula)</label>
-                <input
-                  type="text"
-                  value={targetValue}
-                  onChange={(e) => setTargetValue(e.target.value)}
-                  placeholder="Ex: 4000, 4400, 4150"
-                  className="w-full bg-blue-50 border-4 border-blue-100 focus:border-[#00d66f] rounded-2xl py-4 px-6 outline-none font-bold text-[#0a2540] text-sm"
-                />
-              </div>
-            )}
-
-            {targetType === 'birthday' && (
-              <div className="bg-pink-50 border-4 border-pink-100 p-5 rounded-2xl">
-                <p className="text-[10px] font-black text-pink-600 uppercase flex items-center gap-2">
-                  <Cake size={16} /> Este banner só aparecerá no dia de aniversário do cliente!
-                </p>
+            {/* SELEÇÃO GEOGRÁFICA */}
+            {targetType === 'zonas' && (
+              <div className="p-6 bg-blue-50 border-4 border-blue-100 rounded-[32px] space-y-4 animate-in slide-in-from-top-2">
+                <p className="text-[10px] font-black uppercase text-blue-800 ml-2">Defina o alcance local:</p>
+                <select value={distrito} onChange={e=>{setDistrito(e.target.value); setConcelho(''); setFreguesia('');}} className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold text-xs outline-none">
+                  <option value="">SELECIONE DISTRITO...</option>
+                  {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <select disabled={!distrito} value={concelho} onChange={e=>{setConcelho(e.target.value); setFreguesia('');}} className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold text-xs outline-none disabled:opacity-50">
+                  <option value="">TODO O DISTRITO (Ou escolha Concelho)</option>
+                  {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                </select>
+                <select disabled={!concelho} value={freguesia} onChange={e=>setFreguesia(e.target.value)} className="w-full p-4 bg-white border-2 border-blue-200 rounded-2xl font-bold text-xs outline-none disabled:opacity-50">
+                  <option value="">TODO O CONCELHO (Ou escolha Freguesia)</option>
+                  {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                </select>
               </div>
             )}
 
             <div className="space-y-2">
-              <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Limite de Visualizações</label>
+              <label className="text-[10px] font-black uppercase text-[#0a2540] ml-4 tracking-widest">Limite de Impressões</label>
               <div className="relative">
                 <Eye className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
                 <input
@@ -218,14 +271,10 @@ const BannerManager = () => {
             </div>
 
             <button
-              disabled={uploading}
-              className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase text-sm shadow-xl hover:bg-black active:translate-y-1 active:shadow-none transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-4 border-black/40 mt-4"
+              disabled={loading}
+              className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-3xl font-black uppercase text-sm shadow-xl hover:bg-black active:translate-y-1 transition-all flex items-center justify-center gap-3 disabled:opacity-50 border-b-4 border-black/40 mt-4"
             >
-              {uploading ? (
-                <div className="w-6 h-6 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>Criar e Ativar Banner <Plus size={20} strokeWidth={3} /></>
-              )}
+              {loading ? <Loader2 className="animate-spin" /> : <>Criar e Ativar Banner <Plus size={20} strokeWidth={3} /></>}
             </button>
           </form>
         </div>
@@ -254,34 +303,58 @@ const BannerManager = () => {
                         </span>
                         <span className={`text-white text-[9px] font-black px-3 py-1.5 rounded-xl uppercase flex items-center gap-1.5 shadow-sm border-2 ${
                           banner.targetType === 'all' ? 'bg-blue-500 border-blue-600' : 
-                          banner.targetType === 'zip' ? 'bg-amber-500 border-amber-600' : 'bg-pink-500 border-pink-600'
+                          banner.targetType === 'zonas' ? 'bg-amber-500 border-amber-600' : 'bg-pink-500 border-pink-600'
                         }`}>
-                          {banner.targetType === 'zip' ? <MapPin size={12} strokeWidth={3} /> : banner.targetType === 'birthday' ? <Cake size={12} strokeWidth={3}/> : <Users size={12} strokeWidth={3}/>}
-                          {banner.targetType === 'all' ? 'VISÍVEL A TODOS' : banner.targetType === 'zip' ? `APENAS CP: ${banner.targetValue}` : 'NO ANIVERSÁRIO'}
+                          {banner.targetType === 'zonas' ? <MapPin size={12} strokeWidth={3} /> : banner.targetType === 'birthday' ? <Cake size={12} strokeWidth={3}/> : <Users size={12} strokeWidth={3}/>}
+                          {banner.targetValue}
                         </span>
                       </div>
                     </div>
-                    
-                    <button 
-                      onClick={() => handleDelete(banner.id)}
-                      className="mt-6 self-start bg-red-50 text-red-500 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] flex items-center gap-2 transition-all border-2 border-red-100 hover:border-red-600"
-                    >
-                      <Trash2 size={14} /> Eliminar Banner
-                    </button>
+                    <button onClick={() => handleDelete(banner.id)} className="mt-6 self-start bg-red-50 text-red-500 hover:bg-red-500 hover:text-white px-4 py-2 rounded-xl font-black uppercase text-[9px] flex items-center gap-2 transition-all border-2 border-red-100 hover:border-red-600"><Trash2 size={14} /> Eliminar</button>
                   </div>
                 </div>
               )
             })}
-
-            {banners.length === 0 && (
-              <div className="text-center py-20 bg-white rounded-[40px] border-4 border-dashed border-slate-200">
-                <AlertCircle className="mx-auto text-slate-300 mb-4" size={48} />
-                <p className="font-black text-slate-400 uppercase tracking-widest text-xs">Nenhum banner ativo</p>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* MODAL DE CONFIRMAÇÃO DE AUDIÊNCIA */}
+      {showConfirm && (
+        <div className="fixed inset-0 z-[250] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
+          <div className="bg-white w-full max-w-md rounded-[40px] border-4 border-[#00d66f] shadow-2xl p-10 text-center animate-in zoom-in">
+            <div className="bg-[#00d66f]/20 w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6">
+              <Users size={40} className="text-[#00d66f]" />
+            </div>
+            <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2">Validar Audiência</h3>
+            <p className="text-sm font-bold text-slate-500 mb-8">
+              Este banner será visível para <span className="text-[#0a2540] text-xl font-black">{simulatedCount}</span> clientes ativos na zona selecionada.
+            </p>
+            
+            <div className="grid grid-cols-1 gap-3">
+              <button 
+                onClick={handleFinalPublish} 
+                disabled={uploading}
+                className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 shadow-xl hover:bg-black transition-all border-b-8 border-black/40"
+              >
+                {uploading ? <RefreshCw className="animate-spin" /> : <><CheckCircle2 size={18}/> Validar e Publicar</>}
+              </button>
+              <button 
+                onClick={() => setShowConfirm(false)}
+                className="w-full bg-slate-100 text-slate-400 p-4 rounded-2xl font-black uppercase text-[10px] hover:bg-slate-200 transition-all"
+              >
+                <RefreshCw size={14} className="inline mr-1" /> Corrigir Dados
+              </button>
+              <button 
+                onClick={() => { setShowConfirm(false); resetForm(); }}
+                className="w-full bg-red-50 text-red-500 p-4 rounded-2xl font-black uppercase text-[10px] hover:bg-red-500 hover:text-white transition-all"
+              >
+                <XCircle size={14} className="inline mr-1" /> Cancelar Criação
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -25,7 +25,7 @@ const UserDashboard: React.FC = () => {
 
   const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore' | 'events' | 'anti_waste'>('home');
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
-  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: 'A carregar guia...' });
+  const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '' });
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
@@ -50,7 +50,7 @@ const UserDashboard: React.FC = () => {
     const fetchData = async () => {
       try {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
-        if (configSnap.exists()) setSysConfig(configSnap.data() as any);
+        if (configSnap.exists()) setSysConfig(configSnap.data());
 
         const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
         const merchantsSnap = await getDocs(q);
@@ -505,6 +505,7 @@ const UserDashboard: React.FC = () => {
         </div>
       )}
 
+      {/* REGRAS DE UTILIZAÇÃO */}
       {showRulesModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -513,16 +514,37 @@ const UserDashboard: React.FC = () => {
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase"><u>1. Isenção de Responsabilidade</u></h4><p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo</h4><p>O saldo não possui valor fiduciário.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4><p>O Cliente deve apresentar o Cartão Digital ao lojista antes do pagamento.</p></div>
-              <div><h4 className="font-black text-red-600 mb-1 uppercase">4. Prevenção de Fraude</h4><p>A tentativa de uso de dados de terceiros resultará no bloqueio imediato.</p></div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Isenção de Responsabilidade</h4>
+                <p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico facilitador de cashback. O Vizinho+ isenta-se de qualquer responsabilidade sobre litígios comerciais entre Lojistas e Clientes, qualidade de produtos ou serviços prestados.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4>
+                <p>O saldo acumulado não possui valor fiduciário, não é convertível em numerário e não pode ser transferido para contas bancárias. Serve unicamente como desconto em compras futuras na rede aderente.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4>
+                <p>O Cliente deve apresentar obrigatoriamente o seu Cartão Digital ou QR Code ao lojista antes do encerramento da fatura para garantir a atribuição ou o resgate de saldo.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4>
+                <p>O desconto de saldo acumulado nunca poderá ser superior a 50% do valor total da nova compra, independentemente do saldo disponível na carteira do cliente.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4>
+                <p>Ao resgatar saldo, o cliente continua a acumular novo cashback sobre o valor remanescente efetivamente pago na fatura.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-red-600 mb-1 uppercase">6. Prevenção de Fraude</h4>
+                <p>Qualquer tentativa de fraude, uso de dados de terceiros ou manipulação do sistema resultará na suspensão imediata da conta e perda total dos benefícios acumulados.</p>
+              </div>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi e Aceito as Regras</button></div>
           </div>
         </div>
       )}
 
+      {/* GUIA DA APP (FAQs) */}
       {showFaqModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -531,7 +553,7 @@ const UserDashboard: React.FC = () => {
               <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
-              {sysConfig.clientFaqs}
+              {sysConfig.clientFaqs || "O guia está a ser atualizado pela administração. Por favor, tente mais tarde."}
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
               <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-blue-600">Fechar Guia</button>

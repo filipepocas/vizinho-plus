@@ -1,5 +1,7 @@
+// src/features/user/components/UserExplore.tsx
+
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, Navigation, Percent, X } from 'lucide-react';
+import { Search, MapPin, Navigation, Percent, X, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 import toast from 'react-hot-toast';
 
@@ -10,11 +12,9 @@ interface UserExploreProps {
 const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
   const [searchName, setSearchName] = useState('');
   
-  // Filtros Avançados Múltiplos
   const [selectedConcelhos, setSelectedConcelhos] = useState<string[]>([]);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
 
-  // Listas Únicas para os Dropdowns
   const availableCats = useMemo(() => Array.from(new Set(allMerchants.map(m => m.category).filter(Boolean))), [allMerchants]);
   const availableConcelhos = useMemo(() => Array.from(new Set(allMerchants.map(m => m.concelho).filter(Boolean))), [allMerchants]);
 
@@ -53,7 +53,6 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
-      {/* FILTROS AVANÇADOS */}
       <div className="bg-white p-6 rounded-[35px] border-4 border-[#0a2540] space-y-4 shadow-[8px_8px_0px_#0a2540]">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -103,22 +102,32 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
       <div className="space-y-4">
         {filtered.length > 0 ? (
           filtered.map((m) => (
-            <div key={m.id} className="bg-white rounded-[35px] border-4 border-[#0a2540] overflow-hidden shadow-[6px_6px_0px_#0a2540] flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 group hover:bg-slate-50 transition-all">
+            <div key={m.id} className={`rounded-[35px] border-4 overflow-hidden flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 transition-all ${m.isLeaving ? 'bg-slate-50 border-slate-300 opacity-90' : 'bg-white border-[#0a2540] shadow-[6px_6px_0px_#0a2540] group hover:bg-slate-50'}`}>
+              
               <div className="flex items-center gap-4">
-                <div className="bg-[#0a2540] p-4 rounded-2xl text-[#00d66f] group-hover:scale-110 transition-transform"><MapPin size={24} /></div>
+                <div className={`p-4 rounded-2xl transition-transform ${m.isLeaving ? 'bg-slate-200 text-slate-500' : 'bg-[#0a2540] text-[#00d66f] group-hover:scale-110'}`}>
+                  <MapPin size={24} />
+                </div>
                 <div className="flex-1">
-                  <span className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest">{m.category || 'Comércio'}</span>
-                  <h4 className="text-lg font-black text-[#0a2540] uppercase tracking-tighter leading-none mb-1">{m.shopName || m.name}</h4>
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">{m.address ? `${m.address} • ` : ''}{m.freguesia || m.concelho || 'Sem Localidade'}</p>
+                  <span className={`text-[8px] font-black uppercase tracking-widest ${m.isLeaving ? 'text-slate-400' : 'text-[#00d66f]'}`}>{m.category || 'Comércio'}</span>
+                  <h4 className={`text-lg font-black uppercase tracking-tighter leading-none mb-1 ${m.isLeaving ? 'text-slate-500 line-through decoration-slate-300' : 'text-[#0a2540]'}`}>{m.shopName || m.name}</h4>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">{m.address ? `${m.address} • ` : ''}{m.freguesia || m.concelho || 'Sem Localidade'}</p>
                   
-                  <div className="mt-2 inline-flex items-center gap-1 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-[#00d66f]">
-                    <Percent size={10} strokeWidth={3} />
-                    <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
-                  </div>
+                  {m.isLeaving ? (
+                    <div className="inline-flex items-center gap-2 bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 text-amber-800">
+                      <AlertTriangle size={12} strokeWidth={3} />
+                      <span className="text-[9px] font-black uppercase tracking-widest">Loja sai a {new Date(m.leavingDate!).toLocaleDateString()}. Desconte o seu saldo!</span>
+                    </div>
+                  ) : (
+                    <div className="inline-flex items-center gap-1 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-[#00d66f]">
+                      <Percent size={10} strokeWidth={3} />
+                      <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
+                    </div>
+                  )}
                 </div>
               </div>
               
-              <button onClick={() => openInMaps(m)} className="bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-4 rounded-2xl shadow-[4px_4px_0px_#0a2540] hover:translate-y-[-2px] hover:shadow-[6px_6px_0px_#0a2540] active:translate-y-0 active:shadow-none transition-all flex items-center justify-center gap-2 w-full sm:w-auto" title="Abrir no Maps">
+              <button onClick={() => openInMaps(m)} className={`border-2 p-4 rounded-2xl shadow-sm hover:translate-y-[-2px] transition-all flex items-center justify-center gap-2 w-full sm:w-auto ${m.isLeaving ? 'bg-white border-slate-300 text-slate-500' : 'bg-[#00d66f] text-[#0a2540] border-[#0a2540] hover:shadow-[6px_6px_0px_#0a2540]'}`} title="Abrir no Maps">
                 <Navigation size={20} fill="currentColor" />
                 <span className="font-black uppercase text-[10px]">Ver Mapa</span>
               </button>

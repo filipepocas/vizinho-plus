@@ -1,3 +1,5 @@
+// src/features/public/TermsPage.tsx
+
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, ShieldCheck, ScrollText } from 'lucide-react';
@@ -5,13 +7,22 @@ import { ArrowLeft, ShieldCheck, ScrollText } from 'lucide-react';
 const TermsPage: React.FC = () => {
   const navigate = useNavigate();
 
+  // Função inteligente para voltar atrás ou fechar o separador (Ponto 1)
+  const handleGoBack = () => {
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      window.close();
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] p-6 md:p-12 font-sans text-[#0a2540]">
       <div className="max-w-3xl mx-auto">
         
         <div className="flex items-center gap-6 mb-12">
           <button 
-            onClick={() => navigate(-1)}
+            onClick={handleGoBack}
             className="bg-white p-4 rounded-2xl border-4 border-[#0a2540] shadow-[6px_6px_0px_0px_#0a2540] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all active:scale-95"
           >
             <ArrowLeft size={24} strokeWidth={3} />
@@ -126,7 +137,7 @@ const TermsPage: React.FC = () => {
 
           <section className="relative z-10 pt-6 border-t-2 border-slate-100">
             <button 
-              onClick={() => navigate(-1)}
+              onClick={handleGoBack}
               className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl"
             >
               Compreendi. Voltar Atrás.

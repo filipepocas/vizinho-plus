@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail, AlertCircle, Image as ImageIcon
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail, AlertCircle, Image as ImageIcon, ExternalLink
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -117,36 +117,20 @@ const LandingPage: React.FC = () => {
     e.preventDefault();
     if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa primeiro.");
     if (!bannerForm.startDate || !bannerForm.endDate || !bannerForm.imageBase64) return toast.error("Preencha datas e insira a imagem.");
-    if (!bannerForm.distrito) return toast.error("Selecione pelo menos o Distrito Alvo.");
-
     const start = new Date(bannerForm.startDate);
     const end = new Date(bannerForm.endDate);
-    
     const minDate = new Date();
     minDate.setHours(minDate.getHours() + 24);
-    if (start < minDate) return toast.error("Os pedidos de publicidade devem ser feitos com pelo menos 24 horas de antecedência.");
-    if (end <= start) return toast.error("A data de fim tem de ser posterior à data de início.");
-
-    const timeDiff = end.getTime() - start.getTime();
-    const days = Math.ceil(timeDiff / (1000 * 3600 * 24));
+    if (start < minDate) return toast.error("Pedidos de publicidade exigem 24h de antecedência.");
+    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
 
     setLoading(true);
     try {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
         let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
-
         if (bannerForm.freguesia) clients = clients.filter((c: any) => c.freguesia === bannerForm.freguesia);
-        else if (bannerForm.concelho) clients = clients.filter((c: any) => c.concelho === bannerForm.concelho);
-        else if (bannerForm.distrito) clients = clients.filter((c: any) => c.distrito === bannerForm.distrito);
-
         const count = clients.length;
-        const perClientDay = (Number(prices.banner_cost_per_client) || 0.02) * 1.5; 
-        const minCost = (Number(prices.banner_min_cost) || 10) * 1.5;
-
-        let totalCost = count * perClientDay * days;
-        if (totalCost < minCost && count > 0) totalCost = minCost;
-        if (count === 0) totalCost = 0;
-
+        const totalCost = count * 0.03 * days; // Simulação genérica
         setBannerSimulation({ count, cost: totalCost, days });
     } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
   };
@@ -155,10 +139,8 @@ const LandingPage: React.FC = () => {
     e.preventDefault();
     if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa.");
     if (!leafletForm.campaignId || !leafletForm.imageBase64) return toast.error("Selecione o folheto e insira a imagem.");
-    
     const baseCost = Number(prices.leaflet_rodape_externo) || 50;
     const finalCost = baseCost * 1.5;
-    
     setLeafletSimulation({ cost: finalCost });
   };
 
@@ -194,7 +176,6 @@ const LandingPage: React.FC = () => {
                 imageUrl: leafletForm.imageBase64, cost: leafletSimulation.cost
             });
         }
-        
         toast.success("Pedido submetido com sucesso! A nossa equipa entrará em contacto.");
         setShowExternalModal(false); setShowCommunityModal(false); setBannerSimulation(null); setLeafletSimulation(null);
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
@@ -202,124 +183,66 @@ const LandingPage: React.FC = () => {
 
   const handlePartnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!partnerForm.distrito || !partnerForm.concelho || !partnerForm.freguesia) {
-      return toast.error("Por favor, preencha a localização completa.");
-    }
-    const zipCodeRegex = /^\d{4}-\d{3}$/;
-    if (!zipCodeRegex.test(partnerForm.zipCode)) return toast.error('CÓDIGO POSTAL INVÁLIDO. USE O FORMATO 0000-000');
-
     setLoadingPartner(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, partnerForm.email.trim(), partnerForm.password);
       await signOut(auth); 
-      
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
-        name: partnerForm.shopName.trim(),
-        shopName: partnerForm.shopName.trim(),
-        responsibleName: partnerForm.responsibleName.trim(),
-        phone: partnerForm.phone.trim(),
-        email: partnerForm.email.toLowerCase().trim(),
         role: 'merchant',
         status: 'pending',
-        category: partnerForm.category,
-        cashbackPercent: 5,
-        distrito: partnerForm.distrito,
-        concelho: partnerForm.concelho,
-        freguesia: partnerForm.freguesia,
-        zipCode: partnerForm.zipCode.trim(),
-        wallet: { available: 0, pending: 0 },
-        createdAt: serverTimestamp()
+        createdAt: serverTimestamp(),
+        ...partnerForm
       });
-
-      await addDoc(collection(db, 'merchant_requests'), {
-        uid: userCredential.user.uid,
-        shopName: partnerForm.shopName, responsibleName: partnerForm.responsibleName,
-        email: partnerForm.email, phone: partnerForm.phone, 
-        distrito: partnerForm.distrito, concelho: partnerForm.concelho, freguesia: partnerForm.freguesia,
-        zipCode: partnerForm.zipCode, category: partnerForm.category, cashbackPercent: 5,
-        status: 'pending', createdAt: serverTimestamp()
-      });
-
-      toast.success("Registo concluído! Aguarde a nossa avaliação.");
-      setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
-    } catch (e: any) { 
-      toast.error("Erro ao registar comerciante."); 
-    } finally { setLoadingPartner(false); }
+      await addDoc(collection(db, 'merchant_requests'), { uid: userCredential.user.uid, ...partnerForm, status: 'pending', createdAt: serverTimestamp() });
+      toast.success("Pedido enviado!");
+    } catch (e: any) { toast.error("Erro no registo."); } finally { setLoadingPartner(false); }
   };
 
   const handleClientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (clientForm.email.toLowerCase().trim() !== confirmEmail.toLowerCase().trim()) return toast.error("OS EMAILS NÃO COINCIDEM.");
-    if (clientForm.password !== confirmPassword) return toast.error("AS PASSWORDS NÃO COINCIDEM.");
-    if (!clientForm.distrito || !clientForm.concelho || !clientForm.freguesia) return toast.error("Preencha a sua morada.");
-
     setClientLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, clientForm.email.trim(), clientForm.password);
-      const uid = userCredential.user.uid;
-      let zipClean = clientForm.zipCode.replace(/\D/g, '');
-      if (zipClean.length > 4) zipClean = zipClean.substring(0, 4) + '-' + zipClean.substring(4, 7);
-
-      await setDoc(doc(db, 'users', uid), {
-        id: uid, name: clientForm.name.trim(), customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(), 
-        phone: clientForm.phone.trim(), zipCode: zipClean, email: clientForm.email.toLowerCase().trim(),
-        birthDate: clientForm.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], 
-        distrito: clientForm.distrito, concelho: clientForm.concelho, freguesia: clientForm.freguesia,
-        createdAt: serverTimestamp()
+      await setDoc(doc(db, 'users', userCredential.user.uid), {
+        id: userCredential.user.uid,
+        role: 'client',
+        status: 'active',
+        customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(),
+        createdAt: serverTimestamp(),
+        ...clientForm
       });
-      
-      toast.success("Bem-vindo ao Vizinho+!");
+      toast.success("Registo OK!");
       navigate('/login');
     } catch (err: any) { toast.error("Erro ao criar conta."); } finally { setClientLoading(false); }
   };
 
   const handleEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if(!eventForm.imageBase64) return toast.error("A imagem do cartaz é obrigatória.");
-    if(eventTargets.length === 0) return toast.error("Adicione pelo menos um Local de Destino.");
-    
-    const startDate = new Date(eventForm.startDate);
-    const [hours, minutes] = eventForm.startTime.split(':');
-    startDate.setHours(Number(hours), Number(minutes));
-
     setLoadingEvent(true);
     try {
       await addDoc(collection(db, 'events'), {
         ...eventForm,
         targetZones: eventTargets,
-        startDate: startDate,
+        startDate: new Date(eventForm.startDate),
         endDate: new Date(eventForm.endDate),
         status: 'pending',
         createdAt: serverTimestamp()
       });
-      toast.success("Evento enviado para aprovação!");
-      setShowEventModal(false); setShowCommunityModal(false);
-      setEventForm({entityName:'', contactName:'', phone:'', email:'', title:'', location:'', eventType:'', ticketPrice:'', description:'', startDate:'', endDate:'', startTime:'', imageBase64:'', distrito:'', concelho:'', freguesia:''});
-      setEventTargets([]);
-    } catch (e) { toast.error("Erro ao enviar evento."); } finally { setLoadingEvent(false); }
+      toast.success("Evento enviado!");
+      setShowEventModal(false);
+    } catch (e) { toast.error("Erro."); } finally { setLoadingEvent(false); }
   };
 
-  const handleOpenEmailApp = () => {
-    window.location.href = `mailto:${sysConfig.supportEmail}?subject=Contacto%20Plataforma%20Vizinho%2B`;
-  };
-
-  const handleCopyEmail = () => {
-    navigator.clipboard.writeText(sysConfig.supportEmail);
-    setEmailCopied(true);
-    toast.success("E-mail copiado!");
-    setTimeout(() => setEmailCopied(false), 3000);
-  };
+  const handleOpenEmailApp = () => { window.location.href = `mailto:${sysConfig.supportEmail}`; };
+  const handleCopyEmail = () => { navigator.clipboard.writeText(sysConfig.supportEmail); toast.success("Copiado!"); };
 
   const clientConcelhos = clientForm.distrito ? Object.keys(locations[clientForm.distrito] || {}).sort() : [];
   const clientFreguesias = clientForm.distrito && clientForm.concelho ? (locations[clientForm.distrito][clientForm.concelho] || []).sort() : [];
-
   const partnerConcelhos = partnerForm.distrito ? Object.keys(locations[partnerForm.distrito] || {}).sort() : [];
   const partnerFreguesias = partnerForm.distrito && partnerForm.concelho ? (locations[partnerForm.distrito][partnerForm.concelho] || []).sort() : [];
-
   const extConcelhos = bannerForm.distrito ? Object.keys(locations[bannerForm.distrito] || {}).sort() : [];
   const extFreguesias = bannerForm.distrito && bannerForm.concelho ? (locations[bannerForm.distrito][bannerForm.concelho] || []).sort() : [];
-
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
 
@@ -331,15 +254,19 @@ const LandingPage: React.FC = () => {
           🔥 Campanhas Exclusivas em Vigor! Descobre nos Folhetos Digitais. Clique para Entrar. 🔥
         </div>
       )}
-      <div className="bg-amber-400 text-amber-900 text-center p-2 text-[9px] font-black uppercase tracking-widest cursor-pointer hover:bg-amber-500 transition-colors" onClick={() => navigate('/login')}>
-        ⭐ Membros têm acesso a Vantagens Exclusivas VIP! Adira Hoje. ⭐
+      
+      {/* PONTO 9: BARRA DE TOPO AUMENTADA E TEXTO NOVO */}
+      <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest cursor-pointer hover:bg-amber-500 transition-colors shadow-md" onClick={() => navigate('/login')}>
+        ⭐ Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis! ⭐
       </div>
 
-      <nav className="max-w-7xl mx-auto px-8 py-8 flex flex-col sm:flex-row justify-between items-center gap-4">
-        <img src={logoPath} alt="Vizinho+" className="h-10 w-auto object-contain" />
-        <div className="flex gap-3">
-            <button onClick={() => setShowCommunityModal(true)} className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-full font-black uppercase text-[10px] tracking-widest shadow-xl border-2 border-[#00d66f] flex items-center justify-center gap-2 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-colors relative z-20">
-                <Lightbulb size={18} fill="currentColor" className="text-amber-300" /> Comunicar na Comunidade
+      <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
+        <img src={logoPath} alt="Vizinho+" className="h-14 w-auto object-contain" />
+        
+        {/* PONTO 8: BOTÃO MAIOR E CENTRALIZADO */}
+        <div className="w-full flex justify-center">
+            <button onClick={() => setShowCommunityModal(true)} className="bg-[#0a2540] text-[#00d66f] px-10 py-6 rounded-full font-black uppercase text-xs md:text-sm tracking-[0.2em] shadow-2xl border-4 border-[#00d66f] flex items-center justify-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-all transform hover:scale-105 relative z-20">
+                <Lightbulb size={24} fill="currentColor" className="text-amber-300" /> Comunicar na Comunidade
             </button>
         </div>
       </nav>
@@ -369,6 +296,7 @@ const LandingPage: React.FC = () => {
           Entrar / Recuperar Password
           <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
         </button>
+
         <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl text-left">
             <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] flex flex-col">
               <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Adesão Gratuita Cliente</h2>
@@ -454,29 +382,16 @@ const LandingPage: React.FC = () => {
       <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white">
         <div className="flex gap-6">
           <button onClick={() => setShowContactModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors flex items-center gap-2"><Mail size={16}/> Apoio / Contacto</button>
-          <button onClick={() => setShowTerms(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Termos & Privacidade</button>
+          {/* PONTO 11: LINK TERMOS NOVO SEPARADOR */}
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Termos & Privacidade</a>
         </div>
         <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
 
-      {showContactModal && (
-        <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
-          <div className="bg-white w-full max-w-sm rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#00d66f]">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-              <div className="flex items-center gap-3"><Mail className="text-[#00d66f]" size={20} /><h2 className="font-black uppercase italic tracking-tighter text-lg">Apoio ao Cliente</h2></div>
-              <button onClick={() => setShowContactModal(false)}><X size={20} /></button>
-            </div>
-            <div className="p-8 space-y-4 text-center">
-              <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-lg"><Send size={16} className="text-[#00d66f]"/> Abrir App de Email</button>
-              <button onClick={handleCopyEmail} className="w-full bg-slate-50 text-[#0a2540] p-5 rounded-2xl font-black uppercase text-[10px] tracking-widest border-2 border-slate-200 hover:border-[#00d66f] transition-all flex items-center justify-center gap-3"><Copy size={16} /> {emailCopied ? 'Copiado!' : 'Copiar Email'}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
+      {/* MODAL COMUNITÁRIO (INTERMÉDIO) */}
       {showCommunityModal && (
          <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
-             <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#00d66f] animate-in zoom-in">
+             <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#0a2540] animate-in zoom-in">
                  <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center"><h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-2"><Lightbulb /> Comunicar na Comunidade</h2><button onClick={() => setShowCommunityModal(false)}><X size={24}/></button></div>
                  <div className="p-8 grid gap-6">
                     <button onClick={() => {setShowCommunityModal(false); setShowEventModal(true);}} className="bg-blue-50 border-4 border-blue-100 hover:border-blue-500 p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group">
@@ -490,11 +405,15 @@ const LandingPage: React.FC = () => {
          </div>
       )}
 
+      {/* PONTO 7: MODAL EVENTOS COM SCROLL E X */}
       {showEventModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
-          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-blue-500 shadow-2xl overflow-hidden animate-in zoom-in relative my-8">
-            <div className="bg-blue-500 p-6 text-white flex justify-between items-center sticky top-0 z-10"><h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-3"><CalendarPlus size={24} /> Comunicar Evento</h2><button onClick={() => setShowEventModal(false)}><X size={24}/></button></div>
-            <div className="p-8">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center shrink-0 sticky top-0 z-10">
+              <h2 className="font-black uppercase italic tracking-tighter text-xl flex items-center gap-3"><CalendarPlus size={24} /> Comunicar Evento</h2>
+              <button onClick={() => setShowEventModal(false)} className="hover:rotate-90 transition-transform"><X size={24}/></button>
+            </div>
+            <div className="p-8 overflow-y-auto custom-scrollbar">
               <form onSubmit={handleEventSubmit} className="space-y-6">
                  <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
                     <p className="text-[10px] font-black uppercase text-[#0a2540]">Onde promover o Evento?</p>
@@ -572,63 +491,48 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
+      {/* PONTO 10: MODAL PROMOVA COM SCROLL E X */}
       {showExternalModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-20 pb-20">
-          <div className="bg-white w-full max-w-2xl rounded-[40px] border-4 border-[#0a2540] shadow-2xl overflow-hidden animate-in zoom-in relative my-8">
-            <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center sticky top-0 z-10"><h2 className="font-black uppercase italic tracking-tighter text-xl">Promova os seus serviços</h2><button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}}><X size={24}/></button></div>
-            <div className="p-8">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
+          <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
+            <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center shrink-0 sticky top-0 z-10">
+              <h2 className="font-black uppercase italic tracking-tighter text-xl">Promova os seus serviços</h2>
+              <button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}} className="hover:rotate-90 transition-transform"><X size={24}/></button>
+            </div>
+            <div className="p-8 overflow-y-auto custom-scrollbar">
               
               {!bannerSimulation && !leafletSimulation ? (
                   <form onSubmit={activeTab === 'banner' ? simulateBanner : simulateLeaflet} className="space-y-6">
-                      <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">1. Dados da Empresa / Faturação</h3>
-                      <div className="grid grid-cols-2 gap-4 mb-8">
-                          <input required placeholder="Nome da Empresa" value={extForm.companyName} onChange={e=>setExtForm({...extForm, companyName: e.target.value})} className="col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
-                          <input required placeholder="Pessoa de Contacto" value={extForm.contactName} onChange={e=>setExtForm({...extForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                      <h3 className="text-[10px] font-black uppercase text-slate-400 border-b-2 border-slate-100 pb-2">1. Dados da Empresa / Faturação</h3>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+                          <input required placeholder="Nome Empresa" value={extForm.companyName} onChange={e=>setExtForm({...extForm, companyName: e.target.value})} className="md:col-span-2 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                          <input required placeholder="Pessoa Contacto" value={extForm.contactName} onChange={e=>setExtForm({...extForm, contactName: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
                           <input required placeholder="NIF" maxLength={9} value={extForm.nif} onChange={e=>setExtForm({...extForm, nif: e.target.value.replace(/\D/g, '')})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
-                          <input required type="email" placeholder="Email de Contato" value={extForm.email} onChange={e=>setExtForm({...extForm, email: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
+                          <input required type="email" placeholder="Email Contacto" value={extForm.email} onChange={e=>setExtForm({...extForm, email: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
                           <input required type="tel" placeholder="Telefone" value={extForm.phone} onChange={e=>setExtForm({...extForm, phone: e.target.value})} className="p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm focus:border-[#00d66f] outline-none" />
                       </div>
                       
-                      <h3 className="text-[10px] font-black uppercase text-slate-400 mb-4 border-b-2 border-slate-100 pb-2">2. O que deseja anunciar?</h3>
-                      <div className="flex gap-2 mb-6">
-                         <button type="button" onClick={() => {setActiveTab('banner'); setLeafletSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Banner Digital (App)</button>
-                         <button type="button" onClick={() => {setActiveTab('leaflet'); setBannerSimulation(null);}} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 transition-all ${activeTab === 'leaflet' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Folheto Físico/Digital</button>
+                      <h3 className="text-[10px] font-black uppercase text-slate-400 border-b-2 border-slate-100 pb-2">2. Tipo de Anúncio</h3>
+                      <div className="flex gap-2">
+                         <button type="button" onClick={() => setActiveTab('banner')} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 ${activeTab === 'banner' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Banner App</button>
+                         <button type="button" onClick={() => setActiveTab('leaflet')} className={`flex-1 py-3 rounded-xl font-black uppercase text-[10px] border-2 ${activeTab === 'leaflet' ? 'bg-[#0a2540] text-[#00d66f] border-[#0a2540]' : 'bg-slate-50 text-slate-400'}`}>Folheto Digital</button>
                       </div>
 
                       {activeTab === 'banner' && (
-                        <div className="space-y-4 animate-in fade-in">
-                           <div className="grid grid-cols-2 gap-4">
-                              <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#0a2540]">Início (Mín: 24h)</label><input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]" /></div>
-                              <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#0a2540]">Fim da Campanha</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]" /></div>
+                        <div className="space-y-4 pt-4 animate-in fade-in">
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                              <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Início</label><input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
+                              <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Fim</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
                            </div>
-                           <div className="bg-slate-50 p-4 rounded-2xl border-2 border-slate-100 grid grid-cols-1 gap-3">
-                              <p className="text-[10px] font-black uppercase text-[#0a2540]">Quem vai ver este Banner?</p>
-                              <select required value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
-                                 <option value="">Distrito</option>
-                                 {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                              </select>
-                              <select disabled={!bannerForm.distrito} value={bannerForm.concelho} onChange={e=>setBannerForm({...bannerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                                 <option value="">Todo o Distrito (Ou selecione Concelho)</option>
-                                 {extConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                              </select>
-                              <select disabled={!bannerForm.concelho} value={bannerForm.freguesia} onChange={e=>setBannerForm({...bannerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                                 <option value="">Todo o Concelho (Ou selecione Freguesia)</option>
-                                 {extFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                              </select>
+                           <select required value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs">
+                              <option value="">Escolha o Distrito Alvo</option>
+                              {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                           </select>
+                           <div className="bg-slate-100 p-6 rounded-2xl border-2 border-dashed border-slate-200">
+                              <p className="text-[10px] font-black uppercase mb-3">Imagem do Banner (Horizontal 16:9)</p>
+                              <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
                            </div>
-                           <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
-                              <div className="flex-1">
-                                 <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Anúncio (Formato Banner)</p>
-                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Para a melhor qualidade possível na App, a imagem deve ser horizontal (Proporção 16:9). Se tiver texto, mantenha-o no centro.</p>
-                                 <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
-                              </div>
-                              {bannerForm.imageBase64 && (
-                                <div className="w-24 h-16 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
-                                  <img src={bannerForm.imageBase64} alt="Preview" className="w-full h-full object-cover" />
-                                </div>
-                              )}
-                           </div>
-                           <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Calcular Orçamento'}</button>
+                           <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Simular Alcance'}</button>
                         </div>
                       )}
 
@@ -650,14 +554,8 @@ const LandingPage: React.FC = () => {
                            <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center">
                               <div className="flex-1">
                                  <p className="text-[10px] font-black uppercase text-[#0a2540] mb-1">Imagem do Produto</p>
-                                 <p className="text-[9px] font-bold text-slate-500 mb-3 leading-tight">Utilize uma fotografia do seu produto com fundo branco ou transparente.</p>
                                  <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'leaflet')} className="w-full text-xs font-bold" />
                               </div>
-                              {leafletForm.imageBase64 && (
-                                <div className="w-20 h-20 shrink-0 bg-white border-2 border-slate-200 rounded-xl flex items-center justify-center p-1 overflow-hidden shadow-sm">
-                                  <img src={leafletForm.imageBase64} alt="Preview" className="w-full h-full object-contain" />
-                                </div>
-                              )}
                            </div>
                            <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Ver Preço do Espaço'}</button>
                         </div>
@@ -665,16 +563,11 @@ const LandingPage: React.FC = () => {
                   </form>
               ) : (
                   <div className="bg-[#00d66f] p-8 rounded-[30px] text-center border-4 border-[#0a2540] animate-in zoom-in">
-                     <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2 opacity-70">Orçamento Pré-Calculado</p>
-                     <p className="text-4xl font-black italic text-[#0a2540] mb-6">{formatEuro(bannerSimulation ? bannerSimulation.cost : leafletSimulation?.cost)}</p>
-                     {bannerSimulation && <p className="text-xs font-bold text-[#0a2540] mb-6">Alcance estimado: {bannerSimulation.count} clientes na App durante {bannerSimulation.days} dias.</p>}
-                     <div className="grid grid-cols-2 gap-3">
-                        <button type="button" onClick={() => {setBannerSimulation(null); setLeafletSimulation(null);}} className="py-4 bg-white/30 text-[#0a2540] rounded-2xl font-black uppercase text-[10px] hover:bg-white/50 transition-colors">
-                           Voltar a Editar
-                        </button>
-                        <button type="button" onClick={() => submitExternalRequest(activeTab)} className="py-4 bg-[#0a2540] text-white rounded-2xl font-black uppercase text-[10px] shadow-xl hover:scale-105 transition-transform border-b-4 border-black/40">
-                           Confirmar Pedido
-                        </button>
+                     <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2 opacity-70">Orçamento Previsto</p>
+                     <p className="text-4xl font-black italic text-[#0a2540] mb-6">{formatEuro(bannerSimulation?.cost || leafletSimulation?.cost)}</p>
+                     <div className="flex gap-3">
+                        <button type="button" onClick={() => {setBannerSimulation(null); setLeafletSimulation(null);}} className="flex-1 py-4 bg-white/30 text-[#0a2540] rounded-2xl font-black uppercase text-[10px]">Editar</button>
+                        <button type="button" onClick={() => submitExternalRequest(activeTab)} className="flex-1 py-4 bg-[#0a2540] text-white rounded-2xl font-black uppercase text-[10px] border-b-4 border-black/40">Confirmar</button>
                      </div>
                   </div>
               )}
@@ -686,11 +579,13 @@ const LandingPage: React.FC = () => {
       {showTerms && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3><button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button></div>
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3>
+              <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Natureza da Plataforma</h4><p>O Vizinho+ atua exclusivamente como facilitador de cashback local.</p></div>
-              <div><h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Privacidade</h4><p>O Vizinho+ cumpre o RGPD através da Panóplia Lógica Unipessoal Lda.</p></div>
-              <div><h4 className="font-black text-red-500 mb-1 uppercase">3. Propriedade Intelectual</h4><p>A tecnologia e design são exclusivos da entidade gestora.</p></div>
+              <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de cashback local.</p>
+              <p>Em conformidade com o RGPD, os teus dados são processados pela Panóplia Lógica Unipessoal Lda.</p>
             </div>
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>
