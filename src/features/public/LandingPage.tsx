@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { 
   ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail, AlertCircle, Image as ImageIcon, ExternalLink
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail, AlertCircle, Image as ImageIcon, ExternalLink, Tag, MapPin, Phone, User
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -12,6 +12,16 @@ import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
+
+const MERCH_CATEGORIES = [
+  "Restauração & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
+  "Padarias & Pastelarias", "Moda & Acessórios", "Saúde & Farmácias",
+  "Beleza & Cabeleireiros", "Oficinas & Automóveis", "Construção & Bricolage",
+  "Artigos para Casa & Decoração", "Papelarias & Livrarias", "Floristas & Jardinagem",
+  "Petshops & Veterinários", "Tecnologia & Informática", "Desporto & Lazer",
+  "Ópticas", "Ourivesarias & Relojoarias", "Lavandarias & Engomadoria",
+  "Sapateiros & Reparações", "Educação & Centros de Explicações", "Outros"
+];
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
@@ -183,6 +193,7 @@ const LandingPage: React.FC = () => {
 
   const handlePartnerSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!partnerForm.category) return toast.error("Selecione a categoria da loja.");
     setLoadingPartner(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, partnerForm.email.trim(), partnerForm.password);
@@ -192,15 +203,29 @@ const LandingPage: React.FC = () => {
         role: 'merchant',
         status: 'pending',
         createdAt: serverTimestamp(),
-        ...partnerForm
+        ...partnerForm,
+        name: partnerForm.shopName.trim(),
+        wallet: { available: 0, pending: 0 }
       });
-      await addDoc(collection(db, 'merchant_requests'), { uid: userCredential.user.uid, ...partnerForm, status: 'pending', createdAt: serverTimestamp() });
-      toast.success("Pedido enviado!");
-    } catch (e: any) { toast.error("Erro no registo."); } finally { setLoadingPartner(false); }
+      await addDoc(collection(db, 'merchant_requests'), { 
+        uid: userCredential.user.uid, 
+        ...partnerForm, 
+        status: 'pending', 
+        createdAt: serverTimestamp() 
+      });
+      toast.success("Pedido enviado com sucesso! Aguarde a aprovação do administrador.");
+      setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
+    } catch (e: any) { 
+        if (e.code === 'auth/email-already-in-use') toast.error("Este email já está registado.");
+        else toast.error("Erro no registo."); 
+    } finally { setLoadingPartner(false); }
   };
 
   const handleClientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (clientForm.password !== confirmPassword) return toast.error("As passwords não coincidem.");
+    if (clientForm.email !== confirmEmail) return toast.error("Os emails não coincidem.");
+
     setClientLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, clientForm.email.trim(), clientForm.password);
@@ -210,11 +235,15 @@ const LandingPage: React.FC = () => {
         status: 'active',
         customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(),
         createdAt: serverTimestamp(),
+        wallet: { available: 0, pending: 0 },
         ...clientForm
       });
-      toast.success("Registo OK!");
+      toast.success("Registo efetuado com sucesso!");
       navigate('/login');
-    } catch (err: any) { toast.error("Erro ao criar conta."); } finally { setClientLoading(false); }
+    } catch (err: any) { 
+        if (err.code === 'auth/email-already-in-use') toast.error("Este email já está registado.");
+        else toast.error("Erro ao criar conta."); 
+    } finally { setClientLoading(false); }
   };
 
   const handleEventSubmit = async (e: React.FormEvent) => {
@@ -255,7 +284,6 @@ const LandingPage: React.FC = () => {
         </div>
       )}
       
-      {/* PONTO 9: BARRA DE TOPO AUMENTADA E TEXTO NOVO */}
       <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest cursor-pointer hover:bg-amber-500 transition-colors shadow-md" onClick={() => navigate('/login')}>
         ⭐ Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis! ⭐
       </div>
@@ -263,7 +291,6 @@ const LandingPage: React.FC = () => {
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
         <img src={logoPath} alt="Vizinho+" className="h-14 w-auto object-contain" />
         
-        {/* PONTO 8: BOTÃO MAIOR E CENTRALIZADO */}
         <div className="w-full flex justify-center">
             <button onClick={() => setShowCommunityModal(true)} className="bg-[#0a2540] text-[#00d66f] px-10 py-6 rounded-full font-black uppercase text-xs md:text-sm tracking-[0.2em] shadow-2xl border-4 border-[#00d66f] flex items-center justify-center gap-3 animate-pulse hover:bg-[#00d66f] hover:text-[#0a2540] transition-all transform hover:scale-105 relative z-20">
                 <Lightbulb size={24} fill="currentColor" className="text-amber-300" /> Comunicar na Comunidade
@@ -312,15 +339,15 @@ const LandingPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
                      <p className="text-[10px] font-black uppercase text-slate-400">Morada (Acesso à rede local)</p>
-                     <select required value={clientForm.distrito} onChange={e=>setClientForm({...clientForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
+                     <select required value={clientForm.distrito} onChange={e=>setClientForm({...clientForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540]">
                         <option value="">Distrito</option>
                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
                      </select>
-                     <select required disabled={!clientForm.distrito} value={clientForm.concelho} onChange={e=>setClientForm({...clientForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                     <select required disabled={!clientForm.distrito} value={clientForm.concelho} onChange={e=>setClientForm({...clientForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540] disabled:opacity-50">
                         <option value="">Concelho</option>
                         {clientConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
                      </select>
-                     <select required disabled={!clientForm.concelho} value={clientForm.freguesia} onChange={e=>setClientForm({...clientForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+                     <select required disabled={!clientForm.concelho} value={clientForm.freguesia} onChange={e=>setClientForm({...clientForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540] disabled:opacity-50">
                         <option value="">Freguesia</option>
                         {clientFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                      </select>
@@ -349,7 +376,10 @@ const LandingPage: React.FC = () => {
                   </div>
                   <div className="grid grid-cols-1 gap-4">
                     <input required type="password" placeholder="Password de Acesso" value={partnerForm.password} onChange={e=>setPartnerForm({...partnerForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                    <input required type="text" placeholder="Categoria (Ex: Padaria)" value={partnerForm.category} onChange={e=>setPartnerForm({...partnerForm, category: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                    <select required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs appearance-none" value={partnerForm.category} onChange={e => setPartnerForm({...partnerForm, category: e.target.value})}>
+                      <option value="">SELECIONE O SETOR DE ATIVIDADE...</option>
+                      {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+                    </select>
                   </div>
                   <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
                      <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
@@ -382,13 +412,11 @@ const LandingPage: React.FC = () => {
       <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white">
         <div className="flex gap-6">
           <button onClick={() => setShowContactModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors flex items-center gap-2"><Mail size={16}/> Apoio / Contacto</button>
-          {/* PONTO 11: LINK TERMOS NOVO SEPARADOR */}
           <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Termos & Privacidade</a>
         </div>
         <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
 
-      {/* MODAL COMUNITÁRIO (INTERMÉDIO) */}
       {showCommunityModal && (
          <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
              <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#0a2540] animate-in zoom-in">
@@ -405,7 +433,6 @@ const LandingPage: React.FC = () => {
          </div>
       )}
 
-      {/* PONTO 7: MODAL EVENTOS COM SCROLL E X */}
       {showEventModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
@@ -491,7 +518,6 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* PONTO 10: MODAL PROMOVA COM SCROLL E X */}
       {showExternalModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
