@@ -30,8 +30,9 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       limit(50)
     );
     
-    const unsubscribe = onSnapshot(q, (snap) => {
-      setFeedbacks(snap.docs.map(d => ({ id: d.id, ...d.data() } as Feedback)));
+    // CORREÇÃO: Adicionado (snap: any) e (d: any) para o TypeScript
+    const unsubscribe = onSnapshot(q, (snap: any) => {
+      setFeedbacks(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback)));
       setLoadingFeedbacks(false);
     });
 
@@ -97,7 +98,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     return months;
   }, [transactions]);
 
-  // PONTO 7: Ticket Médio e Média de Vendas Diárias (6 Meses Acumulados vs Mês Atual)
   const performanceStats = useMemo(() => {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -123,9 +123,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       }
     });
 
-    // Dias decorridos no mês atual
     const elapsedDaysCurrentMonth = Math.max(1, new Date().getDate());
-    // Dias nos últimos 6 meses (aprox 180)
     const elapsedDays6Months = 180;
 
     return {
@@ -136,7 +134,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     };
   }, [transactions]);
 
-  // PONTO 7: Top 20 Clientes (Últimos 6 Meses)
   const topClients = useMemo(() => {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
@@ -186,7 +183,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
 
-        {/* NOVO QUADRO DE DESEMPENHO MÉDIO (Ponto 7) */}
         <div className="bg-[#0a2540] p-8 rounded-[40px] border-4 border-[#00d66f] shadow-[8px_8px_0px_#00d66f] text-white">
            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-6">
               <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Activity size={16} /></div> Saúde do Negócio: Últimos 6 Meses vs Mês Atual
@@ -341,7 +337,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
           </div>
         </div>
 
-        {/* TABELAS TOP 20 CLIENTES (6 MESES) */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f]">
               <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">

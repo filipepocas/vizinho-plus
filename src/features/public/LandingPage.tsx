@@ -145,18 +145,23 @@ const LandingPage: React.FC = () => {
     
     const start = new Date(bannerForm.startDate);
     const end = new Date(bannerForm.endDate);
+    
+    // Validação: Fim não pode ser menor que início (mas pode ser igual)
+    if (end < start) return toast.error("A data de fim não pode ser anterior à data de início.");
+
     const minDate = new Date();
     minDate.setHours(minDate.getHours() + 24);
     
     if (start < minDate) return toast.error("Pedidos de publicidade exigem 24h de antecedência.");
-    const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
+    
+    // Cálculo inclusivo de dias (+1 garante que 27 a 27 é 1 dia)
+    const days = Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
 
     setLoading(true);
     try {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
         let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
         
-        // Filtra clientes se a freguesia, concelho ou distrito deles estiver dentro das zonas selecionadas
         clients = clients.filter((c: any) => {
             return bannerTargets.some(z => 
                 z.includes(`Freguesia: ${c.freguesia}`) || 
@@ -548,7 +553,7 @@ const LandingPage: React.FC = () => {
           <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
             <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center shrink-0 sticky top-0 z-10">
               <h2 className="font-black uppercase italic tracking-tighter text-xl">Promova os seus serviços</h2>
-              <button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null);}} className="hover:rotate-90 transition-transform"><X size={24}/></button>
+              <button onClick={() => {setShowExternalModal(false); setBannerSimulation(null); setLeafletSimulation(null); setBannerTargets([]);}} className="hover:rotate-90 transition-transform"><X size={24}/></button>
             </div>
             <div className="p-8 overflow-y-auto custom-scrollbar">
               

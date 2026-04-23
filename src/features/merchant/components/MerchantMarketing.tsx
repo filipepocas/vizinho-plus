@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDoc, doc, getDocs } from 'firebase/firestore';
-import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, AlertCircle, Bell, Filter, X } from 'lucide-react';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDocs } from 'firebase/firestore';
+import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Bell, Filter, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, PricingRule } from '../../../types';
 import { useStore } from '../../../store/useStore';
@@ -19,10 +19,8 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
   const [myRequests, setMyRequests] = useState<MarketingRequest[]>([]);
   
-  // NOVO MOTOR DE PREÇOS
   const [pricingRules, setPricingRules] = useState<PricingRule[]>([]);
 
-  // Estados de Zonas para Banner e Push
   const [distrito, setDistrito] = useState('');
   const [concelho, setConcelho] = useState('');
   const [freguesia, setFreguesia] = useState('');
@@ -57,23 +55,22 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
   useEffect(() => {
-    // Carregar todas as Regras de Preços (NOVO MOTOR)
     const fetchPrices = async () => {
       const q = query(collection(db, 'pricing_rules'));
       const snap = await getDocs(q);
-      setPricingRules(snap.docs.map(d => d.data() as PricingRule));
+      setPricingRules(snap.docs.map((d: any) => d.data() as PricingRule));
     };
     fetchPrices();
 
     const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
-    const unsubCam = onSnapshot(qCam, (snap) => {
+    const unsubCam = onSnapshot(qCam, (snap: any) => {
         const now = new Date();
-        setCampaigns(snap.docs.map(d => ({id: d.id, ...d.data()} as LeafletCampaign)).filter(c => c.limitDate.toDate() > now));
+        setCampaigns(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now));
     });
 
     const qReq = query(collection(db, 'marketing_requests'), where('merchantId', '==', merchantId));
-    const unsubReq = onSnapshot(qReq, (snap) => {
-        setMyRequests(snap.docs.map(d => ({id: d.id, ...d.data()} as MarketingRequest)).sort((a, b) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0)));
+    const unsubReq = onSnapshot(qReq, (snap: any) => {
+        setMyRequests(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as MarketingRequest)).sort((a: any, b: any) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0)));
     });
 
     return () => { unsubCam(); unsubReq(); };
@@ -90,29 +87,25 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
     reader.readAsDataURL(file);
   };
 
-  // ----- FUNÇÃO QUE CALCULA O PREÇO EXATO COM BASE NAS REGRAS DO ADMIN -----
   const calculatePrice = (tool: 'banner' | 'push' | 'leaflet', count: number, days: number = 1) => {
-    let applicableRules = pricingRules.filter(r => r.tool === tool);
+    let applicableRules = pricingRules.filter((r: PricingRule) => r.tool === tool);
     
-    // Para folhetos, filtra pelo ID da campanha e Espaço
     if (tool === 'leaflet') {
-       const specificLeaflet = applicableRules.filter(r => r.leafletId === leafletForm.campaignId && r.spaceType === leafletForm.spaceType);
+       const specificLeaflet = applicableRules.filter((r: PricingRule) => r.leafletId === leafletForm.campaignId && r.spaceType === leafletForm.spaceType);
        if (specificLeaflet.length > 0) applicableRules = specificLeaflet;
-       else applicableRules = applicableRules.filter(r => r.leafletId === 'all' && (r.spaceType === 'all' || r.spaceType === leafletForm.spaceType));
+       else applicableRules = applicableRules.filter((r: PricingRule) => r.leafletId === 'all' && (r.spaceType === 'all' || r.spaceType === leafletForm.spaceType));
     }
 
-    // Se houver zonas selecionadas (para Banner ou Push), tenta encontrar a regra mais específica
     if (targetZones.length > 0) {
-      const zoneRule = applicableRules.find(r => targetZones.some(z => z.includes(r.zoneName) && z.toLowerCase().includes(r.zoneLevel)));
+      const zoneRule = applicableRules.find((r: PricingRule) => targetZones.some((z: string) => z.includes(r.zoneName) && z.toLowerCase().includes(r.zoneLevel)));
       if (zoneRule) applicableRules = [zoneRule];
     } else {
-      applicableRules = applicableRules.filter(r => r.zoneLevel === 'global');
+      applicableRules = applicableRules.filter((r: PricingRule) => r.zoneLevel === 'global');
     }
 
-    // Se mesmo assim não houver regra, usa um valor padrão de segurança
     if (applicableRules.length === 0) return { cost: 0, foundRule: false };
 
-    const rule = applicableRules[0]; // Apanha a primeira regra válida que sobrou (a mais forte)
+    const rule = applicableRules[0]; 
     let totalCost = 0;
 
     if (rule.chargeType === 'per_day') totalCost = rule.price * days;
@@ -134,12 +127,13 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
       const start = new Date(bannerForm.startDate);
       const end = new Date(bannerForm.endDate);
       
+      if (end < start) return toast.error("A data de fim não pode ser anterior à data de início.");
+
       const minDate = new Date();
       minDate.setHours(minDate.getHours() + 24);
       if (start < minDate) return toast.error("Os pedidos devem ser feitos com pelo menos 24 horas de antecedência.");
       
-      if (end <= start) return toast.error("Data de fim inválida.");
-      days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
+      days = Math.floor((end.getTime() - start.getTime()) / (1000 * 3600 * 24)) + 1;
     } else {
       if (!pushForm.title || !pushForm.text || !pushForm.scheduledDate) return toast.error("Preencha Título, Texto e Data.");
       scheduledDateTime = new Date(`${pushForm.scheduledDate}T${pushForm.scheduledTime}`);
@@ -152,29 +146,28 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
     setLoading(true);
     try {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
-        let clients = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
 
         if (targetType === 'zonas') {
-            clients = clients.filter(c => targetZones.some(z => z.includes(`Freguesia: ${c.freguesia}`) || z.includes(`Concelho: ${c.concelho}`) || z.includes(`Distrito: ${c.distrito}`)));
+            clients = clients.filter((c: any) => targetZones.some((z: string) => z.includes(`Freguesia: ${c.freguesia}`) || z.includes(`Concelho: ${c.concelho}`) || z.includes(`Distrito: ${c.distrito}`)));
         } else if (targetType === 'birthDate') {
             const cm = new Date().getMonth() + 1;
-            clients = clients.filter(c => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
+            clients = clients.filter((c: any) => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
         } else if (targetType === 'top_20_volume' || targetType === 'top_20_visits') {
             const txSnap = await getDocs(query(collection(db, 'transactions'), where('merchantId', '==', merchantId)));
-            const txs = txSnap.docs.map(d => d.data()).filter(t => t.type === 'earn' && t.status !== 'cancelled');
+            const txs = txSnap.docs.map((d: any) => d.data()).filter((t: any) => t.type === 'earn' && t.status !== 'cancelled');
             const stats: Record<string, {vol: number, vis: number}> = {};
-            txs.forEach(t => {
+            txs.forEach((t: any) => {
                 if(!stats[t.clientId]) stats[t.clientId] = {vol: 0, vis: 0};
                 stats[t.clientId].vol += Number(t.amount);
                 stats[t.clientId].vis += 1;
             });
-            let sortedIds = Object.keys(stats).sort((a, b) => targetType === 'top_20_volume' ? stats[b].vol - stats[a].vol : stats[b].vis - stats[a].vis);
-            clients = clients.filter(c => sortedIds.slice(0, 20).includes(c.id));
+            let sortedIds = Object.keys(stats).sort((a: string, b: string) => targetType === 'top_20_volume' ? stats[b].vol - stats[a].vol : stats[b].vis - stats[a].vis);
+            clients = clients.filter((c: any) => sortedIds.slice(0, 20).includes(c.id));
         }
 
         const count = clients.length;
         
-        // PONTO 10: Usa o novo Motor de Preços para simular
         const pricing = calculatePrice(type, count, days);
         if (!pricing.foundRule) {
            toast.error("O Administrador ainda não definiu um preço para esta zona/ferramenta. Orçamento a zeros.", { duration: 5000 });
@@ -190,7 +183,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
     e.preventDefault();
     if (!leafletForm.campaignId || !leafletForm.imageBase64) return toast.error("Selecione o folheto e insira a imagem.");
     
-    // PONTO 10: Usa o novo Motor de Preços para o Folheto
     const pricing = calculatePrice('leaflet', 0, 1);
     if (!pricing.foundRule) toast.error("Sem preço tabelado para este espaço.", { duration: 4000 });
     
@@ -220,7 +212,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
             setPushSimulation(null); setPushForm({ title: '', text: '', targetType: 'all', scheduledDate: '', scheduledTime: '10:00' });
             setTargetZones([]);
         } else if (type === 'leaflet' && leafletSimulation) {
-            const camp = campaigns.find(c => c.id === leafletForm.campaignId);
+            const camp = campaigns.find((c: any) => c.id === leafletForm.campaignId);
             await addDoc(collection(db, 'marketing_requests'), {
                 ...baseData, type: 'leaflet',
                 leafletCampaignId: leafletForm.campaignId, leafletCampaignTitle: camp?.title,
@@ -253,7 +245,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
         {/* ===================== BANNER ===================== */}
         {activeTab === 'banner' && (
             <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
-              {/* O formulário mantém os dados e só é sobreposto visualmente pela simulação no ecrã mobile, não desaparece */}
               <form onSubmit={(e) => { e.preventDefault(); simulateMarketing('banner'); }} className="space-y-6">
                   <div><label className="text-[10px] font-black uppercase text-slate-400">Texto Opcional</label><input type="text" value={bannerForm.text} onChange={e=>setBannerForm({...bannerForm, text: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/></div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -275,23 +266,23 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                       <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
                         <select value={distrito} onChange={e=>{setDistrito(e.target.value); setConcelho(''); setFreguesia('');}} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200">
                           <option value="">Distrito</option>
-                          {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                          {distritos.map((d: string) => <option key={d} value={d}>{d}</option>)}
                         </select>
                         <select disabled={!distrito} value={concelho} onChange={e=>{setConcelho(e.target.value); setFreguesia('');}} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200 disabled:opacity-50">
                           <option value="">Todo o Distrito (Ou selecione Concelho)</option>
-                          {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                          {concelhos.map((c: string) => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <select disabled={!concelho} value={freguesia} onChange={e=>setFreguesia(e.target.value)} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200 disabled:opacity-50">
                           <option value="">Todo o Concelho (Ou selecione Freguesia)</option>
-                          {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                          {freguesias.map((f: string) => <option key={f} value={f}>{f}</option>)}
                         </select>
                         <button type="button" onClick={handleAddZone} disabled={!distrito} className="w-full bg-blue-500 text-white p-3 rounded-xl font-black uppercase text-[10px] disabled:opacity-50 hover:bg-blue-600">Adicionar Zona</button>
                         
                         {targetZones.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
-                            {targetZones.map((z, idx) => (
+                            {targetZones.map((z: string, idx: number) => (
                               <span key={idx} className="bg-white text-blue-700 px-2 py-1 rounded text-[8px] font-black uppercase flex items-center gap-1 shadow-sm border border-blue-200">
-                                {z} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => setTargetZones(targetZones.filter((_, i) => i !== idx))}/>
+                                {z} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => setTargetZones(targetZones.filter((_: any, i: number) => i !== idx))}/>
                               </span>
                             ))}
                           </div>
@@ -313,7 +304,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                       )}
                   </div>
                   
-                  {/* BOTÃO MÁGICO: Agora não desaparece, apenas recalcula se editar */}
                   <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase text-sm flex justify-center items-center gap-2 border-b-4 border-black">
                      {loading ? <Loader2 className="animate-spin"/> : <Filter size={20}/>} {bannerSimulation ? 'Recalcular Orçamento' : 'Simular Alcance e Custo'}
                   </button>
@@ -356,23 +346,23 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                       <div className="p-4 bg-blue-50 border-2 border-blue-100 rounded-2xl space-y-3 animate-in slide-in-from-top-2">
                         <select value={distrito} onChange={e=>{setDistrito(e.target.value); setConcelho(''); setFreguesia('');}} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200">
                           <option value="">Distrito</option>
-                          {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                          {distritos.map((d: string) => <option key={d} value={d}>{d}</option>)}
                         </select>
                         <select disabled={!distrito} value={concelho} onChange={e=>{setConcelho(e.target.value); setFreguesia('');}} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200 disabled:opacity-50">
                           <option value="">Todo o Distrito (Ou selecione Concelho)</option>
-                          {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                          {concelhos.map((c: string) => <option key={c} value={c}>{c}</option>)}
                         </select>
                         <select disabled={!concelho} value={freguesia} onChange={e=>setFreguesia(e.target.value)} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200 disabled:opacity-50">
                           <option value="">Todo o Concelho (Ou selecione Freguesia)</option>
-                          {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                          {freguesias.map((f: string) => <option key={f} value={f}>{f}</option>)}
                         </select>
                         <button type="button" onClick={handleAddZone} disabled={!distrito} className="w-full bg-blue-500 text-white p-3 rounded-xl font-black uppercase text-[10px] disabled:opacity-50 hover:bg-blue-600">Adicionar Zona</button>
                         
                         {targetZones.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
-                            {targetZones.map((z, idx) => (
+                            {targetZones.map((z: string, idx: number) => (
                               <span key={idx} className="bg-white text-blue-700 px-2 py-1 rounded text-[8px] font-black uppercase flex items-center gap-1 shadow-sm border border-blue-200">
-                                {z} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => setTargetZones(targetZones.filter((_, i) => i !== idx))}/>
+                                {z} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => setTargetZones(targetZones.filter((_: any, i: number) => i !== idx))}/>
                               </span>
                             ))}
                           </div>
@@ -414,7 +404,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                   </div>
                   <select required value={leafletForm.campaignId} onChange={e=>setLeafletForm({...leafletForm, campaignId: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-black text-sm uppercase outline-none focus:border-[#00d66f]">
                       <option value="">(Escolha um Folheto Futuro)</option>
-                      {campaigns.map(c => <option key={c.id} value={c.id}>{c.title} (Fecha a: {c.limitDate.toDate().toLocaleDateString()})</option>)}
+                      {campaigns.map((c: any) => <option key={c.id} value={c.id}>{c.title} (Fecha a: {c.limitDate.toDate().toLocaleDateString()})</option>)}
                   </select>
                   <select required value={leafletForm.spaceType} onChange={e=>setLeafletForm({...leafletForm, spaceType: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]">
                       <option value="leaflet_capa_destaque">Capa Principal - Destaque (Consulte Preço)</option>
@@ -463,7 +453,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
         {/* ===================== HISTORY ===================== */}
         {activeTab === 'history' && (
             <div className="space-y-4 animate-in fade-in">
-                {myRequests.map(r => {
+                {myRequests.map((r: any) => {
                   const zones = (r as any).targetZones || [];
                   return (
                     <div key={r.id} className="p-6 border-4 border-slate-100 rounded-[30px] flex flex-col md:flex-row justify-between items-start gap-6 bg-slate-50/50 hover:bg-slate-50 transition-colors">
