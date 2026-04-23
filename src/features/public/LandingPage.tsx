@@ -69,7 +69,9 @@ const LandingPage: React.FC = () => {
     eventType: '', ticketPrice: '', description: '', startDate: '', endDate: '', startTime: '', imageBase64: '',
     distrito: '', concelho: '', freguesia: ''
   });
+  
   const [eventTargets, setEventTargets] = useState<string[]>([]);
+  const [bannerTargets, setBannerTargets] = useState<string[]>([]);
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
@@ -123,14 +125,29 @@ const LandingPage: React.FC = () => {
     }
   };
 
+  const handleAddBannerTarget = () => {
+    let target = '';
+    if (bannerForm.freguesia) target = `Freguesia: ${bannerForm.freguesia} (${bannerForm.concelho})`;
+    else if (bannerForm.concelho) target = `Concelho: ${bannerForm.concelho} (${bannerForm.distrito})`;
+    else if (bannerForm.distrito) target = `Distrito: ${bannerForm.distrito}`;
+    
+    if (target && !bannerTargets.includes(target)) {
+      setBannerTargets([...bannerTargets, target]);
+      setBannerForm({...bannerForm, freguesia: '', concelho: ''});
+    }
+  };
+
   const simulateBanner = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!extForm.companyName || !extForm.email || !extForm.nif) return toast.error("Preencha os dados da empresa primeiro.");
     if (!bannerForm.startDate || !bannerForm.endDate || !bannerForm.imageBase64) return toast.error("Preencha datas e insira a imagem.");
+    if (bannerTargets.length === 0) return toast.error("Adicione pelo menos uma Zona Alvo.");
+    
     const start = new Date(bannerForm.startDate);
     const end = new Date(bannerForm.endDate);
     const minDate = new Date();
     minDate.setHours(minDate.getHours() + 24);
+    
     if (start < minDate) return toast.error("Pedidos de publicidade exigem 24h de antecedência.");
     const days = Math.ceil((end.getTime() - start.getTime()) / (1000 * 3600 * 24));
 
@@ -138,7 +155,16 @@ const LandingPage: React.FC = () => {
     try {
         const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
         let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
-        if (bannerForm.freguesia) clients = clients.filter((c: any) => c.freguesia === bannerForm.freguesia);
+        
+        // Filtra clientes se a freguesia, concelho ou distrito deles estiver dentro das zonas selecionadas
+        clients = clients.filter((c: any) => {
+            return bannerTargets.some(z => 
+                z.includes(`Freguesia: ${c.freguesia}`) || 
+                z.includes(`Concelho: ${c.concelho}`) || 
+                z.includes(`Distrito: ${c.distrito}`)
+            );
+        });
+
         const count = clients.length;
         const totalCost = count * 0.03 * days; // Simulação genérica
         setBannerSimulation({ count, cost: totalCost, days });
@@ -164,15 +190,11 @@ const LandingPage: React.FC = () => {
         };
 
         if (type === 'banner' && bannerSimulation) {
-            let targetVal = bannerForm.distrito;
-            if (bannerForm.concelho) targetVal += ` > ${bannerForm.concelho}`;
-            if (bannerForm.freguesia) targetVal += ` > ${bannerForm.freguesia}`;
-
             await addDoc(collection(db, 'marketing_requests'), {
                 ...baseData, type: 'banner',
                 title: bannerForm.title, imageUrl: bannerForm.imageBase64,
                 requestedDate: `Início: ${bannerForm.startDate} | Fim: ${bannerForm.endDate} (${bannerSimulation.days} dias)`,
-                targetType: 'zonas', targetValue: targetVal,
+                targetType: 'zonas', targetZones: bannerTargets,
                 targetCount: bannerSimulation.count, cost: bannerSimulation.cost
             });
         } else if (type === 'leaflet' && leafletSimulation) {
@@ -188,6 +210,7 @@ const LandingPage: React.FC = () => {
         }
         toast.success("Pedido submetido com sucesso! A nossa equipa entrará em contacto.");
         setShowExternalModal(false); setShowCommunityModal(false); setBannerSimulation(null); setLeafletSimulation(null);
+        setBannerTargets([]);
     } catch(err) { toast.error("Erro ao enviar pedido."); } finally { setLoading(false); }
   };
 
@@ -248,6 +271,7 @@ const LandingPage: React.FC = () => {
 
   const handleEventSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (eventTargets.length === 0) return toast.error("Selecione pelo menos uma Zona Alvo para o evento.");
     setLoadingEvent(true);
     try {
       await addDoc(collection(db, 'events'), {
@@ -260,6 +284,7 @@ const LandingPage: React.FC = () => {
       });
       toast.success("Evento enviado!");
       setShowEventModal(false);
+      setEventTargets([]);
     } catch (e) { toast.error("Erro."); } finally { setLoadingEvent(false); }
   };
 
@@ -550,10 +575,35 @@ const LandingPage: React.FC = () => {
                               <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Início</label><input required type="date" value={bannerForm.startDate} onChange={e=>setBannerForm({...bannerForm, startDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
                               <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Fim</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
                            </div>
-                           <select required value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs">
-                              <option value="">Escolha o Distrito Alvo</option>
-                              {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                           </select>
+                           
+                           {/* NOVO SISTEMA MULTI-ZONA PARA BANNER */}
+                           <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
+                              <p className="text-[10px] font-black uppercase text-[#0a2540]">Quais Zonas vão ver o Banner?</p>
+                              <select value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200">
+                                 <option value="">Escolha Distrito</option>
+                                 {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                              </select>
+                              <select disabled={!bannerForm.distrito} value={bannerForm.concelho} onChange={e=>setBannerForm({...bannerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200 disabled:opacity-50">
+                                 <option value="">Concelho (Ou selecione)</option>
+                                 {extConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                              </select>
+                              <select disabled={!bannerForm.concelho} value={bannerForm.freguesia} onChange={e=>setBannerForm({...bannerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200 disabled:opacity-50">
+                                 <option value="">Freguesia (Ou selecione)</option>
+                                 {extFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                              </select>
+                              <button type="button" onClick={handleAddBannerTarget} disabled={!bannerForm.distrito} className="bg-blue-500 text-white p-3 rounded-xl font-black uppercase text-[10px] disabled:opacity-50 hover:bg-blue-600 transition-colors">Adicionar Zona Alvo</button>
+                              
+                              {bannerTargets.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-2"> 
+                                  {bannerTargets.map((t, idx) => (
+                                    <span key={idx} className="bg-white text-blue-700 px-2 py-1 rounded text-[8px] font-black uppercase flex items-center gap-1 border border-blue-200 shadow-sm">
+                                      {t} <X size={10} className="cursor-pointer hover:text-red-500" onClick={() => setBannerTargets(bannerTargets.filter((_, i) => i !== idx))}/>
+                                    </span>
+                                  ))} 
+                                </div>
+                              )}
+                           </div>
+
                            <div className="bg-slate-100 p-6 rounded-2xl border-2 border-dashed border-slate-200">
                               <p className="text-[10px] font-black uppercase mb-3">Imagem do Banner (Horizontal 16:9)</p>
                               <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
@@ -592,7 +642,7 @@ const LandingPage: React.FC = () => {
                      <p className="text-[10px] font-black uppercase text-[#0a2540] mb-2 opacity-70">Orçamento Previsto</p>
                      <p className="text-4xl font-black italic text-[#0a2540] mb-6">{formatEuro(bannerSimulation?.cost || leafletSimulation?.cost)}</p>
                      <div className="flex gap-3">
-                        <button type="button" onClick={() => {setBannerSimulation(null); setLeafletSimulation(null);}} className="flex-1 py-4 bg-white/30 text-[#0a2540] rounded-2xl font-black uppercase text-[10px]">Editar</button>
+                        <button type="button" onClick={() => {setBannerSimulation(null); setLeafletSimulation(null); setBannerTargets([]);}} className="flex-1 py-4 bg-white/30 text-[#0a2540] rounded-2xl font-black uppercase text-[10px]">Editar</button>
                         <button type="button" onClick={() => submitExternalRequest(activeTab)} className="flex-1 py-4 bg-[#0a2540] text-white rounded-2xl font-black uppercase text-[10px] border-b-4 border-black/40">Confirmar</button>
                      </div>
                   </div>

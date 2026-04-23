@@ -1,10 +1,11 @@
 // src/features/admin/MerchantModal.tsx
 
 import React, { useState } from 'react';
-import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag, User, Phone, Lock, AlertCircle } from 'lucide-react';
+import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Tag, User, Phone, Lock, AlertCircle } from 'lucide-react';
 import { provisionAuth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
+import { useStore } from '../../store/useStore';
 
 interface MerchantModalProps {
   isOpen: boolean;
@@ -23,15 +24,21 @@ const MERCH_CATEGORIES = [
 ];
 
 const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSuccess }) => {
+  const { locations } = useStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const [formData, setFormData] = useState({
     name: '', responsibleName: '', phone: '', email: '', password: '', 
-    nif: '', cashbackPercent: '5', category: '', freguesia: '', zipCode: ''
+    nif: '', cashbackPercent: '5', category: '', distrito: '', concelho: '', freguesia: '', zipCode: ''
   });
 
   if (!isOpen) return null;
+
+  // Lógica para carregar Localizações em Cascata
+  const distritos = Object.keys(locations || {}).sort();
+  const merchantConcelhos = formData.distrito ? Object.keys(locations[formData.distrito] || {}).sort() : [];
+  const merchantFreguesias = formData.distrito && formData.concelho ? (locations[formData.distrito][formData.concelho] || []).sort() : [];
 
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
@@ -43,6 +50,10 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
     e.preventDefault();
     if (!formData.category) {
       setError('POR FAVOR, SELECIONE UM SETOR DE ATIVIDADE.');
+      return;
+    }
+    if (!formData.distrito || !formData.concelho || !formData.freguesia) {
+      setError('POR FAVOR, SELECIONE A LOCALIZAÇÃO COMPLETA (DISTRITO, CONCELHO E FREGUESIA).');
       return;
     }
     const zipCodeRegex = /^\d{4}-\d{3}$/;
@@ -70,6 +81,8 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
         status: 'active',
         category: formData.category,
         cashbackPercent: Number(formData.cashbackPercent),
+        distrito: formData.distrito,
+        concelho: formData.concelho,
         freguesia: formData.freguesia.trim(),
         zipCode: formData.zipCode.trim(),
         wallet: { available: 0, pending: 0 },
@@ -188,21 +201,25 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div>
-                <label className="block text-[10px] font-black uppercase mb-2 text-slate-400 ml-2">Freguesia</label>
-                <div className="relative">
-                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                  <input required className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.freguesia} onChange={e => setFormData({...formData, freguesia: e.target.value})} />
-                </div>
-              </div>
-              <div>
-                <label className="block text-[10px] font-black uppercase mb-2 text-slate-400 ml-2">Código Postal</label>
-                <div className="relative">
-                  <Locate className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
-                  <input required maxLength={8} placeholder="0000-000" className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl focus:border-[#00d66f] outline-none font-bold text-sm" value={formData.zipCode} onChange={handleZipCodeChange} />
-                </div>
-              </div>
+            {/* SELETORES EM CASCATA DA ZONA GEOGRÁFICA */}
+            <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
+               <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
+               <select required value={formData.distrito} onChange={e=>setFormData({...formData, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200">
+                  <option value="">Distrito</option>
+                  {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+               </select>
+               <select required disabled={!formData.distrito} value={formData.concelho} onChange={e=>setFormData({...formData, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200 disabled:opacity-50">
+                  <option value="">Concelho</option>
+                  {merchantConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+               </select>
+               <select required disabled={!formData.concelho} value={formData.freguesia} onChange={e=>setFormData({...formData, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200 disabled:opacity-50">
+                  <option value="">Freguesia</option>
+                  {merchantFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+               </select>
+               <div className="relative">
+                 <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                 <input required placeholder="Cód. Postal (0000-000)" value={formData.zipCode} onChange={handleZipCodeChange} className="w-full pl-12 p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
+               </div>
             </div>
 
             <div className="pt-4 sticky bottom-0 bg-white pb-2">
