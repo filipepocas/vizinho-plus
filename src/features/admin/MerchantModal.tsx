@@ -1,7 +1,7 @@
 // src/features/admin/MerchantModal.tsx
 
 import React, { useState } from 'react';
-import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Tag, User, Phone, Lock, AlertCircle } from 'lucide-react';
+import { X, Store, Mail, Hash, Percent, MapPin, Loader2, Locate, Tag, User, Phone, Lock, AlertCircle } from 'lucide-react';
 import { provisionAuth, db } from '../../config/firebase';
 import { createUserWithEmailAndPassword } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -30,12 +30,11 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
 
   const [formData, setFormData] = useState({
     name: '', responsibleName: '', phone: '', email: '', password: '', 
-    nif: '', cashbackPercent: '5', category: '', distrito: '', concelho: '', freguesia: '', zipCode: ''
+    nif: '', cashbackPercent: '5', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '', address: ''
   });
 
   if (!isOpen) return null;
 
-  // Lógica para carregar Localizações em Cascata
   const distritos = Object.keys(locations || {}).sort();
   const merchantConcelhos = formData.distrito ? Object.keys(locations[formData.distrito] || {}).sort() : [];
   const merchantFreguesias = formData.distrito && formData.concelho ? (locations[formData.distrito][formData.concelho] || []).sort() : [];
@@ -66,7 +65,6 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
     setError('');
 
     try {
-      // Criar no Auth usando a ligação de provisão para não deslogar o admin
       const userCredential = await createUserWithEmailAndPassword(provisionAuth, formData.email.trim(), formData.password);
       
       await setDoc(doc(db, 'users', userCredential.user.uid), {
@@ -85,6 +83,7 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
         concelho: formData.concelho,
         freguesia: formData.freguesia.trim(),
         zipCode: formData.zipCode.trim(),
+        address: formData.address.trim(), // NOVO CAMPO
         wallet: { available: 0, pending: 0 },
         createdAt: serverTimestamp()
       });
@@ -104,10 +103,8 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto">
-      {/* Container do Modal com Scroll Interno */}
       <div className="bg-white w-full max-w-xl max-h-[90vh] rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in duration-300 my-auto relative flex flex-col">
         
-        {/* Header Fixo no Topo do Modal */}
         <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center shrink-0 sticky top-0 z-20 border-b-2 border-white/10">
           <div className="flex items-center gap-3">
             <Store className="text-[#00d66f]" size={24} />
@@ -122,7 +119,6 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
           </button>
         </div>
 
-        {/* Formulário com Scroll Próprio */}
         <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (
@@ -201,9 +197,8 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
               </div>
             </div>
 
-            {/* SELETORES EM CASCATA DA ZONA GEOGRÁFICA */}
             <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
-               <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
+               <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial Completa</p>
                <select required value={formData.distrito} onChange={e=>setFormData({...formData, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200">
                   <option value="">Distrito</option>
                   {distritos.map(d => <option key={d} value={d}>{d}</option>)}
@@ -216,8 +211,15 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
                   <option value="">Freguesia</option>
                   {merchantFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                </select>
+               
+               {/* NOVO CAMPO: MORADA (RUA E NÚMERO) */}
                <div className="relative">
                  <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
+                 <input required placeholder="Morada Exata (Rua e Número)" value={formData.address} onChange={e => setFormData({...formData, address: e.target.value})} className="w-full pl-12 p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
+               </div>
+
+               <div className="relative">
+                 <Locate className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={16} />
                  <input required placeholder="Cód. Postal (0000-000)" value={formData.zipCode} onChange={handleZipCodeChange} className="w-full pl-12 p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
                </div>
             </div>

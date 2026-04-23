@@ -45,8 +45,10 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
     });
   }, [allMerchants, searchName, selectedConcelhos, selectedCats]);
 
+  // CORREÇÃO: Utiliza o novo campo m.address se existir para uma localização exata.
   const openInMaps = (m: UserProfile) => {
-    const searchQuery = `${m.shopName || m.name}, ${m.freguesia || m.concelho || ''}, Portugal`.trim();
+    const exactAddress = m.address ? `${m.address}, ` : '';
+    const searchQuery = `${m.shopName || m.name}, ${exactAddress}${m.freguesia || m.concelho || ''}, Portugal`.trim();
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`, '_blank');
   };
 
@@ -111,6 +113,7 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
                 <div className="flex-1">
                   <span className={`text-[8px] font-black uppercase tracking-widest ${m.isLeaving ? 'text-slate-400' : 'text-[#00d66f]'}`}>{m.category || 'Comércio'}</span>
                   <h4 className={`text-lg font-black uppercase tracking-tighter leading-none mb-1 ${m.isLeaving ? 'text-slate-500 line-through decoration-slate-300' : 'text-[#0a2540]'}`}>{m.shopName || m.name}</h4>
+                  {/* CORREÇÃO VISUAL: Mostra a morada na UI se ela existir */}
                   <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">{m.address ? `${m.address} • ` : ''}{m.freguesia || m.concelho || 'Sem Localidade'}</p>
                   
                   {m.isLeaving ? (
