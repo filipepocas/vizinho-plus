@@ -14,19 +14,10 @@ const firebaseConfig = {
 firebase.initializeApp(firebaseConfig);
 const messaging = firebase.messaging();
 
-messaging.onBackgroundMessage((payload) => {
-  const notificationTitle = payload.notification.title || 'Vizinho+';
-  const notificationOptions = {
-    body: payload.notification.body,
-    icon: '/logo192.png',
-    data: {
-      url: '/' 
-    }
-  };
-  self.registration.showNotification(notificationTitle, notificationOptions);
-});
+// NOTA: Não usamos onBackgroundMessage aqui para não criar conflito com o payload de 'notification' do backend.
+// O próprio SDK do Firebase já vai exibir a notificação quando ela chegar.
 
-// X7 - RESOLVIDO: Ouve o clique na notificação para abrir a App (Safari iOS e Android PWA)
+// Apenas ouvimos o clique para abrir a App
 self.addEventListener('notificationclick', function(event) {
   event.notification.close();
   event.waitUntil(
@@ -38,7 +29,7 @@ self.addEventListener('notificationclick', function(event) {
         }
       }
       if (clients.openWindow) {
-        return clients.openWindow(event.notification.data?.url || '/');
+        return clients.openWindow('/');
       }
     })
   );
