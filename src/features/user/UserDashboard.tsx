@@ -44,7 +44,18 @@ const UserDashboard: React.FC = () => {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [wasteItems, setWasteItems] = useState<AntiWasteItem[]>([]);
 
+  // ESTADO DO SCROLL INTELIGENTE
+  const [isScrolled, setIsScrolled] = useState(false);
+
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -255,14 +266,16 @@ const UserDashboard: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
-      <div className="relative">
-        <BannerCarousel />
+      
+      {/* HEADER STICKY COM ANIMAÇÃO */}
+      <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`}>
+        <BannerCarousel isScrolled={isScrolled} />
         
-        <div className="absolute top-0 left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/70 to-transparent z-50">
-          <div className="bg-white/10 backdrop-blur-sm p-2 rounded-2xl border border-white/20">
+        <div className={`absolute left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 via-black/40 to-transparent z-50 transition-all duration-300 ease-in-out ${isScrolled ? 'top-[-10px]' : 'top-0'}`}>
+          <div className={`bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 transition-all duration-300 origin-top-left ${isScrolled ? 'p-1 scale-[0.70]' : 'p-2 scale-100'}`}>
             <img src="/logo-vizinho.png" alt="Vizinho+" className="h-10 w-auto object-contain" />
           </div>
-          <div className="flex gap-3">
+          <div className={`flex gap-3 transition-all duration-300 origin-top-right ${isScrolled ? 'scale-[0.70]' : 'scale-100'}`}>
             <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
               <Settings size={20} />
             </button>
@@ -273,7 +286,8 @@ const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      <main className="max-w-2xl mx-auto px-6 -mt-8 relative z-20 space-y-6">
+      {/* COMPENSAÇÃO DE ALTURA PARA O CONTEÚDO NÃO FICAR ESCONDIDO */}
+      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[360px]'}`}>
         
         <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors animate-in fade-in">
           <HelpCircle size={20} /> Guia Passo-a-Passo da App
@@ -463,7 +477,7 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white">
+      <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white relative z-20">
         <div className="flex gap-4">
           <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
             <Mail size={16} /> Contacto
@@ -505,7 +519,6 @@ const UserDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* REGRAS DE UTILIZAÇÃO */}
       {showRulesModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
@@ -544,7 +557,6 @@ const UserDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* GUIA DA APP (FAQs) */}
       {showFaqModal && (
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">

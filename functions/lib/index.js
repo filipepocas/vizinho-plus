@@ -1,4 +1,5 @@
 "use strict";
+// functions/src/index.ts
 var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
     if (k2 === undefined) k2 = k;
     var desc = Object.getOwnPropertyDescriptor(m, k);
@@ -33,14 +34,14 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendAdminNotification = exports.onNewFeedback = exports.createMerchant = exports.revertCancelledTransaction = exports.processNewTransaction = void 0;
+exports.sendAdminNotification = exports.dispatchMerchantPushCampaigns = exports.dispatchAdminNotifications = exports.onNewFeedback = exports.revertCancelledTransaction = exports.processNewTransaction = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
 const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 /**
- * 1. PROCESSAR NOVAS TRANSAÇÕES E NOTIFICAÇÕES
+ * 1. PROCESSAR NOVAS TRANSAÇÕES E ATRIBUIR SALDO
  */
 exports.processNewTransaction = functions.region("us-central1").firestore
     .document("transactions/{transactionId}")
@@ -110,7 +111,7 @@ exports.processNewTransaction = functions.region("us-central1").firestore
                 wallet: { available: roundToTwo(globalAvailable), pending: 0 }
             });
         });
-        // Notificação
+        // ALERTA DE 50 EUROS NO TELEMÓVEL (PUSH)
         const clientDocAfter = await clientRef.get();
         const clientData = clientDocAfter.data();
         if (clientData && clientData.wallet) {
@@ -122,8 +123,15 @@ exports.processNewTransaction = functions.region("us-central1").firestore
                         body: `Parabéns! Já tens ${totalAvailable.toFixed(2)}€ acumulados no Vizinho+!`,
                     },
                     tokens: clientData.fcmTokens,
-                    android: { priority: "high", notification: { color: "#00d66f" } },
-                    webpush: { headers: { Urgency: "high" } }
+                    webpush: {
+                        headers: { Urgency: "high" },
+                        notification: {
+                            icon: "/logo192.png",
+                            badge: "/logo192.png",
+                            requireInteraction: true,
+                            vibrate: [200, 100, 200, 100, 200]
+                        }
+                    }
                 };
                 await admin.messaging().sendEachForMulticast(message);
             }
@@ -172,30 +180,7 @@ exports.revertCancelledTransaction = functions.region("us-central1").firestore
     }
 });
 /**
- * 3. CRIAR COMERCIANTE
- */
-exports.createMerchant = functions.region("us-central1").https.onCall(async (data, context) => {
-    var _a;
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
-        throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
-    }
-    const { email, password, name, nif, category, cashbackPercent, freguesia, zipCode } = data;
-    try {
-        const userRecord = await admin.auth().createUser({ email, password, displayName: name });
-        await admin.auth().setCustomUserClaims(userRecord.uid, { role: "merchant" });
-        await db.collection("users").doc(userRecord.uid).set({
-            id: userRecord.uid, name, email: email.toLowerCase(), nif, role: "merchant", status: "active",
-            category, cashbackPercent: Number(cashbackPercent), freguesia, zipCode, wallet: { available: 0, pending: 0 },
-            createdAt: admin.firestore.FieldValue.serverTimestamp(), fcmTokens: []
-        });
-        return { success: true, uid: userRecord.uid };
-    }
-    catch (error) {
-        throw new functions.https.HttpsError("internal", error.message);
-    }
-});
-/**
- * 4. NOTIFICAR FEEDBACK
+ * 3. AVALIAÇÕES DAS LOJAS (Feedback)
  */
 exports.onNewFeedback = functions.region("us-central1").firestore
     .document("feedbacks/{feedbackId}")
@@ -208,10 +193,15 @@ exports.onNewFeedback = functions.region("us-central1").firestore
         const merchantData = merchantDoc.data();
         if (merchantData && merchantData.fcmTokens && merchantData.fcmTokens.length > 0) {
             const message = {
-                notification: { title: "Nova Avaliação!", body: `${feedback.userName} deu-te ${feedback.rating} estrelas.` },
+                notification: {
+                    title: "Nova Avaliação de Cliente!",
+                    body: `${feedback.userName} deu-te ${feedback.rating} estrelas.`
+                },
                 tokens: merchantData.fcmTokens,
-                android: { priority: "high" },
-                webpush: { headers: { Urgency: "high" } }
+                webpush: {
+                    headers: { Urgency: "high" },
+                    notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] }
+                }
             };
             await admin.messaging().sendEachForMulticast(message);
         }
@@ -219,32 +209,156 @@ exports.onNewFeedback = functions.region("us-central1").firestore
     catch (error) { }
 });
 /**
- * 5. NOTIFICAÇÃO MANUAL DO ADMIN
+ * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN (Para Clientes)
+ * Lê os filtros e acorda os telemóveis bloqueados.
+ */
+exports.dispatchAdminNotifications = functions.region("us-central1").firestore
+    .document("notifications/{notifId}")
+    .onWrite(async (change, context) => {
+    var _a;
+    const notif = change.after.data();
+    // Se não está aprovada ou já foi enviada, ignora.
+    if (!notif || notif.status !== 'approved' || notif.sent === true)
+        return;
+    // Proteção para agendamentos futuros
+    const scheduledFor = ((_a = notif.scheduledFor) === null || _a === void 0 ? void 0 : _a.toDate) ? notif.scheduledFor.toDate() : new Date(notif.scheduledFor);
+    if (scheduledFor > new Date())
+        return;
+    try {
+        const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
+        let tokens = [];
+        usersSnap.forEach(doc => {
+            var _a;
+            const user = doc.data();
+            if (!user.fcmTokens || user.fcmTokens.length === 0)
+                return;
+            let matches = false;
+            if (notif.targetType === 'all')
+                matches = true;
+            else if (notif.targetType === 'email') {
+                if (user.email === ((_a = notif.targetValue) === null || _a === void 0 ? void 0 : _a.toLowerCase()))
+                    matches = true;
+            }
+            else if (notif.targetType === 'birthDate') {
+                if (user.birthDate && user.birthDate.split('-')[1] === notif.targetValue)
+                    matches = true;
+            }
+            else if (notif.targetType === 'zonas') {
+                const zones = notif.targetZones || [];
+                if (zones.some((z) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`))) {
+                    matches = true;
+                }
+            }
+            if (matches)
+                tokens.push(...user.fcmTokens);
+        });
+        if (tokens.length > 0) {
+            const uniqueTokens = [...new Set(tokens)];
+            const message = {
+                notification: { title: notif.title, body: notif.message },
+                webpush: {
+                    headers: { Urgency: "high" },
+                    notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true, vibrate: [200, 100, 200, 100, 200] }
+                }
+            };
+            const chunkSize = 500;
+            for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
+                const chunk = uniqueTokens.slice(i, i + chunkSize);
+                await admin.messaging().sendEachForMulticast(Object.assign(Object.assign({}, message), { tokens: chunk }));
+            }
+        }
+        // Marca como enviada para não disparar em loop
+        await change.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length });
+    }
+    catch (error) {
+        console.error("Erro fatal no disparo de Push Admin:", error);
+    }
+});
+/**
+ * 5. MOTOR DE DISPARO DO LOJISTA
+ * Dispara o Push quando o Admin aprova o pedido de Marketing.
+ */
+exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestore
+    .document("marketing_requests/{reqId}")
+    .onUpdate(async (change, context) => {
+    const before = change.before.data();
+    const after = change.after.data();
+    // Apenas avança se o Admin acabou de aprovar um Push
+    if (before.status !== 'approved' && after.status === 'approved' && after.type === 'push_notification' && after.sent !== true) {
+        try {
+            const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
+            let tokens = [];
+            usersSnap.forEach(doc => {
+                const user = doc.data();
+                if (!user.fcmTokens || user.fcmTokens.length === 0)
+                    return;
+                let matches = false;
+                if (after.targetType === 'all')
+                    matches = true;
+                else if (after.targetType === 'birthDate') {
+                    const cm = new Date().getMonth() + 1;
+                    if (user.birthDate && parseInt(user.birthDate.split('-')[1]) === cm)
+                        matches = true;
+                }
+                else if (after.targetType === 'zonas') {
+                    const zones = after.targetZones || [];
+                    if (zones.some((z) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`))) {
+                        matches = true;
+                    }
+                }
+                // Nota: top_20 é filtrado no backend para segurança, podemos expandir no futuro, 
+                // mas a validação base é feita acima.
+                if (matches)
+                    tokens.push(...user.fcmTokens);
+            });
+            if (tokens.length > 0) {
+                const uniqueTokens = [...new Set(tokens)];
+                const message = {
+                    notification: { title: after.title, body: after.text },
+                    webpush: {
+                        headers: { Urgency: "high" },
+                        notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true, vibrate: [200, 100, 200, 100, 200] }
+                    }
+                };
+                const chunkSize = 500;
+                for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
+                    const chunk = uniqueTokens.slice(i, i + chunkSize);
+                    await admin.messaging().sendEachForMulticast(Object.assign(Object.assign({}, message), { tokens: chunk }));
+                }
+            }
+            // Marcar como enviado
+            await change.after.ref.update({ sent: true });
+        }
+        catch (error) {
+            console.error("Erro no Push do Lojista:", error);
+        }
+    }
+});
+/**
+ * 6. MENSAGEM MANUAL DO ADMIN PARA LOJISTAS E CLIENTES ESPECÍFICOS (Legacy)
  */
 exports.sendAdminNotification = functions.region("us-central1").https.onCall(async (data, context) => {
-    var _a;
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
+    var _a, _b;
+    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com")
         throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
-    }
     const { targetUserId, title, body } = data;
     try {
         let tokens = [];
         if (targetUserId === "all") {
             const allUsers = await db.collection("users").where("fcmTokens", "!=", []).get();
-            allUsers.forEach(doc => {
-                const d = doc.data();
-                if (d.fcmTokens)
-                    tokens.push(...d.fcmTokens);
-            });
+            allUsers.forEach(doc => { const d = doc.data(); if (d.fcmTokens)
+                tokens.push(...d.fcmTokens); });
         }
         else {
             const userDoc = await db.collection("users").doc(targetUserId).get();
-            const d = userDoc.data();
-            tokens = (d === null || d === void 0 ? void 0 : d.fcmTokens) || [];
+            tokens = ((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmTokens) || [];
         }
         if (tokens.length === 0)
             return { success: false };
-        const message = { notification: { title, body }, tokens, android: { priority: "high" }, webpush: { headers: { Urgency: "high" } } };
+        const message = {
+            notification: { title, body }, tokens,
+            webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] } }
+        };
         const response = await admin.messaging().sendEachForMulticast(message);
         return { success: true, sentCount: response.successCount };
     }

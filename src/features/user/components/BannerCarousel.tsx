@@ -1,10 +1,16 @@
+// src/features/user/components/BannerCarousel.tsx
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useStore } from '../../../store/useStore';
 
-const BannerCarousel: React.FC = () => {
+interface Props {
+  isScrolled?: boolean;
+}
+
+const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
   const { currentUser } = useStore();
   const [activeBanners, setActiveBanners] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -15,12 +21,12 @@ const BannerCarousel: React.FC = () => {
 
     const q = query(collection(db, 'banners'), where('active', '==', true));
     
-    const unsubscribe = onSnapshot(q, (snap) => {
+    // CORREÇÃO: Adicionado (snap: any) e (d: any) para TS Estrito
+    const unsubscribe = onSnapshot(q, (snap: any) => {
       const now = new Date();
       const valid = snap.docs
-        .map(d => ({ id: d.id, ...d.data() }))
+        .map((d: any) => ({ id: d.id, ...d.data() }))
         .filter((b: any) => {
-          // X4 - Proteção contra Timestamps Provisórios do Firebase
           const start = b.startDate && typeof b.startDate.toDate === 'function' ? b.startDate.toDate() : new Date();
           const end = b.endDate && typeof b.endDate.toDate === 'function' ? b.endDate.toDate() : new Date();
           
@@ -42,10 +48,10 @@ const BannerCarousel: React.FC = () => {
     return () => clearInterval(timer);
   }, [activeBanners]);
 
-  if (activeBanners.length === 0) return <div className="w-full h-64 bg-[#0a2540]" />;
+  if (activeBanners.length === 0) return <div className={`w-full bg-[#0a2540] transition-all duration-300 ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`} />;
 
   return (
-    <div className="relative w-full h-[280px] md:h-[350px] overflow-hidden bg-[#0a2540]">
+    <div className={`relative w-full overflow-hidden bg-[#0a2540] transition-all duration-300 ease-in-out ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`}>
       <AnimatePresence mode="wait">
         <motion.img
           key={activeBanners[currentIndex].id}
@@ -57,7 +63,7 @@ const BannerCarousel: React.FC = () => {
           className="absolute inset-0 w-full h-full object-cover"
         />
       </AnimatePresence>
-      <div className="absolute inset-0 bg-gradient-to-b from-black/50 via-transparent to-black/20 pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/20 pointer-events-none transition-all duration-300" />
       {activeBanners.length > 1 && (
         <div className="absolute bottom-12 right-6 flex gap-2">
           {activeBanners.map((_, idx) => (

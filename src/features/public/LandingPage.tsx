@@ -13,6 +13,9 @@ import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
 
+// CORREÇÃO: O caminho foi atualizado para apontar corretamente para a raiz dos componentes
+import ImageCropperModal from '../../components/ImageCropperModal';
+
 const MERCH_CATEGORIES = [
   "Restauração & Bebidas", "Mercearias & Supermercados", "Talhos & Peixarias",
   "Padarias & Pastelarias", "Moda & Acessórios", "Saúde & Farmácias",
@@ -58,7 +61,6 @@ const LandingPage: React.FC = () => {
   const [leafletForm, setLeafletForm] = useState({ campaignId: '', description: '', sellPrice: '', unit: '', promoPrice: '', promoType: '', imageBase64: '' });
   const [leafletSimulation, setLeafletSimulation] = useState<{ cost: number } | null>(null);
 
-  // NOVO: address incluído no partnerForm
   const [partnerForm, setPartnerForm] = useState({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '', address: '' });
   const [clientForm, setClientForm] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
   const [confirmEmail, setConfirmEmail] = useState('');
@@ -76,6 +78,10 @@ const LandingPage: React.FC = () => {
 
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
+
+  // NOVO: Estado para a ferramenta de crop
+  const [fileToCrop, setFileToCrop] = useState<File | null>(null);
+  const [cropType, setCropType] = useState<'banner' | 'leaflet' | 'event'>('banner');
 
   useEffect(() => {
     const fetchData = async () => {
@@ -102,16 +108,31 @@ const LandingPage: React.FC = () => {
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
 
+  // NOVO: Quando escolhe um ficheiro, abre o modal em vez de gravar direto (se for Banner)
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet' | 'event') => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (type === 'banner') {
+      setCropType('banner');
+      setFileToCrop(file);
+      e.target.value = ''; // Reset do input
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => { 
-        if (type === 'banner') setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
-        else if (type === 'leaflet') setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
+        if (type === 'leaflet') setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
         else setEventForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCroppedImage = (base64: string) => {
+    if (cropType === 'banner') {
+      setBannerForm(prev => ({ ...prev, imageBase64: base64 }));
+    }
+    setFileToCrop(null);
   };
 
   const handleAddEventTarget = () => {
@@ -418,32 +439,27 @@ const LandingPage: React.FC = () => {
                       {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
                     </select>
                   </div>
-                  
-                  {/* CAMPO ATUALIZADO: MORADA COMPLETA LOJISTA */}
                   <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
-                     <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial Completa</p>
-                     <select required value={partnerForm.distrito} onChange={e=>setPartnerForm({...partnerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200">
+                     <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
+                     <select required value={partnerForm.distrito} onChange={e=>setPartnerForm({...partnerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
                         <option value="">Distrito</option>
                         {distritos.map(d => <option key={d} value={d}>{d}</option>)}
                      </select>
-                     <select required disabled={!partnerForm.distrito} value={partnerForm.concelho} onChange={e=>setPartnerForm({...partnerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200 disabled:opacity-50">
+                     <select required disabled={!partnerForm.distrito} value={partnerForm.concelho} onChange={e=>setPartnerForm({...partnerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
                         <option value="">Concelho</option>
                         {partnerConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
                      </select>
-                     <select required disabled={!partnerForm.concelho} value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200 disabled:opacity-50">
+                     <select required disabled={!partnerForm.concelho} value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
                         <option value="">Freguesia</option>
                         {partnerFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                      </select>
-                     
-                     <input required placeholder="Morada Exata (Rua e Número)" value={partnerForm.address} onChange={e=>setPartnerForm({...partnerForm, address: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
-                     
+                     <input required placeholder="Morada Exata (Rua, Número)" value={partnerForm.address} onChange={e=>setPartnerForm({...partnerForm, address: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
                      <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> {
                        let val = e.target.value.replace(/\D/g, '');
                        if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
                        setPartnerForm({...partnerForm, zipCode: val});
                      }} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
                   </div>
-                  
                   <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
                     {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
                   </button>
@@ -594,6 +610,7 @@ const LandingPage: React.FC = () => {
                               <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Fim</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
                            </div>
                            
+                           {/* NOVO SISTEMA MULTI-ZONA PARA BANNER */}
                            <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
                               <p className="text-[10px] font-black uppercase text-[#0a2540]">Quais Zonas vão ver o Banner?</p>
                               <select value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200">
@@ -623,9 +640,16 @@ const LandingPage: React.FC = () => {
 
                            <div className="bg-slate-100 p-6 rounded-2xl border-2 border-dashed border-slate-200">
                               <p className="text-[10px] font-black uppercase mb-3">Imagem do Banner (Horizontal 16:9)</p>
-                              <input required type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
+                              <input type="file" accept="image/*" onChange={(e) => handleImageChange(e, 'banner')} className="w-full text-xs font-bold" />
                            </div>
-                           <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Simular Alcance'}</button>
+                           
+                           {bannerForm.imageBase64 && (
+                              <div className="w-full aspect-video bg-white border-2 border-[#00d66f] rounded-xl flex items-center justify-center overflow-hidden shadow-sm mt-4">
+                                <img src={bannerForm.imageBase64} alt="Preview Final" className="w-full h-full object-cover" />
+                              </div>
+                           )}
+
+                           <button type="submit" disabled={loading || !bannerForm.imageBase64} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-[1.02] transition-transform disabled:opacity-50">{loading ? <Loader2 className="animate-spin mx-auto"/> : 'Simular Alcance'}</button>
                         </div>
                       )}
 
@@ -671,7 +695,7 @@ const LandingPage: React.FC = () => {
 
       {showTerms && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#00d66f] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
               <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3>
               <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
@@ -683,6 +707,15 @@ const LandingPage: React.FC = () => {
             <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
           </div>
         </div>
+      )}
+
+      {/* NOVO: Modal de Recorte de Imagem */}
+      {fileToCrop && (
+        <ImageCropperModal 
+          file={fileToCrop} 
+          onCrop={handleCroppedImage} 
+          onCancel={() => setFileToCrop(null)} 
+        />
       )}
     </div>
   );

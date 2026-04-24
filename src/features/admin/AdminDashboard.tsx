@@ -20,7 +20,7 @@ import {
   ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, 
   MessageSquare, CheckSquare, Bell, Megaphone, Crown, 
   FileText, Receipt, CalendarPlus, Leaf, MapPin, 
-  Image as ImageIcon, LayoutDashboard, Euro 
+  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate
 } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -41,6 +41,7 @@ import AdminAntiWaste from './AdminAntiWaste';
 import AdminLocations from './AdminLocations'; 
 import BannerManager from './BannerManager';
 import AdminPricing from './AdminPricing';
+import AdminFlyerGenerator from './AdminFlyerGenerator'; // NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -135,8 +136,9 @@ const AdminDashboard: React.FC = () => {
   const marketingItems = [
     { id: 'events', label: 'Eventos', icon: CalendarPlus, badge: pendingEvents },
     { id: 'anti_waste', label: 'Desperdício', icon: Leaf },
-    { id: 'comms', label: 'Comunicações Pub', icon: Megaphone, badge: pendingMarketing },
-    { id: 'leaflets', label: 'Folhetos', icon: FileText },
+    { id: 'comms', label: 'Aprovar Pub', icon: Megaphone, badge: pendingMarketing },
+    { id: 'flyer_gen', label: 'Gerar Folheto', icon: LayoutTemplate }, // NOVO BOTÃO
+    { id: 'leaflets', label: 'Gestão Folhetos', icon: FileText },
     { id: 'vantagens', label: 'Vantagens VIP', icon: Crown },
     { id: 'banners', label: 'Banners', icon: ImageIcon },
     { id: 'notifications', label: 'Avisos App', icon: Bell },
@@ -207,6 +209,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'events' && <AdminEvents />} 
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
+        {currentView === 'flyer_gen' && <AdminFlyerGenerator />} 
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 

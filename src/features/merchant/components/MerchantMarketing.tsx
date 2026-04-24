@@ -1,3 +1,5 @@
+// src/features/merchant/components/MerchantMarketing.tsx
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
 import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDocs } from 'firebase/firestore';
@@ -5,6 +7,8 @@ import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Bell, Filter, X
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, PricingRule } from '../../../types';
 import { useStore } from '../../../store/useStore';
+// CORREÇÃO: O caminho foi atualizado para apontar corretamente para a raiz dos componentes
+import ImageCropperModal from '../../../components/ImageCropperModal';
 
 interface Props {
   merchantId: string;
@@ -54,6 +58,8 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
   const availableHours = Array.from({ length: 13 }, (_, i) => `${(i + 8).toString().padStart(2, '0')}:00`);
 
+  const [fileToCrop, setFileToCrop] = useState<File | null>(null);
+
   useEffect(() => {
     const fetchPrices = async () => {
       const q = query(collection(db, 'pricing_rules'));
@@ -79,12 +85,23 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet') => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    if (type === 'banner') {
+      setFileToCrop(file);
+      e.target.value = ''; 
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = (ev) => { 
-      if(type === 'banner') setBannerForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
-      else setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
+      if(type === 'leaflet') setLeafletForm(prev => ({...prev, imageBase64: ev.target?.result as string}));
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleCroppedImage = (base64: string) => {
+    setBannerForm(prev => ({ ...prev, imageBase64: base64 }));
+    setFileToCrop(null);
   };
 
   const calculatePrice = (tool: 'banner' | 'push' | 'leaflet', count: number, days: number = 1) => {
@@ -414,10 +431,10 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                       <option value="leaflet_interior_1_2">Interior - Meia Página (Consulte Preço)</option>
                       <option value="leaflet_interior_1_4">Interior - Quarto de Página (Consulte Preço)</option>
                   </select>
-                  <input required type="text" placeholder="Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                  <input required type="text" placeholder="Descrição do Produto" value={leafletForm.description} onChange={e=>setLeafletForm({...leafletForm, description: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" />
                   <div className="grid grid-cols-2 gap-4">
-                      <input required type="text" placeholder="Preço (Ex: 10€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
-                      <input required type="text" placeholder="Unidade (Ex: Kg, Uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]"/>
+                      <input required type="text" placeholder="Preço (Ex: 10€)" value={leafletForm.sellPrice} onChange={e=>setLeafletForm({...leafletForm, sellPrice: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" />
+                      <input required type="text" placeholder="Unidade (Ex: Kg, Uni)" value={leafletForm.unit} onChange={e=>setLeafletForm({...leafletForm, unit: e.target.value})} className="w-full p-4 bg-slate-50 border-4 border-slate-100 rounded-2xl font-bold text-xs" />
                   </div>
                   
                   <div className="bg-slate-100 p-6 rounded-2xl flex flex-col md:flex-row gap-4 items-center border-4 border-dashed border-slate-200">
@@ -433,7 +450,7 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                       )}
                   </div>
                   
-                  <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
+                  <button type="submit" disabled={loading} className="w-full bg-[#0a2540] text-white py-5 rounded-2xl font-black uppercase tracking-widest text-sm hover:scale-[1.02] transition-all flex items-center justify-center gap-2 border-b-4 border-[#0a2540]">
                       {loading ? <Loader2 className="animate-spin" /> : <><Filter size={20}/> {leafletSimulation ? 'Recalcular Preço do Espaço' : 'Ver Preço do Espaço'}</>}
                   </button>
               </form>
@@ -495,6 +512,15 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                 {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-[30px]">Sem pedidos efetuados.</p>}
             </div>
         )}
+
+      {/* NOVO: Modal de Recorte de Imagem */}
+      {fileToCrop && (
+        <ImageCropperModal 
+          file={fileToCrop} 
+          onCrop={handleCroppedImage} 
+          onCancel={() => setFileToCrop(null)} 
+        />
+      )}
     </div>
   );
 };
