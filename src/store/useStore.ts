@@ -2,30 +2,26 @@
 
 import { create } from 'zustand';
 import { 
-  collection, 
-  onSnapshot, 
-  query, 
-  orderBy, 
-  where, 
-  serverTimestamp, 
-  doc, 
-  getDocs, 
-  writeBatch, 
-  getDoc, 
-  limit, 
-  updateDoc, 
-  setDoc,
-  arrayUnion
+  collection, onSnapshot, query, orderBy, where, serverTimestamp, 
+  doc, getDocs, writeBatch, limit, updateDoc, setDoc, arrayUnion, startAfter, getDoc
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
-import { Transaction, TransactionCreate, User as UserProfile, LocationsMap } from '../types';
+import { Transaction, TransactionCreate, User as UserProfile, LocationsMap, Product, ProductTaxonomy } from '../types';
 import toast from 'react-hot-toast';
 
 interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
   locations: LocationsMap;
+  
+  // CATÁLOGO DE PRODUTOS E LISTA DE COMPRAS
+  products: Product[];
+  lastVisibleProduct: any;
+  hasMoreProducts: boolean;
+  shoppingList: Product[];
+  taxonomy: ProductTaxonomy | null;
+
   isLoading: boolean;
   isInitialized: boolean;
   setCurrentUser: (user: UserProfile | null) => void;
@@ -41,12 +37,26 @@ interface StoreState {
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
   updateUserToken: (userId: string, token: string) => Promise<void>;
   toggleNotifications: (userId: string, enabled: boolean) => Promise<void>;
+
+  // AÇÕES DE PRODUTOS
+  fetchProducts: (filters?: any, isNextPage?: boolean) => Promise<void>;
+  addToShoppingList: (product: Product) => void;
+  removeFromShoppingList: (productId: string) => void;
+  clearShoppingList: () => void;
+  fetchTaxonomy: () => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
   locations: {},
+  
+  products: [],
+  lastVisibleProduct: null,
+  hasMoreProducts: true,
+  shoppingList: JSON.parse(localStorage.getItem('vplus_shopping_list') || '[]'),
+  taxonomy: null,
+
   isLoading: true,
   isInitialized: false,
 
@@ -66,6 +76,72 @@ export const useStore = create<StoreState>((set, get) => ({
   resetPassword: async (email: string) => {
     await sendPasswordResetEmail(auth, email);
     toast.success("EMAIL DE RECUPERAÇÃO ENVIADO!");
+  },
+
+  fetchTaxonomy: async () => {
+    try {
+      const docSnap = await getDoc(doc(db, 'system', 'products_taxonomy'));
+      if (docSnap.exists()) {
+        set({ taxonomy: docSnap.data() as ProductTaxonomy });
+      }
+    } catch(e) { console.error(e); }
+  },
+
+  fetchProducts: async (filters: any = {}, isNextPage: boolean = false) => {
+    set({ isLoading: true });
+    const { products, lastVisibleProduct } = get();
+    
+    try {
+      let q = query(collection(db, 'products'), orderBy('createdAt', 'desc'), limit(20));
+
+      if (filters.distrito) q = query(q, where('distrito', '==', filters.distrito));
+      if (filters.concelho) q = query(q, where('concelho', '==', filters.concelho));
+      if (filters.freguesia) q = query(q, where('freguesia', '==', filters.freguesia));
+      
+      if (filters.category) q = query(q, where('category', '==', filters.category));
+      if (filters.family) q = query(q, where('family', '==', filters.family));
+      if (filters.productType) q = query(q, where('productType', '==', filters.productType));
+
+      if (isNextPage && lastVisibleProduct) {
+        q = query(q, startAfter(lastVisibleProduct));
+      }
+
+      const snap = await getDocs(q);
+      const newProducts = snap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+
+      set({
+        products: isNextPage ? [...products, ...newProducts] : newProducts,
+        lastVisibleProduct: snap.docs[snap.docs.length - 1],
+        hasMoreProducts: snap.docs.length === 20,
+        isLoading: false
+      });
+    } catch(e) {
+      console.error(e);
+      set({ isLoading: false });
+    }
+  },
+
+  addToShoppingList: (product) => {
+    const { shoppingList } = get();
+    if (shoppingList.some(item => item.id === product.id)) {
+      toast.error("Produto já está na lista!");
+      return;
+    }
+    const newList = [...shoppingList, product];
+    localStorage.setItem('vplus_shopping_list', JSON.stringify(newList));
+    set({ shoppingList: newList });
+    toast.success("Adicionado à lista!");
+  },
+
+  removeFromShoppingList: (productId) => {
+    const newList = get().shoppingList.filter(p => p.id !== productId);
+    localStorage.setItem('vplus_shopping_list', JSON.stringify(newList));
+    set({ shoppingList: newList });
+  },
+
+  clearShoppingList: () => {
+    localStorage.removeItem('vplus_shopping_list');
+    set({ shoppingList: [] });
   },
 
   updateUserToken: async (userId: string, token: string) => {
@@ -106,9 +182,7 @@ export const useStore = create<StoreState>((set, get) => ({
     if (!currentUser) return;
     
     try {
-      // Usamos setDoc com um novo ID gerado para criar o documento
       const newTxRef = doc(collection(db, 'transactions'));
-      
       const txData = {
         clientId: tx.clientId,
         merchantId: currentUser.id,
@@ -129,7 +203,6 @@ export const useStore = create<StoreState>((set, get) => ({
       toast.success("MOVIMENTO ENVIADO PARA PROCESSAMENTO!");
       return newTxRef.id;
     } catch (e) { 
-      console.error("Erro ao criar transação:", e);
       toast.error("ERRO NO REGISTO.");
     }
   },
@@ -156,7 +229,6 @@ export const useStore = create<StoreState>((set, get) => ({
 
   subscribeToTransactions: (role?: string, id?: string) => {
     if (!id && role !== 'admin') return () => {};
-    
     let q: any;
     if (role === 'admin') {
       q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
@@ -168,13 +240,12 @@ export const useStore = create<StoreState>((set, get) => ({
     
     return onSnapshot(q, (snap: any) => {
       set({ transactions: snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)) });
-    }, (err: any) => console.error("Transactions sub error:", err));
+    });
   },
 
   initializeAuth: () => {
     let unsubProfile: (() => void) | null = null;
     
-    // Carregar Zonas da Base de Dados
     const unsubLocations = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => {
       if (docSnap.exists() && docSnap.data()?.data) {
         set({ locations: docSnap.data().data });
@@ -194,7 +265,7 @@ export const useStore = create<StoreState>((set, get) => ({
           } else {
             set({ currentUser: null, isLoading: false, isInitialized: true });
           }
-        }, (err: any) => {
+        }, () => {
           set({ isLoading: false, isInitialized: true });
         });
       } else {
@@ -202,6 +273,8 @@ export const useStore = create<StoreState>((set, get) => ({
       }
     });
     
+    get().fetchTaxonomy();
+
     return () => { 
       unsubAuth(); 
       if (unsubProfile) unsubProfile(); 
