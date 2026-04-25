@@ -1,9 +1,10 @@
 // src/features/user/components/UserExplore.tsx
 
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, Navigation, Percent, X, AlertTriangle } from 'lucide-react';
+import { Search, MapPin, Navigation, Percent, X, AlertTriangle, Clock } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 import toast from 'react-hot-toast';
+import { isOpenNow } from '../../../utils/timeUtils';
 
 interface UserExploreProps {
   allMerchants: UserProfile[];
@@ -45,7 +46,6 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
     });
   }, [allMerchants, searchName, selectedConcelhos, selectedCats]);
 
-  // CORREÇÃO: Utiliza o novo campo m.address se existir para uma localização exata.
   const openInMaps = (m: UserProfile) => {
     const exactAddress = m.address ? `${m.address}, ` : '';
     const searchQuery = `${m.shopName || m.name}, ${exactAddress}${m.freguesia || m.concelho || ''}, Portugal`.trim();
@@ -103,39 +103,52 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
       {/* RESULTADOS */}
       <div className="space-y-4">
         {filtered.length > 0 ? (
-          filtered.map((m) => (
-            <div key={m.id} className={`rounded-[35px] border-4 overflow-hidden flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 transition-all ${m.isLeaving ? 'bg-slate-50 border-slate-300 opacity-90' : 'bg-white border-[#0a2540] shadow-[6px_6px_0px_#0a2540] group hover:bg-slate-50'}`}>
-              
-              <div className="flex items-center gap-4">
-                <div className={`p-4 rounded-2xl transition-transform ${m.isLeaving ? 'bg-slate-200 text-slate-500' : 'bg-[#0a2540] text-[#00d66f] group-hover:scale-110'}`}>
-                  <MapPin size={24} />
-                </div>
-                <div className="flex-1">
-                  <span className={`text-[8px] font-black uppercase tracking-widest ${m.isLeaving ? 'text-slate-400' : 'text-[#00d66f]'}`}>{m.category || 'Comércio'}</span>
-                  <h4 className={`text-lg font-black uppercase tracking-tighter leading-none mb-1 ${m.isLeaving ? 'text-slate-500 line-through decoration-slate-300' : 'text-[#0a2540]'}`}>{m.shopName || m.name}</h4>
-                  {/* CORREÇÃO VISUAL: Mostra a morada na UI se ela existir */}
-                  <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">{m.address ? `${m.address} • ` : ''}{m.freguesia || m.concelho || 'Sem Localidade'}</p>
-                  
-                  {m.isLeaving ? (
-                    <div className="inline-flex items-center gap-2 bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 text-amber-800">
-                      <AlertTriangle size={12} strokeWidth={3} />
-                      <span className="text-[9px] font-black uppercase tracking-widest">Loja sai a {new Date(m.leavingDate!).toLocaleDateString()}. Desconte o seu saldo!</span>
+          filtered.map((m) => {
+            const isStoreOpen = isOpenNow(m.businessHours);
+
+            return (
+              <div key={m.id} className={`rounded-[35px] border-4 overflow-hidden flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 transition-all ${m.isLeaving ? 'bg-slate-50 border-slate-300 opacity-90' : 'bg-white border-[#0a2540] shadow-[6px_6px_0px_#0a2540] group hover:bg-slate-50'}`}>
+                
+                <div className="flex items-center gap-4">
+                  <div className={`p-4 rounded-2xl transition-transform ${m.isLeaving ? 'bg-slate-200 text-slate-500' : 'bg-[#0a2540] text-[#00d66f] group-hover:scale-110'}`}>
+                    <MapPin size={24} />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`text-[8px] font-black uppercase tracking-widest ${m.isLeaving ? 'text-slate-400' : 'text-[#00d66f]'}`}>{m.category || 'Comércio'}</span>
+                      
+                      {/* NOVO: Indicador de Aberto/Fechado */}
+                      {!m.isLeaving && (
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md flex items-center gap-1 border ${isStoreOpen ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-500 border-red-200'}`}>
+                          <Clock size={10} /> {isStoreOpen ? 'Aberto Agora' : 'Fechado'}
+                        </span>
+                      )}
                     </div>
-                  ) : (
-                    <div className="inline-flex items-center gap-1 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-[#00d66f]">
-                      <Percent size={10} strokeWidth={3} />
-                      <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
-                    </div>
-                  )}
+                    
+                    <h4 className={`text-lg font-black uppercase tracking-tighter leading-none mb-1 ${m.isLeaving ? 'text-slate-500 line-through decoration-slate-300' : 'text-[#0a2540]'}`}>{m.shopName || m.name}</h4>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">{m.address ? `${m.address} • ` : ''}{m.freguesia || m.concelho || 'Sem Localidade'}</p>
+                    
+                    {m.isLeaving ? (
+                      <div className="inline-flex items-center gap-2 bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 text-amber-800">
+                        <AlertTriangle size={12} strokeWidth={3} />
+                        <span className="text-[9px] font-black uppercase tracking-widest">Loja sai a {new Date(m.leavingDate!).toLocaleDateString()}. Desconte o seu saldo!</span>
+                      </div>
+                    ) : (
+                      <div className="inline-flex items-center gap-1 bg-green-50 px-3 py-1 rounded-full border border-green-200 text-[#00d66f]">
+                        <Percent size={10} strokeWidth={3} />
+                        <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
+                      </div>
+                    )}
+                  </div>
                 </div>
+                
+                <button onClick={() => openInMaps(m)} className={`border-2 p-4 rounded-2xl shadow-sm hover:translate-y-[-2px] transition-all flex items-center justify-center gap-2 w-full sm:w-auto ${m.isLeaving ? 'bg-white border-slate-300 text-slate-500' : 'bg-[#00d66f] text-[#0a2540] border-[#0a2540] hover:shadow-[6px_6px_0px_#0a2540]'}`} title="Abrir no Maps">
+                  <Navigation size={20} fill="currentColor" />
+                  <span className="font-black uppercase text-[10px]">Ver Mapa</span>
+                </button>
               </div>
-              
-              <button onClick={() => openInMaps(m)} className={`border-2 p-4 rounded-2xl shadow-sm hover:translate-y-[-2px] transition-all flex items-center justify-center gap-2 w-full sm:w-auto ${m.isLeaving ? 'bg-white border-slate-300 text-slate-500' : 'bg-[#00d66f] text-[#0a2540] border-[#0a2540] hover:shadow-[6px_6px_0px_#0a2540]'}`} title="Abrir no Maps">
-                <Navigation size={20} fill="currentColor" />
-                <span className="font-black uppercase text-[10px]">Ver Mapa</span>
-              </button>
-            </div>
-          ))
+            );
+          })
         ) : (
           <div className="text-center py-12 bg-white rounded-[35px] border-4 border-dashed border-slate-200">
             <p className="text-slate-400 font-black uppercase text-xs tracking-widest">Nenhuma loja encontrada</p>

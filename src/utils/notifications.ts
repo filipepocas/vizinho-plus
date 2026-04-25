@@ -1,3 +1,5 @@
+// src/utils/notifications.ts
+
 import { db, messaging, VAPID_KEY } from "../config/firebase";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { getToken, onMessage } from "firebase/messaging";
@@ -15,7 +17,7 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
   try {
     const userRef = doc(db, 'users', userId);
     const userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) return;
+    if (!userSnap.exists()) throw new Error("Utilizador não encontrado.");
 
     const userData = userSnap.data();
     let devices = userData.devices || [];
@@ -23,6 +25,7 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
     const now = Date.now();
     const FORTY_FIVE_DAYS = 45 * 24 * 60 * 60 * 1000;
 
+    // Limpar dispositivos antigos e o dispositivo atual (para atualizar)
     devices = devices.filter((d: any) => (now - d.lastLogin) < FORTY_FIVE_DAYS);
     devices = devices.filter((d: any) => d.deviceId !== currentDeviceId);
 
@@ -36,6 +39,7 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
       });
     }
 
+    // Ordenar e manter apenas os 2 mais recentes
     devices.sort((a: any, b: any) => b.lastLogin - a.lastLogin);
     if (devices.length > 2) {
       devices = devices.slice(0, 2);
@@ -50,6 +54,8 @@ export const registerDeviceInFirebase = async (userId: string, fcmToken: string)
     });
   } catch (error) {
     console.error("Erro ao registar dispositivo:", error);
+    // CORREÇÃO: Lança o erro para o ecrã saber que falhou
+    throw error; 
   }
 };
 

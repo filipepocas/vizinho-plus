@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
-import { requestNotificationPermission, registerDeviceInFirebase } from '../../utils/notifications';
+import { requestNotificationPermission } from '../../utils/notifications';
 
 interface LoginPageProps {
   installPrompt: any;
@@ -68,11 +68,35 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   };
 
   const finalizeLogin = async (userData: any) => {
-    await registerDeviceInFirebase(userData.id, ""); 
     setCurrentUser(userData);
     if (userData.role === 'admin') navigate('/admin');
     else if (userData.role === 'merchant') navigate('/merchant');
     else navigate('/dashboard');
+  };
+
+  const handleEnableNotifications = async () => {
+    setDiagError(null);
+    setLoading(true);
+    try {
+      const res = await requestNotificationPermission(tempUserId);
+      if (res.success) {
+        toast.success("Notificações Ativas!");
+        
+        const updatedDoc = await getDoc(doc(db, 'users', tempUserId));
+        if (updatedDoc.exists()) {
+          const updatedData = { id: updatedDoc.id, ...updatedDoc.data() } as any;
+          setTimeout(() => finalizeLogin(updatedData), 1000);
+        } else {
+          setTimeout(() => finalizeLogin(tempUserData), 1000);
+        }
+      } else { 
+        setDiagError(res.error || "Erro ao ativar notificações."); 
+        setLoading(false);
+      }
+    } catch (err) {
+      setDiagError("Ocorreu um erro de comunicação com o servidor.");
+      setLoading(false);
+    }
   };
 
   if (setupStep) {
@@ -99,15 +123,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
                     </button>
                 )}
                 {Notification.permission !== 'granted' && (
-                  <button onClick={async () => {
-                      setDiagError(null);
-                      const res = await requestNotificationPermission(tempUserId);
-                      if(res.success) {
-                        toast.success("Notificações Ativas!");
-                        setTimeout(() => finalizeLogin(tempUserData), 1000);
-                      } else { setDiagError(res.error || "Erro."); }
-                  }} className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540] hover:scale-105 transition-transform">
-                      <Volume2 size={24} /> Permitir Notificações
+                  <button 
+                    onClick={handleEnableNotifications} 
+                    disabled={loading}
+                    className="w-full bg-[#00d66f] text-[#0a2540] border-2 border-[#0a2540] p-5 rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-3 shadow-[4px_4px_0px_#0a2540] hover:scale-105 transition-transform disabled:opacity-50"
+                  >
+                      {loading ? <Loader2 className="animate-spin" size={24} /> : <Volume2 size={24} />} 
+                      Permitir Notificações
                   </button>
                 )}
             </div>
@@ -165,6 +187,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
           </form>
 
           <div className="mt-8 pt-6 border-t-2 border-dashed border-slate-50 space-y-4 text-center">
+            {/* CORREÇÃO: Removido o size={14} que estava a causar o erro */}
             <Link to="/forgot-password" className="block text-slate-400 font-bold text-[10px] uppercase hover:text-[#0a2540]">
                 Esqueci-me da Password
             </Link>

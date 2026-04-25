@@ -71,8 +71,9 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editingProduct && products.length >= 10) {
-        return toast.error("Limite de 10 anúncios atingido. Elimine um para publicar novo.");
+    // CORREÇÃO: Limite atualizado para 20 artigos
+    if (!editingProduct && products.length >= 20) {
+        return toast.error("Limite de 20 anúncios atingido. Elimine um para publicar novo.");
     }
     if (!editingProduct && !selectedFile) return toast.error("A imagem do produto é obrigatória.");
     if (!formData.category || !formData.family || !formData.productType) return toast.error("Selecione a classificação completa.");
@@ -165,7 +166,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
             <div className="bg-[#0a2540] p-3 rounded-2xl text-[#00d66f]"><Package size={24} /></div>
             <div>
                <h3 className="font-black uppercase italic tracking-tighter text-[#0a2540]">O Meu Catálogo</h3>
-               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{products.length} de 10 anúncios ativos</p>
+               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{products.length} de 20 anúncios ativos</p>
             </div>
          </div>
          <button 

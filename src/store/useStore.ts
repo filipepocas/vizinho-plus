@@ -93,9 +93,10 @@ export const useStore = create<StoreState>((set, get) => ({
         limit(20)
       );
 
+      // CORREÇÃO: Filtros Múltiplos Seguros (Arrays)
       if (filters.distrito) q = query(q, where('distrito', '==', filters.distrito));
-      if (filters.concelho) q = query(q, where('concelho', 'in', Array.isArray(filters.concelho) ? filters.concelho : [filters.concelho]));
-      if (filters.freguesia) q = query(q, where('freguesia', 'in', Array.isArray(filters.freguesia) ? filters.freguesia : [filters.freguesia]));
+      if (filters.concelho && filters.concelho.length > 0) q = query(q, where('concelho', 'in', filters.concelho));
+      if (filters.freguesia && filters.freguesia.length > 0) q = query(q, where('freguesia', 'in', filters.freguesia));
       
       if (filters.category) q = query(q, where('category', '==', filters.category));
       if (filters.family) q = query(q, where('family', '==', filters.family));
