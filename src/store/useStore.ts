@@ -14,16 +14,14 @@ interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
   locations: LocationsMap;
-  
-  // CATÁLOGO DE PRODUTOS E LISTA DE COMPRAS
   products: Product[];
   lastVisibleProduct: any;
   hasMoreProducts: boolean;
   shoppingList: Product[];
   taxonomy: ProductTaxonomy | null;
-
   isLoading: boolean;
   isInitialized: boolean;
+  
   setCurrentUser: (user: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
   logout: () => Promise<void>;
@@ -37,8 +35,7 @@ interface StoreState {
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
   updateUserToken: (userId: string, token: string) => Promise<void>;
   toggleNotifications: (userId: string, enabled: boolean) => Promise<void>;
-
-  // AÇÕES DE PRODUTOS
+  
   fetchProducts: (filters?: any, isNextPage?: boolean) => Promise<void>;
   addToShoppingList: (product: Product) => void;
   removeFromShoppingList: (productId: string) => void;
@@ -50,13 +47,11 @@ export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
   locations: {},
-  
   products: [],
   lastVisibleProduct: null,
   hasMoreProducts: true,
   shoppingList: JSON.parse(localStorage.getItem('vplus_shopping_list') || '[]'),
   taxonomy: null,
-
   isLoading: true,
   isInitialized: false,
 
@@ -68,9 +63,7 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       await signOut(auth);
       set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
-    } catch (e) {
-      set({ isLoading: false });
-    }
+    } catch (e) { set({ isLoading: false }); }
   },
 
   resetPassword: async (email: string) => {
@@ -81,9 +74,7 @@ export const useStore = create<StoreState>((set, get) => ({
   fetchTaxonomy: async () => {
     try {
       const docSnap = await getDoc(doc(db, 'system', 'products_taxonomy'));
-      if (docSnap.exists()) {
-        set({ taxonomy: docSnap.data() as ProductTaxonomy });
-      }
+      if (docSnap.exists()) set({ taxonomy: docSnap.data() as ProductTaxonomy });
     } catch(e) { console.error(e); }
   },
 
@@ -92,11 +83,19 @@ export const useStore = create<StoreState>((set, get) => ({
     const { products, lastVisibleProduct } = get();
     
     try {
-      let q = query(collection(db, 'products'), orderBy('createdAt', 'desc'), limit(20));
+      const seteDiasAtras = new Date();
+      seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+
+      let q = query(
+        collection(db, 'products'), 
+        where('createdAt', '>=', seteDiasAtras),
+        orderBy('createdAt', 'desc'), 
+        limit(20)
+      );
 
       if (filters.distrito) q = query(q, where('distrito', '==', filters.distrito));
-      if (filters.concelho) q = query(q, where('concelho', '==', filters.concelho));
-      if (filters.freguesia) q = query(q, where('freguesia', '==', filters.freguesia));
+      if (filters.concelho) q = query(q, where('concelho', 'in', Array.isArray(filters.concelho) ? filters.concelho : [filters.concelho]));
+      if (filters.freguesia) q = query(q, where('freguesia', 'in', Array.isArray(filters.freguesia) ? filters.freguesia : [filters.freguesia]));
       
       if (filters.category) q = query(q, where('category', '==', filters.category));
       if (filters.family) q = query(q, where('family', '==', filters.family));
@@ -107,7 +106,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
 
       const snap = await getDocs(q);
-      const newProducts = snap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
+      const newProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
       set({
         products: isNextPage ? [...products, ...newProducts] : newProducts,
@@ -147,27 +146,16 @@ export const useStore = create<StoreState>((set, get) => ({
   updateUserToken: async (userId: string, token: string) => {
     try {
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        fcmTokens: arrayUnion(token),
-        lastTokenUpdate: serverTimestamp(),
-        notificationsEnabled: true
-      });
-    } catch (e) {
-      console.error("Erro ao guardar token:", e);
-    }
+      await updateDoc(userRef, { fcmTokens: arrayUnion(token), notificationsEnabled: true });
+    } catch (e) { console.error(e); }
   },
 
   toggleNotifications: async (userId: string, enabled: boolean) => {
     try {
       const userRef = doc(db, 'users', userId);
-      await updateDoc(userRef, {
-        notificationsEnabled: enabled,
-        notificationsUpdatedAt: serverTimestamp()
-      });
+      await updateDoc(userRef, { notificationsEnabled: enabled });
       toast.success(enabled ? "NOTIFICAÇÕES ATIVADAS!" : "NOTIFICAÇÕES DESATIVADAS.");
-    } catch (e) {
-      toast.error("ERRO AO ALTERAR PREFERÊNCIAS.");
-    }
+    } catch (e) { toast.error("ERRO."); }
   },
 
   checkNifExists: async (nif: string) => {
@@ -183,38 +171,24 @@ export const useStore = create<StoreState>((set, get) => ({
     
     try {
       const newTxRef = doc(collection(db, 'transactions'));
-      const txData = {
-        clientId: tx.clientId,
-        merchantId: currentUser.id,
-        merchantName: currentUser.shopName || currentUser.name,
-        amount: Number(tx.amount),
-        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
-        type: tx.type,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber || "", 
-        documentNumber: tx.documentNumber || "",
-        clientName: tx.clientName || "Desconhecido",
-        clientCardNumber: tx.clientCardNumber || "---",
-        clientBirthDate: tx.clientBirthDate || ""
-      };
-
-      await setDoc(newTxRef, txData);
-      toast.success("MOVIMENTO ENVIADO PARA PROCESSAMENTO!");
+      await setDoc(newTxRef, {
+        clientId: tx.clientId, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name,
+        amount: Number(tx.amount), invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
+        type: tx.type, status: 'pending', createdAt: serverTimestamp(),
+        clientNif: tx.documentNumber || "", documentNumber: tx.documentNumber || "",
+        clientName: tx.clientName || "Desconhecido", clientCardNumber: tx.clientCardNumber || "---", clientBirthDate: tx.clientBirthDate || ""
+      });
+      toast.success("MOVIMENTO ENVIADO!");
       return newTxRef.id;
-    } catch (e) { 
-      toast.error("ERRO NO REGISTO.");
-    }
+    } catch (e) { toast.error("ERRO NO REGISTO."); }
   },
 
   updateTransactionDocument: async (transactionId: string, documentNumber: string) => {
     try {
         const txRef = doc(db, 'transactions', transactionId);
         await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
-        toast.success("Fatura associada com sucesso!");
-    } catch(e) { 
-      toast.error("Erro ao atualizar fatura.");
-    }
+        toast.success("Fatura associada!");
+    } catch(e) { toast.error("Erro."); }
   },
 
   cancelTransaction: async (id: string) => {
@@ -222,9 +196,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const txRef = doc(db, 'transactions', id);
       await updateDoc(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
       toast.success("PEDIDO DE ANULAÇÃO ENVIADO.");
-    } catch (e) { 
-      toast.error("ERRO AO ANULAR.");
-    }
+    } catch (e) { toast.error("ERRO."); }
   },
 
   subscribeToTransactions: (role?: string, id?: string) => {
@@ -238,48 +210,20 @@ export const useStore = create<StoreState>((set, get) => ({
       q = query(collection(db, 'transactions'), where('clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
     }
     
-    return onSnapshot(q, (snap: any) => {
-      set({ transactions: snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)) });
-    });
+    return onSnapshot(q, (snap: any) => set({ transactions: snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)) }));
   },
 
   initializeAuth: () => {
-    let unsubProfile: (() => void) | null = null;
-    
-    const unsubLocations = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => {
-      if (docSnap.exists() && docSnap.data()?.data) {
-        set({ locations: docSnap.data().data });
-      } else {
-        set({ locations: {} });
-      }
-    });
-
+    const unsubLocs = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => set({ locations: docSnap.data()?.data || {} }));
     const unsubAuth = onAuthStateChanged(auth, (user: any) => {
-      if (unsubProfile) { unsubProfile(); unsubProfile = null; }
-
       if (user) {
-        set({ isLoading: true });
-        unsubProfile = onSnapshot(doc(db, 'users', user.uid), (d: any) => {
-          if (d.exists()) {
-            set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
-          } else {
-            set({ currentUser: null, isLoading: false, isInitialized: true });
-          }
-        }, () => {
-          set({ isLoading: false, isInitialized: true });
+        onSnapshot(doc(db, 'users', user.uid), (d: any) => {
+          if (d.exists()) set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
         });
-      } else {
-        set({ currentUser: null, isLoading: false, isInitialized: true });
-      }
+      } else set({ currentUser: null, isLoading: false, isInitialized: true });
     });
-    
     get().fetchTaxonomy();
-
-    return () => { 
-      unsubAuth(); 
-      if (unsubProfile) unsubProfile(); 
-      unsubLocations(); 
-    };
+    return () => { unsubAuth(); unsubLocs(); };
   },
 
   deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {
@@ -291,8 +235,6 @@ export const useStore = create<StoreState>((set, get) => ({
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
       toast.success("DADOS APAGADOS.");
-    } catch (e) { 
-      toast.error("ERRO."); 
-    }
+    } catch (e) { toast.error("ERRO."); }
   }
 }));
