@@ -2,11 +2,32 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../../config/firebase';
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
+import { 
+  collection, 
+  addDoc, 
+  query, 
+  where, 
+  getDocs, 
+  deleteDoc, 
+  doc, 
+  serverTimestamp, 
+  updateDoc, 
+  orderBy 
+} from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
-  Package, Plus, Trash2, Tag, Image as ImageIcon, 
-  Loader2, AlertCircle, Euro, CheckCircle2, X, Edit3, Save
+  Package, 
+  Plus, 
+  Trash2, 
+  Tag, 
+  Image as ImageIcon, 
+  Loader2, 
+  Euro, 
+  CheckCircle2, 
+  X, 
+  Edit3, 
+  Save, 
+  AlertTriangle 
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../../store/useStore';
@@ -25,9 +46,17 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  // ESTADOS DO FORMULÁRIO
   const [formData, setFormData] = useState({
-    description: '', price: '', category: '', family: '', productType: '',
-    hasPromo: false, promoPrice: '', promoStart: '', promoEnd: ''
+    description: '',
+    price: '',
+    category: '',
+    family: '',
+    productType: '',
+    hasPromo: false,
+    promoPrice: '',
+    promoStart: '',
+    promoEnd: ''
   });
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string>('');
@@ -42,6 +71,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   const loadMyProducts = async () => {
     setLoading(true);
     try {
+      // REGRA: Apenas produtos criados nos últimos 7 dias são considerados ativos
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
@@ -54,6 +84,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const snap = await getDocs(q);
       setProducts(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product)));
     } catch (err) {
+      console.error("Erro ao carregar catálogo:", err);
       toast.error("Erro ao carregar catálogo.");
     } finally {
       setLoading(false);
@@ -71,19 +102,22 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    // CORREÇÃO: Limite atualizado para 20 artigos
-    if (!editingProduct && products.length >= 20) {
-        return toast.error("Limite de 20 anúncios atingido. Elimine um para publicar novo.");
+    
+    // REGRA: Limite de 10 anúncios ativos em simultâneo
+    if (!editingProduct && products.length >= 10) {
+        return toast.error("Limite de 10 anúncios atingido. Elimine um para publicar novo.");
     }
+
     if (!editingProduct && !selectedFile) return toast.error("A imagem do produto é obrigatória.");
     if (!formData.category || !formData.family || !formData.productType) return toast.error("Selecione a classificação completa.");
 
     setSaving(true);
-    const toastId = toast.loading("A processar e comprimir imagem...");
+    const toastId = toast.loading(editingProduct ? "A atualizar..." : "A publicar...");
 
     try {
       let imageUrl = editingProduct?.imageUrl || '';
       
+      // Se houver novo ficheiro selecionado, faz a compressão e o upload
       if (selectedFile) {
         const compressedBase64 = await compressImage(selectedFile);
         const blob = dataURLtoBlob(compressedBase64);
@@ -106,9 +140,10 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         family: formData.family,
         productType: formData.productType,
         hasPromo: formData.hasPromo,
-        promoPrice: formData.hasPromo ? Number(formData.promoPrice) : undefined,
+        promoPrice: formData.hasPromo ? Number(formData.promoPrice) : null,
         promoStart: formData.hasPromo ? formData.promoStart : null,
         promoEnd: formData.hasPromo ? formData.promoEnd : null,
+        // REGRA: Preserva a data de criação original se for uma edição
         createdAt: editingProduct ? editingProduct.createdAt : serverTimestamp()
       };
 
@@ -125,14 +160,15 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       resetForm();
       loadMyProducts();
     } catch (err) {
-      toast.error("Erro ao guardar produto.", { id: toastId });
+      console.error("Erro ao guardar produto:", err);
+      toast.error("Erro ao guardar.", { id: toastId });
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Eliminar este anúncio?")) return;
+    if (!window.confirm("Eliminar este anúncio permanentemente?")) return;
     try {
       await deleteDoc(doc(db, 'products', id));
       setProducts(products.filter(p => p.id !== id));
@@ -143,7 +179,17 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   };
 
   const resetForm = () => {
-    setFormData({ description: '', price: '', category: '', family: '', productType: '', hasPromo: false, promoPrice: '', promoStart: '', promoEnd: '' });
+    setFormData({
+      description: '',
+      price: '',
+      category: '',
+      family: '',
+      productType: '',
+      hasPromo: false,
+      promoPrice: '',
+      promoStart: '',
+      promoEnd: ''
+    });
     setSelectedFile(null);
     setPreview('');
   };
@@ -151,9 +197,15 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   const startEdit = (p: Product) => {
     setEditingProduct(p);
     setFormData({
-        description: p.description, price: p.price.toString(), category: p.category,
-        family: p.family, productType: p.productType, hasPromo: p.hasPromo,
-        promoPrice: p.promoPrice?.toString() || '', promoStart: p.promoStart || '', promoEnd: p.promoEnd || ''
+        description: p.description,
+        price: p.price.toString(),
+        category: p.category,
+        family: p.family,
+        productType: p.productType,
+        hasPromo: p.hasPromo,
+        promoPrice: p.promoPrice?.toString() || '',
+        promoStart: p.promoStart || '',
+        promoEnd: p.promoEnd || ''
     });
     setPreview(p.imageUrl);
     setShowAddForm(true);
@@ -161,12 +213,14 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
+      
+      {/* CABEÇALHO DO CATÁLOGO */}
       <div className="flex justify-between items-center bg-white p-6 rounded-[30px] border-4 border-[#0a2540] shadow-lg">
          <div className="flex items-center gap-4">
             <div className="bg-[#0a2540] p-3 rounded-2xl text-[#00d66f]"><Package size={24} /></div>
             <div>
                <h3 className="font-black uppercase italic tracking-tighter text-[#0a2540]">O Meu Catálogo</h3>
-               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{products.length} de 20 anúncios ativos</p>
+               <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{products.length} de 10 anúncios ativos</p>
             </div>
          </div>
          <button 
@@ -177,25 +231,41 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
          </button>
       </div>
 
+      {/* FORMULÁRIO DE ADIÇÃO / EDIÇÃO */}
       {showAddForm && (
         <form onSubmit={handleSaveProduct} className="bg-white p-8 rounded-[40px] border-4 border-[#00d66f] shadow-xl space-y-6 animate-in slide-in-from-top-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* Upload e Preview */}
                 <div className="space-y-4">
                    <label className="block text-[10px] font-black uppercase text-slate-400 ml-2">Imagem do Artigo</label>
                    <div className="relative h-64 bg-slate-50 border-4 border-dashed border-slate-200 rounded-[30px] overflow-hidden group hover:border-[#00d66f] transition-colors">
-                      {preview ? <img src={preview} className="w-full h-full object-cover" alt="Preview" /> : <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300"><ImageIcon size={48} className="mb-2" /><span className="text-[10px] font-black uppercase">Escolher Imagem</span></div>}
+                      {preview ? (
+                        <img src={preview} className="w-full h-full object-cover" alt="Preview" />
+                      ) : (
+                        <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-300">
+                           <ImageIcon size={48} className="mb-2" />
+                           <span className="text-[10px] font-black uppercase">Clique para escolher</span>
+                        </div>
+                      )}
                       <input type="file" accept="image/*" onChange={handleFileChange} className="absolute inset-0 opacity-0 cursor-pointer" />
                    </div>
+                   <p className="text-[9px] text-slate-400 italic text-center">A imagem será comprimida automaticamente para poupar espaço.</p>
                 </div>
+
+                {/* Dados do Produto */}
                 <div className="space-y-4">
                     <div>
-                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Descrição Curta (Nome do Produto)</label>
+                        <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Descrição do Produto</label>
                         <input required type="text" value={formData.description} onChange={e=>setFormData({...formData, description: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-sm outline-none focus:border-[#00d66f]" placeholder="Ex: Pão de Mafra Regional" />
                     </div>
+                    
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Preço (€)</label>
-                            <div className="relative"><Euro size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"/><input required type="number" step="0.01" value={formData.price} onChange={e=>setFormData({...formData, price: e.target.value})} className="w-full pl-10 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-[#00d66f]" /></div>
+                            <label className="text-[10px] font-black uppercase text-slate-400 ml-2">Preço Base (€)</label>
+                            <div className="relative">
+                                <Euro size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300"/>
+                                <input required type="number" step="0.01" value={formData.price} onChange={e=>setFormData({...formData, price: e.target.value})} className="w-full pl-10 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-black text-lg outline-none focus:border-[#00d66f]" />
+                            </div>
                         </div>
                         <div className="flex flex-col justify-end">
                             <button type="button" onClick={() => setFormData({...formData, hasPromo: !formData.hasPromo})} className={`w-full p-4 rounded-2xl font-black uppercase text-[10px] border-2 transition-all ${formData.hasPromo ? 'bg-amber-500 text-white border-amber-600' : 'bg-slate-50 text-slate-400 border-slate-200'}`}>
@@ -203,9 +273,13 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
                             </button>
                         </div>
                     </div>
+
                     {formData.hasPromo && (
                         <div className="bg-amber-50 p-6 rounded-3xl border-2 border-amber-200 space-y-4 animate-in zoom-in">
-                            <div><label className="text-[10px] font-black uppercase text-amber-700 ml-2">Preço Promocional (€)</label><input type="number" step="0.01" value={formData.promoPrice} onChange={e=>setFormData({...formData, promoPrice: e.target.value})} className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl font-black text-[#0a2540] outline-none" /></div>
+                            <div>
+                                <label className="text-[10px] font-black uppercase text-amber-700 ml-2">Preço Promocional (€)</label>
+                                <input type="number" step="0.01" value={formData.promoPrice} onChange={e=>setFormData({...formData, promoPrice: e.target.value})} className="w-full p-3 bg-white border-2 border-amber-300 rounded-xl font-black text-[#0a2540] outline-none" />
+                            </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <div><label className="text-[8px] font-black uppercase text-amber-600 ml-2">Início</label><input type="date" value={formData.promoStart} onChange={e=>setFormData({...formData, promoStart: e.target.value})} className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs font-bold" /></div>
                                 <div><label className="text-[8px] font-black uppercase text-amber-600 ml-2">Fim</label><input type="date" value={formData.promoEnd} onChange={e=>setFormData({...formData, promoEnd: e.target.value})} className="w-full p-2 bg-white border border-amber-200 rounded-lg text-xs font-bold" /></div>
@@ -214,49 +288,82 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
                     )}
                 </div>
             </div>
+
+            {/* Taxonomia em Cascata */}
             <div className="bg-slate-50 p-6 rounded-[35px] border-2 border-slate-100">
                 <p className="text-[10px] font-black uppercase text-[#0a2540] mb-4 flex items-center gap-2"><Tag size={14} className="text-[#00d66f]"/> Classificação do Artigo</p>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <select required value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value, family: '', productType: ''})} className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 font-bold text-xs outline-none focus:border-[#00d66f]">
+                    <select 
+                      required value={formData.category} 
+                      onChange={e=>setFormData({...formData, category: e.target.value, family: '', productType: ''})}
+                      className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 font-bold text-xs outline-none focus:border-[#00d66f]"
+                    >
                         <option value="">Categoria...</option>
                         {taxonomy && Object.keys(taxonomy.categories).sort().map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
                     </select>
-                    <select required disabled={!formData.category} value={formData.family} onChange={e=>setFormData({...formData, family: e.target.value, productType: ''})} className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
+
+                    <select 
+                      required disabled={!formData.category} value={formData.family} 
+                      onChange={e=>setFormData({...formData, family: e.target.value, productType: ''})}
+                      className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50"
+                    >
                         <option value="">Família...</option>
                         {formData.category && taxonomy && Object.keys(taxonomy.categories[formData.category].families).sort().map(f => <option key={f} value={f}>{f}</option>)}
                     </select>
-                    <select required disabled={!formData.family} value={formData.productType} onChange={e=>setFormData({...formData, productType: e.target.value})} className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                        <option value="">Tipo...</option>
+
+                    <select 
+                      required disabled={!formData.family} value={formData.productType} 
+                      onChange={e=>setFormData({...formData, productType: e.target.value})}
+                      className="w-full p-4 rounded-2xl bg-white border-2 border-slate-200 font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50"
+                    >
+                        <option value="">Tipo de Produto...</option>
                         {formData.family && taxonomy && taxonomy.categories[formData.category].families[formData.family].sort().map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                 </div>
             </div>
-            <button disabled={saving} type="submit" className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-[30px] font-black uppercase text-sm shadow-xl hover:scale-[1.01] transition-all flex justify-center items-center gap-3 border-b-4 border-black/30">
-                {saving ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={24}/> {editingProduct ? 'Guardar Alterações' : 'Publicar Artigo'}</>}
+
+            <button disabled={saving} type="submit" className="w-full bg-[#0a2540] text-[#00d66f] p-6 rounded-[30px] font-black uppercase text-sm shadow-xl flex justify-center items-center gap-3 border-b-8 border-black/30 hover:scale-[1.01] transition-all">
+                {saving ? <Loader2 className="animate-spin" /> : <><Save size={24}/> {editingProduct ? 'Guardar Alterações' : 'Publicar Artigo no Vizinho+'}</>}
             </button>
         </form>
       )}
 
+      {/* GRELHA DE PRODUTOS EXISTENTES */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
         {products.map(p => (
             <div key={p.id} className="bg-white rounded-[30px] border-4 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#0a2540] transition-all">
                 <div className="aspect-square relative overflow-hidden bg-slate-50">
                     <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
-                    {p.hasPromo && <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full font-black text-[7px] uppercase shadow-lg border border-white">Oferta</div>}
+                    {p.hasPromo && (
+                        <div className="absolute top-4 right-4 bg-amber-500 text-white px-3 py-1 rounded-full font-black text-[9px] uppercase shadow-lg border-2 border-white">Promoção</div>
+                    )}
                 </div>
                 <div className="p-5 flex-1 flex flex-col">
                     <span className="text-[8px] font-black uppercase text-[#00d66f] tracking-widest mb-1">{p.productType}</span>
-                    <h4 className="font-black text-[#0a2540] uppercase text-[11px] leading-tight mb-3 line-clamp-2 h-8">{p.description}</h4>
-                    <div className="mt-auto flex items-center justify-between">
-                        <p className={`font-black text-sm italic ${p.hasPromo ? 'text-red-500' : 'text-[#0a2540]'}`}>{formatEuro(p.hasPromo ? p.promoPrice! : p.price)}</p>
+                    <h4 className="font-black text-[#0a2540] uppercase text-sm leading-tight mb-4 line-clamp-2 h-8">{p.description}</h4>
+                    
+                    <div className="mt-auto flex items-end justify-between">
+                        <div>
+                            <p className={`font-black text-xl italic ${p.hasPromo ? 'text-amber-600' : 'text-[#0a2540]'}`}>
+                                {formatEuro(p.hasPromo ? p.promoPrice! : p.price)}
+                            </p>
+                            {p.hasPromo && <p className="text-[10px] font-bold text-slate-300 line-through">{formatEuro(p.price)}</p>}
+                        </div>
                         <div className="flex gap-2">
-                            <button onClick={() => startEdit(p)} className="p-2 bg-slate-100 text-slate-500 rounded-lg hover:bg-blue-500 hover:text-white"><Edit3 size={14}/></button>
-                            <button onClick={() => handleDelete(p.id!)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white"><Trash2 size={14}/></button>
+                            <button onClick={() => startEdit(p)} className="p-2 bg-slate-100 text-slate-500 rounded-lg hover:bg-blue-500 hover:text-white transition-colors"><Edit3 size={14}/></button>
+                            <button onClick={() => handleDelete(p.id!)} className="p-2 bg-red-50 text-red-500 rounded-lg hover:bg-red-500 hover:text-white transition-colors"><Trash2 size={14}/></button>
                         </div>
                     </div>
                 </div>
             </div>
         ))}
+
+        {!loading && products.length === 0 && !showAddForm && (
+            <div className="col-span-full py-20 text-center bg-slate-50 rounded-[40px] border-4 border-dashed border-slate-200">
+                <Package size={48} className="mx-auto text-slate-200 mb-4" />
+                <p className="font-black uppercase text-slate-300 text-xs">O seu catálogo está vazio ou os anúncios expiraram.</p>
+            </div>
+        )}
       </div>
     </div>
   );

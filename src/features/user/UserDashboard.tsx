@@ -10,45 +10,49 @@ import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, A
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
-import UserExplore from './components/UserExplore';
 import BannerCarousel from './components/BannerCarousel';
+import ProductMarketplace from './components/ProductMarketplace';
+import ShoppingListModal from './components/ShoppingListModal';
 
-import { LogOut, Star, ExternalLink, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, Leaf, MapPin, Store, Smartphone, HelpCircle } from 'lucide-react';
+import { 
+  LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
+  IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store
+} from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
 
 const UserDashboard: React.FC = () => {
-  const { transactions, logout, currentUser } = useStore();
+  const { transactions, logout, currentUser, shoppingList } = useStore();
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'home' | 'wallets' | 'history' | 'explore' | 'events' | 'anti_waste'>('home');
+  // ESTADOS DE NAVEGAÇÃO E UI
+  const [view, setView] = useState<'home' | 'marketplace' | 'wallets' | 'history' | 'events' | 'anti_waste'>('home');
+  const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
-  const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '' });
+  const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '', merchantTerms: '' });
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
-  const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
+  const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
+  const [events, setEvents] = useState<AppEvent[]>([]);
+  const [wasteItems, setWasteItems] = useState<AntiWasteItem[]>([]);
+  
+  // ESTADO DO SCROLL INTELIGENTE
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [isNotifLoading, setIsNotifLoading] = useState(false);
+  const [localNotifGranted, setLocalNotifGranted] = useState(false);
   
   const [showContactModal, setShowContactModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
   const [showFaqModal, setShowFaqModal] = useState(false); 
-  
   const [emailCopied, setEmailCopied] = useState(false);
-  const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
-
-  const [isNotifLoading, setIsNotifLoading] = useState(false);
-  const [localNotifGranted, setLocalNotifGranted] = useState(false);
-
-  const [events, setEvents] = useState<AppEvent[]>([]);
-  const [wasteItems, setWasteItems] = useState<AntiWasteItem[]>([]);
-
-  // ESTADO DO SCROLL INTELIGENTE
-  const [isScrolled, setIsScrolled] = useState(false);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
+  // 1. MONITOR DE SCROLL
   useEffect(() => {
     const handleScroll = () => {
       setIsScrolled(window.scrollY > 50);
@@ -57,55 +61,63 @@ const UserDashboard: React.FC = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // 2. CARREGAR CONFIGURAÇÕES GLOBAIS
   useEffect(() => {
     const fetchData = async () => {
       try {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
         if (configSnap.exists()) setSysConfig(configSnap.data());
-
-        const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
-        const merchantsSnap = await getDocs(q);
-        setAllMerchants(merchantsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as UserProfile[]);
-      } catch (err) {}
+      } catch (err) {
+        console.error("Erro ao carregar config:", err);
+      }
     };
     fetchData();
   }, []);
 
+  // 3. SUBSCREVER FEEDBACKS (Para saber o que falta avaliar)
   useEffect(() => {
     if (!currentUser?.id) return;
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
-    return onSnapshot(q, (snapshot: any) => {
-      setEvaluatedIds(snapshot.docs.map((doc: any) => doc.data().transactionId));
+    const unsubscribe = onSnapshot(q, (snap: any) => {
+      setEvaluatedIds(snap.docs.map((d: any) => d.data().transactionId));
     });
+    return () => unsubscribe();
   }, [currentUser?.id]);
 
+  // 4. SUBSCREVER FOLHETOS ATIVOS
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
     
-    return onSnapshot(q, (snap: any) => {
+    const unsubscribe = onSnapshot(q, (snap: any) => {
       const now = new Date();
       const valid = snap.docs
         .map((d: any) => ({ id: d.id, ...d.data() } as Leaflet))
         .filter((l: any) => {
-          const start = l.startDate && typeof l.startDate.toDate === 'function' ? l.startDate.toDate() : new Date();
-          const end = l.endDate && typeof l.endDate.toDate === 'function' ? l.endDate.toDate() : new Date();
+          const start = l.startDate?.toDate ? l.startDate.toDate() : new Date();
+          const end = l.endDate?.toDate ? l.endDate.toDate() : new Date();
           const inTime = now >= start && now <= end;
-          const targetZones = (l as any).targetZones || [];
-          const inZone = targetZones.length === 0 || targetZones.some((z: string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
+          const zones = l.targetZones || [];
+          const inZone = zones.length === 0 || zones.some((z: string) => 
+            z.includes(currentUser.freguesia || '') || 
+            z.includes(currentUser.concelho || '') || 
+            z.includes(currentUser.distrito || '')
+          );
           return inTime && inZone;
         });
       setActiveLeaflets(valid);
     });
+    return () => unsubscribe();
   }, [currentUser]);
 
+  // 5. SUBSCREVER NOTIFICAÇÕES IN-APP
   useEffect(() => {
     if (!currentUser) return;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    return onSnapshot(q, (snap: any) => {
+    const unsubscribe = onSnapshot(q, (snap: any) => {
       const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AppNotification));
       for (let notif of docs) {
         if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
@@ -127,12 +139,14 @@ const UserDashboard: React.FC = () => {
         }
       }
     });
+    return () => unsubscribe();
   }, [currentUser]);
 
+  // 6. SUBSCREVER EVENTOS E DESPERDÍCIO
   useEffect(() => {
     if (!currentUser) return;
-    const q = query(collection(db, 'events'), where('status', '==', 'approved'), orderBy('startDate', 'asc'));
-    return onSnapshot(q, (snap: any) => {
+    const qEvents = query(collection(db, 'events'), where('status', '==', 'approved'), orderBy('startDate', 'asc'));
+    const unsubEvents = onSnapshot(qEvents, (snap: any) => {
       const now = new Date();
       const validEvents = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AppEvent))
         .filter((e: any) => {
@@ -143,13 +157,9 @@ const UserDashboard: React.FC = () => {
         });
       setEvents(validEvents);
     });
-  }, [currentUser]);
 
-  useEffect(() => {
-    if (!currentUser) return;
-    const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
-    
-    return onSnapshot(q, (snap: any) => {
+    const qWaste = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
+    const unsubWaste = onSnapshot(qWaste, (snap: any) => {
       const now = new Date();
       const active = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AntiWasteItem))
         .filter((w: any) => {
@@ -160,6 +170,8 @@ const UserDashboard: React.FC = () => {
         });
       setWasteItems(active);
     });
+
+    return () => { unsubEvents(); unsubWaste(); };
   }, [currentUser]);
 
   const dismissNotification = () => {
@@ -267,18 +279,30 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
-      {/* HEADER STICKY COM ANIMAÇÃO */}
+      {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL */}
       <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`}>
         <BannerCarousel isScrolled={isScrolled} />
         
-        <div className={`absolute left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 via-black/40 to-transparent z-50 transition-all duration-300 ease-in-out ${isScrolled ? 'top-[-10px]' : 'top-0'}`}>
+        <div className={`absolute left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 via-black/40 to-transparent z-50 transition-all duration-300 ${isScrolled ? 'top-[-10px]' : 'top-0'}`}>
           <div className={`bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 transition-all duration-300 origin-top-left ${isScrolled ? 'p-1 scale-[0.70]' : 'p-2 scale-100'}`}>
             <img src="/logo-vizinho.png" alt="Vizinho+" className="h-10 w-auto object-contain" />
           </div>
-          <div className={`flex gap-3 transition-all duration-300 origin-top-right ${isScrolled ? 'scale-[0.70]' : 'scale-100'}`}>
+          
+          <div className={`flex gap-3 transition-all duration-300 origin-top-right ${isScrolled ? 'scale-[0.75]' : 'scale-100'}`}>
+            {/* BOTÃO LISTA DE COMPRAS */}
+            <button onClick={() => setShowCart(true)} className="relative bg-[#00d66f] p-3 rounded-full text-[#0a2540] border-2 border-[#0a2540] shadow-lg hover:scale-110 transition-all">
+              <ShoppingBag size={22} strokeWidth={3} />
+              {shoppingList.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a2540] animate-bounce">
+                  {shoppingList.length}
+                </span>
+              )}
+            </button>
+            
             <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
               <Settings size={20} />
             </button>
+            
             <button onClick={handleLogout} className="bg-red-500/80 backdrop-blur-md p-3 rounded-full text-white border border-red-400/30 hover:bg-red-600 transition-all">
               <LogOut size={20} />
             </button>
@@ -286,81 +310,53 @@ const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* COMPENSAÇÃO DE ALTURA PARA O CONTEÚDO NÃO FICAR ESCONDIDO */}
-      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[360px]'}`}>
+      {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
+      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[360px]'}`}>
         
-        <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors animate-in fade-in">
-          <HelpCircle size={20} /> Guia Passo-a-Passo da App
-        </button>
-
-        <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
-          <BookOpen size={20} /> Ler Regras de Utilização
-        </button>
-        
-        <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
-          <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
-             <Printer size={20} />
-          </button>
-
-          <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
-            <div className="pr-12">
-              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Cliente Vizinho+</p>
-              <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">{currentUser.name}</h1>
-              {currentUser.nif && <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>}
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-widest">Saldo Atual</span>
-              <span className="text-2xl font-black text-[#00d66f] italic">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}</span>
-            </div>
-          </div>
-          <div className="p-8 flex flex-col items-center gap-6">
-            <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
-              <QRCodeCanvas id="user-qr-canvas" value={displayCardNumber} size={150} />
-            </div>
-            <div className="text-center">
-              <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
-              
-              <div className="flex flex-col items-center justify-center gap-1 mt-4">
-                <span className="text-[11px] font-black text-[#0a2540] uppercase tracking-widest bg-[#00d66f]/20 px-3 py-1 rounded-md">Apresente este cartão ANTES de terminar a compra</span>
-                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1">Para garantir que acumula ou desconta saldo</span>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {appNotification && (
-          <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
-            <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
-            <div className="flex-1">
-              <h4 className="text-lg font-black uppercase italic text-white leading-none mb-2">{appNotification.title}</h4>
-              <p className="text-xs font-bold text-slate-300">{appNotification.message}</p>
-              <button onClick={dismissNotification} className="mt-4 bg-[#00d66f] text-[#0a2540] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">Fechar</button>
-            </div>
-            <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={16} /></button>
-          </div>
-        )}
+        {/* NAVEGAÇÃO RÁPIDA */}
         <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
+          <button onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'marketplace' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
+            <Search size={18} /> Explorar Artigos
+          </button>
+          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
             <Wallet size={18} /> O meu Saldo
           </button>
-          
-          <button onClick={() => setView(view === 'history' ? 'home' : 'history')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white shadow-lg' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
-            {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
-            <MessageSquare size={18} /> Avaliar Lojas
-          </button>
-
-          <button onClick={() => setView(view === 'events' ? 'home' : 'events')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#3b82f6] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
-             {events.length > 0 && <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{events.length}</span>}
-             <CalendarPlus size={18} className={view === 'events' ? 'text-white' : 'text-blue-500'} /> Eventos Locais
-          </button>
-          
-          <button onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} className={`flex items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[9px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-[#22c55e] border-[#22c55e] text-white shadow-sm hover:scale-[1.02]'}`}>
-             {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
-             <Leaf size={16} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-white'} /> Desperdício Zero
-          </button>
         </div>
 
-        {view === 'wallets' && <UserHome currentUser={currentUser} stats={stats} merchantBalances={[]} vantagensUrl="" />}
+        {/* VISTAS DINÂMICAS */}
+        {view === 'home' && (
+          <div className="space-y-6 animate-in fade-in">
+             <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden p-8 flex flex-col items-center gap-6">
+                <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
+                  <QRCodeCanvas id="user-qr-canvas" value={displayCardNumber} size={150} />
+                </div>
+                <div className="text-center">
+                   <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540] mb-2">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
+                   <span className="text-[10px] font-black uppercase text-slate-400">Apresente este cartão antes de pagar</span>
+                </div>
+             </div>
+             <div className="grid grid-cols-2 gap-4">
+                <button onClick={() => setView('history')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 relative hover:border-[#0a2540] transition-all">
+                   {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
+                   <MessageSquare className="text-[#0a2540]" />
+                   <span className="text-[9px] font-black uppercase text-slate-400">Avaliar Lojas</span>
+                </button>
+                <button onClick={() => setView('events')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 hover:border-blue-500 transition-all">
+                   {events.length > 0 && <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{events.length}</span>}
+                   <CalendarPlus className="text-blue-500" />
+                   <span className="text-[9px] font-black uppercase text-slate-400">Eventos Locais</span>
+                </button>
+             </div>
+             <button onClick={() => setView('anti_waste')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-green-500 transition-all relative">
+                {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
+                <Leaf className="text-green-500" />
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Desperdício Zero</span>
+             </button>
+          </div>
+        )}
+
+        {view === 'marketplace' && <ProductMarketplace />}
+        {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
 
         {view === 'events' && (
@@ -394,8 +390,8 @@ const UserDashboard: React.FC = () => {
         {view === 'anti_waste' && (
            <div className="space-y-4 animate-in fade-in duration-500">
               <div className="bg-[#22c55e] text-white p-6 rounded-[30px] shadow-lg mb-6 border-4 border-[#22c55e]">
-                 <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite (Desperdício)</h3>
-                 <p className="text-xs font-bold opacity-90 mt-2">Os lojistas anunciam sobras do dia com descontos acentuados. Válido apenas nas lojas, sujeito ao stock existente.</p>
+                 <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite</h3>
+                 <p className="text-xs font-bold opacity-90 mt-2">Sobras do dia com descontos acentuados. Válido apenas nas lojas.</p>
               </div>
               {wasteItems.map((w: any) => (
                  <div key={w.id} className="bg-white border-4 border-[#22c55e] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
@@ -412,7 +408,7 @@ const UserDashboard: React.FC = () => {
                        </span>
                     </div>
                     <p className="text-right text-[10px] font-black uppercase text-slate-500 bg-slate-100 p-3 rounded-xl border-2 border-slate-200 inline-block w-full">
-                       ⚠️ Termina Hoje às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
+                       ⚠️ Termina às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
                     </p>
                  </div>
               ))}
@@ -420,6 +416,7 @@ const UserDashboard: React.FC = () => {
            </div>
         )}
 
+        {/* BOTÕES DE SUPORTE E PWA */}
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
             <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
@@ -433,21 +430,15 @@ const UserDashboard: React.FC = () => {
           </div>
         </button>
 
-        <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`w-full p-6 rounded-2xl border-2 font-black uppercase tracking-widest text-[11px] flex items-center justify-center gap-3 transition-all ${view === 'explore' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-white text-[#0a2540] border-[#0a2540] shadow-md hover:bg-slate-50'}`}>
-          {view === 'explore' ? 'Fechar Pesquisa' : 'Ver Todas as Lojas Parceiras'}
-        </button>
-
-        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
           {isInstallable && (
-            <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 active:border-b-0 transition-all">
+            <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 transition-all">
               <Smartphone size={20} className="text-[#00d66f]" />
               <span className="font-black uppercase text-[9px] tracking-widest text-left">Instalar no<br/>Ecrã Principal</span>
             </button>
           )}
           
-          {!isButtonHidden && (
+          {(!currentUser.notificationsEnabled || Notification.permission !== 'granted') && (
             <button onClick={enableNotifications} disabled={isNotifLoading} className={`bg-white text-[#0a2540] rounded-2xl p-4 flex items-center justify-center md:justify-start gap-3 border-2 border-slate-200 shadow-sm hover:border-[#00d66f] transition-all ${!isInstallable && 'md:col-span-2'}`}>
               {isNotifLoading ? <Loader2 size={20} className="animate-spin text-[#00d66f]" /> : (
                 <>
@@ -477,21 +468,9 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white relative z-20">
-        <div className="flex gap-4">
-          <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
-            <Mail size={16} /> Contacto
-          </button>
-          <a href="/terms" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]">
-            <ShieldCheck size={16} /> Privacidade
-          </a>
-        </div>
-        <div className="text-center px-6">
-          <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas.</p>
-        </div>
-      </footer>
-
+      {/* MODAIS */}
+      {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
+      
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
 
       {showContactModal && (
@@ -573,6 +552,17 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
       )}
+
+      <footer className="py-12 flex flex-col items-center gap-6 border-t border-slate-200 mt-20 bg-white relative z-20">
+        <div className="flex gap-4">
+          <button onClick={() => setShowContactModal(true)} className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]"><Mail size={16} /> Contacto</button>
+          <a href="/terms" target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f]"><ShieldCheck size={16} /> Privacidade</a>
+        </div>
+        <div className="text-center px-6">
+          <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
+          <p className="text-slate-400 text-[8px] font-bold max-w-3xl leading-relaxed uppercase">A tecnologia, design, regras de negócio e ideologia do programa Vizinho+ estão legalmente protegidos por direitos de autor e propriedade intelectual. É estritamente proibida a sua reprodução, cópia, venda ou adaptação por entidades não autorizadas.</p>
+        </div>
+      </footer>
     </div>
   );
 };
