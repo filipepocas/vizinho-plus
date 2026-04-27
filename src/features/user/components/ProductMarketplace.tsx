@@ -1,33 +1,13 @@
 // src/features/user/components/ProductMarketplace.tsx
 
 import React, { useState, useEffect } from 'react';
-import { 
-  Search, 
-  Filter, 
-  ShoppingCart, 
-  ChevronDown, 
-  Loader2, 
-  Package, 
-  X, 
-  MapPin, 
-  Tag, 
-  CheckCircle2 
-} from 'lucide-react';
+import { Search, Filter, ShoppingCart, ChevronDown, Loader2, Package, X, MapPin, Tag } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
 
 const ProductMarketplace: React.FC = () => {
-  const { 
-    products, 
-    fetchProducts, 
-    hasMoreProducts, 
-    isLoading, 
-    locations, 
-    taxonomy, 
-    addToShoppingList, 
-    shoppingList 
-  } = useStore();
+  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList } = useStore();
   
   // ESTADO DE FILTROS: Concelho e Freguesia são Arrays para permitir seleção múltipla
   const [filters, setFilters] = useState<{
@@ -67,7 +47,7 @@ const ProductMarketplace: React.FC = () => {
 
   const formatPrice = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Baseada no useStore)
+  // LÓGICA DE OPÇÕES EM CASCATA (Geografia)
   const distritos = Object.keys(locations).sort();
   const availableConcelhos = filters.distrito ? Object.keys(locations[filters.distrito] || {}).sort() : [];
   
@@ -76,20 +56,19 @@ const ProductMarketplace: React.FC = () => {
     ? filters.concelho.flatMap((c: string) => locations[filters.distrito][c] || []).sort()
     : [];
 
+  // LÓGICA DE OPÇÕES EM CASCATA (Taxonomia)
   const categories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
   const families = (taxonomy && filters.category) ? Object.keys(taxonomy.categories[filters.category].families).sort() : [];
   const types = (taxonomy && filters.category && filters.family) ? taxonomy.categories[filters.category].families[filters.family].sort() : [];
 
-  // HANDLERS PARA SELEÇÃO MÚLTIPLA (TAGS)
+  // HANDLERS PARA SELEÇÃO MÚLTIPLA (TAGS GEOGRÁFICAS)
   const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (!val || filters.concelho.includes(val)) return;
-    // Ao adicionar um concelho, mantemos as freguesias já selecionadas (se pertencerem a este ou outros concelhos ativos)
     setFilters({ ...filters, concelho: [...filters.concelho, val] });
   };
 
   const handleRemoveConcelho = (val: string) => {
-    // Ao remover um concelho, removemos também as freguesias que pertenciam a ele
     const remainingConcelhos = filters.concelho.filter(c => c !== val);
     setFilters({ 
       ...filters, 
@@ -290,8 +269,8 @@ const ProductMarketplace: React.FC = () => {
 
       {/* ESTADO VAZIO */}
       {!isLoading && products.length === 0 && (
-        <div className="py-20 text-center flex flex-col items-center gap-4 bg-white rounded-[40px] border-4 border-dashed border-slate-100">
-           <Package size={48} className="text-slate-200" />
+        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
+           <Package size={48} className="mx-auto text-slate-200 mb-4" />
            <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto encontrado para estes filtros.</p>
         </div>
       )}

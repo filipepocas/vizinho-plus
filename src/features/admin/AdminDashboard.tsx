@@ -2,16 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  orderBy, 
-  doc, 
-  writeBatch, 
-  limit, 
-  getDocs, 
-  deleteDoc
+  collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, getDocs, deleteDoc
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
@@ -20,7 +11,7 @@ import {
   ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, 
   MessageSquare, CheckSquare, Bell, Megaphone, Crown, 
   FileText, Receipt, CalendarPlus, Leaf, MapPin, 
-  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate
+  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate, ListTree
 } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -41,7 +32,8 @@ import AdminAntiWaste from './AdminAntiWaste';
 import AdminLocations from './AdminLocations'; 
 import BannerManager from './BannerManager';
 import AdminPricing from './AdminPricing';
-import AdminFlyerGenerator from './AdminFlyerGenerator'; // NOVO COMPONENTE
+import AdminFlyerGenerator from './AdminFlyerGenerator';
+import AdminTaxonomy from './AdminTaxonomy'; // NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -61,25 +53,21 @@ const AdminDashboard: React.FC = () => {
   const [badFeedbacks, setBadFeedbacks] = useState(0);
 
   useEffect(() => {
-    // 1. Ouvir Transações
     const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
     const unsubTx = onSnapshot(qTx, (snap: any) => {
       setGlobalTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
     });
     
-    // 2. Ouvir Lojistas
     const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
     const unsubMerchants = onSnapshot(qMerchants, (snap: any) => {
       setGlobalMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
     });
     
-    // 3. Ouvir Clientes (Vizinhos)
     const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
     const unsubClients = onSnapshot(qClients, (snap: any) => {
       setGlobalClients(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
     });
 
-    // 4. Ouvir Contadores de Pedidos Pendentes
     const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMerchants(snap.size));
     const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMarketing(snap.size));
     const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), (snap: any) => setPendingEvents(snap.size));
@@ -88,35 +76,22 @@ const AdminDashboard: React.FC = () => {
         setBadFeedbacks(bad);
     });
     
-    // 5. Cleanup de dados expirados
     const cleanupExpiredData = async () => {
        const now = new Date();
        const eventsSnap = await getDocs(collection(db, 'events'));
        eventsSnap.forEach((docSnap: any) => {
           const ev = docSnap.data();
-          if (ev.endDate && ev.endDate.toDate() < now) {
-            deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
-          }
+          if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
        });
        const wasteSnap = await getDocs(collection(db, 'anti_waste'));
        wasteSnap.forEach((docSnap: any) => {
           const w = docSnap.data();
-          if (w.endTime && w.endTime.toDate() < now) {
-            deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
-          }
+          if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
        });
     };
     cleanupExpiredData();
 
-    return () => { 
-      unsubTx(); 
-      unsubMerchants(); 
-      unsubClients(); 
-      unsub1(); 
-      unsub2(); 
-      unsub3(); 
-      unsub4(); 
-    };
+    return () => { unsubTx(); unsubMerchants(); unsubClients(); unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
 
   const hasGestaoAlert = pendingMerchants > 0;
@@ -129,6 +104,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'users', label: 'Vizinhos', icon: Users },
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
     { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
+    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, // NOVO ITEM NO MENU
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -137,7 +113,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'events', label: 'Eventos', icon: CalendarPlus, badge: pendingEvents },
     { id: 'anti_waste', label: 'Desperdício', icon: Leaf },
     { id: 'comms', label: 'Aprovar Pub', icon: Megaphone, badge: pendingMarketing },
-    { id: 'flyer_gen', label: 'Gerar Folheto', icon: LayoutTemplate }, // NOVO BOTÃO
+    { id: 'flyer_gen', label: 'Gerar Folheto', icon: LayoutTemplate },
     { id: 'leaflets', label: 'Gestão Folhetos', icon: FileText },
     { id: 'vantagens', label: 'Vantagens VIP', icon: Crown },
     { id: 'banners', label: 'Banners', icon: ImageIcon },
@@ -161,43 +137,22 @@ const AdminDashboard: React.FC = () => {
                 <p className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 mt-1 md:mt-2">Supervisão Vizinho+</p>
               </div>
             </div>
-
             <div className="flex gap-3 w-full md:w-auto">
-              <button onClick={() => {setActiveMenu('gestao'); setCurrentView('settings');}} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-white/10 rounded-xl md:rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-white/10">
-                <Settings size={18} /> Master
-              </button>
-              <button onClick={async () => { await logout(); navigate('/'); }} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-red-500/10 rounded-xl md:rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-red-500/20">
-                <LogOut size={18} /> Sair
-              </button>
+              <button onClick={() => {setActiveMenu('gestao'); setCurrentView('settings');}} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-white/10 rounded-xl md:rounded-2xl text-white hover:bg-[#00d66f] hover:text-[#0a2540] transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-white/10"><Settings size={18} /> Master</button>
+              <button onClick={async () => { await logout(); navigate('/'); }} className="flex-1 md:flex-none justify-center px-4 py-3 md:px-6 md:py-4 bg-red-500/10 rounded-xl md:rounded-2xl text-red-400 hover:bg-red-500 hover:text-white transition-all flex items-center gap-2 text-[10px] md:text-xs font-black uppercase tracking-widest border-2 border-red-500/20"><LogOut size={18} /> Sair</button>
             </div>
           </div>
-
           <div className="flex gap-4 border-b-2 border-white/10 pb-4 mb-4">
-              <button onClick={() => {setActiveMenu('gestao'); setCurrentView('overview');}} className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 transition-all ${activeMenu === 'gestao' ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
-                 <LayoutDashboard size={20} /> GESTÃO
-                 {hasGestaoAlert && <span className="bg-red-500 text-white text-[9px] px-2 py-1 rounded-full animate-pulse shadow-sm border border-red-700">NOVO</span>}
-              </button>
-              <button onClick={() => {setActiveMenu('marketing'); setCurrentView('events');}} className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 transition-all ${activeMenu === 'marketing' ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}>
-                 <Megaphone size={20} /> MARKETING
-                 {hasMarketingAlert && <span className="bg-red-500 text-white text-[9px] px-2 py-1 rounded-full animate-pulse shadow-sm border border-red-700">NOVO</span>}
-              </button>
+              <button onClick={() => {setActiveMenu('gestao'); setCurrentView('overview');}} className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 transition-all ${activeMenu === 'gestao' ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}><LayoutDashboard size={20} /> GESTÃO {hasGestaoAlert && <span className="bg-red-500 text-white text-[9px] px-2 py-1 rounded-full animate-pulse shadow-sm border border-red-700">NOVO</span>}</button>
+              <button onClick={() => {setActiveMenu('marketing'); setCurrentView('events');}} className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-xs flex justify-center items-center gap-2 transition-all ${activeMenu === 'marketing' ? 'bg-[#00d66f] text-[#0a2540] shadow-lg' : 'bg-white/5 text-slate-400 hover:bg-white/10'}`}><Megaphone size={20} /> MARKETING {hasMarketingAlert && <span className="bg-red-500 text-white text-[9px] px-2 py-1 rounded-full animate-pulse shadow-sm border border-red-700">NOVO</span>}</button>
           </div>
-
-          <div className="-mx-6 px-6 md:mx-0 md:px-0">
-            <nav className="flex overflow-x-auto gap-2 bg-black/20 p-2 md:rounded-[25px] border border-white/5 scrollbar-hide">
+          <div className="-mx-6 px-6 md:mx-0 md:px-0"><nav className="flex overflow-x-auto gap-2 bg-black/20 p-2 md:rounded-[25px] border border-white/5 scrollbar-hide">
               {currentMenuItems.map(item => (
-                <button 
-                  key={item.id} 
-                  onClick={() => setCurrentView(item.id)} 
-                  className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-2xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-white text-[#0a2540] shadow-xl md:translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}
-                >
-                  <item.icon size={16} className="md:w-[18px] md:h-[18px]" strokeWidth={3} /> 
-                  {item.label}
-                  {item.badge ? <span className="bg-red-500 text-white text-[8px] px-2 py-0.5 rounded-full animate-pulse ml-1">{item.badge}</span> : null}
+                <button key={item.id} onClick={() => setCurrentView(item.id)} className={`flex-shrink-0 flex items-center gap-2 md:gap-3 px-4 py-3 md:px-6 md:py-4 rounded-xl md:rounded-2xl text-[10px] md:text-[11px] font-black uppercase tracking-widest transition-all ${currentView === item.id ? 'bg-white text-[#0a2540] shadow-xl md:translate-y-[-2px]' : 'text-white/60 hover:text-white hover:bg-white/5'}`}>
+                  <item.icon size={16} className="md:w-[18px] md:h-[18px]" strokeWidth={3} /> {item.label} {item.badge ? <span className="bg-red-500 text-white text-[8px] px-2 py-0.5 rounded-full animate-pulse ml-1">{item.badge}</span> : null}
                 </button>
               ))}
-            </nav>
-          </div>
+          </nav></div>
         </div>
       </header>
 
@@ -210,6 +165,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
         {currentView === 'flyer_gen' && <AdminFlyerGenerator />} 
+        {currentView === 'taxonomy' && <AdminTaxonomy />} {/* NOVO COMPONENTE RENDERS AQUI */}
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 
@@ -219,15 +175,8 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'locations' && <AdminLocations />} 
         {currentView === 'pricing' && <AdminPricing />} 
         {currentView === 'banners' && <BannerManager />} 
-        {currentView === 'admin_msg' && (
-           <div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-200 text-center">
-             <MessageSquare size={64} className="mx-auto text-slate-300 mb-4" />
-             <h2 className="text-2xl font-black uppercase text-slate-400">Comunicados Avançados</h2>
-             <p className="text-slate-400 font-bold mt-2">Esta funcionalidade com filtros de zona está a ser preparada e chegará na próxima atualização.</p>
-           </div>
-        )}
+        {currentView === 'admin_msg' && (<div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-200 text-center"><MessageSquare size={64} className="mx-auto text-slate-300 mb-4" /><h2 className="text-2xl font-black uppercase text-slate-400">Comunicados Avançados</h2><p className="text-slate-400 font-bold mt-2">Esta funcionalidade com filtros de zona está a ser preparada.</p></div>)}
       </main>
-
       <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />
     </div>
   );
