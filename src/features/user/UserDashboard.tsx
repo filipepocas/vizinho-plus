@@ -13,6 +13,7 @@ import UserHistory from './components/UserHistory';
 import BannerCarousel from './components/BannerCarousel';
 import ProductMarketplace from './components/ProductMarketplace';
 import ShoppingListModal from './components/ShoppingListModal';
+import UserExplore from './components/UserExplore'; // REPOSTO
 
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
@@ -29,12 +30,13 @@ const UserDashboard: React.FC = () => {
   const { isInstallable, installApp } = usePWAInstall();
 
   // ESTADOS DE NAVEGAÇÃO E UI
-  const [view, setView] = useState<'home' | 'marketplace' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
+  const [view, setView] = useState<'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
   const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '', merchantTerms: '' });
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
+  const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
   const [events, setEvents] = useState<AppEvent[]>([]);
@@ -56,43 +58,36 @@ const UserDashboard: React.FC = () => {
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
-  // 1. MONITOR DE SCROLL
   useEffect(() => {
-    const handleScroll = () => {
-      setIsScrolled(window.scrollY > 50);
-    };
+    const handleScroll = () => { setIsScrolled(window.scrollY > 50); };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
-  // 2. CARREGAR CONFIGURAÇÕES GLOBAIS
   useEffect(() => {
     const fetchData = async () => {
       try {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
         if (configSnap.exists()) setSysConfig(configSnap.data());
-      } catch (err) {
-        console.error("Erro ao carregar config:", err);
-      }
+
+        const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
+        const merchantsSnap = await getDocs(q);
+        setAllMerchants(merchantsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as UserProfile[]);
+      } catch (err) {}
     };
     fetchData();
   }, []);
 
-  // 3. SUBSCREVER FEEDBACKS
   useEffect(() => {
     if (!currentUser?.id) return;
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
-    const unsubscribe = onSnapshot(q, (snap: any) => {
-      setEvaluatedIds(snap.docs.map((d: any) => d.data().transactionId));
-    });
+    const unsubscribe = onSnapshot(q, (snap: any) => { setEvaluatedIds(snap.docs.map((d: any) => d.data().transactionId)); });
     return () => unsubscribe();
   }, [currentUser?.id]);
 
-  // 4. SUBSCREVER FOLHETOS ATIVOS
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
-    
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const now = new Date();
       const valid = snap.docs
@@ -103,9 +98,7 @@ const UserDashboard: React.FC = () => {
           const inTime = now >= start && now <= end;
           const zones = l.targetZones || [];
           const inZone = zones.length === 0 || zones.some((z: string) => 
-            z.includes(currentUser.freguesia || '') || 
-            z.includes(currentUser.concelho || '') || 
-            z.includes(currentUser.distrito || '')
+            z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || '')
           );
           return inTime && inZone;
         });
@@ -114,12 +107,10 @@ const UserDashboard: React.FC = () => {
     return () => unsubscribe();
   }, [currentUser]);
 
-  // 5. SUBSCREVER NOTIFICAÇÕES IN-APP
   useEffect(() => {
     if (!currentUser) return;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
-    
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AppNotification));
@@ -127,7 +118,6 @@ const UserDashboard: React.FC = () => {
         if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
         const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
         if (dismissed) continue;
-        
         let matches = false;
         if (notif.targetType === 'all') matches = true;
         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue?.toLowerCase()) matches = true;
@@ -136,17 +126,12 @@ const UserDashboard: React.FC = () => {
            const zones = (notif as any).targetZones || [];
            matches = zones.some((z: string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
         }
-        
-        if (matches) {
-          setAppNotification(notif);
-          break; 
-        }
+        if (matches) { setAppNotification(notif); break; }
       }
     });
     return () => unsubscribe();
   }, [currentUser]);
 
-  // 6. SUBSCREVER EVENTOS E DESPERDÍCIO
   useEffect(() => {
     if (!currentUser) return;
     const qEvents = query(collection(db, 'events'), where('status', '==', 'approved'), orderBy('startDate', 'asc'));
@@ -178,23 +163,17 @@ const UserDashboard: React.FC = () => {
     return () => { unsubEvents(); unsubWaste(); };
   }, [currentUser]);
 
-  // 7. SUBSCREVER APOIO AO MUNÍCIPE
   useEffect(() => {
     if (!currentUser || view !== 'municipalities') return;
-    
     let q = query(collection(db, 'municipalities_faqs'), orderBy('createdAt', 'desc'));
-    
     if (munFilters.distrito) q = query(q, where('distrito', '==', munFilters.distrito));
     if (munFilters.concelho) q = query(q, where('concelho', '==', munFilters.concelho));
 
     const unsubscribe = onSnapshot(q, (snap: any) => {
       let results = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MunicipalityFAQ));
-      
-      // Filtrar no cliente por freguesia (pois o Firebase não permite múltiplos wheres em campos opcionais misturados)
       if (munFilters.freguesia) {
         results = results.filter((f: MunicipalityFAQ) => f.freguesia === '' || f.freguesia === munFilters.freguesia);
       }
-      
       setMunicipalitiesFaqs(results);
     });
     return () => unsubscribe();
@@ -309,7 +288,6 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
-      {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL */}
       <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`}>
         <BannerCarousel isScrolled={isScrolled} />
         
@@ -319,6 +297,15 @@ const UserDashboard: React.FC = () => {
           </div>
           
           <div className={`flex gap-3 transition-all duration-300 origin-top-right ${isScrolled ? 'scale-[0.75]' : 'scale-100'}`}>
+            <button onClick={() => setShowCart(true)} className="relative bg-[#00d66f] p-3 rounded-full text-[#0a2540] border-2 border-[#0a2540] shadow-lg hover:scale-110 transition-all">
+              <ShoppingBag size={22} strokeWidth={3} />
+              {shoppingList.length > 0 && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a2540] animate-bounce">
+                  {shoppingList.length}
+                </span>
+              )}
+            </button>
+            
             <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
               <Settings size={20} />
             </button>
@@ -330,7 +317,6 @@ const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
       <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[360px]'}`}>
         
         <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
@@ -378,22 +364,21 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* NAVEGAÇÃO PRINCIPAL */}
+        {/* NAVEGAÇÃO PRINCIPAL (COM BOTÃO VER LOJAS REPOSTO) */}
         <div className="grid grid-cols-2 gap-4">
-          {/* BOTÃO ALTERADO: Lista de Compras */}
           <button onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-4 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}>
             <ShoppingBag size={18} /> Lista de Compras
-            {shoppingList.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{shoppingList.length}</span>}
           </button>
-          
-          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
-            <Wallet size={18} /> O meu Saldo
+          <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-md hover:scale-[1.02]'}`}>
+            <Store size={18} /> Ver Lojas
           </button>
         </div>
 
-        {/* VISTAS DINÂMICAS */}
         {view === 'home' && (
           <div className="space-y-6 animate-in fade-in">
+             <button onClick={() => setView('wallets')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-[#0a2540] transition-all font-black uppercase text-[10px] tracking-widest text-slate-500">
+               <Wallet size={18} /> O meu Saldo Detalhado
+             </button>
              <div className="grid grid-cols-2 gap-4">
                 <button onClick={() => setView('history')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 relative hover:border-[#0a2540] transition-all">
                    {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
@@ -415,10 +400,10 @@ const UserDashboard: React.FC = () => {
         )}
 
         {view === 'marketplace' && <ProductMarketplace />}
+        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
 
-        {/* APOIO AO MUNÍCIPE */}
         {view === 'municipalities' && (
            <div className="space-y-6 animate-in fade-in duration-500">
               <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
@@ -615,13 +600,53 @@ const UserDashboard: React.FC = () => {
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Condições de Adesão</h3>
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Regras de Utilização</h3>
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
             <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
-              {sysConfig.merchantTerms}
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Isenção de Responsabilidade</h4>
+                <p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico facilitador de cashback. O Vizinho+ isenta-se de qualquer responsabilidade sobre litígios comerciais entre Lojistas e Clientes, qualidade de produtos ou serviços prestados.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4>
+                <p>O saldo acumulado não possui valor fiduciário, não é convertível em numerário e não pode ser transferido para contas bancárias. Serve unicamente como desconto em compras futuras na rede aderente.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4>
+                <p>O Cliente deve apresentar obrigatoriamente o seu Cartão Digital ou QR Code ao lojista antes do encerramento da fatura para garantir a atribuição ou o resgate de saldo.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4>
+                <p>O desconto de saldo acumulado nunca poderá ser superior a 50% do valor total da nova compra, independentemente do saldo disponível na carteira do cliente.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4>
+                <p>Ao resgatar saldo, o cliente continua a acumular novo cashback sobre o valor remanescente efetivamente pago na fatura.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-red-600 mb-1 uppercase">6. Prevenção de Fraude</h4>
+                <p>Qualquer tentativa de fraude, uso de dados de terceiros ou manipulação do sistema resultará na suspensão imediata da conta e perda total dos benefícios acumulados.</p>
+              </div>
             </div>
-            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi as Regras</button></div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi e Aceito as Regras</button></div>
+          </div>
+        </div>
+      )}
+
+      {showFaqModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
+              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {sysConfig.clientFaqs || "O guia está a ser atualizado pela administração. Por favor, tente mais tarde."}
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
+              <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-blue-600">Fechar Guia</button>
+            </div>
           </div>
         </div>
       )}

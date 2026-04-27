@@ -1,7 +1,7 @@
 // src/features/user/components/UserExplore.tsx
 
 import React, { useState, useMemo } from 'react';
-import { Search, MapPin, Navigation, Percent, X, AlertTriangle, Clock } from 'lucide-react';
+import { Search, MapPin, Navigation, Percent, X, AlertTriangle, Clock, Info } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 import toast from 'react-hot-toast';
 import { isOpenNow } from '../../../utils/timeUtils';
@@ -55,6 +55,15 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-10">
       
+      {/* NOTA DE ISENÇÃO DE RESPONSABILIDADE */}
+      <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded-[20px] flex gap-3 items-start shadow-sm">
+        <Info size={18} className="text-blue-500 shrink-0 mt-0.5" />
+        <div>
+          <h5 className="text-[10px] font-black uppercase text-blue-800 tracking-widest mb-1">Nota Informativa</h5>
+          <p className="text-[10px] font-bold text-blue-600 leading-relaxed">Os horários de funcionamento apresentados podem sofrer alterações sem aviso prévio. A informação fornecida é da exclusiva responsabilidade de cada lojista.</p>
+        </div>
+      </div>
+
       <div className="bg-white p-6 rounded-[35px] border-4 border-[#0a2540] space-y-4 shadow-[8px_8px_0px_#0a2540]">
         <div className="relative">
           <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
@@ -104,7 +113,7 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
       <div className="space-y-4">
         {filtered.length > 0 ? (
           filtered.map((m) => {
-            const isStoreOpen = isOpenNow(m.businessHours);
+            const storeStatus = isOpenNow(m.businessHours);
 
             return (
               <div key={m.id} className={`rounded-[35px] border-4 overflow-hidden flex flex-col sm:flex-row sm:items-center p-6 justify-between gap-4 transition-all ${m.isLeaving ? 'bg-slate-50 border-slate-300 opacity-90' : 'bg-white border-[#0a2540] shadow-[6px_6px_0px_#0a2540] group hover:bg-slate-50'}`}>
@@ -117,10 +126,11 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
                     <div className="flex items-center gap-2 mb-1">
                       <span className={`text-[8px] font-black uppercase tracking-widest ${m.isLeaving ? 'text-slate-400' : 'text-[#00d66f]'}`}>{m.category || 'Comércio'}</span>
                       
-                      {/* NOVO: Indicador de Aberto/Fechado */}
+                      {/* INDICADOR DE HORÁRIO ATUALIZADO */}
                       {!m.isLeaving && (
-                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md flex items-center gap-1 border ${isStoreOpen ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-500 border-red-200'}`}>
-                          <Clock size={10} /> {isStoreOpen ? 'Aberto Agora' : 'Fechado'}
+                        <span className={`text-[8px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md flex items-center gap-1 border ${storeStatus === null ? 'bg-slate-100 text-slate-500 border-slate-200' : storeStatus ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-500 border-red-200'}`}>
+                          <Clock size={10} /> 
+                          {storeStatus === null ? 'Horário não definido' : storeStatus ? 'Aberto Agora' : 'Fechado'}
                         </span>
                       )}
                     </div>

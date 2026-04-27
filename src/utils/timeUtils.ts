@@ -1,15 +1,19 @@
 // src/utils/timeUtils.ts
 
-export const isOpenNow = (businessHours?: Record<string, { open: string; close: string; closed: boolean }>): boolean => {
-  if (!businessHours) return true; 
+export const isOpenNow = (businessHours?: Record<string, { open: string; close: string; closed: boolean }>): boolean | null => {
+  // Se o objeto não existe, não sabemos o horário
+  if (!businessHours) return null; 
 
   const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const now = new Date();
   const today = days[now.getDay()];
   const todayHours = businessHours[today];
 
-  if (!todayHours || todayHours.closed) return false;
-  if (!todayHours.open || !todayHours.close) return true;
+  // Se o lojista marcou explicitamente como fechado naquele dia
+  if (todayHours && todayHours.closed) return false;
+
+  // Se o lojista não preencheu a hora de abertura ou fecho, não podemos afirmar que está aberto nem fechado
+  if (!todayHours || !todayHours.open || !todayHours.close) return null;
 
   const currentTime = now.getHours() * 60 + now.getMinutes();
   const [openH, openM] = todayHours.open.split(':').map(Number);

@@ -106,7 +106,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
     { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
     { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, 
-    { id: 'municipalities', label: 'Apoio Municipal', icon: Building2 }, // NOVO BOTÃO
+    { id: 'municipalities', label: 'Apoio Municipal', icon: Building2 }, // AQUI ESTÁ O NOVO BOTÃO
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];

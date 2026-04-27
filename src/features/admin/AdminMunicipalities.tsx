@@ -29,7 +29,10 @@ const AdminMunicipalities: React.FC = () => {
     const q = query(collection(db, 'municipalities_faqs'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snap: any) => {
       setFaqs(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MunicipalityFAQ)));
-      setLoading(false);
+      setLoading(false); // Garante que o loading para, mesmo se vazio
+    }, (error) => {
+      console.error(error);
+      setLoading(false); // Para o loading se houver erro de permissão
     });
     return () => unsubscribe();
   }, []);
@@ -44,7 +47,7 @@ const AdminMunicipalities: React.FC = () => {
       const dataToSave = {
         distrito: formData.distrito,
         concelho: formData.concelho,
-        freguesia: formData.freguesia || '', // Vazio significa que se aplica a todo o concelho
+        freguesia: formData.freguesia || '', 
         type: formData.type,
         question: formData.question.trim(),
         answer: formData.answer.trim(),
