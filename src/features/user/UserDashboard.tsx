@@ -6,7 +6,7 @@ import { useStore } from '../../store/useStore';
 import { QRCodeCanvas } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, AntiWasteItem } from '../../types';
+import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, AntiWasteItem, MunicipalityFAQ } from '../../types';
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
@@ -17,19 +17,19 @@ import ShoppingListModal from './components/ShoppingListModal';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
 
 const UserDashboard: React.FC = () => {
-  const { transactions, logout, currentUser, shoppingList } = useStore();
+  const { transactions, logout, currentUser, shoppingList, locations } = useStore();
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
   // ESTADOS DE NAVEGAÇÃO E UI
-  const [view, setView] = useState<'home' | 'marketplace' | 'wallets' | 'history' | 'events' | 'anti_waste'>('home');
+  const [view, setView] = useState<'home' | 'marketplace' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
   const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '', merchantTerms: '' });
@@ -40,6 +40,10 @@ const UserDashboard: React.FC = () => {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [wasteItems, setWasteItems] = useState<AntiWasteItem[]>([]);
   
+  // ESTADOS DO APOIO AO MUNÍCIPE
+  const [municipalitiesFaqs, setMunicipalitiesFaqs] = useState<MunicipalityFAQ[]>([]);
+  const [munFilters, setMunFilters] = useState({ distrito: currentUser?.distrito || '', concelho: currentUser?.concelho || '', freguesia: currentUser?.freguesia || '' });
+
   // ESTADO DO SCROLL INTELIGENTE
   const [isScrolled, setIsScrolled] = useState(false);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
@@ -74,7 +78,7 @@ const UserDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  // 3. SUBSCREVER FEEDBACKS (Para saber o que falta avaliar)
+  // 3. SUBSCREVER FEEDBACKS
   useEffect(() => {
     if (!currentUser?.id) return;
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
@@ -173,6 +177,28 @@ const UserDashboard: React.FC = () => {
 
     return () => { unsubEvents(); unsubWaste(); };
   }, [currentUser]);
+
+  // 7. SUBSCREVER APOIO AO MUNÍCIPE
+  useEffect(() => {
+    if (!currentUser || view !== 'municipalities') return;
+    
+    let q = query(collection(db, 'municipalities_faqs'), orderBy('createdAt', 'desc'));
+    
+    if (munFilters.distrito) q = query(q, where('distrito', '==', munFilters.distrito));
+    if (munFilters.concelho) q = query(q, where('concelho', '==', munFilters.concelho));
+
+    const unsubscribe = onSnapshot(q, (snap: any) => {
+      let results = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MunicipalityFAQ));
+      
+      // Filtrar no cliente por freguesia (pois o Firebase não permite múltiplos wheres em campos opcionais misturados)
+      if (munFilters.freguesia) {
+        results = results.filter((f: MunicipalityFAQ) => f.freguesia === '' || f.freguesia === munFilters.freguesia);
+      }
+      
+      setMunicipalitiesFaqs(results);
+    });
+    return () => unsubscribe();
+  }, [currentUser, view, munFilters]);
 
   const dismissNotification = () => {
     if (appNotification?.id) sessionStorage.setItem(`notif_${appNotification.id}`, "true");
@@ -276,6 +302,10 @@ const UserDashboard: React.FC = () => {
   const hasNotificationsInDB = currentUser.notificationsEnabled === true && currentUser.fcmTokens && currentUser.fcmTokens.length > 0;
   const isButtonHidden = hasNotificationsInDB || localNotifGranted || Notification.permission === 'granted';
 
+  const distritos = Object.keys(locations).sort();
+  const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
+  const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
+
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
@@ -289,16 +319,6 @@ const UserDashboard: React.FC = () => {
           </div>
           
           <div className={`flex gap-3 transition-all duration-300 origin-top-right ${isScrolled ? 'scale-[0.75]' : 'scale-100'}`}>
-            {/* BOTÃO LISTA DE COMPRAS */}
-            <button onClick={() => setShowCart(true)} className="relative bg-[#00d66f] p-3 rounded-full text-[#0a2540] border-2 border-[#0a2540] shadow-lg hover:scale-110 transition-all">
-              <ShoppingBag size={22} strokeWidth={3} />
-              {shoppingList.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a2540] animate-bounce">
-                  {shoppingList.length}
-                </span>
-              )}
-            </button>
-            
             <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
               <Settings size={20} />
             </button>
@@ -313,11 +333,59 @@ const UserDashboard: React.FC = () => {
       {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
       <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[360px]'}`}>
         
-        {/* NAVEGAÇÃO RÁPIDA */}
-        <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'marketplace' ? 'bg-[#00d66f] border-[#0a2540] text-[#0a2540]' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
-            <Search size={18} /> Explorar Artigos
+        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+          <Building2 size={20} /> Apoio ao Munícipe
+        </button>
+        
+        <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
+          <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
+             <Printer size={20} />
           </button>
+
+          <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+            <div className="pr-12">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Cliente Vizinho+</p>
+              <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">{currentUser.name}</h1>
+              {currentUser.nif && <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>}
+            </div>
+            <div className="text-right">
+              <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-widest">Saldo Atual</span>
+              <span className="text-2xl font-black text-[#00d66f] italic">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}</span>
+            </div>
+          </div>
+          <div className="p-8 flex flex-col items-center gap-6">
+            <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
+              <QRCodeCanvas id="user-qr-canvas" value={displayCardNumber} size={150} />
+            </div>
+            <div className="text-center">
+              <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540]">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
+              <div className="flex flex-col items-center justify-center gap-1 mt-4">
+                <span className="text-[11px] font-black text-[#0a2540] uppercase tracking-widest bg-[#00d66f]/20 px-3 py-1 rounded-md">Apresente este cartão antes de pagar</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {appNotification && (
+          <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
+            <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
+            <div className="flex-1">
+              <h4 className="text-lg font-black uppercase italic text-white leading-none mb-2">{appNotification.title}</h4>
+              <p className="text-xs font-bold text-slate-300">{appNotification.message}</p>
+              <button onClick={dismissNotification} className="mt-4 bg-[#00d66f] text-[#0a2540] px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white transition-all">Fechar</button>
+            </div>
+            <button onClick={dismissNotification} className="absolute top-4 right-4 text-slate-500 hover:text-white"><X size={16} /></button>
+          </div>
+        )}
+
+        {/* NAVEGAÇÃO PRINCIPAL */}
+        <div className="grid grid-cols-2 gap-4">
+          {/* BOTÃO ALTERADO: Lista de Compras */}
+          <button onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-4 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}>
+            <ShoppingBag size={18} /> Lista de Compras
+            {shoppingList.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{shoppingList.length}</span>}
+          </button>
+          
           <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
             <Wallet size={18} /> O meu Saldo
           </button>
@@ -326,15 +394,6 @@ const UserDashboard: React.FC = () => {
         {/* VISTAS DINÂMICAS */}
         {view === 'home' && (
           <div className="space-y-6 animate-in fade-in">
-             <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden p-8 flex flex-col items-center gap-6">
-                <div className="bg-white p-4 rounded-3xl border-2 border-slate-100 shadow-inner">
-                  <QRCodeCanvas id="user-qr-canvas" value={displayCardNumber} size={150} />
-                </div>
-                <div className="text-center">
-                   <h3 className="text-2xl font-mono font-bold tracking-[0.4em] text-[#0a2540] mb-2">{displayCardNumber.replace(/(\d{3})(\d{3})(\d{3})/, '$1 $2 $3')}</h3>
-                   <span className="text-[10px] font-black uppercase text-slate-400">Apresente este cartão antes de pagar</span>
-                </div>
-             </div>
              <div className="grid grid-cols-2 gap-4">
                 <button onClick={() => setView('history')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 relative hover:border-[#0a2540] transition-all">
                    {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
@@ -358,6 +417,69 @@ const UserDashboard: React.FC = () => {
         {view === 'marketplace' && <ProductMarketplace />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
+
+        {/* APOIO AO MUNÍCIPE */}
+        {view === 'municipalities' && (
+           <div className="space-y-6 animate-in fade-in duration-500">
+              <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
+                 <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
+                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <select value={munFilters.distrito} onChange={e=>setMunFilters({...munFilters, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400">
+                       <option value="">Distrito</option>
+                       {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                    <select disabled={!munFilters.distrito} value={munFilters.concelho} onChange={e=>setMunFilters({...munFilters, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
+                       <option value="">Concelho</option>
+                       {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                    <select disabled={!munFilters.concelho} value={munFilters.freguesia} onChange={e=>setMunFilters({...munFilters, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
+                       <option value="">Freguesia (Opcional)</option>
+                       {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                 </div>
+              </div>
+
+              <div className="grid grid-cols-1 gap-4">
+                 {municipalitiesFaqs.map(faq => (
+                    <details key={faq.id} className="bg-white border-2 border-slate-100 rounded-2xl shadow-sm group overflow-hidden">
+                       <summary className="p-5 font-black text-[#0a2540] text-sm cursor-pointer list-none flex justify-between items-center hover:bg-slate-50 transition-colors">
+                          <div className="flex items-center gap-3">
+                             <div className={`p-2 rounded-lg ${faq.type === 'camara' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
+                                <Building2 size={16} />
+                             </div>
+                             {faq.question}
+                          </div>
+                          <ChevronDown size={18} className="text-slate-400 group-open:rotate-180 transition-transform" />
+                       </summary>
+                       <div className="p-5 pt-0 text-sm font-bold text-slate-600 leading-relaxed border-t-2 border-slate-50 mt-2 whitespace-pre-wrap">
+                          {faq.answer}
+                          
+                          {(faq.contacts || faq.links) && (
+                             <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                                {faq.contacts && (
+                                   <div className="flex items-center gap-2 text-[11px] font-black uppercase text-[#0a2540]">
+                                      <Phone size={14} className="text-[#00d66f]" /> {faq.contacts}
+                                   </div>
+                                )}
+                                {faq.links && (
+                                   <a href={faq.links} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11px] font-black uppercase text-blue-500 hover:text-blue-700">
+                                      <Link2 size={14} /> Aceder ao Link
+                                   </a>
+                                )}
+                             </div>
+                          )}
+                       </div>
+                    </details>
+                 ))}
+                 {municipalitiesFaqs.length === 0 && (
+                    <div className="py-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                       <Building2 size={32} className="mx-auto text-slate-300 mb-3" />
+                       <p className="text-[10px] font-black uppercase text-slate-400">Nenhuma informação disponível para esta localidade.</p>
+                    </div>
+                 )}
+              </div>
+           </div>
+        )}
 
         {view === 'events' && (
            <div className="space-y-4 animate-in fade-in duration-500">
@@ -395,28 +517,19 @@ const UserDashboard: React.FC = () => {
               </div>
               {wasteItems.map((w: any) => (
                  <div key={w.id} className="bg-white border-4 border-[#22c55e] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
-                    <div className="flex justify-between items-start mb-4 border-b-2 border-slate-100 pb-4">
-                       <div>
-                          <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#22c55e]"/> {w.merchantName}</h4>
-                          <p className="text-[10px] font-bold text-slate-400 mt-1">{w.address}</p>
-                       </div>
-                    </div>
+                    <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#22c55e]"/> {w.merchantName}</h4>
+                    <p className="text-[10px] font-bold text-slate-400 mt-1 mb-4">{w.address}</p>
                     <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100 mb-4">
                        <p className="text-sm font-bold text-green-900 mb-2">{w.productInfo}</p>
-                       <span className="bg-white text-green-700 font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg border border-green-200 inline-block shadow-sm">
-                         🛒 Condições: {w.conditions}
-                       </span>
+                       <span className="bg-white text-green-700 font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg border border-green-200 inline-block shadow-sm">🛒 {w.conditions}</span>
                     </div>
-                    <p className="text-right text-[10px] font-black uppercase text-slate-500 bg-slate-100 p-3 rounded-xl border-2 border-slate-200 inline-block w-full">
-                       ⚠️ Termina às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}
-                    </p>
+                    <p className="text-right text-[10px] font-black uppercase text-slate-500 bg-slate-100 p-3 rounded-xl border-2 border-slate-200 w-full">⚠️ Termina às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
                  </div>
               ))}
               {wasteItems.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhuma oportunidade hoje. Tente mais tarde!</p>}
            </div>
         )}
 
-        {/* BOTÕES DE SUPORTE E PWA */}
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
             <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
@@ -430,6 +543,7 @@ const UserDashboard: React.FC = () => {
           </div>
         </button>
 
+        {/* BOTÕES DE SUPORTE E PWA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
           {isInstallable && (
             <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 transition-all">
@@ -470,9 +584,8 @@ const UserDashboard: React.FC = () => {
 
       {/* MODAIS */}
       {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
-      
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
-
+      
       {showContactModal && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
           <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
@@ -502,53 +615,13 @@ const UserDashboard: React.FC = () => {
         <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
           <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
             <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Regras de Utilização</h3>
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Condições de Adesão</h3>
               <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
             </div>
-            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar">
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Isenção de Responsabilidade</h4>
-                <p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico facilitador de cashback. O Vizinho+ isenta-se de qualquer responsabilidade sobre litígios comerciais entre Lojistas e Clientes, qualidade de produtos ou serviços prestados.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4>
-                <p>O saldo acumulado não possui valor fiduciário, não é convertível em numerário e não pode ser transferido para contas bancárias. Serve unicamente como desconto em compras futuras na rede aderente.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4>
-                <p>O Cliente deve apresentar obrigatoriamente o seu Cartão Digital ou QR Code ao lojista antes do encerramento da fatura para garantir a atribuição ou o resgate de saldo.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4>
-                <p>O desconto de saldo acumulado nunca poderá ser superior a 50% do valor total da nova compra, independentemente do saldo disponível na carteira do cliente.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4>
-                <p>Ao resgatar saldo, o cliente continua a acumular novo cashback sobre o valor remanescente efetivamente pago na fatura.</p>
-              </div>
-              <div>
-                <h4 className="font-black text-red-600 mb-1 uppercase">6. Prevenção de Fraude</h4>
-                <p>Qualquer tentativa de fraude, uso de dados de terceiros ou manipulação do sistema resultará na suspensão imediata da conta e perda total dos benefícios acumulados.</p>
-              </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {sysConfig.merchantTerms}
             </div>
-            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi e Aceito as Regras</button></div>
-          </div>
-        </div>
-      )}
-
-      {showFaqModal && (
-        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
-              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
-            </div>
-            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
-              {sysConfig.clientFaqs || "O guia está a ser atualizado pela administração. Por favor, tente mais tarde."}
-            </div>
-            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-              <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-blue-600">Fechar Guia</button>
-            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi as Regras</button></div>
           </div>
         </div>
       )}

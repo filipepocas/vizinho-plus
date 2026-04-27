@@ -21,7 +21,6 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
 
     const q = query(collection(db, 'banners'), where('active', '==', true));
     
-    // CORREÇÃO: Adicionado (snap: any) e (d: any) para TS Estrito
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const now = new Date();
       const valid = snap.docs
@@ -48,10 +47,10 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
     return () => clearInterval(timer);
   }, [activeBanners]);
 
-  if (activeBanners.length === 0) return <div className={`w-full bg-[#0a2540] transition-all duration-300 ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`} />;
+  if (activeBanners.length === 0) return <div className={`w-full bg-[#0a2540] transition-all duration-300 ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[400px]'}`} />;
 
   return (
-    <div className={`relative w-full overflow-hidden bg-[#0a2540] transition-all duration-300 ease-in-out ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`}>
+    <div className={`relative w-full overflow-hidden bg-[#0a2540] transition-all duration-300 ease-in-out ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[400px]'}`}>
       <AnimatePresence mode="wait">
         <motion.img
           key={activeBanners[currentIndex].id}
@@ -60,7 +59,8 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 1, ease: "linear" }}
-          className="absolute inset-0 w-full h-full object-cover"
+          // CORREÇÃO: No telemóvel preenche (cover), no PC ajusta-se para não cortar (contain)
+          className="absolute inset-0 w-full h-full object-cover md:object-contain"
         />
       </AnimatePresence>
       <div className="absolute inset-0 bg-gradient-to-b from-black/70 via-transparent to-black/20 pointer-events-none transition-all duration-300" />

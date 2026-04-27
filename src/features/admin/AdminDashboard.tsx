@@ -11,7 +11,7 @@ import {
   ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, 
   MessageSquare, CheckSquare, Bell, Megaphone, Crown, 
   FileText, Receipt, CalendarPlus, Leaf, MapPin, 
-  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate, ListTree
+  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate, ListTree, Building2
 } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -33,7 +33,8 @@ import AdminLocations from './AdminLocations';
 import BannerManager from './BannerManager';
 import AdminPricing from './AdminPricing';
 import AdminFlyerGenerator from './AdminFlyerGenerator';
-import AdminTaxonomy from './AdminTaxonomy'; // IMPORTAÇÃO DO NOVO COMPONENTE
+import AdminTaxonomy from './AdminTaxonomy';
+import AdminMunicipalities from './AdminMunicipalities'; // NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -104,7 +105,8 @@ const AdminDashboard: React.FC = () => {
     { id: 'users', label: 'Vizinhos', icon: Users },
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
     { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
-    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, // AQUI ESTÁ O NOVO BOTÃO
+    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, 
+    { id: 'municipalities', label: 'Apoio Municipal', icon: Building2 }, // NOVO BOTÃO
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -165,7 +167,8 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
         {currentView === 'flyer_gen' && <AdminFlyerGenerator />} 
-        {currentView === 'taxonomy' && <AdminTaxonomy />} {/* AQUI RENDERIZA O NOVO COMPONENTE */}
+        {currentView === 'taxonomy' && <AdminTaxonomy />} 
+        {currentView === 'municipalities' && <AdminMunicipalities />} {/* AQUI RENDERIZA O NOVO COMPONENTE */}
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 

@@ -305,6 +305,20 @@ export interface AntiWasteItem {
   createdAt: any;
 }
 
+// NOVO: Interface para o Apoio ao Munícipe
+export interface MunicipalityFAQ {
+  id?: string;
+  distrito: string;
+  concelho: string;
+  freguesia?: string; // Se vazio, aplica a todo o concelho
+  type: 'camara' | 'junta';
+  question: string;
+  answer: string;
+  contacts?: string;
+  links?: string;
+  createdAt: any;
+}
+
 export type LocationsMap = Record<string, Record<string, string[]>>;
 
 export interface PricingRule {

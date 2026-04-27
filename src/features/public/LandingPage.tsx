@@ -12,8 +12,6 @@ import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
-
-// CORREÇÃO: O caminho foi atualizado para apontar corretamente para a raiz dos componentes
 import ImageCropperModal from '../../components/ImageCropperModal';
 
 const MERCH_CATEGORIES = [
@@ -79,7 +77,6 @@ const LandingPage: React.FC = () => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
-  // NOVO: Estado para a ferramenta de crop
   const [fileToCrop, setFileToCrop] = useState<File | null>(null);
   const [cropType, setCropType] = useState<'banner' | 'leaflet' | 'event'>('banner');
 
@@ -108,7 +105,6 @@ const LandingPage: React.FC = () => {
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
 
-  // NOVO: Quando escolhe um ficheiro, abre o modal em vez de gravar direto (se for Banner)
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet' | 'event') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -116,7 +112,7 @@ const LandingPage: React.FC = () => {
     if (type === 'banner') {
       setCropType('banner');
       setFileToCrop(file);
-      e.target.value = ''; // Reset do input
+      e.target.value = ''; 
       return;
     }
 
@@ -191,7 +187,7 @@ const LandingPage: React.FC = () => {
         });
 
         const count = clients.length;
-        const totalCost = count * 0.03 * days; // Simulação genérica
+        const totalCost = count * 0.03 * days; 
         setBannerSimulation({ count, cost: totalCost, days });
     } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
   };
@@ -341,6 +337,7 @@ const LandingPage: React.FC = () => {
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
         <img src={logoPath} alt="Vizinho+" className="h-14 w-auto object-contain" />
         
+        {/* CORREÇÃO 1: Botão atualizado para 'Anuncie aqui' */}
         <div className="w-full flex justify-center mt-2">
             <button 
                 onClick={() => setShowCommunityModal(true)} 
@@ -348,7 +345,7 @@ const LandingPage: React.FC = () => {
             >
                 <div className="flex items-center gap-3">
                     <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
-                    <span>Apoiar o Bairro</span>
+                    <span>Anuncie aqui</span>
                 </div>
                 <span className="text-[10px] font-bold text-green-900 tracking-normal opacity-90">Promover Negócio, Evento ou Anúncio Local</span>
             </button>
@@ -610,7 +607,6 @@ const LandingPage: React.FC = () => {
                               <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Fim</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
                            </div>
                            
-                           {/* NOVO SISTEMA MULTI-ZONA PARA BANNER */}
                            <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
                               <p className="text-[10px] font-black uppercase text-[#0a2540]">Quais Zonas vão ver o Banner?</p>
                               <select value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200">
@@ -693,23 +689,7 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {showTerms && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
-              <h3 className="font-black uppercase italic flex items-center gap-2"><ShieldCheck className="text-[#00d66f]" /> Termos & RGPD</h3>
-              <button onClick={() => setShowTerms(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
-            </div>
-            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-bold text-slate-600 leading-relaxed custom-scrollbar">
-              <p>Ao registares-te no Vizinho+, aceitas que a plataforma atua exclusivamente como uma solução tecnológica facilitadora de cashback local.</p>
-              <p>Em conformidade com o RGPD, os teus dados são processados pela Panóplia Lógica Unipessoal Lda.</p>
-            </div>
-            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowTerms(false)} className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi e Aceito</button></div>
-          </div>
-        </div>
-      )}
-
-      {/* NOVO: Modal de Recorte de Imagem */}
+      {/* MODAL CROP DE IMAGEM */}
       {fileToCrop && (
         <ImageCropperModal 
           file={fileToCrop} 
