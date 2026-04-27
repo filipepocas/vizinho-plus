@@ -33,7 +33,7 @@ import AdminLocations from './AdminLocations';
 import BannerManager from './BannerManager';
 import AdminPricing from './AdminPricing';
 import AdminFlyerGenerator from './AdminFlyerGenerator';
-import AdminTaxonomy from './AdminTaxonomy'; // NOVO COMPONENTE
+import AdminTaxonomy from './AdminTaxonomy'; // IMPORTAÇÃO DO NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -104,7 +104,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'users', label: 'Vizinhos', icon: Users },
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
     { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
-    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, // NOVO ITEM NO MENU
+    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, // AQUI ESTÁ O NOVO BOTÃO
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -165,7 +165,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
         {currentView === 'flyer_gen' && <AdminFlyerGenerator />} 
-        {currentView === 'taxonomy' && <AdminTaxonomy />} {/* NOVO COMPONENTE RENDERS AQUI */}
+        {currentView === 'taxonomy' && <AdminTaxonomy />} {/* AQUI RENDERIZA O NOVO COMPONENTE */}
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 

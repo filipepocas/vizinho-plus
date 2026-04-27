@@ -73,7 +73,7 @@ const ProductMarketplace: React.FC = () => {
     setFilters({ 
       ...filters, 
       concelho: remainingConcelhos,
-      freguesia: [] // Reset de freguesias para evitar inconsistência na query 'in'
+      freguesia: [] // Reset de freguesias para evitar inconsistência na query 'in' do Firebase
     });
   };
 

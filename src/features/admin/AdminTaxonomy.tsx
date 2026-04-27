@@ -3,8 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
-// CORREÇÃO: Adicionado o 'X' aos imports do lucide-react
-import { Tag, Plus, Trash2, Save, Loader2, Layers, ChevronRight, ListTree, X } from 'lucide-react';
+import { Tag, Plus, Trash2, Save, Loader2, Layers, ChevronRight, ListTree, X, ClipboardPaste, AlertCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { ProductTaxonomy } from '../../types';
 
@@ -13,7 +12,10 @@ const AdminTaxonomy: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Estados para inputs de adição
+  // Estados para importação via Excel
+  const [pasteData, setPasteData] = useState('');
+
+  // Estados para inputs de adição manual
   const [newCat, setNewCat] = useState('');
   const [newFamily, setNewFamily] = useState<{ [cat: string]: string }>({});
   const [newType, setNewType] = useState<{ [fam: string]: string }>({});
@@ -49,6 +51,48 @@ const AdminTaxonomy: React.FC = () => {
     }
   };
 
+  // LÓGICA DE IMPORTAÇÃO (EXCEL)
+  const handleParseAndMerge = () => {
+    if (!pasteData.trim()) return toast.error('Cole os dados do Excel primeiro.');
+    
+    const lines = pasteData.split(/\r?\n/);
+    const updatedCats = { ...taxonomy.categories }; // Mantém as categorias que já existem
+    let count = 0;
+
+    lines.forEach(line => {
+      // O Excel usa tabulação (\t) para separar colunas
+      const parts = line.split('\t').map(s => s?.trim());
+      
+      // Precisamos de 3 colunas: Categoria, Família, Tipo
+      if (parts.length >= 3) {
+        const cat = parts[0];
+        const fam = parts[1];
+        const type = parts[2];
+
+        if (cat && fam && type) {
+          // Cria a categoria se não existir
+          if (!updatedCats[cat]) updatedCats[cat] = { families: {} };
+          // Cria a família se não existir
+          if (!updatedCats[cat].families[fam]) updatedCats[cat].families[fam] = [];
+          // Adiciona o tipo se não existir
+          if (!updatedCats[cat].families[fam].includes(type)) {
+            updatedCats[cat].families[fam].push(type);
+            count++;
+          }
+        }
+      }
+    });
+
+    if (count === 0) {
+      return toast.error('Nenhum dado novo detetado. Certifique-se que copiou 3 colunas (Categoria, Família, Tipo).');
+    }
+
+    setTaxonomy({ ...taxonomy, categories: updatedCats });
+    setPasteData('');
+    toast.success(`${count} novos Tipos processados! Faça scroll para rever e clique em 'Guardar Estrutura'.`);
+  };
+
+  // LÓGICAS DE ADIÇÃO MANUAL
   const addCategory = () => {
     if (!newCat.trim()) return;
     const cat = newCat.trim();
@@ -92,6 +136,7 @@ const AdminTaxonomy: React.FC = () => {
     setNewType({ ...newType, [fam]: '' });
   };
 
+  // LÓGICAS DE REMOÇÃO
   const removeCategory = (cat: string) => {
     if (!window.confirm(`Apagar a categoria "${cat}" e todas as suas famílias e tipos?`)) return;
     const updatedCats = { ...taxonomy.categories };
@@ -118,23 +163,58 @@ const AdminTaxonomy: React.FC = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20 font-sans">
       <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+        
+        {/* CABEÇALHO */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
           <div className="flex items-center gap-4">
             <div className="bg-[#00d66f] p-4 rounded-2xl border-4 border-[#0a2540] text-[#0a2540]">
               <ListTree size={28} strokeWidth={3} />
             </div>
             <div>
-              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Filtros de Catálogo</h3>
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Gestão de Taxonomia</h3>
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Configura as Categorias, Famílias e Tipos de Artigos</p>
             </div>
           </div>
-          <button onClick={handleSave} disabled={saving} className="bg-[#0a2540] text-[#00d66f] px-8 py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-105 transition-transform flex items-center gap-2">
+          <button onClick={handleSave} disabled={saving} className="bg-[#0a2540] text-[#00d66f] px-8 py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:scale-105 transition-transform flex items-center gap-2 border-b-4 border-black/40">
             {saving ? <Loader2 className="animate-spin" size={18}/> : <Save size={18} />} Guardar Estrutura
           </button>
         </div>
 
+        {/* SECÇÃO DE IMPORTAÇÃO RÁPIDA (EXCEL) */}
+        <div className="bg-slate-50 p-6 rounded-[30px] border-4 border-slate-100 mb-10 grid grid-cols-1 lg:grid-cols-2 gap-8">
+           <div className="space-y-4">
+             <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100">
+                <h4 className="flex items-center gap-2 text-[10px] font-black uppercase text-blue-800 mb-2">
+                  <AlertCircle size={16} /> Importação Rápida (Excel)
+                </h4>
+                <p className="text-[10px] font-bold text-blue-600 leading-relaxed">
+                  Copie 3 colunas do seu ficheiro Excel (Categoria, Família, Tipo) e cole na caixa abaixo. O sistema irá organizar a árvore automaticamente sem apagar os dados existentes.
+                </p>
+             </div>
+             <textarea 
+               value={pasteData}
+               onChange={(e) => setPasteData(e.target.value)}
+               placeholder="Categoria &#9; Família &#9; Tipo..."
+               className="w-full h-32 p-4 bg-white border-2 border-slate-200 rounded-2xl font-mono text-xs outline-none focus:border-[#0a2540] resize-none whitespace-pre"
+             />
+             <button 
+               onClick={handleParseAndMerge} 
+               className="w-full bg-[#0a2540] text-white p-4 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all shadow-md flex justify-center items-center gap-2"
+             >
+               <ClipboardPaste size={16} /> Processar Dados Colados
+             </button>
+           </div>
+           <div className="bg-white p-6 rounded-2xl border-2 border-slate-100 flex flex-col justify-center items-center text-center">
+               <ListTree size={48} className="text-slate-200 mb-4" />
+               <p className="text-xs font-black uppercase text-slate-400">Como funciona?</p>
+               <p className="text-[10px] font-bold text-slate-500 mt-2 max-w-xs leading-relaxed">
+                 Os dados colados serão adicionados à árvore abaixo. Faça scroll para rever o resultado e, quando estiver satisfeito com a organização, clique no botão <strong className="text-[#0a2540]">Guardar Estrutura</strong> no topo da página.
+               </p>
+           </div>
+        </div>
+
         <div className="space-y-10">
-          {/* Adicionar Categoria Principal */}
+          {/* Adicionar Categoria Principal Manualmente */}
           <div className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 flex gap-4 items-center">
             <Tag className="text-slate-300" />
             <input 
@@ -159,7 +239,7 @@ const AdminTaxonomy: React.FC = () => {
                 </div>
 
                 <div className="p-6 space-y-6">
-                  {/* Adicionar Família */}
+                  {/* Adicionar Família Manualmente */}
                   <div className="flex gap-3 bg-slate-50 p-3 rounded-2xl">
                     <input 
                       type="text" 
@@ -181,7 +261,7 @@ const AdminTaxonomy: React.FC = () => {
                           <button onClick={() => removeFamily(catName, famName)} className="text-red-300 hover:text-red-500"><Trash2 size={14}/></button>
                         </div>
 
-                        {/* Adicionar Tipo */}
+                        {/* Adicionar Tipo Manualmente */}
                         <div className="flex gap-2 mb-4">
                           <input 
                             type="text" 
@@ -211,7 +291,7 @@ const AdminTaxonomy: React.FC = () => {
             
             {Object.keys(taxonomy.categories).length === 0 && (
               <div className="text-center p-10 border-4 border-dashed border-slate-200 rounded-[30px]">
-                <p className="text-slate-400 font-black uppercase text-xs">Nenhuma categoria criada. Comece por adicionar uma acima.</p>
+                <p className="text-slate-400 font-black uppercase text-xs">Nenhuma categoria criada. Importe via Excel ou crie manualmente.</p>
               </div>
             )}
           </div>
