@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { 
   collection, onSnapshot, query, orderBy, where, serverTimestamp, 
-  doc, getDocs, writeBatch, limit, updateDoc, setDoc, arrayUnion, startAfter, getDoc
+  doc, getDocs, writeBatch, limit, updateDoc, setDoc, arrayUnion, getDoc
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -15,8 +15,6 @@ interface StoreState {
   currentUser: UserProfile | null;
   locations: LocationsMap;
   products: Product[];
-  lastVisibleProduct: any;
-  hasMoreProducts: boolean;
   shoppingList: Product[];
   taxonomy: ProductTaxonomy | null;
   isLoading: boolean;
@@ -36,7 +34,7 @@ interface StoreState {
   updateUserToken: (userId: string, token: string) => Promise<void>;
   toggleNotifications: (userId: string, enabled: boolean) => Promise<void>;
   
-  fetchProducts: (filters?: any, isNextPage?: boolean) => Promise<void>;
+  fetchProducts: (filters?: any) => Promise<void>;
   addToShoppingList: (product: Product) => void;
   removeFromShoppingList: (productId: string) => void;
   clearShoppingList: () => void;
@@ -48,8 +46,6 @@ export const useStore = create<StoreState>((set, get) => ({
   currentUser: null,
   locations: {},
   products: [],
-  lastVisibleProduct: null,
-  hasMoreProducts: true,
   shoppingList: JSON.parse(localStorage.getItem('vplus_shopping_list') || '[]'),
   taxonomy: null,
   isLoading: true,
@@ -78,9 +74,8 @@ export const useStore = create<StoreState>((set, get) => ({
     } catch(e) { console.error(e); }
   },
 
-  fetchProducts: async (filters: any = {}, isNextPage: boolean = false) => {
+  fetchProducts: async (filters: any = {}) => {
     set({ isLoading: true });
-    const { products, lastVisibleProduct } = get();
     
     try {
       const seteDiasAtras = new Date();
@@ -89,30 +84,35 @@ export const useStore = create<StoreState>((set, get) => ({
       let q = query(
         collection(db, 'products'), 
         where('createdAt', '>=', seteDiasAtras),
-        orderBy('createdAt', 'desc'), 
-        limit(20)
+        orderBy('createdAt', 'desc')
       );
 
-      // CORREÇÃO: Filtros Múltiplos Seguros (Arrays)
-      if (filters.distrito) q = query(q, where('distrito', '==', filters.distrito));
-      if (filters.concelho && filters.concelho.length > 0) q = query(q, where('concelho', 'in', filters.concelho));
-      if (filters.freguesia && filters.freguesia.length > 0) q = query(q, where('freguesia', 'in', filters.freguesia));
-      
-      if (filters.category) q = query(q, where('category', '==', filters.category));
-      if (filters.family) q = query(q, where('family', '==', filters.family));
-      if (filters.productType) q = query(q, where('productType', '==', filters.productType));
-
-      if (isNextPage && lastVisibleProduct) {
-        q = query(q, startAfter(lastVisibleProduct));
+      if (filters.distrito) {
+        q = query(q, where('distrito', '==', filters.distrito));
       }
 
       const snap = await getDocs(q);
-      const newProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+      let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+
+      // CORREÇÃO: Tipagem explícita (p: Product) nos filtros em memória
+      if (filters.concelho && filters.concelho.length > 0) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => filters.concelho.includes(p.concelho));
+      }
+      if (filters.freguesia && filters.freguesia.length > 0) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => filters.freguesia.includes(p.freguesia));
+      }
+      if (filters.category && filters.category.length > 0) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => filters.category.includes(p.category));
+      }
+      if (filters.family && filters.family.length > 0) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => filters.family.includes(p.family));
+      }
+      if (filters.productType && filters.productType.length > 0) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => filters.productType.includes(p.productType));
+      }
 
       set({
-        products: isNextPage ? [...products, ...newProducts] : newProducts,
-        lastVisibleProduct: snap.docs[snap.docs.length - 1],
-        hasMoreProducts: snap.docs.length === 20,
+        products: fetchedProducts,
         isLoading: false
       });
     } catch(e) {

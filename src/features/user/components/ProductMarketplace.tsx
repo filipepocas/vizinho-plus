@@ -7,42 +7,39 @@ import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
 
 const ProductMarketplace: React.FC = () => {
-  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList, currentUser } = useStore();
+  const { products, fetchProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList, currentUser } = useStore();
   
-  // ESTADO DE FILTROS: Preenchido por defeito com a localização do Cliente
+  // ESTADO DE FILTROS: Todos os campos (exceto distrito) são Arrays para seleção múltipla
   const [filters, setFilters] = useState<{
     distrito: string;
     concelho: string[];
     freguesia: string[];
-    category: string;
-    family: string;
-    productType: string;
+    category: string[];
+    family: string[];
+    productType: string[];
   }>({
     distrito: currentUser?.distrito || '',
     concelho: currentUser?.concelho ? [currentUser.concelho] : [],
     freguesia: currentUser?.freguesia ? [currentUser.freguesia] : [],
-    category: '',
-    family: '',
-    productType: ''
+    category: [],
+    family: [],
+    productType: []
   });
   
   const [showFilters, setShowFilters] = useState(false);
   const [showCart, setShowCart] = useState(false);
+  
+  // Paginação no Frontend (já que os dados vêm todos de uma vez do backend)
+  const [visibleCount, setVisibleCount] = useState(20);
 
-  // Carregamento inicial ao montar o componente
   useEffect(() => {
     fetchProducts(filters);
   }, []);
 
   const handleApplyFilters = () => {
+    setVisibleCount(20);
     fetchProducts(filters);
     setShowFilters(false);
-  };
-
-  const loadMore = () => {
-    if (!isLoading && hasMoreProducts) {
-      fetchProducts(filters, true);
-    }
   };
 
   const formatPrice = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
@@ -50,47 +47,54 @@ const ProductMarketplace: React.FC = () => {
   // LÓGICA DE OPÇÕES EM CASCATA (Geografia)
   const distritos = Object.keys(locations).sort();
   const availableConcelhos = filters.distrito ? Object.keys(locations[filters.distrito] || {}).sort() : [];
-  
-  // Agrega todas as freguesias dos concelhos que o utilizador selecionou
   const availableFreguesias = (filters.distrito && filters.concelho.length > 0)
     ? filters.concelho.flatMap((c: string) => locations[filters.distrito][c] || []).sort()
     : [];
 
   // LÓGICA DE OPÇÕES EM CASCATA (Taxonomia)
-  const categories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
-  const families = (taxonomy && filters.category) ? Object.keys(taxonomy.categories[filters.category].families).sort() : [];
-  const types = (taxonomy && filters.category && filters.family) ? taxonomy.categories[filters.category].families[filters.family].sort() : [];
+  const availableCategories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
+  const availableFamilies = (taxonomy && filters.category.length > 0) 
+    ? filters.category.flatMap(c => Object.keys(taxonomy.categories[c]?.families || {})).sort() 
+    : [];
+  const availableTypes = (taxonomy && filters.category.length > 0 && filters.family.length > 0) 
+    ? filters.family.flatMap(f => {
+        for (let c of filters.category) {
+          if (taxonomy.categories[c]?.families[f]) return taxonomy.categories[c].families[f];
+        }
+        return [];
+      }).sort() 
+    : [];
 
-  // HANDLERS PARA SELEÇÃO MÚLTIPLA (TAGS GEOGRÁFICAS)
-  const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
+  // HANDLERS PARA SELEÇÃO MÚLTIPLA
+  const handleAddArrayFilter = (e: React.ChangeEvent<HTMLSelectElement>, field: keyof typeof filters) => {
     const val = e.target.value;
-    if (!val || filters.concelho.includes(val)) return;
-    setFilters({ ...filters, concelho: [...filters.concelho, val] });
-  };
-
-  const handleRemoveConcelho = (val: string) => {
-    const remainingConcelhos = filters.concelho.filter(c => c !== val);
-    setFilters({ 
-      ...filters, 
-      concelho: remainingConcelhos,
-      freguesia: [] // Reset de freguesias para evitar inconsistência na query 'in' do Firebase
+    if (!val || (filters[field] as string[]).includes(val)) return;
+    
+    setFilters(prev => {
+      const newState = { ...prev, [field]: [...(prev[field] as string[]), val] };
+      // Limpar dependentes se a raiz mudar
+      if (field === 'concelho') newState.freguesia = [];
+      if (field === 'category') { newState.family = []; newState.productType = []; }
+      if (field === 'family') newState.productType = [];
+      return newState;
     });
   };
 
-  const handleAddFreguesia = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (!val || filters.freguesia.includes(val)) return;
-    setFilters({ ...filters, freguesia: [...filters.freguesia, val] });
+  const handleRemoveArrayFilter = (val: string, field: keyof typeof filters) => {
+    setFilters(prev => {
+      const newState = { ...prev, [field]: (prev[field] as string[]).filter(item => item !== val) };
+      if (field === 'concelho') newState.freguesia = [];
+      if (field === 'category') { newState.family = []; newState.productType = []; }
+      if (field === 'family') newState.productType = [];
+      return newState;
+    });
   };
 
-  const handleRemoveFreguesia = (val: string) => {
-    setFilters({ ...filters, freguesia: filters.freguesia.filter(f => f !== val) });
-  };
+  const displayedProducts = products.slice(0, visibleCount);
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* BARRA DE PESQUISA E ACESSO À LISTA */}
       <div className="bg-white p-4 rounded-[30px] border-4 border-[#0a2540] shadow-lg sticky top-24 z-40">
         <div className="flex gap-2">
           <div className="flex-1 relative">
@@ -100,26 +104,15 @@ const ProductMarketplace: React.FC = () => {
               className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"
             />
           </div>
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className={`p-4 rounded-2xl transition-all ${showFilters ? 'bg-[#00d66f] text-[#0a2540]' : 'bg-[#0a2540] text-white'}`}
-          >
+          <button onClick={() => setShowFilters(!showFilters)} className={`p-4 rounded-2xl transition-all ${showFilters ? 'bg-[#00d66f] text-[#0a2540]' : 'bg-[#0a2540] text-white'}`}>
             <Filter size={20} />
           </button>
-          <button 
-            onClick={() => setShowCart(true)} 
-            className="relative bg-amber-500 text-white p-4 rounded-2xl shadow-md hover:scale-105 transition-transform"
-          >
+          <button onClick={() => setShowCart(true)} className="relative bg-amber-500 text-white p-4 rounded-2xl shadow-md hover:scale-105 transition-transform">
             <ShoppingCart size={20} />
-            {shoppingList.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
-                    {shoppingList.length}
-                </span>
-            )}
+            {shoppingList.length > 0 && <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">{shoppingList.length}</span>}
           </button>
         </div>
 
-        {/* PAINEL DE FILTROS AVANÇADOS */}
         {showFilters && (
           <div className="mt-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6 animate-in slide-in-from-top-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -128,110 +121,94 @@ const ProductMarketplace: React.FC = () => {
               <div className="space-y-3">
                 <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><MapPin size={10}/> Localização (Múltipla)</p>
                 
-                <select 
-                    value={filters.distrito} 
-                    onChange={e=>setFilters({...filters, distrito: e.target.value, concelho:[], freguesia:[]})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f]"
-                >
+                <select value={filters.distrito} onChange={e=>setFilters({...filters, distrito: e.target.value, concelho:[], freguesia:[]})} className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f]">
                   <option value="">Escolha o Distrito</option>
                   {distritos.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
                 
-                <select 
-                    disabled={!filters.distrito} 
-                    value="" 
-                    onChange={handleAddConcelho} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
+                <select disabled={!filters.distrito} value="" onChange={e => handleAddArrayFilter(e, 'concelho')} className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50">
                   <option value="">+ Adicionar Concelho</option>
                   {availableConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
 
-                {/* Tags de Concelhos Selecionados */}
                 <div className="flex flex-wrap gap-1">
                     {filters.concelho.map(c => (
                         <span key={c} className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-blue-200">
-                            {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveConcelho(c)}/>
+                            {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveArrayFilter(c, 'concelho')}/>
                         </span>
                     ))}
                 </div>
 
-                <select 
-                    disabled={filters.concelho.length === 0} 
-                    value="" 
-                    onChange={handleAddFreguesia} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
+                <select disabled={filters.concelho.length === 0} value="" onChange={e => handleAddArrayFilter(e, 'freguesia')} className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50">
                   <option value="">+ Adicionar Freguesia</option>
                   {availableFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
 
-                {/* Tags de Freguesias Selecionadas */}
                 <div className="flex flex-wrap gap-1">
                     {filters.freguesia.map(f => (
                         <span key={f} className="bg-green-100 text-green-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-green-200">
-                            {f} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveFreguesia(f)}/>
+                            {f} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveArrayFilter(f, 'freguesia')}/>
                         </span>
                     ))}
                 </div>
               </div>
 
-              {/* Grupo 2: Taxonomia de Produtos */}
+              {/* Grupo 2: Taxonomia Múltipla */}
               <div className="space-y-3">
-                <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><Tag size={10}/> Categoria e Tipo</p>
+                <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><Tag size={10}/> Categoria e Tipo (Múltipla)</p>
                 
-                <select 
-                    value={filters.category} 
-                    onChange={e=>setFilters({...filters, category: e.target.value, family:'', productType:''})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f]"
-                >
-                  <option value="">Todas as Categorias</option>
-                  {categories.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
+                <select value="" onChange={e => handleAddArrayFilter(e, 'category')} className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f]">
+                  <option value="">+ Adicionar Categoria</option>
+                  {availableCategories.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
                 </select>
+                <div className="flex flex-wrap gap-1">
+                    {filters.category.map(c => (
+                        <span key={c} className="bg-purple-100 text-purple-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-purple-200">
+                            {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveArrayFilter(c, 'category')}/>
+                        </span>
+                    ))}
+                </div>
 
-                <select 
-                    disabled={!filters.category} 
-                    value={filters.family} 
-                    onChange={e=>setFilters({...filters, family: e.target.value, productType:''})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
-                  <option value="">Família de Produto...</option>
-                  {families.map(f => <option key={f} value={f}>{f}</option>)}
+                <select disabled={filters.category.length === 0} value="" onChange={e => handleAddArrayFilter(e, 'family')} className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50">
+                  <option value="">+ Adicionar Família</option>
+                  {availableFamilies.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
+                <div className="flex flex-wrap gap-1">
+                    {filters.family.map(f => (
+                        <span key={f} className="bg-indigo-100 text-indigo-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-indigo-200">
+                            {f} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveArrayFilter(f, 'family')}/>
+                        </span>
+                    ))}
+                </div>
 
-                <select 
-                    disabled={!filters.family} 
-                    value={filters.productType} 
-                    onChange={e=>setFilters({...filters, productType: e.target.value})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
-                  <option value="">Tipo de Artigo...</option>
-                  {types.map(t => <option key={t} value={t}>{t}</option>)}
+                <select disabled={filters.family.length === 0} value="" onChange={e => handleAddArrayFilter(e, 'productType')} className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50">
+                  <option value="">+ Adicionar Tipo</option>
+                  {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
+                <div className="flex flex-wrap gap-1">
+                    {filters.productType.map(t => (
+                        <span key={t} className="bg-amber-100 text-amber-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-amber-200">
+                            {t} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveArrayFilter(t, 'productType')}/>
+                        </span>
+                    ))}
+                </div>
               </div>
             </div>
 
-            <button 
-                onClick={handleApplyFilters} 
-                className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:bg-black transition-all"
-            >
+            <button onClick={handleApplyFilters} className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:bg-black transition-all">
                 Aplicar Filtros e Pesquisar
             </button>
           </div>
         )}
       </div>
 
-      {/* GRELHA DE PRODUTOS (Infinite Scroll) */}
+      {/* GRELHA DE PRODUTOS */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {products.map((p: Product) => (
+        {displayedProducts.map((p: Product) => (
           <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#00d66f] transition-all">
              <div className="aspect-square relative overflow-hidden bg-slate-50">
                 <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={p.description} />
-                {p.hasPromo && (
-                    <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full font-black text-[7px] uppercase shadow-lg border border-white">
-                        Oferta
-                    </div>
-                )}
+                {p.hasPromo && <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full font-black text-[7px] uppercase shadow-lg border border-white">Oferta</div>}
              </div>
              <div className="p-4 flex flex-col flex-1">
                 <p className="text-[7px] font-black uppercase text-slate-400 mb-1 truncate">{p.shopName} • {p.freguesia}</p>
@@ -244,10 +221,7 @@ const ProductMarketplace: React.FC = () => {
                       </span>
                       {p.hasPromo && <span className="text-[8px] text-slate-300 line-through">{formatPrice(p.price)}</span>}
                    </div>
-                   <button 
-                     onClick={() => addToShoppingList(p)}
-                     className="bg-[#00d66f] text-[#0a2540] p-2.5 rounded-xl hover:bg-[#0a2540] hover:text-[#00d66f] transition-all shadow-sm"
-                   >
+                   <button onClick={() => addToShoppingList(p)} className="bg-[#00d66f] text-[#0a2540] p-2.5 rounded-xl hover:bg-[#0a2540] hover:text-[#00d66f] transition-all shadow-sm">
                      <ShoppingCart size={16} strokeWidth={3}/>
                    </button>
                 </div>
@@ -256,14 +230,10 @@ const ProductMarketplace: React.FC = () => {
         ))}
       </div>
 
-      {/* TRIGGER DE CARREGAMENTO (Infinite Scroll) */}
-      {hasMoreProducts && (
-        <button 
-          onClick={loadMore} 
-          disabled={isLoading}
-          className="w-full p-6 bg-white border-4 border-dashed border-slate-200 rounded-[35px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] hover:text-[#00d66f] transition-all flex justify-center items-center gap-3"
-        >
-          {isLoading ? <Loader2 className="animate-spin" /> : <ChevronDown />} Carregar mais produtos
+      {/* TRIGGER DE CARREGAMENTO (Infinite Scroll Frontend) */}
+      {products.length > visibleCount && (
+        <button onClick={() => setVisibleCount(prev => prev + 20)} className="w-full p-6 bg-white border-4 border-dashed border-slate-200 rounded-[35px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] hover:text-[#00d66f] transition-all flex justify-center items-center gap-3">
+          <ChevronDown /> Carregar mais produtos
         </button>
       )}
 

@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore';
 import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
-import { User as UserProfile, Transaction } from '../../types';
+import { User as UserProfile } from '../../types';
 import { 
   LogOut, Settings, X, 
   Smartphone, AlertTriangle, Megaphone, 
@@ -181,10 +181,10 @@ const MerchantDashboard: React.FC = () => {
         
         <nav className="flex flex-wrap justify-center gap-2">
           <button onClick={() => setView('terminal')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
-          <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> Catálogo</button>
-          <button onClick={() => setView('marketing')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
-          <button onClick={() => setView('anti_waste')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'anti_waste' ? 'bg-[#22c55e] text-white' : 'text-green-400 hover:bg-green-500/20'}`}>Desperdício</button>
-          <button onClick={() => setView('bi')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Activity size={14} className="inline mr-1"/> B.I.</button>
+          <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> O meu catálogo</button>
+          <button onClick={() => setView('marketing')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Comunicar – Ações Comerciais</button>
+          <button onClick={() => setView('anti_waste')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'anti_waste' ? 'bg-[#22c55e] text-white' : 'text-green-400 hover:bg-green-500/20'}`}>Desperdício Zero</button>
+          <button onClick={() => setView('bi')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Activity size={14} className="inline mr-1"/> Análise Inteligente do Negócio</button>
           <button onClick={() => setView('settings')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Settings size={14} className="inline mr-1"/></button>
           <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
         </nav>
@@ -202,6 +202,7 @@ const MerchantDashboard: React.FC = () => {
            </button>
         </div>
 
+        {/* VISTAS DINÂMICAS */}
         {view === 'terminal' && (
           <MerchantTerminal 
             cardNumber={cardNumber} setCardNumber={setCardNumber}
@@ -305,83 +306,41 @@ const MerchantDashboard: React.FC = () => {
            </div>
         )}
 
+        {/* MODAIS DE CONFIRMAÇÃO E REGRAS */}
         {showConfirmModal && foundClient && pendingAction && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
-            <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
-               <div className="bg-[#0a2540] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3></div>
+          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0f172a]/90 backdrop-blur-md">
+            <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0f172a] shadow-2xl overflow-hidden animate-in zoom-in">
+               <div className="bg-[#0f172a] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3></div>
                <div className="p-8 text-center space-y-4">
-                 <p className="text-xs font-bold text-slate-500 uppercase">Cliente</p>
-                 <p className="text-lg font-black text-[#0a2540]">{foundClient.name}</p>
-                 <div className="border-t-2 border-dashed border-slate-100 my-4"></div>
-                 <p className="text-xs font-bold text-slate-500 uppercase">{pendingAction.type === 'earn' ? 'Fatura Base' : 'Valor a Descontar'}</p>
-                 <p className={`text-4xl font-black italic ${pendingAction.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>{formatCurrency(pendingAction.val)}</p>
+                 <p className="text-xs font-bold text-slate-500 uppercase">Cliente: <span className="text-[#0f172a]">{foundClient.name}</span></p>
+                 <p className="text-4xl font-black italic text-[#0f172a]">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(pendingAction.val)}</p>
                  <div className="flex gap-4 mt-8">
-                   <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
-                   <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
+                   <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100">Cancelar</button>
+                   <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0f172a] bg-[#00d66f] shadow-lg">Confirmar</button>
                  </div>
                </div>
             </div>
           </div>
         )}
-
-        {showRulesModal && (
-          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-              <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
-                <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Condições de Adesão</h3>
-                <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
-              </div>
-              <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
-                {sysConfig.merchantTerms}
-              </div>
-              <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-                <button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Compreendi as Regras</button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {showFaqModal && (
-          <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
-            <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
-              <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
-                <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
-                <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
-              </div>
-              <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
-                {sysConfig.merchantFaqs}
-              </div>
-              <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
-                <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md">Fechar Guia</button>
-              </div>
-            </div>
-          </div>
-        )}
-
       </main>
-
-      <footer className="py-12 flex flex-col items-center gap-6 mt-20">
-        <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
-      </footer>
 
       {showScanner && <QRScannerModal onScan={(text: string) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
       
-      {showInbox && (
-        <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
-           <div className="bg-white w-full max-w-lg rounded-[40px] border-4 border-[#00d66f] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-10">
-              <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic tracking-tighter text-lg flex items-center gap-3"><BellRing className="text-[#00d66f]" /> Mensagens da Administração</h3><button onClick={() => setShowInbox(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors"><X /></button></div>
-              <div className="p-6 max-h-[60vh] overflow-y-auto space-y-4">
-                 {adminMessages.length === 0 ? (<p className="text-center text-slate-400 font-black uppercase text-[10px] py-10">Sem mensagens novas.</p>) : adminMessages.map((msg: any) => (
-                   <div key={msg.id} className="bg-slate-50 p-6 rounded-3xl border-2 border-slate-100 relative group transition-colors hover:border-blue-100 hover:bg-blue-50/30">
-                      <p className="text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{msg.message}</p>
-                      <div className="mt-4 flex justify-between items-center border-t-2 border-slate-100 pt-4">
-                         <span className="text-[9px] font-black text-slate-400 uppercase">Enviada a: {msg.createdAt?.seconds ? new Date(msg.createdAt.seconds * 1000).toLocaleString() : 'Recente'}</span>
-                         <button onClick={() => handleDeleteMessage(msg.id)} className="text-red-400 hover:text-red-600 bg-red-50 hover:bg-red-100 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 transition-all"><Trash2 size={14} /> Apagar</button>
-                      </div>
-                   </div>
-                 ))}
-              </div>
-           </div>
+      {showRulesModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0f172a]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-amber-500 p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic flex items-center gap-2"><BookOpen /> Condições</h3><button onClick={() => setShowRulesModal(false)}><X /></button></div>
+            <div className="p-8 overflow-y-auto flex-1 text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{sysConfig.merchantTerms}</div>
+          </div>
+        </div>
+      )}
+
+      {showFaqModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0f172a]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center"><h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle /> Guia</h3><button onClick={() => setShowFaqModal(false)}><X /></button></div>
+            <div className="p-8 overflow-y-auto flex-1 text-sm font-bold text-slate-600 leading-relaxed whitespace-pre-wrap">{sysConfig.merchantFaqs}</div>
+          </div>
         </div>
       )}
     </div>
