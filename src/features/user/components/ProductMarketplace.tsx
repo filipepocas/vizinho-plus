@@ -7,9 +7,9 @@ import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
 
 const ProductMarketplace: React.FC = () => {
-  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList } = useStore();
+  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList, currentUser } = useStore();
   
-  // ESTADO DE FILTROS: Concelho e Freguesia são Arrays para permitir seleção múltipla
+  // ESTADO DE FILTROS: Preenchido por defeito com a localização do Cliente
   const [filters, setFilters] = useState<{
     distrito: string;
     concelho: string[];
@@ -18,9 +18,9 @@ const ProductMarketplace: React.FC = () => {
     family: string;
     productType: string;
   }>({
-    distrito: '',
-    concelho: [],
-    freguesia: [],
+    distrito: currentUser?.distrito || '',
+    concelho: currentUser?.concelho ? [currentUser.concelho] : [],
+    freguesia: currentUser?.freguesia ? [currentUser.freguesia] : [],
     category: '',
     family: '',
     productType: ''

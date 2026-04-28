@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../../config/firebase';
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, orderBy, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   Package, Plus, Trash2, Tag, Image as ImageIcon, 
@@ -29,6 +29,9 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
+  // Limite Dinâmico de Produtos
+  const [maxProducts, setMaxProducts] = useState<number>(20);
+
   const [formData, setFormData] = useState({
     description: '', price: '', category: '', family: '', productType: '',
     hasPromo: false, promoPrice: '', promoStart: '', promoEnd: ''
@@ -40,6 +43,20 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   useEffect(() => {
     if (!taxonomy) fetchTaxonomy();
+    
+    // Carregar a configuração global para saber o limite de produtos
+    const fetchConfig = async () => {
+      try {
+        const configSnap = await getDoc(doc(db, 'system', 'config'));
+        if (configSnap.exists() && configSnap.data().maxProductsPerStore) {
+          setMaxProducts(configSnap.data().maxProductsPerStore);
+        }
+      } catch (err) {
+        console.error("Erro ao carregar configurações:", err);
+      }
+    };
+    
+    fetchConfig();
     loadProducts();
   }, [merchant.id]);
 
@@ -49,6 +66,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
+      // 1. Carregar Meus Produtos
       const qMine = query(
         collection(db, 'products'), 
         where('merchantId', '==', merchant.id),
@@ -58,16 +76,17 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const snapMine = await getDocs(qMine);
       setProducts(snapMine.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product)));
 
-      if (merchant.freguesia) {
+      // 2. Carregar Produtos da Concorrência no CONCELHO
+      if (merchant.concelho) {
         const qComp = query(
           collection(db, 'products'), 
-          where('freguesia', '==', merchant.freguesia),
+          where('concelho', '==', merchant.concelho),
           where('createdAt', '>=', seteDiasAtras),
           orderBy('createdAt', 'desc')
         );
         const snapComp = await getDocs(qComp);
         const allLocalProducts = snapComp.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
-        // CORREÇÃO: Tipagem (p: Product) adicionada
+        // Filtra para remover os produtos do próprio lojista da lista da concorrência
         setCompetitionProducts(allLocalProducts.filter((p: Product) => p.merchantId !== merchant.id));
       }
     } catch (err) {
@@ -90,9 +109,11 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!editingProduct && products.length >= 20) {
-        return toast.error("Limite de 20 anúncios atingido. Elimine um para publicar novo.");
+    // Validação do Limite Dinâmico
+    if (!editingProduct && products.length >= maxProducts) {
+        return toast.error(`Limite de ${maxProducts} anúncios atingido. Elimine um para publicar novo.`);
     }
+
     if (!editingProduct && !selectedFile) return toast.error("A imagem do produto é obrigatória.");
     if (!formData.category || !formData.family || !formData.productType) return toast.error("Selecione a classificação completa.");
 
@@ -100,6 +121,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
     const toastId = toast.loading("A validar exclusividade...");
 
     try {
+      // REGRA: Proteção Anti-Duplicados na mesma FREGUESIA
       if (!editingProduct || editingProduct.productType !== formData.productType) {
          const seteDiasAtras = new Date();
          seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
@@ -136,7 +158,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         distrito: merchant.distrito || '',
         concelho: merchant.concelho || '',
         freguesia: merchant.freguesia || '',
-        coords: (merchant.latitude && merchant.longitude) ? { lat: merchant.latitude, lng: merchant.longitude } : undefined,
+        coords: (merchant.latitude && merchant.longitude) ? { lat: merchant.latitude, lng: merchant.longitude } : null,
         description: formData.description,
         imageUrl: imageUrl,
         price: Number(formData.price),
@@ -155,7 +177,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         toast.success("Produto atualizado!", { id: toastId });
       } else {
         await addDoc(collection(db, 'products'), productData);
-        toast.success("Produto publicado com exclusividade!", { id: toastId });
+        toast.success("Produto publicado com exclusividade na Freguesia!", { id: toastId });
       }
       
       setShowAddForm(false);
@@ -216,6 +238,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
+      {/* TABS DE NAVEGAÇÃO */}
       <div className="flex gap-4 mb-6">
         <button 
             onClick={() => setActiveTab('my_catalog')} 
@@ -227,7 +250,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
             onClick={() => setActiveTab('competition')} 
             className={`flex-1 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all border-4 ${activeTab === 'competition' ? 'bg-amber-500 text-white border-amber-600' : 'bg-white text-slate-400 border-slate-100 hover:border-amber-400'}`}
         >
-            <Eye size={16} className="inline mr-2"/> Concorrência ({merchant.freguesia})
+            <Eye size={16} className="inline mr-2"/> Concorrência ({merchant.concelho})
         </button>
       </div>
 
@@ -238,7 +261,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
                     <div className="bg-[#0a2540] p-3 rounded-2xl text-[#00d66f]"><Package size={24} /></div>
                     <div>
                         <h3 className="font-black uppercase italic tracking-tighter text-[#0a2540]">Gestão de Artigos</h3>
-                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{products.length} de 20 anúncios ativos</p>
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{products.length} de {maxProducts} anúncios ativos</p>
                     </div>
                 </div>
                 <button 
@@ -384,9 +407,9 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       {activeTab === 'competition' && (
         <div className="space-y-6 animate-in fade-in">
           <div className="bg-amber-50 p-6 rounded-[30px] border-4 border-amber-200 text-center">
-             <h3 className="text-lg font-black uppercase text-amber-800 mb-2">Artigos na sua Freguesia</h3>
+             <h3 className="text-lg font-black uppercase text-amber-800 mb-2">Artigos no seu Concelho</h3>
              <p className="text-[10px] font-bold text-amber-700 max-w-lg mx-auto leading-relaxed">
-               A plataforma Vizinho+ garante exclusividade por Tipo de Produto durante 7 dias. Se um concorrente já publicou "Pão", esse espaço está ocupado. Acompanhe aqui quando expiram os anúncios da concorrência para garantir o seu lugar.
+               A plataforma Vizinho+ garante exclusividade por Tipo de Produto na sua Freguesia durante 7 dias. Acompanhe aqui os artigos publicados no seu Concelho e veja quando expiram para garantir o seu lugar.
              </p>
           </div>
 
@@ -414,7 +437,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
             {!loading && competitionProducts.length === 0 && (
                 <div className="col-span-full py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-200">
                     <Store size={48} className="mx-auto text-slate-200 mb-4" />
-                    <p className="font-black uppercase text-slate-400 text-xs">Nenhum concorrente na sua freguesia publicou artigos ainda. Aproveite!</p>
+                    <p className="font-black uppercase text-slate-400 text-xs">Nenhum concorrente no seu concelho publicou artigos ainda. Aproveite!</p>
                 </div>
             )}
           </div>
