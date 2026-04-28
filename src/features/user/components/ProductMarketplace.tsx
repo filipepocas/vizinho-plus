@@ -31,7 +31,7 @@ const ProductMarketplace: React.FC = () => {
     currentUser 
   } = useStore();
   
-  // ESTADO DE FILTROS: Inicializados vazios para serem preenchidos no useEffect
+  // ESTADO DE FILTROS: Inicializados com base no perfil do utilizador (Instrução 4)
   const [filters, setFilters] = useState<{
     distrito: string;
     concelho: string[];
@@ -54,9 +54,8 @@ const ProductMarketplace: React.FC = () => {
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   /**
-   * 1. SINCRONIZAÇÃO DE DADOS
-   * Garante que a taxonomia é carregada e que os filtros iniciais 
-   * respeitam o concelho do utilizador logado.
+   * SINCRONIZAÇÃO INICIAL
+   * Carrega a taxonomia e define o Concelho do utilizador como filtro base.
    */
   useEffect(() => {
     if (!taxonomy) fetchTaxonomy();
@@ -65,7 +64,7 @@ const ProductMarketplace: React.FC = () => {
       const initialFilters = {
         distrito: currentUser.distrito || '',
         concelho: currentUser.concelho ? [currentUser.concelho] : [],
-        freguesia: [], // Vazio por defeito para mostrar todo o concelho (Instrução 4)
+        freguesia: [], // Vazio para mostrar todo o concelho inicialmente
         category: [],
         family: [],
         productType: []
@@ -112,13 +111,12 @@ const ProductMarketplace: React.FC = () => {
     
     setFilters(prev => {
       const newState = { ...prev, [field]: [...(prev[field] as string[]), val] };
-      // Limpar dependentes se a raiz mudar para manter a coerência dos dados
       if (field === 'concelho') newState.freguesia = [];
       if (field === 'category') { newState.family = []; newState.productType = []; }
       if (field === 'family') newState.productType = [];
       return newState;
     });
-    e.target.value = ""; // Reset do select para permitir nova escolha
+    e.target.value = ""; 
   };
 
   const handleRemoveArrayFilter = (val: string, field: keyof typeof filters) => {
@@ -136,13 +134,13 @@ const ProductMarketplace: React.FC = () => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* BARRA DE PESQUISA E ACESSO A FILTROS */}
+      {/* BARRA DE PESQUISA E FILTROS */}
       <div className="bg-white p-4 rounded-[30px] border-4 border-[#0a2540] shadow-lg sticky top-24 z-40">
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
             <input 
-              placeholder="Pesquisar no Marketplace..." 
+              placeholder="O que procuras hoje?..." 
               className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"
             />
           </div>
@@ -163,12 +161,11 @@ const ProductMarketplace: React.FC = () => {
           </button>
         </div>
 
-        {/* PAINEL DE FILTROS (Cascata e Seleção Múltipla) */}
         {showFilters && (
           <div className="mt-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6 animate-in slide-in-from-top-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               
-              {/* Filtros Geográficos */}
+              {/* FILTROS GEOGRÁFICOS */}
               <div className="space-y-4">
                 <p className="text-[10px] font-black uppercase text-[#0a2540] flex items-center gap-2">
                     <MapPin size={14} className="text-[#00d66f]"/> Localização
@@ -220,7 +217,7 @@ const ProductMarketplace: React.FC = () => {
                 </div>
               </div>
 
-              {/* Filtros de Taxonomia */}
+              {/* FILTROS DE TAXONOMIA */}
               <div className="space-y-4">
                 <p className="text-[10px] font-black uppercase text-[#0a2540] flex items-center gap-2">
                     <Tag size={14} className="text-[#00d66f]"/> Categorias

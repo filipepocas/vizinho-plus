@@ -85,28 +85,35 @@ export const useStore = create<StoreState>((set, get) => ({
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-      // Query base: Produtos dos últimos 7 dias
+      // Query simplificada para evitar erros de índice composto no Firebase
       let q = query(
         collection(db, 'products'), 
-        where('createdAt', '>=', seteDiasAtras),
-        orderBy('createdAt', 'desc')
+        where('createdAt', '>=', seteDiasAtras)
       );
-
-      // Filtro por distrito na query (requer índice composto se usado com orderBy)
-      if (filters.distrito) {
-        q = query(q, where('distrito', '==', filters.distrito));
-      }
 
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // FILTRAGEM EM MEMÓRIA (Para suportar seleções múltiplas e evitar erros de índice no Firebase)
+      // 1. Ordenação em Memória (Garante que os mais recentes aparecem primeiro)
+      // CORREÇÃO: Tipagem explícita (a: Product, b: Product) para resolver o erro TS(7006)
+      fetchedProducts.sort((a: Product, b: Product) => {
+        const dateA = a.createdAt?.seconds || 0;
+        const dateB = b.createdAt?.seconds || 0;
+        return dateB - dateA;
+      });
+
+      // 2. Filtragem Geográfica em Memória
+      if (filters.distrito) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => p.distrito === filters.distrito);
+      }
       if (filters.concelho && filters.concelho.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.concelho.includes(p.concelho));
       }
       if (filters.freguesia && filters.freguesia.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.freguesia.includes(p.freguesia));
       }
+
+      // 3. Filtragem de Taxonomia em Memória
       if (filters.category && filters.category.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.category.includes(p.category));
       }
@@ -119,7 +126,8 @@ export const useStore = create<StoreState>((set, get) => ({
 
       set({ products: fetchedProducts, isLoading: false });
     } catch(e: any) {
-      console.error("Erro ao carregar produtos:", e);
+      console.error("Erro crítico ao carregar produtos:", e);
+      toast.error("Erro ao ligar ao servidor de produtos.");
       set({ products: [], isLoading: false });
     }
   },
