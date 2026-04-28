@@ -70,8 +70,12 @@ export const useStore = create<StoreState>((set, get) => ({
   fetchTaxonomy: async () => {
     try {
       const docSnap = await getDoc(doc(db, 'system', 'products_taxonomy'));
-      if (docSnap.exists()) set({ taxonomy: docSnap.data() as ProductTaxonomy });
-    } catch(e) { console.error(e); }
+      if (docSnap.exists()) {
+        set({ taxonomy: docSnap.data() as ProductTaxonomy });
+      }
+    } catch(e) { 
+      console.error("Erro ao carregar taxonomia:", e); 
+    }
   },
 
   fetchProducts: async (filters: any = {}) => {
@@ -81,12 +85,14 @@ export const useStore = create<StoreState>((set, get) => ({
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
+      // Query base: Produtos dos últimos 7 dias
       let q = query(
         collection(db, 'products'), 
         where('createdAt', '>=', seteDiasAtras),
         orderBy('createdAt', 'desc')
       );
 
+      // Filtro por distrito na query (requer índice composto se usado com orderBy)
       if (filters.distrito) {
         q = query(q, where('distrito', '==', filters.distrito));
       }
@@ -94,7 +100,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // CORREÇÃO: Tipagem explícita (p: Product) nos filtros em memória
+      // FILTRAGEM EM MEMÓRIA (Para suportar seleções múltiplas e evitar erros de índice no Firebase)
       if (filters.concelho && filters.concelho.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.concelho.includes(p.concelho));
       }
@@ -111,13 +117,10 @@ export const useStore = create<StoreState>((set, get) => ({
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.productType.includes(p.productType));
       }
 
-      set({
-        products: fetchedProducts,
-        isLoading: false
-      });
-    } catch(e) {
-      console.error(e);
-      set({ isLoading: false });
+      set({ products: fetchedProducts, isLoading: false });
+    } catch(e: any) {
+      console.error("Erro ao carregar produtos:", e);
+      set({ products: [], isLoading: false });
     }
   },
 
@@ -219,9 +222,17 @@ export const useStore = create<StoreState>((set, get) => ({
     const unsubAuth = onAuthStateChanged(auth, (user: any) => {
       if (user) {
         onSnapshot(doc(db, 'users', user.uid), (d: any) => {
-          if (d.exists()) set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
+          if (d.exists()) {
+            set({ 
+              currentUser: { ...d.data(), id: user.uid } as UserProfile, 
+              isLoading: false, 
+              isInitialized: true 
+            });
+          }
         });
-      } else set({ currentUser: null, isLoading: false, isInitialized: true });
+      } else {
+        set({ currentUser: null, isLoading: false, isInitialized: true });
+      }
     });
     get().fetchTaxonomy();
     return () => { unsubAuth(); unsubLocs(); };
