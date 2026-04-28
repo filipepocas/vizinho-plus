@@ -13,12 +13,13 @@ import UserHistory from './components/UserHistory';
 import BannerCarousel from './components/BannerCarousel';
 import ProductMarketplace from './components/ProductMarketplace';
 import ShoppingListModal from './components/ShoppingListModal';
-import UserExplore from './components/UserExplore'; // REPOSTO
+// CORREÇÃO: Importação do UserExplore reposta
+import UserExplore from './components/UserExplore';
 
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -29,7 +30,6 @@ const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  // ESTADOS DE NAVEGAÇÃO E UI
   const [view, setView] = useState<'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
   const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
@@ -42,11 +42,9 @@ const UserDashboard: React.FC = () => {
   const [events, setEvents] = useState<AppEvent[]>([]);
   const [wasteItems, setWasteItems] = useState<AntiWasteItem[]>([]);
   
-  // ESTADOS DO APOIO AO MUNÍCIPE
   const [municipalitiesFaqs, setMunicipalitiesFaqs] = useState<MunicipalityFAQ[]>([]);
   const [munFilters, setMunFilters] = useState({ distrito: currentUser?.distrito || '', concelho: currentUser?.concelho || '', freguesia: currentUser?.freguesia || '' });
 
-  // ESTADO DO SCROLL INTELIGENTE
   const [isScrolled, setIsScrolled] = useState(false);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
   const [localNotifGranted, setLocalNotifGranted] = useState(false);
@@ -59,7 +57,9 @@ const UserDashboard: React.FC = () => {
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
   useEffect(() => {
-    const handleScroll = () => { setIsScrolled(window.scrollY > 50); };
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
@@ -73,7 +73,9 @@ const UserDashboard: React.FC = () => {
         const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
         const merchantsSnap = await getDocs(q);
         setAllMerchants(merchantsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as UserProfile[]);
-      } catch (err) {}
+      } catch (err) {
+        console.error("Erro ao carregar config:", err);
+      }
     };
     fetchData();
   }, []);
@@ -81,13 +83,16 @@ const UserDashboard: React.FC = () => {
   useEffect(() => {
     if (!currentUser?.id) return;
     const q = query(collection(db, 'feedbacks'), where('userId', '==', currentUser.id));
-    const unsubscribe = onSnapshot(q, (snap: any) => { setEvaluatedIds(snap.docs.map((d: any) => d.data().transactionId)); });
+    const unsubscribe = onSnapshot(q, (snap: any) => {
+      setEvaluatedIds(snap.docs.map((d: any) => d.data().transactionId));
+    });
     return () => unsubscribe();
   }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser) return;
     const q = query(collection(db, 'leaflets'), where('isActive', '==', true));
+    
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const now = new Date();
       const valid = snap.docs
@@ -98,7 +103,9 @@ const UserDashboard: React.FC = () => {
           const inTime = now >= start && now <= end;
           const zones = l.targetZones || [];
           const inZone = zones.length === 0 || zones.some((z: string) => 
-            z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || '')
+            z.includes(currentUser.freguesia || '') || 
+            z.includes(currentUser.concelho || '') || 
+            z.includes(currentUser.distrito || '')
           );
           return inTime && inZone;
         });
@@ -111,6 +118,7 @@ const UserDashboard: React.FC = () => {
     if (!currentUser) return;
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
+    
     const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as AppNotification));
@@ -118,6 +126,7 @@ const UserDashboard: React.FC = () => {
         if (notif.createdAt && notif.createdAt.toDate() < yesterday) continue;
         const dismissed = sessionStorage.getItem(`notif_${notif.id}`);
         if (dismissed) continue;
+        
         let matches = false;
         if (notif.targetType === 'all') matches = true;
         else if (notif.targetType === 'email' && currentUser.email === notif.targetValue?.toLowerCase()) matches = true;
@@ -126,7 +135,11 @@ const UserDashboard: React.FC = () => {
            const zones = (notif as any).targetZones || [];
            matches = zones.some((z: string) => z.includes(currentUser.freguesia || '') || z.includes(currentUser.concelho || '') || z.includes(currentUser.distrito || ''));
         }
-        if (matches) { setAppNotification(notif); break; }
+        
+        if (matches) {
+          setAppNotification(notif);
+          break; 
+        }
       }
     });
     return () => unsubscribe();
@@ -165,15 +178,19 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     if (!currentUser || view !== 'municipalities') return;
+    
     let q = query(collection(db, 'municipalities_faqs'), orderBy('createdAt', 'desc'));
+    
     if (munFilters.distrito) q = query(q, where('distrito', '==', munFilters.distrito));
     if (munFilters.concelho) q = query(q, where('concelho', '==', munFilters.concelho));
 
     const unsubscribe = onSnapshot(q, (snap: any) => {
       let results = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MunicipalityFAQ));
+      
       if (munFilters.freguesia) {
         results = results.filter((f: MunicipalityFAQ) => f.freguesia === '' || f.freguesia === munFilters.freguesia);
       }
+      
       setMunicipalitiesFaqs(results);
     });
     return () => unsubscribe();
@@ -288,7 +305,8 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
-      <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[350px]'}`}>
+      {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL */}
+      <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[400px]'}`}>
         <BannerCarousel isScrolled={isScrolled} />
         
         <div className={`absolute left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 via-black/40 to-transparent z-50 transition-all duration-300 ${isScrolled ? 'top-[-10px]' : 'top-0'}`}>
@@ -317,7 +335,8 @@ const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[360px]'}`}>
+      {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
+      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[420px]'}`}>
         
         <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
           <Building2 size={20} /> Apoio ao Munícipe
@@ -364,20 +383,22 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* NAVEGAÇÃO PRINCIPAL (COM BOTÃO VER LOJAS REPOSTO) */}
+        {/* NAVEGAÇÃO PRINCIPAL */}
         <div className="grid grid-cols-2 gap-4">
           <button onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-4 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}>
             <ShoppingBag size={18} /> Lista de Compras
           </button>
-          <button onClick={() => setView(view === 'explore' ? 'home' : 'explore')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-md hover:scale-[1.02]'}`}>
-            <Store size={18} /> Ver Lojas
+          
+          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
+            <Wallet size={18} /> O meu Saldo
           </button>
         </div>
 
+        {/* VISTAS DINÂMICAS */}
         {view === 'home' && (
           <div className="space-y-6 animate-in fade-in">
-             <button onClick={() => setView('wallets')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-[#0a2540] transition-all font-black uppercase text-[10px] tracking-widest text-slate-500">
-               <Wallet size={18} /> O meu Saldo Detalhado
+             <button onClick={() => setView('explore')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-[#0a2540] transition-all font-black uppercase text-[10px] tracking-widest text-slate-500">
+               <Store size={18} /> Ver Lojas Parceiras
              </button>
              <div className="grid grid-cols-2 gap-4">
                 <button onClick={() => setView('history')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 relative hover:border-[#0a2540] transition-all">
