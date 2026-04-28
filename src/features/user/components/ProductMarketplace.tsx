@@ -1,7 +1,7 @@
 // src/features/user/components/ProductMarketplace.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Search, Filter, ShoppingCart, ChevronDown, Loader2, Package, X, MapPin, Tag } from 'lucide-react';
+import { Search, Filter, ShoppingCart, ChevronDown, Package, X, MapPin, Tag } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
@@ -9,7 +9,7 @@ import ShoppingListModal from './ShoppingListModal';
 const ProductMarketplace: React.FC = () => {
   const { products, fetchProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList, currentUser } = useStore();
   
-  // ESTADO DE FILTROS: Todos os campos (exceto distrito) são Arrays para seleção múltipla
+  // ESTADO DE FILTROS: Freguesia vazia por defeito para mostrar todo o Concelho
   const [filters, setFilters] = useState<{
     distrito: string;
     concelho: string[];
@@ -20,7 +20,7 @@ const ProductMarketplace: React.FC = () => {
   }>({
     distrito: currentUser?.distrito || '',
     concelho: currentUser?.concelho ? [currentUser.concelho] : [],
-    freguesia: currentUser?.freguesia ? [currentUser.freguesia] : [],
+    freguesia: [], 
     category: [],
     family: [],
     productType: []
@@ -28,8 +28,6 @@ const ProductMarketplace: React.FC = () => {
   
   const [showFilters, setShowFilters] = useState(false);
   const [showCart, setShowCart] = useState(false);
-  
-  // Paginação no Frontend (já que os dados vêm todos de uma vez do backend)
   const [visibleCount, setVisibleCount] = useState(20);
 
   useEffect(() => {
@@ -44,14 +42,12 @@ const ProductMarketplace: React.FC = () => {
 
   const formatPrice = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Geografia)
   const distritos = Object.keys(locations).sort();
   const availableConcelhos = filters.distrito ? Object.keys(locations[filters.distrito] || {}).sort() : [];
   const availableFreguesias = (filters.distrito && filters.concelho.length > 0)
     ? filters.concelho.flatMap((c: string) => locations[filters.distrito][c] || []).sort()
     : [];
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Taxonomia)
   const availableCategories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
   const availableFamilies = (taxonomy && filters.category.length > 0) 
     ? filters.category.flatMap(c => Object.keys(taxonomy.categories[c]?.families || {})).sort() 
@@ -65,14 +61,12 @@ const ProductMarketplace: React.FC = () => {
       }).sort() 
     : [];
 
-  // HANDLERS PARA SELEÇÃO MÚLTIPLA
   const handleAddArrayFilter = (e: React.ChangeEvent<HTMLSelectElement>, field: keyof typeof filters) => {
     const val = e.target.value;
     if (!val || (filters[field] as string[]).includes(val)) return;
     
     setFilters(prev => {
       const newState = { ...prev, [field]: [...(prev[field] as string[]), val] };
-      // Limpar dependentes se a raiz mudar
       if (field === 'concelho') newState.freguesia = [];
       if (field === 'category') { newState.family = []; newState.productType = []; }
       if (field === 'family') newState.productType = [];
@@ -117,7 +111,6 @@ const ProductMarketplace: React.FC = () => {
           <div className="mt-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6 animate-in slide-in-from-top-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
-              {/* Grupo 1: Localização Múltipla */}
               <div className="space-y-3">
                 <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><MapPin size={10}/> Localização (Múltipla)</p>
                 
@@ -153,7 +146,6 @@ const ProductMarketplace: React.FC = () => {
                 </div>
               </div>
 
-              {/* Grupo 2: Taxonomia Múltipla */}
               <div className="space-y-3">
                 <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><Tag size={10}/> Categoria e Tipo (Múltipla)</p>
                 
@@ -202,7 +194,6 @@ const ProductMarketplace: React.FC = () => {
         )}
       </div>
 
-      {/* GRELHA DE PRODUTOS */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
         {displayedProducts.map((p: Product) => (
           <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#00d66f] transition-all">
@@ -230,14 +221,12 @@ const ProductMarketplace: React.FC = () => {
         ))}
       </div>
 
-      {/* TRIGGER DE CARREGAMENTO (Infinite Scroll Frontend) */}
       {products.length > visibleCount && (
         <button onClick={() => setVisibleCount(prev => prev + 20)} className="w-full p-6 bg-white border-4 border-dashed border-slate-200 rounded-[35px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] hover:text-[#00d66f] transition-all flex justify-center items-center gap-3">
           <ChevronDown /> Carregar mais produtos
         </button>
       )}
 
-      {/* ESTADO VAZIO */}
       {!isLoading && products.length === 0 && (
         <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
            <Package size={48} className="mx-auto text-slate-200 mb-4" />
@@ -245,7 +234,6 @@ const ProductMarketplace: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL DA LISTA DE COMPRAS */}
       {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
     </div>
   );

@@ -15,11 +15,10 @@ import ProductMarketplace from './components/ProductMarketplace';
 import ShoppingListModal from './components/ShoppingListModal';
 import UserExplore from './components/UserExplore';
 
-// CORREÇÃO: Adicionado ChevronDown aos imports
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, ArrowLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -317,10 +316,7 @@ const UserDashboard: React.FC = () => {
 
       <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[420px]'}`}>
         
-        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
-          <Building2 size={20} /> Apoio ao Munícipe
-        </button>
-        
+        {/* CARTÃO DE CLIENTE - SEMPRE VISÍVEL NO TOPO */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
              <Printer size={20} />
@@ -350,6 +346,47 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* BOTÃO APOIO AO MUNÍCIPE (Movido para baixo do cartão) */}
+        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+          <Building2 size={20} /> Apoio ao Munícipe
+        </button>
+
+        {/* GRELHA DE NAVEGAÇÃO PERSISTENTE (Nunca desaparece) */}
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+          <button onClick={() => setView('marketplace')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f] shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
+            <ShoppingBag size={22} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Marketplace</span>
+          </button>
+          
+          <button onClick={() => setView('wallets')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
+            <Wallet size={22} />
+            <span className="text-[9px] font-black uppercase tracking-widest">O meu Saldo</span>
+          </button>
+
+          <button onClick={() => setView('explore')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
+            <Store size={22} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Lojas Parceiras</span>
+          </button>
+
+          <button onClick={() => setView('history')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
+            {pendingEvaluations.length > 0 && <span className="absolute top-2 right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
+            <MessageSquare size={22} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Avaliar Lojas</span>
+          </button>
+
+          <button onClick={() => setView('events')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 relative ${view === 'events' ? 'bg-blue-500 border-blue-600 text-white shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-blue-500'}`}>
+            {events.length > 0 && <span className="absolute top-2 right-2 bg-blue-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border-2 border-white animate-bounce">{events.length}</span>}
+            <CalendarPlus size={22} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Eventos Locais</span>
+          </button>
+
+          <button onClick={() => setView('anti_waste')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 relative ${view === 'anti_waste' ? 'bg-green-500 border-green-600 text-white shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-green-500'}`}>
+            {wasteItems.length > 0 && <span className="absolute top-2 right-2 bg-red-500 text-white w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
+            <Leaf size={22} />
+            <span className="text-[9px] font-black uppercase tracking-widest">Desperdício Zero</span>
+          </button>
+        </div>
+
         {appNotification && (
           <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
             <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
@@ -362,175 +399,174 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        <div className="grid grid-cols-2 gap-4">
-          <button 
-            onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} 
-            className={`flex items-center justify-center gap-3 p-5 rounded-2xl transition-all font-black uppercase text-[10px] tracking-widest relative border-b-4 ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f] translate-y-1 shadow-inner' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:bg-slate-50'}`}
-          >
-            <ShoppingBag size={18} /> Lista de Compras
-          </button>
-          
-          <button 
-            onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} 
-            className={`flex items-center justify-center gap-3 p-5 rounded-2xl transition-all font-black uppercase text-[10px] tracking-widest border-b-4 ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white translate-y-1 shadow-inner' : 'bg-white border-slate-200 text-slate-500 shadow-md hover:bg-slate-50'}`}
-          >
-            <Wallet size={18} /> O meu Saldo
-          </button>
-        </div>
+        {/* ÁREA DE CONTEÚDO ATIVO COM BOTÃO VOLTAR */}
+        {view !== 'home' && (
+          <div className="mt-8 pt-6 border-t-2 border-slate-200 animate-in fade-in">
+            <div className="flex justify-between items-center mb-6">
+               <h2 className="text-lg font-black uppercase italic text-[#0a2540]">
+                 {view === 'marketplace' && 'Marketplace Local'}
+                 {view === 'explore' && 'Lojas Parceiras'}
+                 {view === 'wallets' && 'O Meu Saldo'}
+                 {view === 'history' && 'Histórico e Avaliações'}
+                 {view === 'events' && 'Eventos Locais'}
+                 {view === 'anti_waste' && 'Desperdício Zero'}
+                 {view === 'municipalities' && 'Apoio ao Munícipe'}
+               </h2>
+               <button onClick={() => setView('home')} className="bg-white border-2 border-slate-200 text-slate-500 px-4 py-2 rounded-xl text-[9px] font-black uppercase flex items-center gap-2 hover:bg-slate-50 hover:text-[#0a2540] transition-colors shadow-sm">
+                 <ArrowLeft size={14} /> Voltar ao Início
+               </button>
+            </div>
 
-        {view === 'home' && (
-          <div className="space-y-6 animate-in fade-in">
-             <button onClick={() => setView('explore')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-[#0a2540] transition-all font-black uppercase text-[10px] tracking-widest text-slate-500 shadow-sm">
-               <Store size={18} /> Ver Lojas Parceiras
-             </button>
-             <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => setView('history')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 relative hover:border-[#0a2540] transition-all shadow-sm">
-                   {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
-                   <MessageSquare className="text-[#0a2540]" />
-                   <span className="text-[9px] font-black uppercase text-slate-400">Avaliar Lojas</span>
-                </button>
-                <button onClick={() => setView('events')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 hover:border-blue-500 transition-all shadow-sm">
-                   {events.length > 0 && <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{events.length}</span>}
-                   <CalendarPlus className="text-blue-500" />
-                   <span className="text-[9px] font-black uppercase text-slate-400">Eventos Locais</span>
-                </button>
-             </div>
-             <button onClick={() => setView('anti_waste')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-green-500 transition-all relative shadow-sm">
-                {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
-                <Leaf className="text-green-500" />
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Desperdício Zero</span>
-             </button>
-          </div>
-        )}
+            {view === 'marketplace' && <ProductMarketplace />}
+            {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
+            {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
+            {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
 
-        {view === 'marketplace' && <ProductMarketplace />}
-        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-        {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
-        {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
+            {view === 'municipalities' && (
+               <div className="space-y-6 animate-in fade-in duration-500">
+                  <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
+                     <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
+                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <select value={munFilters.distrito} onChange={e=>setMunFilters({...munFilters, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400">
+                           <option value="">Distrito</option>
+                           {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                        </select>
+                        <select disabled={!munFilters.distrito} value={munFilters.concelho} onChange={e=>setMunFilters({...munFilters, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
+                           <option value="">Concelho</option>
+                           {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                        <select disabled={!munFilters.concelho} value={munFilters.freguesia} onChange={e=>setMunFilters({...munFilters, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
+                           <option value="">Freguesia (Opcional)</option>
+                           {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                        </select>
+                     </div>
+                  </div>
 
-        {view === 'municipalities' && (
-           <div className="space-y-6 animate-in fade-in duration-500">
-              <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
-                 <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <select value={munFilters.distrito} onChange={e=>setMunFilters({...munFilters, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400">
-                       <option value="">Distrito</option>
-                       {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <select disabled={!munFilters.distrito} value={munFilters.concelho} onChange={e=>setMunFilters({...munFilters, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
-                       <option value="">Concelho</option>
-                       {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select disabled={!munFilters.concelho} value={munFilters.freguesia} onChange={e=>setMunFilters({...munFilters, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
-                       <option value="">Freguesia (Opcional)</option>
-                       {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                 </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                 {municipalitiesFaqs.map(faq => (
-                    <details key={faq.id} className="bg-white border-2 border-slate-100 rounded-2xl shadow-sm group overflow-hidden">
-                       <summary className="p-5 font-black text-[#0a2540] text-sm cursor-pointer list-none flex justify-between items-center hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-3">
-                             <div className={`p-2 rounded-lg ${faq.type === 'camara' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
-                                <Building2 size={16} />
-                             </div>
-                             {faq.question}
-                          </div>
-                          <ChevronDown size={18} className="text-slate-400 group-open:rotate-180 transition-transform" />
-                       </summary>
-                       <div className="p-5 pt-0 text-sm font-bold text-slate-600 leading-relaxed border-t-2 border-slate-50 mt-2 whitespace-pre-wrap">
-                          {faq.answer}
-                          
-                          {(faq.contacts || faq.links) && (
-                             <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                                {faq.contacts && (
-                                   <div className="flex items-center gap-2 text-[11px] font-black uppercase text-[#0a2540]">
-                                      <Phone size={14} className="text-[#00d66f]" /> {faq.contacts}
-                                   </div>
-                                )}
-                                {faq.links && (
-                                   <a href={faq.links} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11px] font-black uppercase text-blue-500 hover:text-blue-700">
-                                      <Link2 size={14} /> Aceder ao Link
-                                   </a>
-                                )}
-                             </div>
-                          )}
-                       </div>
-                    </details>
-                 ))}
-                 {municipalitiesFaqs.length === 0 && (
-                    <div className="py-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
-                       <Building2 size={32} className="mx-auto text-slate-300 mb-3" />
-                       <p className="text-[10px] font-black uppercase text-slate-400">Nenhuma informação disponível para esta localidade.</p>
-                    </div>
-                 )}
-              </div>
-           </div>
-        )}
-
-        {view === 'events' && (
-           <div className="space-y-4 animate-in fade-in duration-500">
-              <h3 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-4 flex items-center gap-2"><CalendarPlus className="text-blue-500" /> Agenda da Freguesia</h3>
-              {events.map((ev: any) => (
-                 <div key={ev.id} className="bg-white border-4 border-blue-500 rounded-[30px] p-6 shadow-lg flex flex-col md:flex-row gap-6">
-                    <div className="w-full md:w-48 shrink-0 bg-slate-100 rounded-2xl border-2 border-slate-200 overflow-hidden flex items-center justify-center p-2">
-                       <img src={ev.imageUrl} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
-                    </div>
-                    <div className="flex-1">
-                        <h4 className="font-black uppercase text-[#0a2540] text-xl mb-1">{ev.title}</h4>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Org: {ev.entityName} | {ev.eventType}</p>
-                        
-                        <p className="text-xs font-bold text-slate-600 leading-relaxed mb-4">{ev.description}</p>
-                        
-                        <div className="grid grid-cols-2 gap-2 bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 text-[10px] font-black uppercase text-blue-900">
-                           <p className="flex items-center gap-2"><MapPin size={14} className="text-blue-500" /> {ev.location}</p>
-                           <p className="flex items-center gap-2"><Star size={14} className="text-blue-500" /> {ev.ticketPrice}</p>
-                           <p className="flex items-center gap-2 col-span-2 mt-2 pt-2 border-t border-blue-200">
-                             Da {ev.startDate.toDate().toLocaleDateString()} a {ev.endDate.toDate().toLocaleDateString()} (Início às {ev.startTime})
-                           </p>
+                  <div className="grid grid-cols-1 gap-4">
+                     {municipalitiesFaqs.map(faq => (
+                        <details key={faq.id} className="bg-white border-2 border-slate-100 rounded-2xl shadow-sm group overflow-hidden">
+                           <summary className="p-5 font-black text-[#0a2540] text-sm cursor-pointer list-none flex justify-between items-center hover:bg-slate-50 transition-colors">
+                              <div className="flex items-center gap-3">
+                                 <div className={`p-2 rounded-lg ${faq.type === 'camara' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
+                                    <Building2 size={16} />
+                                 </div>
+                                 {faq.question}
+                              </div>
+                              <ChevronDown size={18} className="text-slate-400 group-open:rotate-180 transition-transform" />
+                           </summary>
+                           <div className="p-5 pt-0 text-sm font-bold text-slate-600 leading-relaxed border-t-2 border-slate-50 mt-2 whitespace-pre-wrap">
+                              {faq.answer}
+                              
+                              {(faq.contacts || faq.links) && (
+                                 <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                                    {faq.contacts && (
+                                       <div className="flex items-center gap-2 text-[11px] font-black uppercase text-[#0a2540]">
+                                          <Phone size={14} className="text-[#00d66f]" /> {faq.contacts}
+                                       </div>
+                                    )}
+                                    {faq.links && (
+                                       <a href={faq.links} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11px] font-black uppercase text-blue-500 hover:text-blue-700">
+                                          <Link2 size={14} /> Aceder ao Link
+                                       </a>
+                                    )}
+                                 </div>
+                              )}
+                           </div>
+                        </details>
+                     ))}
+                     {municipalitiesFaqs.length === 0 && (
+                        <div className="py-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                           <Building2 size={32} className="mx-auto text-slate-300 mb-3" />
+                           <p className="text-[10px] font-black uppercase text-slate-400">Nenhuma informação disponível para esta localidade.</p>
                         </div>
-                    </div>
-                 </div>
-              ))}
-              {events.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhum evento agendado para breve.</p>}
-           </div>
-        )}
+                     )}
+                  </div>
+               </div>
+            )}
 
-        {view === 'anti_waste' && (
-           <div className="space-y-4 animate-in fade-in duration-500">
-              <div className="bg-[#22c55e] text-white p-6 rounded-[30px] shadow-lg mb-6 border-4 border-[#22c55e]">
-                 <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite</h3>
-                 <p className="text-xs font-bold opacity-90 mt-2">Sobras do dia com descontos acentuados. Válido apenas nas lojas.</p>
-              </div>
-              {wasteItems.map((w: any) => (
-                 <div key={w.id} className="bg-white border-4 border-[#22c55e] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
-                    <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#22c55e]"/> {w.merchantName}</h4>
-                    <p className="text-[10px] font-bold text-slate-400 mt-1 mb-4">{w.address}</p>
-                    <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100 mb-4">
-                       <p className="text-sm font-bold text-green-900 mb-2">{w.productInfo}</p>
-                       <span className="bg-white text-green-700 font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg border border-green-200 inline-block shadow-sm">🛒 {w.conditions}</span>
-                    </div>
-                    <p className="text-right text-[10px] font-black uppercase text-slate-500 bg-slate-100 p-3 rounded-xl border-2 border-slate-200 w-full">⚠️ Termina às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
-                 </div>
-              ))}
-              {wasteItems.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhuma oportunidade hoje. Tente mais tarde!</p>}
-           </div>
-        )}
+            {view === 'events' && (
+               <div className="space-y-4 animate-in fade-in duration-500">
+                  {events.map((ev: any) => (
+                     <div key={ev.id} className="bg-white border-4 border-blue-500 rounded-[30px] p-6 shadow-lg flex flex-col md:flex-row gap-6">
+                        <div className="w-full md:w-48 shrink-0 bg-slate-100 rounded-2xl border-2 border-slate-200 overflow-hidden flex items-center justify-center p-2">
+                           <img src={ev.imageUrl} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
+                        </div>
+                        <div className="flex-1">
+                            <h4 className="font-black uppercase text-[#0a2540] text-xl mb-1">{ev.title}</h4>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-4">Org: {ev.entityName} | {ev.eventType}</p>
+                            
+                            <p className="text-xs font-bold text-slate-600 leading-relaxed mb-4">{ev.description}</p>
+                            
+                            <div className="grid grid-cols-2 gap-2 bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 text-[10px] font-black uppercase text-blue-900">
+                               <p className="flex items-center gap-2"><MapPin size={14} className="text-blue-500" /> {ev.location}</p>
+                               <p className="flex items-center gap-2"><Star size={14} className="text-blue-500" /> {ev.ticketPrice}</p>
+                               <p className="flex items-center gap-2 col-span-2 mt-2 pt-2 border-t border-blue-200">
+                                 Da {ev.startDate.toDate().toLocaleDateString()} a {ev.endDate.toDate().toLocaleDateString()} (Início às {ev.startTime})
+                               </p>
+                            </div>
+                        </div>
+                     </div>
+                  ))}
+                  {events.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhum evento agendado para breve.</p>}
+               </div>
+            )}
 
-        <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
-          <div className="flex items-center">
-            <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
-              <Star size={32} className="text-[#00d66f]" />
-            </div>
-            <div className="p-6 text-left flex-1">
-              <h4 className="text-lg font-black uppercase italic leading-none text-[#0a2540]">Oportunidades da Semana</h4>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{activeLeaflets.length > 0 ? 'Clique para abrir o folheto digital' : 'Não existem folhetos ativos'}</p>
-            </div>
-            {activeLeaflets.length > 0 && <div className="pr-6"><ExternalLink size={20} className="text-[#0a2540] opacity-30" /></div>}
+            {view === 'anti_waste' && (
+               <div className="space-y-4 animate-in fade-in duration-500">
+                  <div className="bg-[#22c55e] text-white p-6 rounded-[30px] shadow-lg mb-6 border-4 border-[#22c55e]">
+                     <h3 className="text-xl font-black uppercase italic tracking-tighter flex items-center gap-2"><Leaf /> Ofertas Limite</h3>
+                     <p className="text-xs font-bold opacity-90 mt-2">Sobras do dia com descontos acentuados. Válido apenas nas lojas.</p>
+                  </div>
+                  {wasteItems.map((w: any) => (
+                     <div key={w.id} className="bg-white border-4 border-[#22c55e] rounded-[30px] p-6 shadow-lg relative overflow-hidden">
+                        <h4 className="font-black uppercase text-[#0a2540] flex items-center gap-2"><Store size={16} className="text-[#22c55e]"/> {w.merchantName}</h4>
+                        <p className="text-[10px] font-bold text-slate-400 mt-1 mb-4">{w.address}</p>
+                        <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-100 mb-4">
+                           <p className="text-sm font-bold text-green-900 mb-2">{w.productInfo}</p>
+                           <span className="bg-white text-green-700 font-black text-[10px] uppercase tracking-widest px-3 py-1.5 rounded-lg border border-green-200 inline-block shadow-sm">🛒 {w.conditions}</span>
+                        </div>
+                        <p className="text-right text-[10px] font-black uppercase text-slate-500 bg-slate-100 p-3 rounded-xl border-2 border-slate-200 w-full">⚠️ Termina às {w.endTime.toDate().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                     </div>
+                  ))}
+                  {wasteItems.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhuma oportunidade hoje. Tente mais tarde!</p>}
+               </div>
+            )}
           </div>
-        </button>
+        )}
+
+        {/* CONTEÚDO DA HOME (Folhetos e Vantagens) */}
+        {view === 'home' && (
+          <div className="mt-8 space-y-6 animate-in fade-in">
+            <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
+              <div className="flex items-center">
+                <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
+                  <Star size={32} className="text-[#00d66f]" />
+                </div>
+                <div className="p-6 text-left flex-1">
+                  <h4 className="text-lg font-black uppercase italic leading-none text-[#0a2540]">Oportunidades da Semana</h4>
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{activeLeaflets.length > 0 ? 'Clique para abrir o folheto digital' : 'Não existem folhetos ativos'}</p>
+                </div>
+                {activeLeaflets.length > 0 && <div className="pr-6"><ExternalLink size={20} className="text-[#0a2540] opacity-30" /></div>}
+              </div>
+            </button>
+
+            {sysConfig.vantagensUrl && (
+              <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
+                <div className="flex items-center justify-between relative z-10">
+                  <div className="flex items-center gap-4">
+                    <div className="bg-[#bf953f] p-3 rounded-2xl"><Star size={24} className="text-white fill-white" /></div>
+                    <div className="text-left">
+                      <h4 className="text-lg font-black uppercase italic leading-none tracking-tighter text-[#bf953f]">Vantagens VIP</h4>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Exclusivo para membros Vizinho+</p>
+                    </div>
+                  </div>
+                  <ExternalLink size={20} className="text-[#bf953f]" />
+                </div>
+              </button>
+            )}
+          </div>
+        )}
 
         {/* BOTÕES DE SUPORTE E PWA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
@@ -552,22 +588,6 @@ const UserDashboard: React.FC = () => {
             </button>
           )}
         </div>
-
-        {sysConfig.vantagensUrl && (
-          <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-            <div className="flex items-center justify-between relative z-10">
-              <div className="flex items-center gap-4">
-                <div className="bg-[#bf953f] p-3 rounded-2xl"><Star size={24} className="text-white fill-white" /></div>
-                <div className="text-left">
-                  <h4 className="text-lg font-black uppercase italic leading-none tracking-tighter text-[#bf953f]">Vantagens VIP</h4>
-                  <p className="text-[10px] font-black uppercase tracking-widest text-slate-400 mt-1">Exclusivo para membros Vizinho+</p>
-                </div>
-              </div>
-              <ExternalLink size={20} className="text-[#bf953f]" />
-            </div>
-          </button>
-        )}
 
       </main>
 
