@@ -56,10 +56,18 @@ const UserDashboard: React.FC = () => {
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
-  // Efeito para scroll automático ao selecionar uma funcionalidade (Melhoria UX Mobile)
+  // CORREÇÃO CRÍTICA: Matemática de Scroll para não esconder conteúdo atrás do banner fixo
   useEffect(() => {
     if (view !== 'home' && contentRef.current) {
-      contentRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      // Calcula a altura do banner dependendo do ecrã (Mobile vs Desktop) + margem de segurança
+      const headerOffset = window.innerWidth >= 768 ? 440 : 320; 
+      const elementPosition = contentRef.current.getBoundingClientRect().top;
+      const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
+      
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: 'smooth'
+      });
     }
   }, [view]);
 
@@ -319,7 +327,8 @@ const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[420px]'}`}>
+      {/* CORREÇÃO CRÍTICA: Aumento do padding-top para não sobrepor o botão azul com o banner */}
+      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[320px] md:pt-[440px]'}`}>
         
         {/* 1. CARTÃO DE CLIENTE */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
@@ -351,12 +360,12 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 2. BOTÃO APOIO AO MUNÍCIPE (Por baixo do cartão) */}
+        {/* 2. BOTÃO APOIO AO MUNÍCIPE */}
         <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
           <Building2 size={20} /> Apoio ao Munícipe
         </button>
 
-        {/* 3. GRELHA DE NAVEGAÇÃO PERSISTENTE (Sempre visível) */}
+        {/* 3. GRELHA DE NAVEGAÇÃO PERSISTENTE */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <button onClick={() => setView('marketplace')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f] shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
             <ShoppingBag size={22} />
@@ -404,7 +413,7 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* 4. ÁREA DE CONTEÚDO ATIVO COM BOTÃO VOLTAR */}
+        {/* 4. ÁREA DE CONTEÚDO ATIVO */}
         <div ref={contentRef} className="mt-8 pt-6 border-t-2 border-slate-200 animate-in fade-in">
           {view !== 'home' && (
             <div className="flex justify-between items-center mb-6">
@@ -602,6 +611,61 @@ const UserDashboard: React.FC = () => {
                 <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3">Abrir App de Email</button>
                 <button onClick={handleCopyEmail} className="w-full p-4 rounded-xl font-black uppercase text-[10px] tracking-widest border-2 border-slate-100 hover:bg-slate-50 transition-all">{emailCopied ? 'Copiado!' : 'Copiar Email'}</button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRulesModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-amber-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-amber-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2 text-[#0a2540]"><BookOpen className="text-[#0a2540]" /> Regras de Utilização</h3>
+              <button onClick={() => setShowRulesModal(false)} className="p-2 hover:bg-white/20 rounded-full text-[#0a2540]"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-xs font-medium text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">1. Isenção de Responsabilidade</h4>
+                <p>A plataforma Vizinho+ atua exclusivamente como um intermediário tecnológico facilitador de cashback. O Vizinho+ isenta-se de qualquer responsabilidade sobre litígios comerciais entre Lojistas e Clientes, qualidade de produtos ou serviços prestados.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">2. Natureza do Saldo (Cashback)</h4>
+                <p>O saldo acumulado não possui valor fiduciário, não é convertível em numerário e não pode ser transferido para contas bancárias. Serve unicamente como desconto em compras futuras na rede aderente.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">3. Apresentação do Cartão</h4>
+                <p>O Cliente deve apresentar obrigatoriamente o seu Cartão Digital ou QR Code ao lojista antes do encerramento da fatura para garantir a atribuição ou o resgate de saldo.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">4. Limites de Desconto (Regra dos 50%)</h4>
+                <p>O desconto de saldo acumulado nunca poderá ser superior a 50% do valor total da nova compra, independentemente do saldo disponível na carteira do cliente.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-[#0a2540] mb-1 uppercase">5. Acumulação em Resgates</h4>
+                <p>Ao resgatar saldo, o cliente continua a acumular novo cashback sobre o valor remanescente efetivamente pago na fatura.</p>
+              </div>
+              <div>
+                <h4 className="font-black text-red-600 mb-1 uppercase">6. Prevenção de Fraude</h4>
+                <p>Qualquer tentativa de fraude, uso de dados de terceiros ou manipulação do sistema resultará na suspensão imediata da conta e perda total dos benefícios acumulados.</p>
+              </div>
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50"><button onClick={() => setShowRulesModal(false)} className="w-full bg-amber-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-amber-600">Compreendi e Aceito as Regras</button></div>
+          </div>
+        </div>
+      )}
+
+      {showFaqModal && (
+        <div className="fixed inset-0 z-[250] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm">
+          <div className="bg-white w-full max-w-2xl h-[80vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in">
+            <div className="bg-blue-500 p-6 text-white flex justify-between items-center">
+              <h3 className="font-black uppercase italic flex items-center gap-2"><HelpCircle size={24} /> Guia de Utilização (FAQs)</h3>
+              <button onClick={() => setShowFaqModal(false)} className="p-2 hover:bg-white/10 rounded-full"><X /></button>
+            </div>
+            <div className="p-8 overflow-y-auto flex-1 space-y-6 text-sm font-bold text-slate-600 leading-relaxed custom-scrollbar whitespace-pre-wrap">
+              {sysConfig.clientFaqs || "O guia está a ser atualizado pela administração. Por favor, tente mais tarde."}
+            </div>
+            <div className="p-6 border-t-2 border-slate-100 bg-slate-50">
+              <button onClick={() => setShowFaqModal(false)} className="w-full bg-blue-500 text-white p-4 rounded-2xl font-black uppercase tracking-widest shadow-md hover:bg-blue-600">Fechar Guia</button>
             </div>
           </div>
         </div>
