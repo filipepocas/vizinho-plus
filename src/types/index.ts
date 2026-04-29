@@ -85,7 +85,7 @@ export interface Product {
 
 export interface Banner { id: string; title: string; imageUrl: string; targetType: 'all' | 'zip' | 'birthday' | 'zonas'; targetValue?: string; targetZones?: string[]; targetZipCodes?: string[]; maxImpressions?: number; startDate: any; endDate: any; createdAt: any; active: boolean; }
 export interface Transaction { id: string; clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem' | 'cancel'; status: 'pending' | 'available' | 'rejected' | 'cancelled'; createdAt: any; clientName?: string; clientCardNumber?: string; clientNif?: string; cashbackAmount: number; cashbackEarned?: number; documentNumber?: string; clientBirthDate?: string; processedByBackend?: boolean; maturedAt?: any; rejectReason?: string; cancelledAt?: any; }
-export interface TransactionCreate { clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem' | 'cancel'; documentNumber?: string; clientName?: string; clientCardNumber?: string; clientBirthDate?: string; }
+export interface TransactionCreate { clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem' | 'cancel'; documentNumber?: string; clientName?: string; clientCardNumber?: string; clientBirthDate?: string; discountUsed?: number; }
 export interface MarketingRequest { id?: string; merchantId?: string; merchantName?: string; shopName?: string; type: 'banner' | 'leaflet' | 'push_notification'; status: 'pending' | 'approved' | 'rejected'; createdAt: any; title?: string; text?: string; imageUrl?: string; requestedDate?: string; leafletCampaignTitle?: string; leafletCampaignId?: string; spaceType?: string; description?: string; sellPrice?: string; unit?: string; promoPrice?: string; promoType?: string; targetType?: string; targetCriteria?: string; targetValue?: string; targetZones?: string[]; targetCount?: number; cost?: number; isExternal?: boolean; companyName?: string; contactName?: string; nif?: string; email?: string; phone?: string; serviceCompleted?: boolean; finalPrice?: number; billingSent?: boolean; billingSentDate?: string; paymentReceived?: boolean; paymentReceivedDate?: string; }
 export interface Leaflet { id?: string; title: string; createdAt?: any; startDate?: any; endDate?: any; leafletUrl?: string; imageUrl?: string; isActive?: boolean; targetZipCodes?: string[]; targetZones?: string[]; limitDate?: any; distributionDate?: any; }
 export type LeafletCampaign = Leaflet;
@@ -99,7 +99,6 @@ export interface AntiWasteItem { id?: string; merchantId: string; merchantName: 
 export type LocationsMap = Record<string, Record<string, string[]>>;
 export interface PricingRule { id?: string; tool: 'banner' | 'push' | 'leaflet'; chargeType: 'per_day' | 'per_client' | 'fixed'; zoneLevel: 'global' | 'distrito' | 'concelho' | 'freguesia'; zoneName: string; leafletId?: string; spaceType?: string; price: number; minPrice: number; createdAt?: any; }
 
-// CORREÇÃO: Interface adicionada
 export interface MunicipalityFAQ {
   id?: string;
   distrito: string;

@@ -87,7 +87,6 @@ export const useStore = create<StoreState>((set, get) => ({
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-      // Query APENAS por data para evitar erros de índice composto no Firestore
       const q = query(
         collection(db, 'products'), 
         where('createdAt', '>=', seteDiasAtras)
@@ -96,14 +95,12 @@ export const useStore = create<StoreState>((set, get) => ({
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // Ordenação manual em memória para garantir 100% de sucesso sem índices
       fetchedProducts.sort((a: Product, b: Product) => {
         const dateA = a.createdAt?.seconds || 0;
         const dateB = b.createdAt?.seconds || 0;
         return dateB - dateA;
       });
 
-      // FILTRAGEM EM MEMÓRIA (Substitui os wheres do Firestore)
       if (filters.distrito) {
         fetchedProducts = fetchedProducts.filter((p: Product) => p.distrito === filters.distrito);
       }
@@ -182,11 +179,19 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       const newTxRef = doc(collection(db, 'transactions'));
       await setDoc(newTxRef, {
-        clientId: tx.clientId, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name,
-        amount: Number(tx.amount), invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
-        type: tx.type, status: 'pending', createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber || "", documentNumber: tx.documentNumber || "",
-        clientName: tx.clientName || "Desconhecido", clientCardNumber: tx.clientCardNumber || "---", clientBirthDate: tx.clientBirthDate || ""
+        clientId: tx.clientId, 
+        merchantId: currentUser.id, 
+        merchantName: currentUser.shopName || currentUser.name,
+        amount: Number(tx.amount), // Valor do Desconto (se houver) ou Fatura (se não houver desconto)
+        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0, // Valor total da Fatura
+        type: tx.type, 
+        status: 'pending', 
+        createdAt: serverTimestamp(),
+        clientNif: tx.documentNumber || "", 
+        documentNumber: tx.documentNumber || "",
+        clientName: tx.clientName || "Desconhecido", 
+        clientCardNumber: tx.clientCardNumber || "---", 
+        clientBirthDate: tx.clientBirthDate || ""
       });
       toast.success("MOVIMENTO ENVIADO!");
       return newTxRef.id;
@@ -212,36 +217,57 @@ export const useStore = create<StoreState>((set, get) => ({
   subscribeToTransactions: (role?: string, id?: string) => {
     if (!id && role !== 'admin') return () => {};
     let q: any;
+    
     if (role === 'admin') {
       q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
     } else if (role === 'merchant') {
-      q = query(collection(db, 'transactions'), where('merchantId', '==', id), orderBy('createdAt', 'desc'), limit(150));
+      q = query(collection(db, 'transactions'), where('merchantId', '==', id));
     } else {
-      q = query(collection(db, 'transactions'), where('clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
+      q = query(collection(db, 'transactions'), where('clientId', '==', id));
     }
     
-    return onSnapshot(q, (snap: any) => set({ transactions: snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)) }));
+    return onSnapshot(q, (snap: any) => {
+      let fetchedTxs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+      
+      if (role !== 'admin') {
+        fetchedTxs.sort((a: Transaction, b: Transaction) => {
+          const dateA = a.createdAt?.seconds || 0;
+          const dateB = b.createdAt?.seconds || 0;
+          return dateB - dateA;
+        });
+        fetchedTxs = fetchedTxs.slice(0, 150);
+      }
+      
+      set({ transactions: fetchedTxs });
+    });
   },
 
   initializeAuth: () => {
     const unsubLocs = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => set({ locations: docSnap.data()?.data || {} }));
+    let unsubTx: (() => void) | undefined;
+
     const unsubAuth = onAuthStateChanged(auth, (user: any) => {
       if (user) {
         onSnapshot(doc(db, 'users', user.uid), (d: any) => {
           if (d.exists()) {
+            const userData = { ...d.data(), id: user.uid } as UserProfile;
             set({ 
-              currentUser: { ...d.data(), id: user.uid } as UserProfile, 
+              currentUser: userData, 
               isLoading: false, 
               isInitialized: true 
             });
+            
+            if (unsubTx) unsubTx();
+            unsubTx = get().subscribeToTransactions(userData.role, userData.id);
           }
         });
       } else {
-        set({ currentUser: null, isLoading: false, isInitialized: true });
+        if (unsubTx) unsubTx();
+        set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
       }
     });
     get().fetchTaxonomy();
-    return () => { unsubAuth(); unsubLocs(); };
+    return () => { unsubAuth(); unsubLocs(); if (unsubTx) unsubTx(); };
   },
 
   deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {

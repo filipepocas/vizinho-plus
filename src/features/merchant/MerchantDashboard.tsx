@@ -23,7 +23,7 @@ import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 
 const MerchantDashboard: React.FC = () => {
-  const { currentUser, addTransaction, logout, locations } = useStore();
+  const { currentUser, transactions, addTransaction, logout, locations } = useStore();
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
@@ -42,8 +42,6 @@ const MerchantDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
 
   // Estados de Desperdício
   const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00' });
@@ -58,12 +56,6 @@ const MerchantDashboard: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
   const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
-
-  const previewCashbackValue = useMemo(() => {
-    const numAmount = parseFloat(amount) || 0;
-    const percent = currentUser?.cashbackPercent || 0;
-    return (numAmount * percent) / 100;
-  }, [amount, currentUser?.cashbackPercent]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -116,23 +108,39 @@ const MerchantDashboard: React.FC = () => {
     try { await deleteDoc(doc(db, 'merchant_messages', id)); toast.success("MENSAGEM APAGADA."); if (adminMessages.length <= 1) setShowInbox(false); } catch (e) { toast.error("ERRO."); }
   };
 
-  const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
-    const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
-    setPendingAction({ type, val: val || 0, invAmount: parseFloat(amount) || 0 });
-    setShowConfirmModal(true);
-  };
-
-  const handleConfirm = async () => {
-    if (!pendingAction || !currentUser || !foundClient) return;
-    setShowConfirmModal(false); setIsLoading(true);
+  // NOVA LÓGICA DE PROCESSAMENTO UNIFICADA
+  const processAction = async (type: string, payload: any) => {
+    if (!currentUser || !foundClient) return;
+    setIsLoading(true);
+    
     try {
+      // Se houve desconto, a transação principal é do tipo 'redeem' (resgate)
+      // A Cloud Function vai ler o invoiceAmount e calcular o cashback restante automaticamente.
+      const txType = payload.discountUsed > 0 ? 'redeem' : 'earn';
+      const txAmount = payload.discountUsed > 0 ? payload.discountUsed : payload.invoiceAmount;
+
       await addTransaction({
-        clientId: foundClient.id, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name || 'Loja',
-        amount: pendingAction.val, invoiceAmount: pendingAction.invAmount, type: pendingAction.type, documentNumber: documentNumber,
-        clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
+        clientId: foundClient.id, 
+        merchantId: currentUser.id, 
+        merchantName: currentUser.shopName || currentUser.name || 'Loja',
+        amount: txAmount, 
+        invoiceAmount: payload.invoiceAmount, 
+        type: txType, 
+        documentNumber: documentNumber,
+        clientName: foundClient.name, 
+        clientCardNumber: foundClient.customerNumber, 
+        clientBirthDate: foundClient.birthDate
       });
-      setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
-    } catch (e) { toast.error("ERRO NO REGISTO."); } finally { setIsLoading(false); }
+      
+      setAmount(''); 
+      setDocumentNumber(''); 
+      setCardNumber(''); 
+      setFoundClient(null);
+    } catch (e) { 
+      toast.error("ERRO NO REGISTO."); 
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   const handleAddWasteZone = () => {
@@ -208,7 +216,7 @@ const MerchantDashboard: React.FC = () => {
             cardNumber={cardNumber} setCardNumber={setCardNumber}
             isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
             amount={amount} setAmount={setAmount}
-            previewCashback={previewCashbackValue}
+            previewCashback={0} // Legado
             documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
@@ -216,11 +224,12 @@ const MerchantDashboard: React.FC = () => {
             clientStoreBalance={foundClient?.storeWallets?.[currentUser.id]?.available || 0}
             formatCurrency={(v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v)}
             isLeaving={currentUser.isLeaving}
+            merchantPercent={currentUser.cashbackPercent}
           />
         )}
 
         {view === 'catalog' && <MerchantCatalog merchant={currentUser} />}
-        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={[]} />}
+        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={transactions} />}
         {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
@@ -304,23 +313,6 @@ const MerchantDashboard: React.FC = () => {
                  {activeWasteOffers.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-300 text-sm uppercase">Nenhum anúncio ativo hoje.</p>}
               </div>
            </div>
-        )}
-
-        {/* MODAIS DE CONFIRMAÇÃO E REGRAS */}
-        {showConfirmModal && foundClient && pendingAction && (
-          <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0f172a]/90 backdrop-blur-md">
-            <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0f172a] shadow-2xl overflow-hidden animate-in zoom-in">
-               <div className="bg-[#0f172a] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3></div>
-               <div className="p-8 text-center space-y-4">
-                 <p className="text-xs font-bold text-slate-500 uppercase">Cliente: <span className="text-[#0f172a]">{foundClient.name}</span></p>
-                 <p className="text-4xl font-black italic text-[#0f172a]">{new Intl.NumberFormat('pt-PT',{style:'currency',currency:'EUR'}).format(pendingAction.val)}</p>
-                 <div className="flex gap-4 mt-8">
-                   <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100">Cancelar</button>
-                   <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0f172a] bg-[#00d66f] shadow-lg">Confirmar</button>
-                 </div>
-               </div>
-            </div>
-          </div>
         )}
       </main>
 
