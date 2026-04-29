@@ -6,9 +6,15 @@ service cloud.firestore {
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
     function isAuthenticated() { return request.auth != null; }
+    function isMunicipality() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'municipality';
+    }
+    function isPartner() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'partner';
+    }
 
     match /users/{userId} {
-      allow read: if true; 
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin());
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
     }
@@ -26,13 +32,22 @@ service cloud.firestore {
       allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.userId == request.auth.uid);
     }
     
-    match /vantagens/{vantagemId} { allow read: if true; allow write: if isAdmin(); }
+    match /vantagens/{vantagemId} { 
+      allow read: if true; 
+      allow create: if isAdmin();
+      allow update: if isAdmin() || (isPartner() && resource.data.partnerUid == request.auth.uid);
+      allow delete: if isAdmin();
+    }
     match /banners/{bannerId} { allow read: if true; allow write: if isAdmin(); }
     match /leaflets/{leafletId} { allow read: if true; allow write: if isAdmin(); }
     match /leaflet_campaigns/{campaignId} { allow read: if true; allow write: if isAdmin(); }
     match /system/{document=**} { allow read: if true; allow write: if isAdmin(); }
     match /pricing_rules/{ruleId} { allow read: if isAuthenticated(); allow write: if isAdmin(); }
-    match /municipalities_faqs/{faqId} { allow read: if true; allow write: if isAdmin(); }
+    match /municipalities_faqs/{faqId} { 
+      allow read: if true; 
+      allow create: if isAdmin() || isMunicipality();
+      allow update, delete: if isAdmin() || (isMunicipality() && resource.data.distrito == get(/databases/$(database)/documents/users/$(request.auth.uid)).data.distrito);
+    }
 
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
@@ -70,7 +85,6 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
     }
 
-    // NOVA REGRA: PRODUTOS DO CATÁLOGO
     match /products/{productId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.merchantId == request.auth.uid;

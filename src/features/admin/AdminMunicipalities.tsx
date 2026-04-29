@@ -2,11 +2,13 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, addDoc, query, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, orderBy } from 'firebase/firestore';
-import { Building2, Plus, Trash2, Edit3, Loader2, Search, MapPin, Link2, Phone } from 'lucide-react';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, updateDoc, serverTimestamp, orderBy, where } from 'firebase/firestore';
+import { Building2, Plus, Trash2, Edit3, Loader2, Search, MapPin, Link2, Phone, UserPlus, ShieldOff, ShieldCheck, Key, X } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { MunicipalityFAQ } from '../../types';
+import { MunicipalityFAQ, User as UserProfile } from '../../types';
 import { useStore } from '../../store/useStore';
+import MunicipalityUserModal from './MunicipalityUserModal';
+import { getAuth, updatePassword } from 'firebase/auth';
 
 const AdminMunicipalities: React.FC = () => {
   const { locations } = useStore();
@@ -15,6 +17,11 @@ const AdminMunicipalities: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+
+  const [municipalityUsers, setMunicipalityUsers] = useState<UserProfile[]>([]);
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [changingPassId, setChangingPassId] = useState<string | null>(null);
+  const [newPass, setNewPass] = useState('');
 
   const [formData, setFormData] = useState<MunicipalityFAQ>({
     distrito: '', concelho: '', freguesia: '', type: 'camara',
@@ -29,10 +36,18 @@ const AdminMunicipalities: React.FC = () => {
     const q = query(collection(db, 'municipalities_faqs'), orderBy('createdAt', 'desc'));
     const unsubscribe = onSnapshot(q, (snap: any) => {
       setFaqs(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MunicipalityFAQ)));
-      setLoading(false); // Garante que o loading para, mesmo se vazio
-    }, (error) => {
+      setLoading(false);
+    }, (error: any) => {
       console.error(error);
-      setLoading(false); // Para o loading se houver erro de permissão
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'users'), where('role', '==', 'municipality'));
+    const unsubscribe = onSnapshot(q, (snap: any) => {
+      setMunicipalityUsers(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
     });
     return () => unsubscribe();
   }, []);
@@ -101,6 +116,27 @@ const AdminMunicipalities: React.FC = () => {
 
   const resetForm = () => {
     setFormData({ distrito: '', concelho: '', freguesia: '', type: 'camara', question: '', answer: '', contacts: '', links: '', createdAt: null });
+  };
+
+  const toggleUserStatus = async (userId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'active' ? 'disabled' : 'active';
+    await updateDoc(doc(db, 'users', userId), { status: newStatus });
+    toast.success(`Utilizador ${newStatus === 'active' ? 'ativado' : 'suspenso'}.`);
+  };
+
+  const handleChangePassword = async (userId: string) => {
+    if (!newPass || newPass.length < 6) return toast.error('Mínimo 6 caracteres.');
+    try {
+      const provisionAuthInstance = getAuth();
+      const user = provisionAuthInstance.currentUser;
+      if (!user) return toast.error('Sem sessão ativa.');
+      await updatePassword(user, newPass);
+      toast.success('Password alterada no Auth.');
+      setChangingPassId(null);
+      setNewPass('');
+    } catch (err: any) {
+      toast.error(err.message || 'Erro ao alterar password.');
+    }
   };
 
   if (loading) return <div className="p-20 text-center"><Loader2 className="animate-spin mx-auto text-[#00d66f]" size={40} /></div>;
@@ -214,6 +250,56 @@ const AdminMunicipalities: React.FC = () => {
           )}
         </div>
       </div>
+
+      {/* SECÇÃO: GESTÃO DE ACESSOS MUNICIPAIS */}
+      <div className="bg-white p-8 rounded-[40px] border-4 border-blue-500 shadow-[12px_12px_0px_#2563eb]">
+        <div className="flex justify-between items-center mb-8">
+          <div className="flex items-center gap-4">
+            <div className="bg-blue-100 p-4 rounded-2xl border-4 border-blue-200 text-blue-600">
+              <UserPlus size={28} strokeWidth={3} />
+            </div>
+            <div>
+              <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Acessos Municipais</h3>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Gerir contas de Juntas e Câmaras</p>
+            </div>
+          </div>
+          <button onClick={() => setShowUserModal(true)} className="bg-blue-500 text-white px-6 py-4 rounded-2xl font-black uppercase text-xs shadow-lg hover:bg-blue-600 transition-all flex items-center gap-2">
+            <Plus size={18} /> Criar Acesso
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 gap-4">
+          {municipalityUsers.length > 0 ? municipalityUsers.map(u => (
+            <div key={u.id} className="flex items-center justify-between bg-slate-50 p-5 rounded-2xl border-2 border-slate-200">
+              <div>
+                <p className="font-black text-[#0a2540] uppercase">{u.name || u.email}</p>
+                <p className="text-[10px] font-bold text-slate-500">{u.distrito} &gt; {u.concelho} {u.freguesia ? `> ${u.freguesia}` : ''}</p>
+                <span className={`text-[9px] font-black uppercase ${u.status === 'active' ? 'text-green-600' : 'text-red-500'}`}>{u.status}</span>
+              </div>
+              <div className="flex gap-2 items-center">
+                {changingPassId === u.id ? (
+                  <div className="flex gap-2 items-center">
+                    <input type="password" placeholder="Nova pass" value={newPass} onChange={e => setNewPass(e.target.value)} className="p-2 border rounded-lg text-xs w-28" />
+                    <button onClick={() => handleChangePassword(u.id)} className="bg-green-500 text-white p-2 rounded-lg text-[10px] font-black"><Key size={14} /></button>
+                    <button onClick={() => { setChangingPassId(null); setNewPass(''); }} className="text-slate-400"><X size={14} /></button>
+                  </div>
+                ) : (
+                  <>
+                    <button onClick={() => setChangingPassId(u.id)} className="bg-slate-200 text-slate-600 p-2 rounded-lg text-[10px] font-black uppercase hover:bg-blue-100">Alterar Pass</button>
+                    <button onClick={() => toggleUserStatus(u.id, u.status || 'active')} className={`p-2 rounded-lg text-[10px] font-black uppercase ${u.status === 'active' ? 'bg-red-50 text-red-500 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}>
+                      {u.status === 'active' ? <ShieldOff size={14} /> : <ShieldCheck size={14} />}
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+          )) : (
+            <p className="text-center text-slate-400 font-bold p-6">Nenhum utilizador municipal criado.</p>
+          )}
+        </div>
+      </div>
+
+      <MunicipalityUserModal isOpen={showUserModal} onClose={() => setShowUserModal(false)} onSuccess={() => setShowUserModal(false)} />
     </div>
   );
 };

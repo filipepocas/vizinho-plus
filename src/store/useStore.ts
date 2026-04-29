@@ -30,6 +30,7 @@ interface StoreState {
   updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>;
   subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
+  checkCardNumberExists: (cardNumber: string) => Promise<boolean>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
   updateUserToken: (userId: string, token: string) => Promise<void>;
@@ -172,6 +173,13 @@ export const useStore = create<StoreState>((set, get) => ({
     return !snap.empty;
   },
 
+  checkCardNumberExists: async (cardNumber: string) => {
+    if (!cardNumber || cardNumber.trim() === '') return false;
+    const q = query(collection(db, 'users'), where('customerNumber', '==', cardNumber), limit(1));
+    const snap = await getDocs(q);
+    return !snap.empty;
+  },
+
   addTransaction: async (tx: TransactionCreate) => {
     const { currentUser } = get();
     if (!currentUser) return;
@@ -182,8 +190,8 @@ export const useStore = create<StoreState>((set, get) => ({
         clientId: tx.clientId, 
         merchantId: currentUser.id, 
         merchantName: currentUser.shopName || currentUser.name,
-        amount: Number(tx.amount), // Valor do Desconto (se houver) ou Fatura (se não houver desconto)
-        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0, // Valor total da Fatura
+        amount: Number(tx.amount),
+        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
         type: tx.type, 
         status: 'pending', 
         createdAt: serverTimestamp(),

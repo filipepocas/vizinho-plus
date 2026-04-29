@@ -6,7 +6,7 @@ import { db } from '../../config/firebase';
 import { User as UserProfile, Transaction } from '../../types/index';
 import { 
   Search, Users, Mail, Download, Phone, 
-  BellRing, Trash2, RefreshCw, Hash, IdCard, MapPin, AlertCircle, X, Filter, CheckSquare
+  BellRing, Trash2, RefreshCw, Hash, IdCard, MapPin, AlertCircle, X, Filter, CheckSquare, CreditCard
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
@@ -18,18 +18,18 @@ interface AdminUsersProps {
 }
 
 const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
-  const { deleteUserWithHistory, locations } = useStore();
+  const { deleteUserWithHistory, locations, checkCardNumberExists } = useStore();
   
   const [searchQuery, setSearchQuery] = useState('');
   const [searchNif, setSearchNif] = useState('');
   const [searchCard, setSearchCard] = useState('');
   
-  // FILTROS MÚLTIPLOS (Ponto 2)
   const [selectedDistritos, setSelectedDistritos] = useState<string[]>([]);
   const [selectedConcelhos, setSelectedConcelhos] = useState<string[]>([]);
   const [selectedFreguesias, setSelectedFreguesias] = useState<string[]>([]);
   
   const [isDeletingId, setIsDeletingId] = useState<string | null>(null);
+  const [isGeneratingCardId, setIsGeneratingCardId] = useState<string | null>(null);
 
   const distritos = Object.keys(locations || {}).sort();
 
@@ -46,7 +46,6 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
     const matchNif = searchNif === '' || u.nif === searchNif;
     const matchCard = searchCard === '' || u.customerNumber === searchCard;
     
-    // Lógica de Filtros Múltiplos
     const matchDistrito = selectedDistritos.length === 0 || selectedDistritos.includes(u.distrito || '');
     const matchConcelho = selectedConcelhos.length === 0 || selectedConcelhos.includes(u.concelho || '');
     const matchFreguesia = selectedFreguesias.length === 0 || selectedFreguesias.includes(u.freguesia || '');
@@ -73,6 +72,31 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
       toast.error("Erro."); 
     } finally { 
       setIsDeletingId(null); 
+    }
+  };
+
+  const generateUniqueCardNumber = async (): Promise<string> => {
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const randomNumber = Math.floor(100000000 + Math.random() * 900000000).toString();
+      const exists = await checkCardNumberExists(randomNumber);
+      if (!exists) return randomNumber;
+    }
+    throw new Error("Não foi possível gerar um número único. Tente novamente.");
+  };
+
+  const handleGenerateNewCard = async (userId: string, currentName: string) => {
+    if (!window.confirm(`Gerar um NOVO cartão para "${currentName}"? O cartão antigo será invalidado imediatamente.`)) return;
+    
+    setIsGeneratingCardId(userId);
+    try {
+      const newNumber = await generateUniqueCardNumber();
+      const userRef = doc(db, 'users', userId);
+      await updateDoc(userRef, { customerNumber: newNumber });
+      toast.success(`Novo cartão gerado: ${newNumber}`);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao gerar novo cartão.");
+    } finally {
+      setIsGeneratingCardId(null);
     }
   };
 
@@ -220,6 +244,14 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
                       {isDeletingId === u.id ? <RefreshCw className="animate-spin" size={14} /> : <Trash2 size={14} />} Eliminar
                     </button>
                   </div>
+                  <button 
+                    onClick={() => handleGenerateNewCard(u.id, u.name)} 
+                    disabled={isGeneratingCardId === u.id}
+                    className="w-full bg-amber-50 hover:bg-amber-500 hover:text-white text-amber-600 p-3 rounded-xl font-black uppercase text-[10px] transition-all flex items-center justify-center gap-2 border border-amber-200 hover:border-amber-600"
+                  >
+                    {isGeneratingCardId === u.id ? <RefreshCw className="animate-spin" size={14} /> : <CreditCard size={14} />} 
+                    {isGeneratingCardId === u.id ? 'A Gerar...' : 'Gerar Novo Cartão'}
+                  </button>
                 </div>
             </div>
           )

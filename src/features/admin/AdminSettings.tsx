@@ -1,9 +1,12 @@
+// src/features/admin/AdminSettings.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../config/firebase';
-import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText, HelpCircle } from 'lucide-react';
+import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText, HelpCircle, Copy, Smartphone } from 'lucide-react';
 import { SystemConfig } from '../../types';
+import toast from 'react-hot-toast';
 
 const defaultMerchantFaqs = `GUIA PASSO-A-PASSO PARA LOJISTAS:
 
@@ -77,7 +80,7 @@ const AdminSettings: React.FC = () => {
             merchantTerms: data.merchantTerms || 'Escreva aqui as condições...',
             clientFaqs: data.clientFaqs || defaultClientFaqs,
             merchantFaqs: data.merchantFaqs || defaultMerchantFaqs,
-            showMemberCount: data.showMemberCount !== false // Default é true
+            showMemberCount: data.showMemberCount !== false
           });
         }
       } catch (e) {
@@ -107,6 +110,15 @@ const AdminSettings: React.FC = () => {
       await setDoc(doc(db, 'system', 'config'), { ...sysConfig, updatedAt: serverTimestamp(), lastChangeBy: currentUser?.id || 'admin' }, { merge: true });
       setMessage({ type: 'success', text: 'Configurações gravadas com sucesso!' });
     } catch (e) { setMessage({ type: 'error', text: 'Falha ao gravar.' }); } finally { setIsSaving(false); }
+  };
+
+  const handleCopyInstallLink = () => {
+    const link = `${window.location.origin}/instalar`;
+    navigator.clipboard.writeText(link).then(() => {
+      toast.success('Link copiado! Partilhe no WhatsApp ou Redes Sociais.');
+    }).catch(() => {
+      toast.error('Erro ao copiar. Tente manualmente.');
+    });
   };
 
   return (
@@ -164,6 +176,34 @@ const AdminSettings: React.FC = () => {
                     <ExternalLink className="absolute right-6 top-1/2 -translate-y-1/2 text-amber-400" size={24} />
                   </div>
                 </div>
+
+                {/* NOVO BLOCO: LINK DE INSTALAÇÃO DA PWA */}
+                <div className="space-y-4 md:col-span-2 bg-green-50 p-6 rounded-3xl border-4 border-green-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-green-500 p-2 rounded-xl">
+                      <Smartphone size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Link de Instalação da App</h3>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Partilhe este link para qualquer pessoa instalar a App Vizinho+ no telemóvel, mesmo sem registo.</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-4 items-center">
+                    <input 
+                      type="text" 
+                      readOnly 
+                      value={`${window.location.origin}/instalar`} 
+                      className="flex-1 p-4 bg-white border-2 border-green-300 rounded-2xl font-bold text-xs text-slate-600 outline-none"
+                    />
+                    <button 
+                      type="button"
+                      onClick={handleCopyInstallLink}
+                      className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center gap-2 shadow-lg"
+                    >
+                      <Copy size={18} /> Copiar Link
+                    </button>
+                  </div>
+                </div>
               </div>
 
               <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#00c265] transition-all shadow-xl border-b-8 border-black/10 flex justify-center gap-2">
@@ -177,7 +217,6 @@ const AdminSettings: React.FC = () => {
           <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12">
             <form onSubmit={handleUpdateSystem} className="space-y-10">
               
-              {/* TERMOS DE ADESÃO */}
               <div className="space-y-4">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-amber-100 p-3 rounded-2xl text-amber-600"><ScrollText size={24} /></div>
@@ -194,7 +233,6 @@ const AdminSettings: React.FC = () => {
                   />
               </div>
 
-              {/* FAQs COMERCIANTE */}
               <div className="space-y-4 pt-8 border-t-4 border-slate-100">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-blue-100 p-3 rounded-2xl text-blue-600"><HelpCircle size={24} /></div>
@@ -211,7 +249,6 @@ const AdminSettings: React.FC = () => {
                   />
               </div>
 
-              {/* FAQs CLIENTE */}
               <div className="space-y-4 pt-8 border-t-4 border-slate-100">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-green-100 p-3 rounded-2xl text-green-600"><HelpCircle size={24} /></div>

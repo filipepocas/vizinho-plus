@@ -1,3 +1,5 @@
+// src/App.tsx
+
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
@@ -10,12 +12,15 @@ import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
 import TermsPage from './features/public/TermsPage'; 
 import VantagensPage from './features/public/VantagensPage'; 
+import InstallPage from './features/public/InstallPage'; 
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
+import MunicipalityDashboard from './features/municipality/MunicipalityDashboard';
+import PartnerDashboard from './features/partner/PartnerDashboard';
 import ProfileSettings from './features/profile/ProfileSettings';
 
-const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredRole?: 'admin' | 'merchant' | 'client' }> = ({ children, requiredRole }) => {
+const ProtectedRoute: React.FC<{ children: React.ReactNode; allowedRoles?: string[] }> = ({ children, allowedRoles }) => {
   const { currentUser, isLoading, isInitialized } = useStore();
 
   if (!isInitialized || isLoading) {
@@ -27,9 +32,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredRole?: 'admi
   }
 
   if (!currentUser) return <Navigate to="/login" replace />;
-  if (requiredRole && currentUser.role !== requiredRole) {
-    const defaultPaths = { admin: '/admin', merchant: '/merchant', client: '/dashboard' };
-    return <Navigate to={defaultPaths[currentUser.role as keyof typeof defaultPaths]} replace />;
+  if (allowedRoles && !allowedRoles.includes(currentUser.role)) {
+    const defaultPaths: Record<string, string> = { admin: '/admin', merchant: '/merchant', client: '/dashboard', municipality: '/municipality', partner: '/partner' };
+    return <Navigate to={defaultPaths[currentUser.role] || '/login'} replace />;
   }
 
   return <>{children}</>;
@@ -71,8 +76,6 @@ function App() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  // X5 - RESOLVIDO: O pedido automático abusivo de Notification.requestPermission foi totalmente apagado daqui.
-
   const handleBack = () => {
     window.history.back();
   };
@@ -85,14 +88,17 @@ function App() {
 
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/instalar" element={<InstallPage />} />
           <Route path="/login" element={<LoginPage installPrompt={deferredPrompt} onRegister={() => window.location.href = '/register'} onForgotPassword={() => window.location.href = '/forgot-password'} />} />
           <Route path="/register" element={<RegisterPage onBack={handleBack} onSuccess={() => window.location.href = '/login'} />} />
           <Route path="/forgot-password" element={<ForgotPassword onBack={handleBack} />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/vantagens" element={<VantagensPage />} />
-          <Route path="/admin/*" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
-          <Route path="/merchant/*" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
-          <Route path="/dashboard/*" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
+          <Route path="/admin/*" element={<ProtectedRoute allowedRoles={['admin']}><AdminDashboard /></ProtectedRoute>} />
+          <Route path="/merchant/*" element={<ProtectedRoute allowedRoles={['merchant']}><MerchantDashboard /></ProtectedRoute>} />
+          <Route path="/dashboard/*" element={<ProtectedRoute allowedRoles={['client']}><UserDashboard /></ProtectedRoute>} />
+          <Route path="/municipality/*" element={<ProtectedRoute allowedRoles={['municipality']}><MunicipalityDashboard /></ProtectedRoute>} />
+          <Route path="/partner/*" element={<ProtectedRoute allowedRoles={['partner']}><PartnerDashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><ProfileSettings onBack={handleBack} /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

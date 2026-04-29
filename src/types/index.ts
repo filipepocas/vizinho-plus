@@ -4,7 +4,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
-  role: 'admin' | 'merchant' | 'client';
+  role: 'admin' | 'merchant' | 'client' | 'municipality' | 'partner';
   nif?: string;
   phone?: string;
   zipCode?: string;
@@ -92,7 +92,7 @@ export type LeafletCampaign = Leaflet;
 export interface MerchantRequest { id?: string; uid?: string; shopName: string; responsibleName: string; nif: string; email: string; phone: string; category: string; distrito?: string; concelho?: string; freguesia: string; zipCode: string; cashbackPercent: string | number; pass?: string; password?: string; status?: 'pending' | 'approved' | 'rejected'; createdAt?: any; }
 export interface AppNotification { id?: string; title: string; message: string; targetType?: string; targetValue: string; targetZones?: string[]; createdAt?: any; sent?: boolean; type?: string; icon?: string; }
 export interface SystemConfig { id?: string; globalServiceFee: number; maturationHours: number; minRedeemAmount: number; platformStatus: 'active' | 'maintenance'; supportEmail: string; vantagensUrl: string; merchantTerms?: string; clientFaqs?: string; merchantFaqs?: string; showMemberCount?: boolean; updatedAt?: any; appVersion?: string; lastChangeBy?: string; }
-export interface Vantagem { id: string; title?: string; description: string; partnerName: string; category: string; imageBase64?: string; zipCode?: string; address?: string; websiteUrl?: string; isActive: boolean; imageUrl?: string; targetZones?: string[]; createdAt?: any; }
+export interface Vantagem { id: string; title?: string; description: string; partnerName: string; category: string; imageBase64?: string; zipCode?: string; address?: string; websiteUrl?: string; isActive: boolean; imageUrl?: string; targetZones?: string[]; createdAt?: any; partnerUid?: string; }
 export interface Feedback { id: string; merchantId: string; merchantName?: string; transactionId?: string; userId: string; userName: string; rating: number; comment: string; recommend?: boolean | null; status?: 'new' | 'reviewed'; createdAt: any; }
 export interface AppEvent { id?: string; entityName: string; contactName: string; phone: string; email: string; title: string; location: string; eventType: string; ticketPrice: string; description: string; startDate: any; endDate: any; startTime: string; imageUrl: string; status: 'pending' | 'approved'; targetZips?: string[]; targetZones?: string[]; createdAt: any; }
 export interface AntiWasteItem { id?: string; merchantId: string; merchantName: string; address: string; productInfo: string; conditions: string; targetZip?: string; targetZones?: string[]; endTime: any; createdAt: any; }

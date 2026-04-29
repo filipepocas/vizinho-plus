@@ -18,11 +18,11 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, ArrowLeft
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, ArrowLeft, AlertCircle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
-import { requestNotificationPermission } from '../../utils/notifications';
+import { requestNotificationPermission, getLocalDeviceId } from '../../utils/notifications';
 
 const UserDashboard: React.FC = () => {
   const { transactions, logout, currentUser, shoppingList, locations } = useStore();
@@ -47,19 +47,38 @@ const UserDashboard: React.FC = () => {
 
   const [isScrolled, setIsScrolled] = useState(false);
   const [isNotifLoading, setIsNotifLoading] = useState(false);
-  const [localNotifGranted, setLocalNotifGranted] = useState(false);
   
   const [showContactModal, setShowContactModal] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
   const [showFaqModal, setShowFaqModal] = useState(false); 
   const [emailCopied, setEmailCopied] = useState(false);
 
+  const [isThisDeviceLinked, setIsThisDeviceLinked] = useState<boolean | null>(null);
+
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
-  // CORREÇÃO CRÍTICA: Matemática de Scroll para não esconder conteúdo atrás do banner fixo
+  useEffect(() => {
+    const checkDevice = async () => {
+      if (!currentUser?.id) return;
+      const deviceId = getLocalDeviceId();
+      try {
+        const userSnap = await getDoc(doc(db, 'users', currentUser.id));
+        if (userSnap.exists()) {
+          const devices = userSnap.data().devices || [];
+          const linked = devices.some((d: any) => d.deviceId === deviceId);
+          setIsThisDeviceLinked(linked);
+        } else {
+          setIsThisDeviceLinked(false);
+        }
+      } catch {
+        setIsThisDeviceLinked(false);
+      }
+    };
+    checkDevice();
+  }, [currentUser?.id]);
+
   useEffect(() => {
     if (view !== 'home' && contentRef.current) {
-      // Calcula a altura do banner dependendo do ecrã (Mobile vs Desktop) + margem de segurança
       const headerOffset = window.innerWidth >= 768 ? 440 : 320; 
       const elementPosition = contentRef.current.getBoundingClientRect().top;
       const offsetPosition = elementPosition + window.pageYOffset - headerOffset;
@@ -226,7 +245,7 @@ const UserDashboard: React.FC = () => {
       const res = await requestNotificationPermission(currentUser!.id);
       if(res.success) {
         toast.success("Notificações ativadas com sucesso!");
-        setLocalNotifGranted(true); 
+        setIsThisDeviceLinked(true);
       } else {
         toast.error(res.error || "O navegador bloqueou o pedido.", { duration: 6000 });
       }
@@ -316,8 +335,16 @@ const UserDashboard: React.FC = () => {
               )}
             </button>
             
-            <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
+            <button 
+              onClick={() => navigate('/settings')} 
+              className="relative bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all"
+            >
               <Settings size={20} />
+              {isThisDeviceLinked === false && (
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white animate-pulse shadow-lg">
+                  !
+                </span>
+              )}
             </button>
             
             <button onClick={handleLogout} className="bg-red-500/80 backdrop-blur-md p-3 rounded-full text-white border border-red-400/30 hover:bg-red-600 transition-all">
@@ -327,10 +354,8 @@ const UserDashboard: React.FC = () => {
         </div>
       </div>
 
-      {/* CORREÇÃO CRÍTICA: Aumento do padding-top para não sobrepor o botão azul com o banner */}
       <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[320px] md:pt-[440px]'}`}>
         
-        {/* 1. CARTÃO DE CLIENTE */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
              <Printer size={20} />
@@ -360,12 +385,10 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* 2. BOTÃO APOIO AO MUNÍCIPE */}
         <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
           <Building2 size={20} /> Apoio ao Munícipe
         </button>
 
-        {/* 3. GRELHA DE NAVEGAÇÃO PERSISTENTE */}
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <button onClick={() => setView('marketplace')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f] shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
             <ShoppingBag size={22} />
@@ -413,7 +436,6 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* 4. ÁREA DE CONTEÚDO ATIVO */}
         <div ref={contentRef} className="mt-8 pt-6 border-t-2 border-slate-200 animate-in fade-in">
           {view !== 'home' && (
             <div className="flex justify-between items-center mb-6">
@@ -568,7 +590,6 @@ const UserDashboard: React.FC = () => {
           )}
         </div>
 
-        {/* 5. BOTÕES DE SUPORTE E PWA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
           {isInstallable && (
             <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 transition-all">
@@ -591,7 +612,6 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAIS */}
       {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
       
