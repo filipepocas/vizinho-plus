@@ -1,3 +1,5 @@
+// src/features/merchant/components/BusinessIntelligence.tsx
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
@@ -30,7 +32,6 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       limit(50)
     );
     
-    // CORREÇÃO: Adicionado (snap: any) e (d: any) para o TypeScript
     const unsubscribe = onSnapshot(q, (snap: any) => {
       setFeedbacks(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback)));
       setLoadingFeedbacks(false);
@@ -41,21 +42,35 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  const parseDate = (createdAt: any) => {
+  /**
+   * FUNÇÕES DE FUSO HORÁRIO (TIMEZONE)
+   * Garante que todas as estatísticas são calculadas no fuso horário de Portugal (Europe/Lisbon),
+   * ignorando o fuso horário do servidor (UTC) ou do telemóvel do utilizador.
+   */
+  const parseDate = (createdAt: any): Date => {
     if (!createdAt) return new Date();
     if (createdAt.toDate) return createdAt.toDate();
     if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
     return new Date(createdAt);
   };
 
+  const getLisbonDate = (dateInput?: any): Date => {
+    const d = dateInput ? parseDate(dateInput) : new Date();
+    // Converte a data para a string exata do fuso horário de Lisboa
+    const lisbonStr = d.toLocaleString('en-US', { timeZone: 'Europe/Lisbon' });
+    // Cria um novo objeto Date baseado nessa string local
+    return new Date(lisbonStr);
+  };
+
   const dayStats = useMemo(() => {
     const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
-    const counts = days.map(d => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
-    const oneYearAgo = new Date();
+    const counts = days.map((d: string) => ({ day: d, count: 0, volume: 0, hours: Array(24).fill(0) }));
+    
+    const oneYearAgo = getLisbonDate();
     oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
 
-    transactions.forEach(t => {
-      const date = parseDate(t.createdAt);
+    transactions.forEach((t: Transaction) => {
+      const date = getLisbonDate(t.createdAt);
       if (date > oneYearAgo && t.type === 'earn' && t.status !== 'cancelled') {
         const dayIdx = date.getDay();
         const hour = date.getHours();
@@ -65,7 +80,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       }
     });
 
-    return counts.map(d => ({
+    return counts.map((d: { day: string, count: number, volume: number, hours: number[] }) => ({
       ...d,
       peakHour: d.count > 0 ? `${d.hours.indexOf(Math.max(...d.hours))}:00` : '--:--'
     }));
@@ -74,7 +89,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   const monthStats = useMemo(() => {
     const months: MonthStat[] = [];
     for (let i = 5; i >= 0; i--) {
-      const d = new Date();
+      const d = getLisbonDate();
       d.setMonth(d.getMonth() - i);
       const daysInMonth = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
       months.push({ 
@@ -85,10 +100,10 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       });
     }
 
-    transactions.forEach(t => {
+    transactions.forEach((t: Transaction) => {
       if (t.type === 'earn' && t.status !== 'cancelled') {
-        const date = parseDate(t.createdAt);
-        const idx = months.findIndex(m => m.m === date.getMonth() && m.y === date.getFullYear());
+        const date = getLisbonDate(t.createdAt);
+        const idx = months.findIndex((m: MonthStat) => m.m === date.getMonth() && m.y === date.getFullYear());
         if (idx !== -1) {
           months[idx].volume += Number(t.amount || 0);
           months[idx].visits += 1;
@@ -99,19 +114,19 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   }, [transactions]);
 
   const performanceStats = useMemo(() => {
-    const sixMonthsAgo = new Date();
+    const sixMonthsAgo = getLisbonDate();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
-    const currentMonthStart = new Date();
+    const currentMonthStart = getLisbonDate();
     currentMonthStart.setDate(1);
     currentMonthStart.setHours(0, 0, 0, 0);
 
     let vol6m = 0, visits6m = 0;
     let vol1m = 0, visits1m = 0;
 
-    transactions.forEach(t => {
+    transactions.forEach((t: Transaction) => {
       if (t.type === 'earn' && t.status !== 'cancelled') {
-        const d = parseDate(t.createdAt);
+        const d = getLisbonDate(t.createdAt);
         if (d >= sixMonthsAgo) {
           vol6m += Number(t.amount || 0);
           visits6m++;
@@ -123,7 +138,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
       }
     });
 
-    const elapsedDaysCurrentMonth = Math.max(1, new Date().getDate());
+    const elapsedDaysCurrentMonth = Math.max(1, getLisbonDate().getDate());
     const elapsedDays6Months = 180;
 
     return {
@@ -135,13 +150,13 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   }, [transactions]);
 
   const topClients = useMemo(() => {
-    const sixMonthsAgo = new Date();
+    const sixMonthsAgo = getLisbonDate();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 
     const clientMap: Record<string, { name: string, card: string, birth: string, volume: number, visits: number }> = {};
 
-    transactions.forEach(t => {
-      const date = parseDate(t.createdAt);
+    transactions.forEach((t: Transaction) => {
+      const date = getLisbonDate(t.createdAt);
       if (date >= sixMonthsAgo && t.type === 'earn' && t.status !== 'cancelled') {
         if (!clientMap[t.clientId]) {
           clientMap[t.clientId] = {
@@ -158,14 +173,14 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
     const allClientsArr = Object.values(clientMap);
     return {
-      byVolume: [...allClientsArr].sort((a, b) => b.volume - a.volume).slice(0, 20),
-      byVisits: [...allClientsArr].sort((a, b) => b.visits - a.visits).slice(0, 20)
+      byVolume: [...allClientsArr].sort((a: any, b: any) => b.volume - a.volume).slice(0, 20),
+      byVisits: [...allClientsArr].sort((a: any, b: any) => b.visits - a.visits).slice(0, 20)
     };
   }, [transactions]);
 
   const cashbackStats = useMemo(() => {
     let emitted = 0, used = 0, available = 0;
-    transactions.forEach(t => {
+    transactions.forEach((t: Transaction) => {
       if (t.status === 'cancelled') return;
       if (t.type === 'earn') { emitted += t.cashbackAmount; available += t.cashbackAmount; } 
       else if (t.type === 'redeem') { used += t.amount; available -= t.amount; }
@@ -175,8 +190,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const feedbackStats = useMemo(() => {
     if (feedbacks.length === 0) return { avg: "0.0", count: 0, promoters: 0 };
-    const sum = feedbacks.reduce((acc, f) => acc + f.rating, 0);
-    const promotersCount = feedbacks.filter(f => f.rating >= 4).length;
+    const sum = feedbacks.reduce((acc: number, f: Feedback) => acc + f.rating, 0);
+    const promotersCount = feedbacks.filter((f: Feedback) => f.rating >= 4).length;
     return { avg: (sum / feedbacks.length).toFixed(1), count: feedbacks.length, promoters: ((promotersCount / feedbacks.length) * 100).toFixed(0) };
   }, [feedbacks]);
 
@@ -223,8 +238,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
               <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
             </h3>
             <div className="flex items-end justify-between h-32 gap-2 mb-8 mt-auto">
-              {dayStats.map((d, i) => {
-                const maxVol = Math.max(...dayStats.map(x => x.volume)) || 1; 
+              {dayStats.map((d: any, i: number) => {
+                const maxVol = Math.max(...dayStats.map((x: any) => x.volume)) || 1; 
                 const heightPercentage = (d.volume / maxVol) * 100;
                 return (
                   <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-pointer">
@@ -239,7 +254,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             <div className="space-y-3 pt-6 border-t-2 border-slate-100">
               <p className="text-[8px] font-black text-slate-300 uppercase tracking-widest text-center mb-2">Horas de Ponta (12M)</p>
               <div className="grid grid-cols-2 gap-2">
-                  {dayStats.filter(d => d.count > 0).slice(0, 4).map((d, i) => (
+                  {dayStats.filter((d: any) => d.count > 0).slice(0, 4).map((d: any, i: number) => (
                     <div key={i} className="flex justify-between items-center bg-slate-50 p-2 rounded-lg text-[9px] font-bold uppercase border border-slate-100">
                       <span className="text-slate-500">{d.day}</span>
                       <span className="text-[#0a2540] flex items-center gap-1"><Clock size={10} className="text-[#00d66f]"/> {d.peakHour}</span>
@@ -254,8 +269,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
               <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
             </h3>
             <div className="space-y-5 mt-auto">
-              {monthStats.map((m, i) => {
-                  const maxVol = Math.max(...monthStats.map(x => x.volume)) || 1;
+              {monthStats.map((m: MonthStat, i: number) => {
+                  const maxVol = Math.max(...monthStats.map((x: MonthStat) => x.volume)) || 1;
                   return (
                     <div key={i} className="space-y-1">
                       <div className="flex justify-between text-[10px] font-black uppercase tracking-widest">
@@ -317,7 +332,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
               {loadingFeedbacks ? (
                   <div className="flex justify-center p-6"><div className="w-6 h-6 border-2 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div></div>
               ) : feedbacks.length > 0 ? (
-                  feedbacks.map((f, i) => (
+                  feedbacks.map((f: Feedback, i: number) => (
                     <div key={i} className="p-4 bg-slate-50 rounded-2xl border-l-4 border-[#00d66f] group hover:bg-slate-100 transition-colors">
                       <div className="flex gap-0.5 mb-2">
                         {[...Array(5)].map((_, si) => (
@@ -352,7 +367,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                       {topClients.byVolume.map((c, i) => (
+                       {topClients.byVolume.map((c: any, i: number) => (
                           <tr key={i} className="hover:bg-slate-50">
                              <td className="py-4">
                                 <p className="font-black text-xs uppercase text-[#0a2540]">{c.name}</p>
@@ -382,7 +397,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
                        </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-50">
-                       {topClients.byVisits.map((c, i) => (
+                       {topClients.byVisits.map((c: any, i: number) => (
                           <tr key={i} className="hover:bg-slate-50">
                              <td className="py-4">
                                 <p className="font-black text-xs uppercase text-[#0a2540]">{c.name}</p>
