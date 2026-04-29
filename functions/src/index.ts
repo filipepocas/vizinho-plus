@@ -144,6 +144,7 @@ export const processNewTransaction = functions.region("us-central1").firestore
       await snap.ref.update({ status: "rejected", rejectReason: error.message });
     }
   });
+
 /**
  * 2. REVERTER ANULAÇÕES
  * Se o lojista anular uma transação, o sistema reverte exatamente o impacto 
@@ -401,3 +402,33 @@ export const sendAdminNotification = functions.region("us-central1").https.onCal
       throw new functions.https.HttpsError("internal", error.message); 
   }
 });
+
+/**
+ * 7. CONTADOR DE MEMBROS (NOVA FUNÇÃO)
+ * Atualiza automaticamente o documento system/stats sempre que um utilizador é criado ou apagado.
+ */
+export const updateMemberCount = functions.region("us-central1").firestore
+  .document("users/{userId}")
+  .onWrite(async (change, context) => {
+    const statsRef = db.collection("system").doc("stats");
+    
+    try {
+      await db.runTransaction(async (transaction) => {
+        const statsDoc = await transaction.get(statsRef);
+        let currentCount = statsDoc.exists ? (statsDoc.data()?.membersCount || 0) : 0;
+        
+        if (!change.before.exists && change.after.exists) {
+          currentCount += 1;
+        } else if (change.before.exists && !change.after.exists) {
+          currentCount = Math.max(0, currentCount - 1);
+        }
+        
+        transaction.set(statsRef, { 
+          membersCount: currentCount, 
+          updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+        }, { merge: true });
+      });
+    } catch (error) {
+      console.error("Erro ao atualizar contador de membros:", error);
+    }
+  });

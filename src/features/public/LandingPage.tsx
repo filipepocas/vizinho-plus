@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot, getCountFromServer, setDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, setDoc, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -88,10 +88,16 @@ const LandingPage: React.FC = () => {
       if (cSnap.exists()) setSysConfig(cSnap.data() as any);
 
       try {
-        const collUsers = collection(db, 'users');
-        const snapshot = await getCountFromServer(collUsers);
-        setMembersCount(snapshot.data().count);
-      } catch (err) { setMembersCount(1250); }
+        const statsSnap = await getDoc(doc(db, 'system', 'stats'));
+        if (statsSnap.exists()) {
+          setMembersCount(statsSnap.data()?.membersCount || 0);
+        } else {
+          setMembersCount(0);
+        }
+      } catch (err) {
+        console.error("Erro ao obter contador:", err);
+        setMembersCount(0);
+      }
     };
     fetchData();
 
@@ -337,7 +343,6 @@ const LandingPage: React.FC = () => {
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
         <img src={logoPath} alt="Vizinho+" className="h-14 w-auto object-contain" />
         
-        {/* CORREÇÃO 1: Botão atualizado para 'Anuncie aqui' */}
         <div className="w-full flex justify-center mt-2">
             <button 
                 onClick={() => setShowCommunityModal(true)} 
@@ -689,7 +694,6 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* MODAL CROP DE IMAGEM */}
       {fileToCrop && (
         <ImageCropperModal 
           file={fileToCrop} 
