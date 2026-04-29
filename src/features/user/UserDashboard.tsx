@@ -37,6 +37,7 @@ const UserDashboard: React.FC = () => {
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);
+  const [loadingMerchants, setLoadingMerchants] = useState(true);
   const [activeLeaflets, setActiveLeaflets] = useState<Leaflet[]>([]);
   const [appNotification, setAppNotification] = useState<AppNotification | null>(null);
   const [events, setEvents] = useState<AppEvent[]>([]);
@@ -98,6 +99,7 @@ const UserDashboard: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      setLoadingMerchants(true);
       try {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
         if (configSnap.exists()) setSysConfig(configSnap.data());
@@ -105,7 +107,13 @@ const UserDashboard: React.FC = () => {
         const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
         const merchantsSnap = await getDocs(q);
         setAllMerchants(merchantsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as UserProfile[]);
-      } catch (err) {}
+      } catch (err: any) {
+        console.error("Erro ao carregar lojas:", err);
+        toast.error("Falha ao carregar a lista de lojas. Tente novamente mais tarde.");
+        setAllMerchants([]);
+      } finally {
+        setLoadingMerchants(false);
+      }
     };
     fetchData();
   }, []);
@@ -488,12 +496,22 @@ const UserDashboard: React.FC = () => {
           )}
 
           {view === 'marketplace' && <ProductMarketplace />}
-          {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
+          {view === 'explore' && (
+            loadingMerchants ? (
+              <div className="py-20 text-center">
+                <Loader2 size={40} className="animate-spin text-[#00d66f] mx-auto mb-4" />
+                <p className="text-[10px] font-black uppercase text-slate-400">A carregar lojas...</p>
+              </div>
+            ) : (
+              <UserExplore allMerchants={allMerchants} />
+            )
+          )}
           {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
           {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
 
           {view === 'municipalities' && (
              <div className="space-y-6 animate-in fade-in duration-500">
+                {/* ... (resto da vista municipalities igual) ... */}
                 <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
                    <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

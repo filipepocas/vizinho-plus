@@ -1,3 +1,5 @@
+// src/features/profile/ProfileSettings.tsx
+
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { db, auth } from '../../config/firebase';
@@ -7,7 +9,7 @@ import {
   ArrowLeft, User as UserIcon, Phone, MapPin, Save, 
   ShieldCheck, Trash2, AlertTriangle, RefreshCw, Mail, Bell, BellOff 
 } from 'lucide-react';
-import { getLocalDeviceId, removeCurrentDeviceNotification } from '../../utils/notifications';
+import { getLocalDeviceId, removeCurrentDeviceNotification, requestNotificationPermission } from '../../utils/notifications';
 import toast from 'react-hot-toast';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
@@ -17,6 +19,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const [isDeleting, setIsDeleting] = useState(false);
   const [rgpdDeleted, setRgpdDeleted] = useState(false);
   const [isThisDeviceLinked, setIsThisDeviceLinked] = useState(false);
+  const [isEnablingNotif, setIsEnablingNotif] = useState(false);
 
   const [formData, setFormData] = useState({
     name: currentUser?.name || '',
@@ -68,6 +71,24 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
     }
   };
 
+  const handleEnableNotifications = async () => {
+    if (!currentUser?.id) return;
+    setIsEnablingNotif(true);
+    try {
+      const result = await requestNotificationPermission(currentUser.id);
+      if (result.success) {
+        setIsThisDeviceLinked(true);
+        toast.success("Notificações ativadas com sucesso!");
+      } else {
+        toast.error(result.error || "O navegador bloqueou o pedido.");
+      }
+    } catch (error) {
+      toast.error("Erro ao ativar notificações.");
+    } finally {
+      setIsEnablingNotif(false);
+    }
+  };
+
   const handleDeleteAccount = async () => {
     if (!currentUser?.id) return;
     if (!window.confirm("Desejas eliminar a tua conta permanentemente? Esta ação não pode ser desfeita.")) return;
@@ -111,7 +132,13 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
           <div className="bg-white p-6 rounded-[30px] border-2 border-slate-100 shadow-sm">
             <div className="flex items-center justify-between mb-4">
                <div className="flex items-center gap-3"><h3 className="font-black uppercase text-xs text-[#0a2540] flex items-center gap-2">{isThisDeviceLinked ? <Bell className="text-[#00d66f]" size={20} /> : <BellOff className="text-slate-300" size={20} />} Alertas da App</h3></div>
-               {isThisDeviceLinked ? <button type="button" onClick={handleDisableNotifications} className="text-[10px] font-black text-red-500 uppercase hover:underline transition-all">Desativar</button> : <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inativo</span>}
+               {isThisDeviceLinked ? (
+                 <button type="button" onClick={handleDisableNotifications} className="text-[10px] font-black text-red-500 uppercase hover:underline transition-all">Desativar</button>
+               ) : (
+                 <button type="button" onClick={handleEnableNotifications} disabled={isEnablingNotif} className="text-[10px] font-black text-[#00d66f] uppercase bg-[#00d66f]/10 px-3 py-1.5 rounded-xl hover:bg-[#00d66f]/20 transition-all disabled:opacity-50">
+                   {isEnablingNotif ? 'A ativar...' : 'Ativar Notificações'}
+                 </button>
+               )}
             </div>
             <p className="text-[10px] text-slate-500 font-bold leading-tight">{isThisDeviceLinked ? "Este telemóvel está configurado para receber notificações em tempo real." : "As notificações estão desligadas neste aparelho."}</p>
           </div>
