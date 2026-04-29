@@ -22,7 +22,7 @@ const ProductMarketplace: React.FC = () => {
   const { 
     products, 
     fetchProducts, 
-    isLoading, 
+    isFetchingProducts, 
     locations, 
     taxonomy, 
     fetchTaxonomy,
@@ -31,7 +31,7 @@ const ProductMarketplace: React.FC = () => {
     currentUser 
   } = useStore();
   
-  // ESTADO DE FILTROS: Inicializados com base no perfil do utilizador (Instrução 4)
+  // ESTADO DE FILTROS GEOGRÁFICOS E TAXONOMIA
   const [filters, setFilters] = useState<{
     distrito: string;
     concelho: string[];
@@ -48,14 +48,15 @@ const ProductMarketplace: React.FC = () => {
     productType: []
   });
   
+  const [searchTerm, setSearchTerm] = useState(''); // NOVO: Pesquisa por texto real
   const [showFilters, setShowFilters] = useState(false);
   const [showCart, setShowCart] = useState(false);
   const [visibleCount, setVisibleCount] = useState(20);
   const [isFirstLoad, setIsFirstLoad] = useState(true);
 
   /**
-   * SINCRONIZAÇÃO INICIAL
-   * Carrega a taxonomia e define o Concelho do utilizador como filtro base.
+   * 1. CARREGAMENTO INICIAL
+   * Sincroniza a taxonomia e define o Concelho do utilizador como ponto de partida.
    */
   useEffect(() => {
     if (!taxonomy) fetchTaxonomy();
@@ -64,7 +65,7 @@ const ProductMarketplace: React.FC = () => {
       const initialFilters = {
         distrito: currentUser.distrito || '',
         concelho: currentUser.concelho ? [currentUser.concelho] : [],
-        freguesia: [], // Vazio para mostrar todo o concelho inicialmente
+        freguesia: [], 
         category: [],
         family: [],
         productType: []
@@ -75,6 +76,25 @@ const ProductMarketplace: React.FC = () => {
     }
   }, [currentUser, taxonomy, fetchTaxonomy, fetchProducts, isFirstLoad]);
 
+  /**
+   * 2. FILTRAGEM POR TEXTO (EM MEMÓRIA)
+   * Filtra os produtos carregados com base no que o utilizador escreve.
+   */
+  const filteredBySearch = useMemo(() => {
+    if (!searchTerm.trim()) return products;
+    const term = searchTerm.toLowerCase().trim();
+    return products.filter(p => 
+      p.description.toLowerCase().includes(term) || 
+      p.shopName.toLowerCase().includes(term) ||
+      p.productType.toLowerCase().includes(term)
+    );
+  }, [products, searchTerm]);
+
+  const displayedProducts = useMemo(() => 
+    filteredBySearch.slice(0, visibleCount), 
+    [filteredBySearch, visibleCount]
+  );
+
   const handleApplyFilters = () => {
     setVisibleCount(20);
     fetchProducts(filters);
@@ -83,14 +103,14 @@ const ProductMarketplace: React.FC = () => {
 
   const formatPrice = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Geografia)
+  // LÓGICA DE CASCATA (Geografia)
   const distritos = Object.keys(locations || {}).sort();
   const availableConcelhos = filters.distrito ? Object.keys(locations[filters.distrito] || {}).sort() : [];
   const availableFreguesias = (filters.distrito && filters.concelho.length > 0)
     ? filters.concelho.flatMap((c: string) => locations[filters.distrito][c] || []).sort()
     : [];
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Taxonomia)
+  // LÓGICA DE CASCATA (Taxonomia)
   const availableCategories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
   const availableFamilies = (taxonomy && filters.category.length > 0) 
     ? filters.category.flatMap(c => Object.keys(taxonomy.categories[c]?.families || {})).sort() 
@@ -104,7 +124,6 @@ const ProductMarketplace: React.FC = () => {
       }).sort() 
     : [];
 
-  // HANDLERS PARA SELEÇÃO MÚLTIPLA
   const handleAddArrayFilter = (e: React.ChangeEvent<HTMLSelectElement>, field: keyof typeof filters) => {
     const val = e.target.value;
     if (!val || (filters[field] as string[]).includes(val)) return;
@@ -129,20 +148,26 @@ const ProductMarketplace: React.FC = () => {
     });
   };
 
-  const displayedProducts = useMemo(() => products.slice(0, visibleCount), [products, visibleCount]);
-
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* BARRA DE PESQUISA E FILTROS */}
+      {/* BARRA DE PESQUISA FIXA */}
       <div className="bg-white p-4 rounded-[30px] border-4 border-[#0a2540] shadow-lg sticky top-24 z-40">
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
             <input 
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="O que procuras hoje?..." 
               className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"
             />
+            {searchTerm && (
+              <button onClick={() => setSearchTerm('')} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-red-500">
+                <X size={16} />
+              </button>
+            )}
           </div>
           <button 
             onClick={() => setShowFilters(!showFilters)} 
@@ -161,11 +186,11 @@ const ProductMarketplace: React.FC = () => {
           </button>
         </div>
 
+        {/* PAINEL DE FILTROS */}
         {showFilters && (
           <div className="mt-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6 animate-in slide-in-from-top-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
               
-              {/* FILTROS GEOGRÁFICOS */}
               <div className="space-y-4">
                 <p className="text-[10px] font-black uppercase text-[#0a2540] flex items-center gap-2">
                     <MapPin size={14} className="text-[#00d66f]"/> Localização
@@ -217,7 +242,6 @@ const ProductMarketplace: React.FC = () => {
                 </div>
               </div>
 
-              {/* FILTROS DE TAXONOMIA */}
               <div className="space-y-4">
                 <p className="text-[10px] font-black uppercase text-[#0a2540] flex items-center gap-2">
                     <Tag size={14} className="text-[#00d66f]"/> Categorias
@@ -262,7 +286,7 @@ const ProductMarketplace: React.FC = () => {
                     onChange={e => handleAddArrayFilter(e, 'productType')} 
                     className="w-full p-3 rounded-xl border-2 border-white font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50 shadow-sm"
                 >
-                  <option value="">+ Adicionar Tipo de Produto</option>
+                  <option value="">+ Adicionar Tipo</option>
                   {availableTypes.map(t => <option key={t} value={t}>{t}</option>)}
                 </select>
                 <div className="flex flex-wrap gap-2">
@@ -285,14 +309,15 @@ const ProductMarketplace: React.FC = () => {
         )}
       </div>
 
-      {/* ESTADO DE CARREGAMENTO / GRELHA */}
-      {isLoading ? (
+      {/* ESTADO DE CARREGAMENTO LOCAL */}
+      {isFetchingProducts ? (
         <div className="py-20 text-center flex flex-col items-center gap-4">
             <Loader2 size={48} className="animate-spin text-[#00d66f]" />
             <p className="font-black uppercase text-[10px] tracking-widest text-slate-400">A procurar as melhores ofertas...</p>
         </div>
       ) : (
         <>
+          {/* GRELHA DE PRODUTOS */}
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {displayedProducts.map((p: Product) => {
               const isInCart = shoppingList.some(item => item.id === p.id);
@@ -342,7 +367,7 @@ const ProductMarketplace: React.FC = () => {
           </div>
 
           {/* PAGINAÇÃO */}
-          {products.length > visibleCount && (
+          {filteredBySearch.length > visibleCount && (
             <button 
                 onClick={() => setVisibleCount(prev => prev + 20)} 
                 className="w-full p-6 bg-white border-4 border-dashed border-slate-200 rounded-[35px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] hover:text-[#00d66f] transition-all flex justify-center items-center gap-3"
@@ -352,16 +377,16 @@ const ProductMarketplace: React.FC = () => {
           )}
 
           {/* ESTADO VAZIO */}
-          {products.length === 0 && (
+          {filteredBySearch.length === 0 && (
             <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
                <Package size={48} className="mx-auto text-slate-200 mb-4" />
-               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Sem produtos nesta zona</p>
-               <p className="text-[9px] font-bold text-slate-300 uppercase">Tente alargar a pesquisa para outros concelhos ou categorias.</p>
+               <p className="text-[10px] font-black uppercase text-slate-400 tracking-widest mb-2">Sem produtos encontrados</p>
+               <p className="text-[9px] font-bold text-slate-300 uppercase">Tente alargar a pesquisa ou mudar os filtros.</p>
                <button 
-                onClick={() => setShowFilters(true)}
+                onClick={() => { setShowFilters(true); setSearchTerm(''); }}
                 className="mt-6 text-[10px] font-black uppercase text-[#0a2540] underline"
                >
-                 Abrir Filtros
+                 Limpar Pesquisa e Abrir Filtros
                </button>
             </div>
           )}
