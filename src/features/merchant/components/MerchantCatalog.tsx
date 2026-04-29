@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../../config/firebase';
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, orderBy, getDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, getDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   Package, Plus, Trash2, Tag, Image as ImageIcon, 
-  Loader2, Euro, CheckCircle2, X, Edit3, Save, Eye, Store, Clock
+  Loader2, Euro, CheckCircle2, X, Edit3, Eye, Store, Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../../store/useStore';
@@ -41,6 +41,14 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   const formatEuro = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
+  // Função auxiliar para lidar com as datas do Firestore
+  const parseDate = (createdAt: any) => {
+    if (!createdAt) return new Date(0);
+    if (createdAt.toDate) return createdAt.toDate();
+    if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
+    return new Date(createdAt);
+  };
+
   useEffect(() => {
     if (!taxonomy) fetchTaxonomy();
     
@@ -66,28 +74,26 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-      // 1. Carregar Meus Produtos
-      const qMine = query(
-        collection(db, 'products'), 
-        where('merchantId', '==', merchant.id),
-        where('createdAt', '>=', seteDiasAtras),
-        orderBy('createdAt', 'desc')
-      );
+      // 1. Carregar Meus Produtos (Query simples por merchantId, filtro de data e ordenação em memória)
+      const qMine = query(collection(db, 'products'), where('merchantId', '==', merchant.id));
       const snapMine = await getDocs(qMine);
-      setProducts(snapMine.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product)));
+      let myProds = snapMine.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+      
+      myProds = myProds.filter((p: Product) => parseDate(p.createdAt) >= seteDiasAtras);
+      myProds.sort((a: Product, b: Product) => parseDate(b.createdAt).getTime() - parseDate(a.createdAt).getTime());
+      
+      setProducts(myProds);
 
-      // 2. Carregar Produtos da Concorrência no CONCELHO
+      // 2. Carregar Produtos da Concorrência no CONCELHO (Query simples por concelho, filtro em memória)
       if (merchant.concelho) {
-        const qComp = query(
-          collection(db, 'products'), 
-          where('concelho', '==', merchant.concelho),
-          where('createdAt', '>=', seteDiasAtras),
-          orderBy('createdAt', 'desc')
-        );
+        const qComp = query(collection(db, 'products'), where('concelho', '==', merchant.concelho));
         const snapComp = await getDocs(qComp);
-        const allLocalProducts = snapComp.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
-        // Filtra para remover os produtos do próprio lojista da lista da concorrência
-        setCompetitionProducts(allLocalProducts.filter((p: Product) => p.merchantId !== merchant.id));
+        let compProds = snapComp.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+        
+        compProds = compProds.filter((p: Product) => p.merchantId !== merchant.id && parseDate(p.createdAt) >= seteDiasAtras);
+        compProds.sort((a: Product, b: Product) => parseDate(b.createdAt).getTime() - parseDate(a.createdAt).getTime());
+        
+        setCompetitionProducts(compProds);
       }
     } catch (err) {
       console.error("Erro ao carregar catálogo:", err);
@@ -121,21 +127,20 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
     const toastId = toast.loading("A validar exclusividade...");
 
     try {
-      // REGRA: Proteção Anti-Duplicados na mesma FREGUESIA
+      // REGRA: Proteção Anti-Duplicados na mesma FREGUESIA (Query simples, validação em memória)
       if (!editingProduct || editingProduct.productType !== formData.productType) {
          const seteDiasAtras = new Date();
          seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-         const qDuplicate = query(
-           collection(db, 'products'),
-           where('freguesia', '==', merchant.freguesia),
-           where('productType', '==', formData.productType),
-           where('createdAt', '>=', seteDiasAtras)
-         );
-         
+         const qDuplicate = query(collection(db, 'products'), where('freguesia', '==', merchant.freguesia));
          const snapDuplicate = await getDocs(qDuplicate);
          
-         if (!snapDuplicate.empty) {
+         const hasDuplicate = snapDuplicate.docs.some((d: any) => {
+            const p = d.data() as Product;
+            return p.productType === formData.productType && parseDate(p.createdAt) >= seteDiasAtras;
+         });
+         
+         if (hasDuplicate) {
             setSaving(false);
             return toast.error(`Já existe um artigo do tipo "${formData.productType}" ativo na sua Freguesia. Vá ao separador 'Concorrência' para ver quando expira.`, { id: toastId, duration: 6000 });
          }
@@ -196,7 +201,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
     if (!window.confirm("Eliminar este anúncio permanentemente? O lugar ficará livre para a concorrência.")) return;
     try {
       await deleteDoc(doc(db, 'products', id));
-      setProducts(products.filter(p => p.id !== id));
+      setProducts(products.filter((p: Product) => p.id !== id));
       toast.success("Anúncio removido.");
     } catch (err) {
       toast.error("Erro ao eliminar.");
@@ -225,8 +230,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   };
 
   const getDaysRemaining = (createdAt: any) => {
-    if (!createdAt) return 7;
-    const createdDate = createdAt.toDate ? createdAt.toDate() : new Date(createdAt.seconds * 1000);
+    const createdDate = parseDate(createdAt);
     const expireDate = new Date(createdDate);
     expireDate.setDate(expireDate.getDate() + 7);
     
@@ -366,7 +370,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
             )}
 
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-                {products.map(p => (
+                {products.map((p: Product) => (
                     <div key={p.id} className="bg-white rounded-[30px] border-4 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#0a2540] transition-all">
                         <div className="aspect-square relative overflow-hidden bg-slate-50">
                             <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt="" />
@@ -414,7 +418,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {competitionProducts.map(p => {
+            {competitionProducts.map((p: Product) => {
               const daysLeft = getDaysRemaining(p.createdAt);
               return (
                 <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-200 overflow-hidden flex flex-col shadow-sm opacity-80 hover:opacity-100 transition-opacity">

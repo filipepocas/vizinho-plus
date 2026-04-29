@@ -87,15 +87,11 @@ export const useStore = create<StoreState>((set, get) => ({
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-      // Query resiliente para evitar erros de índice composto
-      let q = query(
+      // Query APENAS por data para evitar erros de índice composto no Firestore
+      const q = query(
         collection(db, 'products'), 
         where('createdAt', '>=', seteDiasAtras)
       );
-
-      if (filters.distrito) {
-        q = query(q, where('distrito', '==', filters.distrito));
-      }
 
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
@@ -107,15 +103,16 @@ export const useStore = create<StoreState>((set, get) => ({
         return dateB - dateA;
       });
 
-      // Filtragem Geográfica em Memória (Suporta seleções múltiplas)
+      // FILTRAGEM EM MEMÓRIA (Substitui os wheres do Firestore)
+      if (filters.distrito) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => p.distrito === filters.distrito);
+      }
       if (filters.concelho && filters.concelho.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.concelho.includes(p.concelho));
       }
       if (filters.freguesia && filters.freguesia.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.freguesia.includes(p.freguesia));
       }
-
-      // Filtragem de Taxonomia em Memória
       if (filters.category && filters.category.length > 0) {
         fetchedProducts = fetchedProducts.filter((p: Product) => filters.category.includes(p.category));
       }
