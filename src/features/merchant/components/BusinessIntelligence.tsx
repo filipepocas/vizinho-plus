@@ -56,10 +56,32 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const getLisbonDate = (dateInput?: any): Date => {
     const d = dateInput ? parseDate(dateInput) : new Date();
-    // Converte a data para a string exata do fuso horário de Lisboa
-    const lisbonStr = d.toLocaleString('en-US', { timeZone: 'Europe/Lisbon' });
-    // Cria um novo objeto Date baseado nessa string local
-    return new Date(lisbonStr);
+    // Usa Intl.DateTimeFormat para obter os componentes da data no fuso de Lisboa
+    const format = new Intl.DateTimeFormat('pt-PT', {
+      timeZone: 'Europe/Lisbon',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+    });
+    const parts = format.formatToParts(d);
+    const obj: any = {};
+    parts.forEach((p) => {
+      if (p.type !== 'literal') obj[p.type] = p.value;
+    });
+    // Cria um objeto Date a partir das partes numéricas (sem fuso, interpretado como local, mas os valores já estão corretos para Lisboa)
+    const lisbonDate = new Date(
+      parseInt(obj.year),
+      parseInt(obj.month) - 1,
+      parseInt(obj.day),
+      parseInt(obj.hour),
+      parseInt(obj.minute),
+      parseInt(obj.second)
+    );
+    return lisbonDate;
   };
 
   const dayStats = useMemo(() => {

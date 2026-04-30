@@ -8,28 +8,38 @@ import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink,
 import { SystemConfig } from '../../types';
 import toast from 'react-hot-toast';
 
-const defaultMerchantFaqs = `GUIA PASSO-A-PASSO PARA LOJISTAS:
+const defaultMerchantFaqs = `GUIA RÁPIDO DO COMERCIANTE VIZINHO+
 
-1. TERMINAL DE VENDAS (Dar e Descontar Saldo)
-- Peça ao cliente o NIF ou Número de Cartão Vizinho+.
-- Insira o número na caixa ou clique no botão "Ler QR Code" para usar a câmara.
-- Digite o valor TOTAL da fatura.
-- Se for para dar saldo, clique em "Atribuir Cashback".
-- Se o cliente tiver saldo e quiser usar, o sistema avisa. Escreva o valor a descontar (máximo 50% da fatura) e clique em "Confirmar Desconto".
+1. COMO DAR CASHBACK AOS CLIENTES?
+- No menu "Terminal", peça ao cliente o NIF ou o número do Cartão Vizinho+ (ou leia o QR Code).
+- Insira o número e clique em "Avançar".
+- Digite o valor TOTAL da fatura e o número do documento (opcional).
+- O sistema calcula automaticamente o cashback com base na sua percentagem.
+- Confirme a operação. O cliente recebe uma notificação na hora!
 
-2. MARKETING E PUSH
-- Crie Banners ou Notificações Push para promover a sua loja.
-- Selecione o Público Alvo (ex: Todos, Aniversariantes, Top Clientes).
-- A simulação mostrará o custo. O pedido vai para aprovação do Admin.
+2. COMO O CLIENTE USA O SALDO?
+- Se o cliente tiver saldo acumulado, o sistema mostra o valor disponível.
+- Pode inserir o valor do desconto que o cliente quer usar (até 50% do valor da compra).
+- O cliente paga o valor restante e continua a acumular novo cashback sobre a parte paga.
 
-3. DESPERDÍCIO ZERO
-- Anuncie sobras do dia (Ex: pão, bolos, pratos do dia) a preços de desconto.
-- Pode selecionar no máximo 2 Concelhos para o anúncio.
-- O anúncio expira no próprio dia, à hora que definir.
+3. O QUE É O MENU "O MEU CATÁLOGO"?
+- Pode publicar os seus produtos com foto e preço.
+- Os produtos aparecem no "Marketplace" da App de todos os clientes do seu Concelho.
+- Mantenha o seu catálogo atualizado para atrair mais vizinhos à sua loja!
 
-4. DEFINIÇÕES DA LOJA
-- Altere a sua Password de acesso.
-- Atualize a sua percentagem de cashback a qualquer momento.`;
+4. COMO FUNCIONA O "DESPERDÍCIO ZERO"?
+- Se tem sobras do dia (pão, refeições, etc.), publique um anúncio.
+- Escolha até 2 Concelhos onde quer que ele apareça.
+- O anúncio expira automaticamente à hora que definir. Os clientes adoram estas oportunidades!
+
+5. FERRAMENTAS DE MARKETING
+- Pode pedir "Banners" ou "Notificações Push" profissionais.
+- O custo é calculado automaticamente pelo motor de preços.
+- O seu pedido será analisado pelo Administrador Vizinho+ e, se aprovado, será publicado.
+
+6. PRECISA DE AJUDA?
+- Consulte o botão "Ler Condições de Adesão" para saber as regras oficiais do programa.
+- Contacte o Administrador Vizinho+ através dos canais oficiais.`;
 
 const defaultClientFaqs = `GUIA PASSO-A-PASSO PARA VIZINHOS:
 
@@ -50,6 +60,34 @@ const defaultClientFaqs = `GUIA PASSO-A-PASSO PARA VIZINHOS:
 - Fique atento à secção "Zero Desperdício" para oportunidades de última hora nos lojistas locais.
 - Acompanhe a "Agenda da Freguesia" para eventos culturais e desportivos.`;
 
+const defaultMerchantTerms = `CONDIÇÕES GERAIS DE ADESÃO AO PROGRAMA VIZINHO+
+
+1. NATUREZA DO SERVIÇO
+O Vizinho+ é uma plataforma tecnológica de fidelização local que disponibiliza um sistema de gestão de cashback entre comerciantes e clientes. A plataforma não é parte nas transações comerciais, limitando-se a fornecer a infraestrutura digital para atribuição e resgate de saldo promocional.
+
+2. ADESÃO E PERFIL DO COMERCIANTE
+- O registo é gratuito e está sujeito a validação pela administração do Vizinho+.
+- O comerciante declara que toda a informação fornecida (NIF, morada, contactos) é verdadeira e atual.
+- A percentagem de cashback é definida livremente pelo comerciante no seu painel e pode ser alterada a qualquer momento, aplicando-se apenas a transações futuras.
+
+3. ATRIBUIÇÃO DE CASHBACK (DAR SALDO)
+- O comerciante obriga-se a atribuir a percentagem de cashback definida no seu perfil sobre o valor total faturado ao cliente.
+- O sistema calcula automaticamente o valor do cashback no momento da transação. A responsabilidade financeira pelo cashback atribuído é exclusivamente do comerciante.
+- O cashback gerado fica disponível na carteira digital do cliente de forma imediata.
+
+4. RESGATE DE SALDO (DESCONTO)
+- O comerciante obriga-se a aceitar o saldo de cashback como forma de desconto sobre novas compras, até ao limite de 50% do valor da nova fatura.
+- O comerciante NÃO pode recusar o desconto se o cliente tiver saldo disponível e cumprir o limite de 50%.
+- O valor do desconto é deduzido da responsabilidade do comerciante perante o sistema.
+
+5. OBRIGAÇÕES E RESPONSABILIDADES
+- O comerciante é responsável por verificar a identidade do cliente no momento da transação (via NIF/Cartão).
+- Qualquer uso fraudulento da plataforma, simulação de transações ou manipulação de saldos resultará no cancelamento imediato da conta e na perda de todos os saldos associados.
+- O Vizinho+ reserva-se o direito de auditar as transações e suspender contas em caso de atividade suspeita.
+
+6. PROPRIEDADE INTELECTUAL
+A plataforma Vizinho+, incluindo código, design, base de dados e ideologia do programa, é propriedade intelectual da Panóplia Lógica Unipessoal Lda. Não é permitida a reprodução, cópia ou engenharia reversa.`;
+
 const AdminSettings: React.FC = () => {
   const { currentUser, setCurrentUser } = useStore();
   
@@ -60,8 +98,8 @@ const AdminSettings: React.FC = () => {
   
   const [sysConfig, setSysConfig] = useState<SystemConfig>({
     globalServiceFee: 0, maturationHours: 0, minRedeemAmount: 5.00,
-    platformStatus: 'active', supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', merchantTerms: '',
-    clientFaqs: '', merchantFaqs: '', showMemberCount: true
+    platformStatus: 'active', supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', merchantTerms: defaultMerchantTerms,
+    clientFaqs: defaultClientFaqs, merchantFaqs: defaultMerchantFaqs, showMemberCount: true
   });
 
   const [isSaving, setIsSaving] = useState(false);
@@ -77,7 +115,7 @@ const AdminSettings: React.FC = () => {
           setSysConfig({ 
             ...data, 
             supportEmail: data.supportEmail || 'ajuda@vizinho-plus.pt',
-            merchantTerms: data.merchantTerms || 'Escreva aqui as condições...',
+            merchantTerms: data.merchantTerms || defaultMerchantTerms,
             clientFaqs: data.clientFaqs || defaultClientFaqs,
             merchantFaqs: data.merchantFaqs || defaultMerchantFaqs,
             showMemberCount: data.showMemberCount !== false
@@ -177,7 +215,7 @@ const AdminSettings: React.FC = () => {
                   </div>
                 </div>
 
-                {/* NOVO BLOCO: LINK DE INSTALAÇÃO DA PWA */}
+                {/* BLOCO: LINK DE INSTALAÇÃO DA PWA */}
                 <div className="space-y-4 md:col-span-2 bg-green-50 p-6 rounded-3xl border-4 border-green-200">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-green-500 p-2 rounded-xl">

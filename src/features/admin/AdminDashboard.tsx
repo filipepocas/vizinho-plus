@@ -34,7 +34,8 @@ import BannerManager from './BannerManager';
 import AdminPricing from './AdminPricing';
 import AdminFlyerGenerator from './AdminFlyerGenerator';
 import AdminTaxonomy from './AdminTaxonomy';
-import AdminMunicipalities from './AdminMunicipalities'; // NOVO COMPONENTE
+import AdminMunicipalities from './AdminMunicipalities';
+import AdminMessages from './AdminMessages'; // NOVO COMPONENTE
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -106,7 +107,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
     { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
     { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, 
-    { id: 'municipalities', label: 'Apoio Municipal', icon: Building2 }, // AQUI ESTÁ O NOVO BOTÃO
+    { id: 'municipalities', label: 'Apoio Municipal', icon: Building2 },
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -168,7 +169,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'comms' && <AdminComms />}
         {currentView === 'flyer_gen' && <AdminFlyerGenerator />} 
         {currentView === 'taxonomy' && <AdminTaxonomy />} 
-        {currentView === 'municipalities' && <AdminMunicipalities />} {/* AQUI RENDERIZA O NOVO COMPONENTE */}
+        {currentView === 'municipalities' && <AdminMunicipalities />}
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 
@@ -178,7 +179,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'locations' && <AdminLocations />} 
         {currentView === 'pricing' && <AdminPricing />} 
         {currentView === 'banners' && <BannerManager />} 
-        {currentView === 'admin_msg' && (<div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-200 text-center"><MessageSquare size={64} className="mx-auto text-slate-300 mb-4" /><h2 className="text-2xl font-black uppercase text-slate-400">Comunicados Avançados</h2><p className="text-slate-400 font-bold mt-2">Esta funcionalidade com filtros de zona está a ser preparada.</p></div>)}
+        {currentView === 'admin_msg' && <AdminMessages />}
       </main>
       <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />
     </div>
