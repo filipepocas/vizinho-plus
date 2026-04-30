@@ -17,7 +17,6 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
 
   useEffect(() => {
     if (!currentUser) return;
-    const userZipBase = currentUser.zipCode?.substring(0, 4);
 
     const q = query(collection(db, 'banners'), where('active', '==', true));
     
@@ -30,10 +29,32 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
           const end = b.endDate && typeof b.endDate.toDate === 'function' ? b.endDate.toDate() : new Date();
           
           const isTimeValid = now >= start && now <= end;
-          const hasTargetZips = b.targetZipCodes && b.targetZipCodes.length > 0;
-          const isZipValid = !hasTargetZips || (userZipBase && b.targetZipCodes?.includes(userZipBase));
 
-          return isTimeValid && isZipValid;
+          // NOVO FILTRO POR ZONAS (Distrito/Concelho/Freguesia)
+          const hasTargetZones = b.targetZones && b.targetZones.length > 0;
+          let isZoneValid = true;
+          if (hasTargetZones) {
+            isZoneValid = b.targetZones.some((zone: string) => {
+              const userDistrito = currentUser.distrito || '';
+              const userConcelho = currentUser.concelho || '';
+              const userFreguesia = currentUser.freguesia || '';
+
+              // Verifica se a zona corresponde (formato "Freguesia: Nome (Concelho)", etc.)
+              if (zone.includes('Freguesia:')) {
+                const nomeFreguesia = zone.split('Freguesia:')[1].split('(')[0].trim();
+                return nomeFreguesia === userFreguesia;
+              } else if (zone.includes('Concelho:')) {
+                const nomeConcelho = zone.split('Concelho:')[1].split('(')[0].trim();
+                return nomeConcelho === userConcelho;
+              } else if (zone.includes('Distrito:')) {
+                const nomeDistrito = zone.split('Distrito:')[1].trim();
+                return nomeDistrito === userDistrito;
+              }
+              return false;
+            });
+          }
+
+          return isTimeValid && isZoneValid;
         });
       setActiveBanners(valid);
     });
@@ -59,7 +80,6 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 1, ease: "linear" }}
-          // CORREÇÃO: No telemóvel preenche (cover), no PC ajusta-se para não cortar (contain)
           className="absolute inset-0 w-full h-full object-cover md:object-contain"
         />
       </AnimatePresence>

@@ -12,15 +12,20 @@ service cloud.firestore {
     function isPartner() {
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'partner';
     }
+    function isActiveMerchant() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'merchant' &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active';
+    }
 
     match /users/{userId} {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId || 
-        isAdmin() || 
-        // CORREÇÃO: Permite que comerciantes ativos leiam dados de clientes para pesquisa no Terminal
-        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'merchant' &&
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active' &&
-         resource.data.role == 'client')
+        isAdmin() ||
+        // Qualquer utilizador autenticado pode ver lojas parceiras ativas (listagem pública de lojas)
+        (resource.data.role == 'merchant' && resource.data.status == 'active') ||
+        // Comerciante ativo pode pesquisar clientes pelo NIF ou nº de cartão
+        (isActiveMerchant() && resource.data.role == 'client')
       );
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
