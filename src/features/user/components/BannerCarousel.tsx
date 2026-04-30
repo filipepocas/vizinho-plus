@@ -19,43 +19,56 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
     if (!currentUser) return;
 
     const q = query(collection(db, 'banners'), where('active', '==', true));
-    
+
     const unsubscribe = onSnapshot(q, (snap: any) => {
       const now = new Date();
-      const valid = snap.docs
-        .map((d: any) => ({ id: d.id, ...d.data() }))
-        .filter((b: any) => {
-          const start = b.startDate && typeof b.startDate.toDate === 'function' ? b.startDate.toDate() : new Date();
-          const end = b.endDate && typeof b.endDate.toDate === 'function' ? b.endDate.toDate() : new Date();
-          
-          const isTimeValid = now >= start && now <= end;
+      const allBanners = snap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+      console.log('🔍 Banners recebidos:', allBanners.length, allBanners);
 
-          // NOVO FILTRO POR ZONAS (Distrito/Concelho/Freguesia)
-          const hasTargetZones = b.targetZones && b.targetZones.length > 0;
-          let isZoneValid = true;
-          if (hasTargetZones) {
-            isZoneValid = b.targetZones.some((zone: string) => {
-              const userDistrito = currentUser.distrito || '';
-              const userConcelho = currentUser.concelho || '';
-              const userFreguesia = currentUser.freguesia || '';
-
-              // Verifica se a zona corresponde (formato "Freguesia: Nome (Concelho)", etc.)
-              if (zone.includes('Freguesia:')) {
-                const nomeFreguesia = zone.split('Freguesia:')[1].split('(')[0].trim();
-                return nomeFreguesia === userFreguesia;
-              } else if (zone.includes('Concelho:')) {
-                const nomeConcelho = zone.split('Concelho:')[1].split('(')[0].trim();
-                return nomeConcelho === userConcelho;
-              } else if (zone.includes('Distrito:')) {
-                const nomeDistrito = zone.split('Distrito:')[1].trim();
-                return nomeDistrito === userDistrito;
-              }
-              return false;
-            });
+      const valid = allBanners.filter((b: any) => {
+        // Validação segura de datas
+        let start = new Date(0);
+        let end = new Date(8640000000000000);
+        try {
+          if (b.startDate) {
+            start = typeof b.startDate.toDate === 'function' ? b.startDate.toDate() : new Date(b.startDate);
           }
+          if (b.endDate) {
+            end = typeof b.endDate.toDate === 'function' ? b.endDate.toDate() : new Date(b.endDate);
+          }
+        } catch (e) {
+          console.warn('Erro ao converter datas do banner', b.id, e);
+        }
+        const isTimeValid = now >= start && now <= end;
 
-          return isTimeValid && isZoneValid;
-        });
+        // Validação segura das zonas (targetZones pode ser undefined, null, array, etc.)
+        const zones = Array.isArray(b.targetZones) ? b.targetZones : [];
+        const hasTargetZones = zones.length > 0;
+        let isZoneValid = true;
+        if (hasTargetZones) {
+          isZoneValid = zones.some((zone: string) => {
+            const userDistrito = currentUser.distrito || '';
+            const userConcelho = currentUser.concelho || '';
+            const userFreguesia = currentUser.freguesia || '';
+
+            if (zone.includes('Freguesia:')) {
+              const nome = zone.split('Freguesia:')[1]?.split('(')[0]?.trim();
+              return nome === userFreguesia;
+            } else if (zone.includes('Concelho:')) {
+              const nome = zone.split('Concelho:')[1]?.split('(')[0]?.trim();
+              return nome === userConcelho;
+            } else if (zone.includes('Distrito:')) {
+              const nome = zone.split('Distrito:')[1]?.trim();
+              return nome === userDistrito;
+            }
+            return false;
+          });
+        }
+
+        return isTimeValid && isZoneValid;
+      });
+
+      console.log('✅ Banners válidos:', valid.length, valid);
       setActiveBanners(valid);
     });
 
