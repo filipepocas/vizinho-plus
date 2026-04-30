@@ -17,7 +17,10 @@ service cloud.firestore {
       allow read: if isAuthenticated() && (
         request.auth.uid == userId || 
         isAdmin() || 
-        (resource.data.role == 'merchant' && resource.data.status == 'active')
+        // CORREÇÃO: Permite que comerciantes ativos leiam dados de clientes para pesquisa no Terminal
+        (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'merchant' &&
+         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.status == 'active' &&
+         resource.data.role == 'client')
       );
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;

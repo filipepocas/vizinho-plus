@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDoc, doc, setDoc, getDocs, query, where, orderBy, onSnapshot, getCountFromServer } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, setDoc, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -87,11 +87,15 @@ const LandingPage: React.FC = () => {
       const cSnap = await getDoc(doc(db, 'system', 'config'));
       if (cSnap.exists()) setSysConfig(cSnap.data() as any);
 
-      // CORREÇÃO 3: Usar getCountFromServer para obter o número real e exato de utilizadores
+      // CORREÇÃO: Lê o contador de membros diretamente do documento system/stats,
+      // que é atualizado pela Cloud Function e tem regra pública de leitura.
       try {
-        const coll = collection(db, 'users');
-        const snapshot = await getCountFromServer(coll);
-        setMembersCount(snapshot.data().count);
+        const statsSnap = await getDoc(doc(db, 'system', 'stats'));
+        if (statsSnap.exists()) {
+          setMembersCount(statsSnap.data().membersCount || 0);
+        } else {
+          setMembersCount(0);
+        }
       } catch (err) {
         console.error("Erro ao obter contador de utilizadores:", err);
         setMembersCount(0);
