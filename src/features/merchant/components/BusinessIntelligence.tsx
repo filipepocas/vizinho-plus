@@ -43,8 +43,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
   /**
-   * FUNÇÕES DE FUSO HORÁRIO (TIMEZONE)
-   * Garante que todas as estatísticas são calculadas no fuso horário de Portugal (Europe/Lisbon),
+   * FUNÇÕES DE FUSO HORÁRIO (TIMEZONE) - CORREÇÃO 2
+   * Garante que todas as estatísticas são calculadas no fuso horário de Portugal Continental (Europe/Lisbon),
    * ignorando o fuso horário do servidor (UTC) ou do telemóvel do utilizador.
    */
   const parseDate = (createdAt: any): Date => {
@@ -56,32 +56,30 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
   const getLisbonDate = (dateInput?: any): Date => {
     const d = dateInput ? parseDate(dateInput) : new Date();
-    // Usa Intl.DateTimeFormat para obter os componentes da data no fuso de Lisboa
-    const format = new Intl.DateTimeFormat('pt-PT', {
-      timeZone: 'Europe/Lisbon',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit',
-      second: '2-digit',
-      hour12: false,
+    
+    // Usar toLocaleString com en-US garante um formato previsível: "MM/DD/YYYY, HH:mm:ss"
+    const lisbonString = d.toLocaleString('en-US', { 
+        timeZone: 'Europe/Lisbon', 
+        hour12: false 
     });
-    const parts = format.formatToParts(d);
-    const obj: any = {};
-    parts.forEach((p) => {
-      if (p.type !== 'literal') obj[p.type] = p.value;
-    });
-    // Cria um objeto Date a partir das partes numéricas (sem fuso, interpretado como local, mas os valores já estão corretos para Lisboa)
-    const lisbonDate = new Date(
-      parseInt(obj.year),
-      parseInt(obj.month) - 1,
-      parseInt(obj.day),
-      parseInt(obj.hour),
-      parseInt(obj.minute),
-      parseInt(obj.second)
+    
+    const [datePart, timePart] = lisbonString.split(', ');
+    const [month, day, year] = datePart.split('/');
+    let [hour, minute, second] = timePart.split(':');
+    
+    // Correção de segurança: em alguns browsers hour12:false pode retornar '24' em vez de '00'
+    if (hour === '24') hour = '00';
+
+    // Cria um objeto Date local, mas "injetado" com os valores exatos de Lisboa.
+    // Assim, quando fizermos .getHours() ou .getDay(), ele devolve a hora/dia de Portugal.
+    return new Date(
+      parseInt(year),
+      parseInt(month) - 1,
+      parseInt(day),
+      parseInt(hour),
+      parseInt(minute),
+      parseInt(second)
     );
-    return lisbonDate;
   };
 
   const dayStats = useMemo(() => {
@@ -104,7 +102,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
 
     return counts.map((d: { day: string, count: number, volume: number, hours: number[] }) => ({
       ...d,
-      peakHour: d.count > 0 ? `${d.hours.indexOf(Math.max(...d.hours))}:00` : '--:--'
+      // Formata a hora de ponta com 2 dígitos (ex: 09:00 em vez de 9:00)
+      peakHour: d.count > 0 ? `${String(d.hours.indexOf(Math.max(...d.hours))).padStart(2, '0')}:00` : '--:--'
     }));
   }, [transactions]);
 
@@ -134,8 +133,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
     });
     return months;
   }, [transactions]);
-
-  const performanceStats = useMemo(() => {
+const performanceStats = useMemo(() => {
     const sixMonthsAgo = getLisbonDate();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
 

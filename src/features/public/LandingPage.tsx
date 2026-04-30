@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDoc, doc, setDoc, getDocs, query, where, orderBy, onSnapshot } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, setDoc, getDocs, query, where, orderBy, onSnapshot, getCountFromServer } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -87,15 +87,13 @@ const LandingPage: React.FC = () => {
       const cSnap = await getDoc(doc(db, 'system', 'config'));
       if (cSnap.exists()) setSysConfig(cSnap.data() as any);
 
+      // CORREÇÃO 3: Usar getCountFromServer para obter o número real e exato de utilizadores
       try {
-        const statsSnap = await getDoc(doc(db, 'system', 'stats'));
-        if (statsSnap.exists()) {
-          setMembersCount(statsSnap.data()?.membersCount || 0);
-        } else {
-          setMembersCount(0);
-        }
+        const coll = collection(db, 'users');
+        const snapshot = await getCountFromServer(coll);
+        setMembersCount(snapshot.data().count);
       } catch (err) {
-        console.error("Erro ao obter contador:", err);
+        console.error("Erro ao obter contador de utilizadores:", err);
         setMembersCount(0);
       }
     };
@@ -326,8 +324,7 @@ const LandingPage: React.FC = () => {
   const extFreguesias = bannerForm.distrito && bannerForm.concelho ? (locations[bannerForm.distrito][bannerForm.concelho] || []).sort() : [];
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
-
-  return (
+return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
       {campaigns.length > 0 && (

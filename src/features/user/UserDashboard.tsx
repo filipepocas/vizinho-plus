@@ -321,8 +321,7 @@ const UserDashboard: React.FC = () => {
   const distritos = Object.keys(locations).sort();
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
-
-  return (
+return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
       <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[400px]'}`}>
@@ -393,9 +392,16 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
-          <Building2 size={20} /> Apoio ao Munícipe
-        </button>
+        {/* CORREÇÃO 1: Botão do Guia Passo-a-Passo da App adicionado aqui */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+           <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors">
+             <HelpCircle size={20} /> Guia Passo-a-Passo da App
+           </button>
+
+           <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+             <Building2 size={20} /> Apoio ao Munícipe
+           </button>
+        </div>
 
         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
           <button onClick={() => setView('marketplace')} className={`p-4 rounded-2xl flex flex-col items-center justify-center gap-2 text-center transition-all border-2 ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f] shadow-inner' : 'bg-white border-slate-100 text-slate-500 shadow-sm hover:border-[#00d66f]'}`}>
