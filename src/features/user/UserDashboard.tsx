@@ -397,7 +397,6 @@ return (
           </div>
         </div>
 
-        {/* CORREÇÃO 1: Botão do Guia Passo-a-Passo da App adicionado aqui */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
            <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors">
              <HelpCircle size={20} /> Guia Passo-a-Passo da App
@@ -578,7 +577,7 @@ return (
                 {events.map((ev: any) => (
                    <div key={ev.id} className="bg-white border-4 border-blue-500 rounded-[30px] p-6 shadow-lg flex flex-col md:flex-row gap-6">
                       <div className="w-full md:w-48 shrink-0 bg-slate-100 rounded-2xl border-2 border-slate-200 overflow-hidden flex items-center justify-center p-2">
-                         <img src={ev.imageUrl} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
+                         <img src={ev.imageUrl || ev.imageBase64} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
                       </div>
                       <div className="flex-1">
                           <h4 className="font-black uppercase text-[#0a2540] text-xl mb-1">{ev.title}</h4>

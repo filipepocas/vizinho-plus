@@ -34,121 +34,73 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.updateMemberCount = exports.sendAdminNotification = exports.dispatchMerchantPushCampaigns = exports.dispatchAdminNotifications = exports.onNewFeedback = exports.revertCancelledTransaction = exports.processNewTransaction = void 0;
+exports.refreshAppCache = exports.cleanupExpiredData = exports.generateAppCache = exports.updateMemberCount = exports.sendAdminNotification = exports.dispatchMerchantPushCampaigns = exports.dispatchAdminNotifications = exports.onNewFeedback = exports.revertCancelledTransaction = exports.processNewTransaction = void 0;
 const functions = __importStar(require("firebase-functions"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
-/**
- * Função Auxiliar para arredondamento financeiro preciso (2 casas decimais)
- * Evita problemas de dízimas binárias (ex: 0.1 + 0.2 = 0.30000000000000004)
- */
 const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 /**
  * 1. PROCESSAR NOVAS TRANSAÇÕES (WIZARD FLOW)
- * Esta função é o motor central do cashback.
- * Processa compras, descontos e notas de crédito de forma unificada.
  */
 exports.processNewTransaction = functions.region("us-central1").firestore
     .document("transactions/{transactionId}")
     .onCreate(async (snap, context) => {
     const tx = snap.data();
-    // Proteção contra loops e dados nulos
     if (!tx || tx.processedByBackend)
         return;
     const clientRef = db.collection("users").doc(tx.clientId);
     const merchantRef = db.collection("users").doc(tx.merchantId);
     try {
         let notificationPayload = { title: "", body: "" };
-        await db.runTransaction(async (transaction) => {
-            const clientDoc = await transaction.get(clientRef);
-            const merchantDoc = await transaction.get(merchantRef);
-            if (!clientDoc.exists || !merchantDoc.exists)
-                throw new Error("Documentos não encontrados.");
-            const merchantData = merchantDoc.data();
-            if (!merchantData)
-                throw new Error("Dados do lojista vazios.");
-            const merchantCashbackPercent = Number(merchantData.cashbackPercent) || 0;
-            const invoiceAmount = Number(tx.invoiceAmount) || 0;
-            // --- NOVA MATEMÁTICA DO WIZARD ---
-            // Se o tipo for 'redeem', o campo 'amount' traz o valor do desconto solicitado
-            let discountUsed = 0;
-            if (tx.type === 'redeem') {
-                discountUsed = Number(tx.amount) || 0;
-            }
-            // O Cashback é ganho sobre o valor real pago (Fatura - Desconto)
-            // Se for nota de crédito (fatura negativa), o cashback ganho será negativo (estorno de saldo)
-            const amountPaid = roundToTwo(invoiceAmount - discountUsed);
-            const secureCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
-            // O impacto líquido na carteira do cliente é: O que ganhou MENOS o que descontou
-            const netWalletChange = roundToTwo(secureCashbackEarned - discountUsed);
-            // Atualiza o documento da transação com os valores finais blindados pelo servidor
-            transaction.update(snap.ref, {
-                cashbackAmount: secureCashbackEarned, // Valor do cashback gerado (positivo ou negativo)
-                discountUsed: discountUsed, // Valor do saldo que foi abatido
-                amountPaid: amountPaid, // Valor final pago em dinheiro/cartão
-                cashbackPercent: merchantCashbackPercent,
-                processedByBackend: true,
-                status: 'available' // Saldo fica disponível no imediato
-            });
-            const userData = clientDoc.data();
-            if (!userData)
-                throw new Error("Dados do cliente vazios.");
-            let storeWallets = userData.storeWallets || {};
-            const mId = tx.merchantId;
-            // Inicializa carteira da loja se não existir
-            if (!storeWallets[mId]) {
-                storeWallets[mId] = { available: 0, pending: 0, merchantName: tx.merchantName };
-            }
-            let currentAvailable = Number(storeWallets[mId].available) || 0;
-            // Atualização do saldo da loja específica (pode ficar negativo em notas de crédito)
-            storeWallets[mId].available = roundToTwo(currentAvailable + netWalletChange);
-            storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();
-            // Recalcular Saldo Global do Utilizador (Soma de todas as storeWallets)
-            let globalAvailable = 0;
-            Object.values(storeWallets).forEach((w) => {
-                globalAvailable += (Number(w.available) || 0);
-            });
-            transaction.update(clientRef, {
-                storeWallets: storeWallets,
-                wallet: {
-                    available: roundToTwo(globalAvailable),
-                    pending: 0
-                }
-            });
-            // Criar Alerta Interno (Notificação na App que desaparece ao ler)
-            const alertRef = db.collection("users").doc(tx.clientId).collection("alerts").doc();
-            transaction.set(alertRef, {
-                title: invoiceAmount >= 0 ? "Nova Compra!" : "Nota de Crédito",
-                message: invoiceAmount >= 0
-                    ? `Compra em ${tx.merchantName}. Fatura: ${invoiceAmount.toFixed(2)}€ | Ganhaste: ${secureCashbackEarned.toFixed(2)}€.`
-                    : `Nota de crédito em ${tx.merchantName}. Valor: ${invoiceAmount.toFixed(2)}€ | Saldo ajustado.`,
-                type: 'transaction',
-                transactionId: snap.id,
-                read: false,
-                createdAt: admin.firestore.FieldValue.serverTimestamp()
-            });
-            notificationPayload = {
-                title: `Vizinho+: ${tx.merchantName}`,
-                body: invoiceAmount >= 0
-                    ? `Pagaste ${amountPaid.toFixed(2)}€ e ganhaste ${secureCashbackEarned.toFixed(2)}€ de cashback! 🥳`
-                    : `Nota de crédito de ${Math.abs(invoiceAmount).toFixed(2)}€ processada.`
-            };
+        const merchantDoc = await merchantRef.get();
+        const merchantData = merchantDoc.data();
+        if (!merchantData)
+            throw new Error("Lojista não encontrado.");
+        const merchantCashbackPercent = Number(merchantData.cashbackPercent) || 0;
+        const invoiceAmount = Number(tx.invoiceAmount) || 0;
+        let discountUsed = 0;
+        if (tx.type === 'redeem')
+            discountUsed = Number(tx.amount) || 0;
+        const amountPaid = roundToTwo(invoiceAmount - discountUsed);
+        const secureCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
+        const netWalletChange = roundToTwo(secureCashbackEarned - discountUsed);
+        await snap.ref.update({
+            cashbackAmount: secureCashbackEarned, discountUsed, amountPaid,
+            cashbackPercent: merchantCashbackPercent, processedByBackend: true, status: 'available'
         });
-        // ENVIAR NOTIFICAÇÃO PUSH (Executado após o sucesso da transação)
-        const clientDocAfter = await clientRef.get();
-        const clientData = clientDocAfter.data();
+        const batch = db.batch();
+        batch.update(clientRef, {
+            [`storeWallets.${tx.merchantId}.available`]: admin.firestore.FieldValue.increment(netWalletChange),
+            [`storeWallets.${tx.merchantId}.merchantName`]: tx.merchantName,
+            [`storeWallets.${tx.merchantId}.lastUpdate`]: admin.firestore.FieldValue.serverTimestamp(),
+            'wallet.available': admin.firestore.FieldValue.increment(netWalletChange),
+            'wallet.pending': 0
+        });
+        await batch.commit();
+        const alertRef = db.collection("users").doc(tx.clientId).collection("alerts").doc();
+        await alertRef.set({
+            title: invoiceAmount >= 0 ? "Nova Compra!" : "Nota de Crédito",
+            message: invoiceAmount >= 0
+                ? `Compra em ${tx.merchantName}. Fatura: ${invoiceAmount.toFixed(2)}€ | Ganhaste: ${secureCashbackEarned.toFixed(2)}€.`
+                : `Nota de crédito em ${tx.merchantName}. Valor: ${invoiceAmount.toFixed(2)}€ | Saldo ajustado.`,
+            type: 'transaction', transactionId: snap.id, read: false,
+            createdAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        notificationPayload = {
+            title: `Vizinho+: ${tx.merchantName}`,
+            body: invoiceAmount >= 0
+                ? `Pagaste ${amountPaid.toFixed(2)}€ e ganhaste ${secureCashbackEarned.toFixed(2)}€ de cashback!`
+                : `Nota de crédito de ${Math.abs(invoiceAmount).toFixed(2)}€ processada.`
+        };
+        const clientDoc = await clientRef.get();
+        const clientData = clientDoc.data();
         if ((clientData === null || clientData === void 0 ? void 0 : clientData.fcmTokens) && clientData.fcmTokens.length > 0) {
             const message = {
-                notification: notificationPayload,
-                tokens: clientData.fcmTokens,
+                notification: notificationPayload, tokens: clientData.fcmTokens,
                 webpush: {
                     headers: { Urgency: "high" },
-                    notification: {
-                        icon: "/logo192.png",
-                        badge: "/logo192.png",
-                        requireInteraction: true
-                    }
+                    notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true }
                 }
             };
             await admin.messaging().sendEachForMulticast(message);
@@ -161,50 +113,39 @@ exports.processNewTransaction = functions.region("us-central1").firestore
 });
 /**
  * 2. REVERTER ANULAÇÕES
- * Se o lojista anular uma transação, o sistema reverte exatamente o impacto
- * líquido que foi aplicado na carteira do cliente.
  */
 exports.revertCancelledTransaction = functions.region("us-central1").firestore
     .document("transactions/{transactionId}")
     .onUpdate(async (change, context) => {
     const before = change.before.data();
     const after = change.after.data();
-    // Só executa se o status mudar para 'cancelled'
     if (before && after && before.status !== 'cancelled' && after.status === 'cancelled') {
         const clientRef = db.collection("users").doc(after.clientId);
-        await db.runTransaction(async (transaction) => {
-            const clientDoc = await transaction.get(clientRef);
+        try {
+            const clientDoc = await clientRef.get();
             const userData = clientDoc.data();
             if (!clientDoc.exists || !userData)
                 return;
-            let storeWallets = userData.storeWallets || {};
-            const mId = after.merchantId;
-            if (!storeWallets[mId])
+            const storeWallets = userData.storeWallets || {};
+            if (!storeWallets[after.merchantId])
                 return;
-            let currentAvailable = Number(storeWallets[mId].available) || 0;
-            // Recupera os valores calculados pelo backend no momento da criação
             const cashbackEarned = Number(after.cashbackAmount) || 0;
             const discountUsed = Number(after.discountUsed) || 0;
-            // O impacto original foi: (Ganho - Desconto)
-            // Para reverter, subtraímos esse impacto do saldo atual
             const netImpactToRevert = roundToTwo(cashbackEarned - discountUsed);
-            storeWallets[mId].available = roundToTwo(currentAvailable - netImpactToRevert);
-            storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();
-            // Recalcular Saldo Global
-            let globalAvailable = 0;
-            Object.values(storeWallets).forEach((w) => {
-                globalAvailable += (Number(w.available) || 0);
+            const batch = db.batch();
+            batch.update(clientRef, {
+                [`storeWallets.${after.merchantId}.available`]: admin.firestore.FieldValue.increment(-netImpactToRevert),
+                'wallet.available': admin.firestore.FieldValue.increment(-netImpactToRevert),
             });
-            transaction.update(clientRef, {
-                storeWallets: storeWallets,
-                wallet: { available: roundToTwo(globalAvailable), pending: 0 }
-            });
-        });
+            await batch.commit();
+        }
+        catch (error) {
+            console.error("Erro na reversão:", error);
+        }
     }
 });
 /**
  * 3. AVALIAÇÕES DAS LOJAS (Feedback)
- * Notifica o lojista quando recebe uma nova avaliação.
  */
 exports.onNewFeedback = functions.region("us-central1").firestore
     .document("feedbacks/{feedbackId}")
@@ -217,15 +158,9 @@ exports.onNewFeedback = functions.region("us-central1").firestore
         const merchantData = merchantDoc.data();
         if ((merchantData === null || merchantData === void 0 ? void 0 : merchantData.fcmTokens) && merchantData.fcmTokens.length > 0) {
             const message = {
-                notification: {
-                    title: "Nova Avaliação de Cliente!",
-                    body: `${feedback.userName} deu-te ${feedback.rating} estrelas.`
-                },
+                notification: { title: "Nova Avaliação de Cliente!", body: `${feedback.userName} deu-te ${feedback.rating} estrelas.` },
                 tokens: merchantData.fcmTokens,
-                webpush: {
-                    headers: { Urgency: "high" },
-                    notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] }
-                }
+                webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] } }
             };
             await admin.messaging().sendEachForMulticast(message);
         }
@@ -236,7 +171,6 @@ exports.onNewFeedback = functions.region("us-central1").firestore
 });
 /**
  * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN
- * Filtra utilizadores e envia notificações em massa (Multicast).
  */
 exports.dispatchAdminNotifications = functions.region("us-central1").firestore
     .document("notifications/{notifId}")
@@ -245,7 +179,6 @@ exports.dispatchAdminNotifications = functions.region("us-central1").firestore
     const notif = change.after.data();
     if (!notif || notif.status !== 'approved' || notif.sent === true)
         return;
-    // Proteção para agendamentos futuros
     const scheduledFor = ((_a = notif.scheduledFor) === null || _a === void 0 ? void 0 : _a.toDate) ? notif.scheduledFor.toDate() : new Date(notif.scheduledFor);
     if (scheduledFor > new Date())
         return;
@@ -270,11 +203,8 @@ exports.dispatchAdminNotifications = functions.region("us-central1").firestore
             }
             else if (notif.targetType === 'zonas') {
                 const zones = notif.targetZones || [];
-                if (zones.some((z) => z.includes(`Freguesia: ${user.freguesia}`) ||
-                    z.includes(`Concelho: ${user.concelho}`) ||
-                    z.includes(`Distrito: ${user.distrito}`))) {
+                if (zones.some((z) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`)))
                     matches = true;
-                }
             }
             if (matches)
                 tokens.push(...user.fcmTokens);
@@ -283,23 +213,15 @@ exports.dispatchAdminNotifications = functions.region("us-central1").firestore
             const uniqueTokens = [...new Set(tokens)];
             const message = {
                 notification: { title: notif.title, body: notif.message },
-                webpush: {
-                    headers: { Urgency: "high" },
-                    notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true }
-                }
+                webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true } }
             };
-            // Envio em lotes de 500 (Limite do Firebase)
             const chunkSize = 500;
             for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
                 const chunk = uniqueTokens.slice(i, i + chunkSize);
                 await admin.messaging().sendEachForMulticast(Object.assign(Object.assign({}, message), { tokens: chunk }));
             }
         }
-        await change.after.ref.update({
-            sent: true,
-            sentAt: admin.firestore.FieldValue.serverTimestamp(),
-            reachCount: tokens.length
-        });
+        await change.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length });
     }
     catch (error) {
         console.error("Erro fatal no disparo de Push Admin:", error);
@@ -331,11 +253,8 @@ exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestor
                 }
                 else if (after.targetType === 'zonas') {
                     const zones = after.targetZones || [];
-                    if (zones.some((z) => z.includes(`Freguesia: ${user.freguesia}`) ||
-                        z.includes(`Concelho: ${user.concelho}`) ||
-                        z.includes(`Distrito: ${user.distrito}`))) {
+                    if (zones.some((z) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`)))
                         matches = true;
-                    }
                 }
                 if (matches)
                     tokens.push(...user.fcmTokens);
@@ -344,10 +263,7 @@ exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestor
                 const uniqueTokens = [...new Set(tokens)];
                 const message = {
                     notification: { title: after.title, body: after.text },
-                    webpush: {
-                        headers: { Urgency: "high" },
-                        notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true }
-                    }
+                    webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true } }
                 };
                 const chunkSize = 500;
                 for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
@@ -367,32 +283,23 @@ exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestor
  */
 exports.sendAdminNotification = functions.region("us-central1").https.onCall(async (data, context) => {
     var _a, _b;
-    // Proteção de e-mail do Super Admin
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
-        throw new functions.https.HttpsError("permission-denied", "Acesso restrito ao Super Administrador.");
-    }
+    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com")
+        throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
     const { targetUserId, title, body } = data;
     try {
         let tokens = [];
         if (targetUserId === "all") {
             const allUsers = await db.collection("users").where("fcmTokens", "!=", []).get();
-            allUsers.forEach(doc => {
-                const d = doc.data();
-                if (d.fcmTokens)
-                    tokens.push(...d.fcmTokens);
-            });
+            allUsers.forEach(doc => { const d = doc.data(); if (d.fcmTokens)
+                tokens.push(...d.fcmTokens); });
         }
         else {
             const userDoc = await db.collection("users").doc(targetUserId).get();
             tokens = ((_b = userDoc.data()) === null || _b === void 0 ? void 0 : _b.fcmTokens) || [];
         }
         if (tokens.length === 0)
-            return { success: false, message: "Nenhum dispositivo encontrado." };
-        const message = {
-            notification: { title, body },
-            tokens: [...new Set(tokens)],
-            webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png" } }
-        };
+            return { success: false };
+        const message = { notification: { title, body }, tokens: [...new Set(tokens)], webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png" } } };
         const response = await admin.messaging().sendEachForMulticast(message);
         return { success: true, sentCount: response.successCount };
     }
@@ -401,8 +308,7 @@ exports.sendAdminNotification = functions.region("us-central1").https.onCall(asy
     }
 });
 /**
- * 7. CONTADOR DE MEMBROS (NOVA FUNÇÃO)
- * Atualiza automaticamente o documento system/stats sempre que um utilizador é criado ou apagado.
+ * 7. CONTADOR DE MEMBROS
  */
 exports.updateMemberCount = functions.region("us-central1").firestore
     .document("users/{userId}")
@@ -413,20 +319,118 @@ exports.updateMemberCount = functions.region("us-central1").firestore
             var _a;
             const statsDoc = await transaction.get(statsRef);
             let currentCount = statsDoc.exists ? (((_a = statsDoc.data()) === null || _a === void 0 ? void 0 : _a.membersCount) || 0) : 0;
-            if (!change.before.exists && change.after.exists) {
+            if (!change.before.exists && change.after.exists)
                 currentCount += 1;
-            }
-            else if (change.before.exists && !change.after.exists) {
+            else if (change.before.exists && !change.after.exists)
                 currentCount = Math.max(0, currentCount - 1);
-            }
-            transaction.set(statsRef, {
-                membersCount: currentCount,
-                updatedAt: admin.firestore.FieldValue.serverTimestamp()
-            }, { merge: true });
+            transaction.set(statsRef, { membersCount: currentCount, updatedAt: admin.firestore.FieldValue.serverTimestamp() }, { merge: true });
         });
     }
     catch (error) {
         console.error("Erro ao atualizar contador de membros:", error);
+    }
+});
+/**
+ * 8. GERAÇÃO DE CACHE CENTRALIZADO (Agendado diariamente)
+ */
+exports.generateAppCache = functions.region("us-central1").pubsub.schedule("every 24 hours").onRun(async (context) => {
+    var _a;
+    try {
+        const cache = {
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            locations: {}, stats: { membersCount: 0 }, config: {},
+            pricingRules: [], municipalitiesFaqs: [], leafletCampaigns: [],
+        };
+        const locDoc = await db.collection("system").doc("locations").get();
+        if (locDoc.exists)
+            cache.locations = ((_a = locDoc.data()) === null || _a === void 0 ? void 0 : _a.data) || {};
+        const statsDoc = await db.collection("system").doc("stats").get();
+        if (statsDoc.exists)
+            cache.stats = statsDoc.data() || { membersCount: 0 };
+        const configDoc = await db.collection("system").doc("config").get();
+        if (configDoc.exists)
+            cache.config = configDoc.data() || {};
+        const pricingSnap = await db.collection("pricing_rules").get();
+        pricingSnap.forEach(doc => cache.pricingRules.push(Object.assign({ id: doc.id }, doc.data())));
+        const faqsSnap = await db.collection("municipalities_faqs").orderBy("createdAt", "desc").limit(100).get();
+        faqsSnap.forEach(doc => cache.municipalitiesFaqs.push(Object.assign({ id: doc.id }, doc.data())));
+        const campaignsSnap = await db.collection("leaflet_campaigns").where("isActive", "==", true).get();
+        campaignsSnap.forEach(doc => cache.leafletCampaigns.push(Object.assign({ id: doc.id }, doc.data())));
+        await db.collection("system").doc("app_cache").set(cache);
+        console.log("Cache gerado com sucesso.");
+    }
+    catch (error) {
+        console.error("Erro ao gerar app_cache:", error);
+    }
+    return null;
+});
+/**
+ * 9. LIMPEZA AUTOMÁTICA DE DADOS EXPIRADOS (Agendado diariamente)
+ */
+exports.cleanupExpiredData = functions.region("us-central1").pubsub.schedule("every 24 hours").onRun(async (context) => {
+    const batchSize = 100;
+    const now = admin.firestore.Timestamp.now();
+    // Eventos expirados
+    const expiredEvents = await db.collection("events").where("endDate", "<", now).limit(batchSize).get();
+    const eventBatch = db.batch();
+    expiredEvents.docs.forEach(doc => eventBatch.delete(doc.ref));
+    await eventBatch.commit();
+    console.log(`Eventos eliminados: ${expiredEvents.size}`);
+    // Desperdício Zero expirado
+    const expiredWaste = await db.collection("anti_waste").where("endTime", "<", now).limit(batchSize).get();
+    const wasteBatch = db.batch();
+    expiredWaste.docs.forEach(doc => wasteBatch.delete(doc.ref));
+    await wasteBatch.commit();
+    console.log(`Anúncios de desperdício eliminados: ${expiredWaste.size}`);
+    // Produtos do Marketplace com mais de 7 dias
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const expiredProducts = await db.collection("products").where("createdAt", "<", sevenDaysAgo).limit(batchSize).get();
+    const productBatch = db.batch();
+    expiredProducts.docs.forEach(doc => productBatch.delete(doc.ref));
+    await productBatch.commit();
+    console.log(`Produtos expirados eliminados: ${expiredProducts.size}`);
+    return null;
+});
+/**
+ * 10. FORÇAR A ATUALIZAÇÃO DO CACHE (Admin)
+ */
+exports.refreshAppCache = functions.region("us-central1").https.onCall(async (data, context) => {
+    var _a, _b;
+    // Verificar se o utilizador é admin
+    if (!context.auth) {
+        throw new functions.https.HttpsError("unauthenticated", "Necessita de autenticação.");
+    }
+    const userDoc = await db.collection("users").doc(context.auth.uid).get();
+    if (!userDoc.exists || ((_a = userDoc.data()) === null || _a === void 0 ? void 0 : _a.role) !== 'admin') {
+        throw new functions.https.HttpsError("permission-denied", "Acesso restrito ao administrador.");
+    }
+    try {
+        const cache = {
+            updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+            locations: {}, stats: { membersCount: 0 }, config: {},
+            pricingRules: [], municipalitiesFaqs: [], leafletCampaigns: [],
+        };
+        const locDoc = await db.collection("system").doc("locations").get();
+        if (locDoc.exists)
+            cache.locations = ((_b = locDoc.data()) === null || _b === void 0 ? void 0 : _b.data) || {};
+        const statsDoc = await db.collection("system").doc("stats").get();
+        if (statsDoc.exists)
+            cache.stats = statsDoc.data() || { membersCount: 0 };
+        const configDoc = await db.collection("system").doc("config").get();
+        if (configDoc.exists)
+            cache.config = configDoc.data() || {};
+        const pricingSnap = await db.collection("pricing_rules").get();
+        pricingSnap.forEach(doc => cache.pricingRules.push(Object.assign({ id: doc.id }, doc.data())));
+        const faqsSnap = await db.collection("municipalities_faqs").orderBy("createdAt", "desc").limit(100).get();
+        faqsSnap.forEach(doc => cache.municipalitiesFaqs.push(Object.assign({ id: doc.id }, doc.data())));
+        const campaignsSnap = await db.collection("leaflet_campaigns").where("isActive", "==", true).get();
+        campaignsSnap.forEach(doc => cache.leafletCampaigns.push(Object.assign({ id: doc.id }, doc.data())));
+        await db.collection("system").doc("app_cache").set(cache);
+        return { success: true };
+    }
+    catch (error) {
+        throw new functions.https.HttpsError("internal", "Erro ao atualizar cache.");
     }
 });
 //# sourceMappingURL=index.js.map
