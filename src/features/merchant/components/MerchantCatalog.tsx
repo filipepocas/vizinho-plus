@@ -29,7 +29,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
 
-  // Limite Dinâmico de Produtos
   const [maxProducts, setMaxProducts] = useState<number>(20);
 
   const [formData, setFormData] = useState({
@@ -41,7 +40,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   const formatEuro = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // Função auxiliar para lidar com as datas do Firestore
   const parseDate = (createdAt: any) => {
     if (!createdAt) return new Date(0);
     if (createdAt.toDate) return createdAt.toDate();
@@ -51,8 +49,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   useEffect(() => {
     if (!taxonomy) fetchTaxonomy();
-    
-    // Carregar a configuração global para saber o limite de produtos
+
     const fetchConfig = async () => {
       try {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
@@ -63,7 +60,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         console.error("Erro ao carregar configurações:", err);
       }
     };
-    
+
     fetchConfig();
     loadProducts();
   }, [merchant.id]);
@@ -74,25 +71,23 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-      // 1. Carregar Meus Produtos (Query simples por merchantId, filtro de data e ordenação em memória)
       const qMine = query(collection(db, 'products'), where('merchantId', '==', merchant.id));
       const snapMine = await getDocs(qMine);
       let myProds = snapMine.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
-      
+
       myProds = myProds.filter((p: Product) => parseDate(p.createdAt) >= seteDiasAtras);
       myProds.sort((a: Product, b: Product) => parseDate(b.createdAt).getTime() - parseDate(a.createdAt).getTime());
-      
+
       setProducts(myProds);
 
-      // 2. Carregar Produtos da Concorrência no CONCELHO (Query simples por concelho, filtro em memória)
       if (merchant.concelho) {
         const qComp = query(collection(db, 'products'), where('concelho', '==', merchant.concelho));
         const snapComp = await getDocs(qComp);
         let compProds = snapComp.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
-        
+
         compProds = compProds.filter((p: Product) => p.merchantId !== merchant.id && parseDate(p.createdAt) >= seteDiasAtras);
         compProds.sort((a: Product, b: Product) => parseDate(b.createdAt).getTime() - parseDate(a.createdAt).getTime());
-        
+
         setCompetitionProducts(compProds);
       }
     } catch (err) {
@@ -114,8 +109,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    // Validação do Limite Dinâmico
+
     if (!editingProduct && products.length >= maxProducts) {
         return toast.error(`Limite de ${maxProducts} anúncios atingido. Elimine um para publicar novo.`);
     }
@@ -127,7 +121,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
     const toastId = toast.loading("A validar exclusividade...");
 
     try {
-      // REGRA: Proteção Anti-Duplicados na mesma FREGUESIA (Query simples, validação em memória)
       if (!editingProduct || editingProduct.productType !== formData.productType) {
          const seteDiasAtras = new Date();
          seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
@@ -148,7 +141,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
       toast.loading("A processar imagem...", { id: toastId });
       let imageUrl = editingProduct?.imageUrl || '';
-      
+
       if (selectedFile) {
         const compressedBase64 = await compressImage(selectedFile);
         const blob = dataURLtoBlob(compressedBase64);
@@ -184,7 +177,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         await addDoc(collection(db, 'products'), productData);
         toast.success("Produto publicado com exclusividade na Freguesia!", { id: toastId });
       }
-      
+
       setShowAddForm(false);
       setEditingProduct(null);
       resetForm();
@@ -242,7 +235,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* TABS DE NAVEGAÇÃO */}
       <div className="flex gap-4 mb-6">
         <button 
             onClick={() => setActiveTab('my_catalog')} 
@@ -447,7 +439,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
           </div>
         </div>
       )}
-
     </div>
   );
 };

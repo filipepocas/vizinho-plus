@@ -25,7 +25,7 @@ import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission, getLocalDeviceId } from '../../utils/notifications';
 
 const UserDashboard: React.FC = () => {
-  const { transactions, logout, currentUser, shoppingList, locations } = useStore();
+  const { transactions, logout, currentUser, shoppingList, locations, appCache } = useStore();
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
   const contentRef = useRef<HTMLDivElement>(null);
@@ -203,21 +203,26 @@ const UserDashboard: React.FC = () => {
     return () => { unsubEvents(); unsubWaste(); };
   }, [currentUser]);
 
+  // NOVA LÓGICA: FAQs municipais passam a vir do cache (app_cache)
   useEffect(() => {
     if (!currentUser || view !== 'municipalities') return;
-    let q = query(collection(db, 'municipalities_faqs'), orderBy('createdAt', 'desc'));
-    if (munFilters.distrito) q = query(q, where('distrito', '==', munFilters.distrito));
-    if (munFilters.concelho) q = query(q, where('concelho', '==', munFilters.concelho));
-
-    const unsubscribe = onSnapshot(q, (snap: any) => {
-      let results = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as MunicipalityFAQ));
-      if (munFilters.freguesia) {
-        results = results.filter((f: MunicipalityFAQ) => f.freguesia === '' || f.freguesia === munFilters.freguesia);
-      }
-      setMunicipalitiesFaqs(results);
-    });
-    return () => unsubscribe();
-  }, [currentUser, view, munFilters]);
+    if (appCache && appCache.municipalitiesFaqs) {
+      let filtered = appCache.municipalitiesFaqs.filter((faq: MunicipalityFAQ) => {
+        if (munFilters.distrito && faq.distrito !== munFilters.distrito) return false;
+        if (munFilters.concelho && faq.concelho !== munFilters.concelho) return false;
+        if (munFilters.freguesia && faq.freguesia !== '' && faq.freguesia !== munFilters.freguesia) return false;
+        return true;
+      });
+      filtered.sort((a: MunicipalityFAQ, b: MunicipalityFAQ) => {
+        const dateA = a.createdAt?.seconds || 0;
+        const dateB = b.createdAt?.seconds || 0;
+        return dateB - dateA;
+      });
+      setMunicipalitiesFaqs(filtered);
+    } else {
+      setMunicipalitiesFaqs([]);
+    }
+  }, [currentUser, view, munFilters, appCache]);
 
   const dismissNotification = () => {
     if (appNotification?.id) sessionStorage.setItem(`notif_${appNotification.id}`, "true");
@@ -517,7 +522,6 @@ return (
 
           {view === 'municipalities' && (
              <div className="space-y-6 animate-in fade-in duration-500">
-                {/* ... (resto da vista municipalities igual) ... */}
                 <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
                    <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">

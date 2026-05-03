@@ -10,6 +10,16 @@ import { db, auth } from '../config/firebase';
 import { Transaction, TransactionCreate, User as UserProfile, LocationsMap, Product, ProductTaxonomy } from '../types';
 import toast from 'react-hot-toast';
 
+interface AppCache {
+  locations: LocationsMap;
+  stats: { membersCount: number };
+  config: any;
+  pricingRules: any[];
+  municipalitiesFaqs: any[];
+  leafletCampaigns: any[];
+  updatedAt: any;
+}
+
 interface StoreState {
   transactions: Transaction[];
   currentUser: UserProfile | null;
@@ -20,6 +30,7 @@ interface StoreState {
   isLoading: boolean; 
   isFetchingProducts: boolean; 
   isInitialized: boolean;
+  appCache: AppCache | null;
   
   setCurrentUser: (user: UserProfile | null) => void;
   setLoading: (loading: boolean) => void;
@@ -41,6 +52,7 @@ interface StoreState {
   removeFromShoppingList: (productId: string) => void;
   clearShoppingList: () => void;
   fetchTaxonomy: () => Promise<void>;
+  loadAppCache: () => Promise<void>;
 }
 
 export const useStore = create<StoreState>((set, get) => ({
@@ -53,6 +65,7 @@ export const useStore = create<StoreState>((set, get) => ({
   isLoading: true,
   isFetchingProducts: false,
   isInitialized: false,
+  appCache: null,
 
   setCurrentUser: (user) => set({ currentUser: user, isLoading: false, isInitialized: true }),
   setLoading: (loading) => set({ isLoading: loading }),
@@ -78,6 +91,25 @@ export const useStore = create<StoreState>((set, get) => ({
       }
     } catch(e) { 
       console.error("Erro ao carregar taxonomia:", e); 
+    }
+  },
+
+  loadAppCache: async () => {
+    try {
+      const cacheSnap = await getDoc(doc(db, 'system', 'app_cache'));
+      if (cacheSnap.exists()) {
+        const data = cacheSnap.data() as AppCache;
+        set({ 
+          appCache: data,
+          locations: data.locations || {},
+          // Atualiza também o currentUser com o config, se necessário (feito nos componentes)
+        });
+        console.log('Cache carregado com sucesso.');
+      } else {
+        console.warn('Cache não encontrado. A usar dados em tempo real.');
+      }
+    } catch (e) {
+      console.error('Erro ao carregar cache:', e);
     }
   },
 
@@ -251,7 +283,9 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   initializeAuth: () => {
-    const unsubLocs = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => set({ locations: docSnap.data()?.data || {} }));
+    // Carrega o cache imediatamente (não requer autenticação e é público)
+    get().loadAppCache();
+
     let unsubTx: (() => void) | undefined;
 
     const unsubAuth = onAuthStateChanged(auth, (user: any) => {
@@ -275,7 +309,7 @@ export const useStore = create<StoreState>((set, get) => ({
       }
     });
     get().fetchTaxonomy();
-    return () => { unsubAuth(); unsubLocs(); if (unsubTx) unsubTx(); };
+    return () => { unsubAuth(); if (unsubTx) unsubTx(); };
   },
 
   deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {

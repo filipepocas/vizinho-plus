@@ -27,7 +27,7 @@ const MERCH_CATEGORIES = [
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
-  const { locations } = useStore();
+  const { locations, appCache } = useStore();
 
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showExternalModal, setShowExternalModal] = useState(false);
@@ -82,23 +82,24 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      // Preços de marketing continuam a ser lidos diretamente
       const pSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (pSnap.exists()) setPrices(pSnap.data());
-      const cSnap = await getDoc(doc(db, 'system', 'config'));
-      if (cSnap.exists()) setSysConfig(cSnap.data() as any);
-
-      // CORREÇÃO: Lê o contador de membros diretamente do documento system/stats,
-      // que é atualizado pela Cloud Function e tem regra pública de leitura.
-      try {
-        const statsSnap = await getDoc(doc(db, 'system', 'stats'));
-        if (statsSnap.exists()) {
-          setMembersCount(statsSnap.data().membersCount || 0);
-        } else {
-          setMembersCount(0);
+      
+      // Configuração e membros vêm do cache, se disponível
+      if (appCache) {
+        setSysConfig(appCache.config || { supportEmail: 'ajuda@vizinho-plus.pt', showMemberCount: true });
+        setMembersCount(appCache.stats?.membersCount || 0);
+      } else {
+        // Fallback: ler diretamente se o cache não estiver disponível (primeiro carregamento)
+        try {
+          const cSnap = await getDoc(doc(db, 'system', 'config'));
+          if (cSnap.exists()) setSysConfig(cSnap.data() as any);
+          const statsSnap = await getDoc(doc(db, 'system', 'stats'));
+          if (statsSnap.exists()) setMembersCount(statsSnap.data().membersCount || 0);
+        } catch (err) {
+          console.error("Erro ao carregar configurações:", err);
         }
-      } catch (err) {
-        console.error("Erro ao obter contador de utilizadores:", err);
-        setMembersCount(0);
       }
     };
     fetchData();
@@ -109,7 +110,7 @@ const LandingPage: React.FC = () => {
         setCampaigns(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now));
     });
     return () => unsubCam();
-  }, []);
+  }, [appCache]);
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
 
@@ -328,7 +329,8 @@ const LandingPage: React.FC = () => {
   const extFreguesias = bannerForm.distrito && bannerForm.concelho ? (locations[bannerForm.distrito][bannerForm.concelho] || []).sort() : [];
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
-return (
+
+  return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
       {campaigns.length > 0 && (

@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, getDocs, deleteDoc
+  collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, getDocs
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
@@ -35,7 +35,7 @@ import AdminPricing from './AdminPricing';
 import AdminFlyerGenerator from './AdminFlyerGenerator';
 import AdminTaxonomy from './AdminTaxonomy';
 import AdminMunicipalities from './AdminMunicipalities';
-import AdminMessages from './AdminMessages'; // NOVO COMPONENTE
+import AdminMessages from './AdminMessages';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -78,20 +78,7 @@ const AdminDashboard: React.FC = () => {
         setBadFeedbacks(bad);
     });
     
-    const cleanupExpiredData = async () => {
-       const now = new Date();
-       const eventsSnap = await getDocs(collection(db, 'events'));
-       eventsSnap.forEach((docSnap: any) => {
-          const ev = docSnap.data();
-          if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
-       });
-       const wasteSnap = await getDocs(collection(db, 'anti_waste'));
-       wasteSnap.forEach((docSnap: any) => {
-          const w = docSnap.data();
-          if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
-       });
-    };
-    cleanupExpiredData();
+    // A limpeza de dados expirados é agora feita pela Cloud Function cleanupExpiredData
 
     return () => { unsubTx(); unsubMerchants(); unsubClients(); unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);

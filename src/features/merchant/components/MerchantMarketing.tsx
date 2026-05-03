@@ -7,7 +7,6 @@ import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Bell, Filter, X
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, PricingRule } from '../../../types';
 import { useStore } from '../../../store/useStore';
-// CORREÇÃO: O caminho foi atualizado para apontar corretamente para a raiz dos componentes
 import ImageCropperModal from '../../../components/ImageCropperModal';
 
 interface Props {
@@ -17,7 +16,7 @@ interface Props {
 }
 
 const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialTab = 'banner' }) => {
-  const { locations } = useStore();
+  const { locations, appCache } = useStore();
   const [activeTab, setActiveTab] = useState<'banner' | 'push' | 'leaflet' | 'history'>(initialTab);
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
@@ -61,25 +60,18 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
   const [fileToCrop, setFileToCrop] = useState<File | null>(null);
 
   useEffect(() => {
-    const fetchPrices = async () => {
-      const q = query(collection(db, 'pricing_rules'));
-      const snap = await getDocs(q);
-      setPricingRules(snap.docs.map((d: any) => d.data() as PricingRule));
-    };
-    fetchPrices();
+    if (appCache) {
+      setPricingRules(appCache.pricingRules || []);
+      setCampaigns(appCache.leafletCampaigns || []);
+    }
+  }, [appCache]);
 
-    const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
-    const unsubCam = onSnapshot(qCam, (snap: any) => {
-        const now = new Date();
-        setCampaigns(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now));
-    });
-
+  useEffect(() => {
     const qReq = query(collection(db, 'marketing_requests'), where('merchantId', '==', merchantId));
     const unsubReq = onSnapshot(qReq, (snap: any) => {
         setMyRequests(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as MarketingRequest)).sort((a: any, b: any) => (b.createdAt?.toDate().getTime() || 0) - (a.createdAt?.toDate().getTime() || 0)));
     });
-
-    return () => { unsubCam(); unsubReq(); };
+    return () => unsubReq();
   }, [merchantId]);
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet') => {
@@ -259,7 +251,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
             <button onClick={() => setActiveTab('history')} className={`px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest transition-all whitespace-nowrap border-4 ${activeTab === 'history' ? 'bg-[#0a2540] text-white border-[#0a2540]' : 'bg-slate-50 text-slate-400 border-slate-100 hover:border-[#00d66f]'}`}><Megaphone size={16} className="inline mr-2"/> Histórico de Pedidos</button>
         </div>
 
-        {/* ===================== BANNER ===================== */}
         {activeTab === 'banner' && (
             <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
               <form onSubmit={(e) => { e.preventDefault(); simulateMarketing('banner'); }} className="space-y-6">
@@ -342,7 +333,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
             </div>
         )}
 
-        {/* ===================== PUSH ===================== */}
         {activeTab === 'push' && (
             <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
               <form onSubmit={(e) => { e.preventDefault(); simulateMarketing('push'); }} className="space-y-6">
@@ -411,7 +401,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
             </div>
         )}
 
-        {/* ===================== FOLHETO ===================== */}
         {activeTab === 'leaflet' && (
             <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in">
               <form onSubmit={simulateLeafletCost} className="space-y-6 max-w-2xl mx-auto w-full">
@@ -467,7 +456,6 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
             </div>
         )}
 
-        {/* ===================== HISTORY ===================== */}
         {activeTab === 'history' && (
             <div className="space-y-4 animate-in fade-in">
                 {myRequests.map((r: any) => {
@@ -508,12 +496,12 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                             <div className="w-full md:w-32 h-32 shrink-0 bg-white rounded-2xl border-4 border-dashed border-slate-100 flex flex-col items-center justify-center text-slate-300"><Bell size={24} /><span className="text-[8px] font-black uppercase mt-2">Sem Imagem</span></div>
                         )}
                     </div>
-                )})}
+                  )
+                })}
                 {myRequests.length === 0 && <p className="text-center text-slate-400 font-black uppercase text-xs p-10 border-4 border-dashed border-slate-200 rounded-[30px]">Sem pedidos efetuados.</p>}
             </div>
         )}
 
-      {/* NOVO: Modal de Recorte de Imagem */}
       {fileToCrop && (
         <ImageCropperModal 
           file={fileToCrop} 

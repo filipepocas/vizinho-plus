@@ -3,15 +3,16 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../config/firebase';
-import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText, HelpCircle, Copy, Smartphone } from 'lucide-react';
+import { httpsCallable } from 'firebase/functions';
+import { db, functions } from '../../config/firebase';
+import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText, HelpCircle, Copy, Smartphone, RefreshCw } from 'lucide-react';
 import { SystemConfig } from '../../types';
 import toast from 'react-hot-toast';
 
 const defaultMerchantFaqs = `GUIA RÁPIDO DO COMERCIANTE VIZINHO+
 
 1. COMO DAR CASHBACK AOS CLIENTES?
-- No menu "Terminal", peça ao cliente o NIF ou o número do Cartão Vizinho+ (ou leia o QR Code).
+- No menu "Terminal", peça ao cliente o NIF ou o n.º do Cartão Vizinho+ (ou leia o QR Code).
 - Insira o número e clique em "Avançar".
 - Digite o valor TOTAL da fatura e o número do documento (opcional).
 - O sistema calcula automaticamente o cashback com base na sua percentagem.
@@ -45,7 +46,7 @@ const defaultClientFaqs = `GUIA PASSO-A-PASSO PARA VIZINHOS:
 
 1. O MEU SALDO E CARTÃO DIGITAL
 - No painel "O meu Saldo", encontra o seu Cartão Digital com QR Code.
-- Apresente este QR Code (ou diga o seu NIF/Nº Cartão) ANTES de pagar na loja.
+- Apresente este QR Code (ou diga o seu NIF/N.º Cartão) ANTES de pagar na loja.
 - O saldo ganho na Loja A só pode ser descontado na Loja A.
 
 2. AVALIAR LOJAS
@@ -103,6 +104,7 @@ const AdminSettings: React.FC = () => {
   });
 
   const [isSaving, setIsSaving] = useState(false);
+  const [isCacheLoading, setIsCacheLoading] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
   useEffect(() => {
@@ -148,6 +150,20 @@ const AdminSettings: React.FC = () => {
       await setDoc(doc(db, 'system', 'config'), { ...sysConfig, updatedAt: serverTimestamp(), lastChangeBy: currentUser?.id || 'admin' }, { merge: true });
       setMessage({ type: 'success', text: 'Configurações gravadas com sucesso!' });
     } catch (e) { setMessage({ type: 'error', text: 'Falha ao gravar.' }); } finally { setIsSaving(false); }
+  };
+
+  const handleForceCache = async () => {
+    setIsCacheLoading(true);
+    try {
+      const refreshFn = httpsCallable(functions, 'refreshAppCache');
+      await refreshFn();
+      toast.success('Cache atualizado com sucesso! As alterações já estão visíveis.');
+    } catch (error: any) {
+      console.error(error);
+      toast.error('Erro ao atualizar o cache. Verifique as permissões.');
+    } finally {
+      setIsCacheLoading(false);
+    }
   };
 
   const handleCopyInstallLink = () => {
@@ -215,7 +231,6 @@ const AdminSettings: React.FC = () => {
                   </div>
                 </div>
 
-                {/* BLOCO: LINK DE INSTALAÇÃO DA PWA */}
                 <div className="space-y-4 md:col-span-2 bg-green-50 p-6 rounded-3xl border-4 border-green-200">
                   <div className="flex items-center gap-3 mb-4">
                     <div className="bg-green-500 p-2 rounded-xl">
@@ -242,6 +257,29 @@ const AdminSettings: React.FC = () => {
                     </button>
                   </div>
                 </div>
+
+                {/* BOTÃO DE FORÇAR CACHE */}
+                <div className="space-y-4 md:col-span-2 bg-purple-50 p-6 rounded-3xl border-4 border-purple-200">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="bg-purple-500 p-2 rounded-xl">
+                      <Database size={24} className="text-white" />
+                    </div>
+                    <div>
+                      <h3 className="font-black text-xl uppercase italic tracking-tighter text-[#0a2540]">Cache da Plataforma</h3>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase">Forçar a atualização imediata dos dados em cache (distritos, FAQs, preços).</p>
+                    </div>
+                  </div>
+                  <button 
+                    type="button"
+                    onClick={handleForceCache}
+                    disabled={isCacheLoading}
+                    className="bg-[#0a2540] text-[#00d66f] px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center gap-2 shadow-lg disabled:opacity-50"
+                  >
+                    {isCacheLoading ? <RefreshCw size={18} className="animate-spin" /> : <RefreshCw size={18} />}
+                    {isCacheLoading ? 'A Atualizar...' : 'Atualizar Cache Agora'}
+                  </button>
+                </div>
+
               </div>
 
               <button type="submit" disabled={isSaving} className="w-full bg-[#00d66f] text-[#0a2540] p-8 rounded-3xl font-black text-xs uppercase tracking-widest hover:bg-[#00c265] transition-all shadow-xl border-b-8 border-black/10 flex justify-center gap-2">
