@@ -82,16 +82,13 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      // Preços de marketing continuam a ser lidos diretamente
       const pSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
       if (pSnap.exists()) setPrices(pSnap.data());
       
-      // Configuração e membros vêm do cache, se disponível
       if (appCache) {
         setSysConfig(appCache.config || { supportEmail: 'ajuda@vizinho-plus.pt', showMemberCount: true });
         setMembersCount(appCache.stats?.membersCount || 0);
       } else {
-        // Fallback: ler diretamente se o cache não estiver disponível (primeiro carregamento)
         try {
           const cSnap = await getDoc(doc(db, 'system', 'config'));
           if (cSnap.exists()) setSysConfig(cSnap.data() as any);
@@ -364,7 +361,7 @@ const LandingPage: React.FC = () => {
         <div className="w-full flex justify-center mb-8">
             <button 
                 onClick={() => setShowCommunityModal(true)} 
-                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all relative z-20"
+                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all animate-pulse relative z-20"
             >
                 <div className="flex items-center gap-3">
                     <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
