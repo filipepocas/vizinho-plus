@@ -339,36 +339,15 @@ const LandingPage: React.FC = () => {
         </div>
       )}
       
-      <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md">
-        ⭐ Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis! ⭐
+      <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md flex items-center justify-center gap-4 flex-wrap">
+        {sysConfig.showMemberCount !== false && (
+           <span className="text-amber-900 font-black text-sm md:text-base">Já somos {membersCount} membros!</span>
+        )}
+        <span>⭐ Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis! ⭐</span>
       </div>
-
-      <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
-        <img src={logoPath} alt="Vizinho+" className="h-14 w-auto object-contain" />
-        
-        <div className="w-full flex justify-center mt-2">
-            <button 
-                onClick={() => setShowCommunityModal(true)} 
-                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all animate-[bounce_3s_infinite] relative z-20"
-            >
-                <div className="flex items-center gap-3">
-                    <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
-                    <span>Anuncie aqui</span>
-                </div>
-                <span className="text-[10px] font-bold text-green-900 tracking-normal opacity-90">Promover Negócio, Evento ou Anúncio Local</span>
-            </button>
-        </div>
-      </nav>
 
       <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
         
-        {sysConfig.showMemberCount !== false && (
-          <div className="w-full max-w-xl bg-[#0a2540] text-white px-8 py-6 rounded-[30px] font-black uppercase text-xl md:text-2xl italic tracking-tighter shadow-2xl mb-12 animate-in slide-in-from-top-10 border-4 border-[#00d66f]">
-            Já somos <span className="text-[#00d66f]">{membersCount} membros!</span><br /> 
-            <span className="text-sm tracking-widest opacity-80 not-italic">Junte-se a nós. Aqui todos ganhamos!</span>
-          </div>
-        )}
-
         <div className="mb-12 animate-in fade-in zoom-in duration-1000">
           <img src={logoPath} alt="Vizinho+" className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" />
         </div>
@@ -380,6 +359,19 @@ const LandingPage: React.FC = () => {
           <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed">
             A plataforma de fidelização que une os vizinhos e fortalece a economia local. Acumule cashback real em todas as lojas aderentes.
           </p>
+        </div>
+
+        <div className="w-full flex justify-center mb-8">
+            <button 
+                onClick={() => setShowCommunityModal(true)} 
+                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all relative z-20"
+            >
+                <div className="flex items-center gap-3">
+                    <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
+                    <span>Anuncie aqui</span>
+                </div>
+                <span className="text-[10px] font-bold text-green-900 tracking-normal opacity-90">Promover Negócio, Evento ou Anúncio Local</span>
+            </button>
         </div>
         
         <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20 z-10">
