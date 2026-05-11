@@ -300,7 +300,8 @@ const UserDashboard: React.FC = () => {
   const distritos = Object.keys(locations).sort();
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
-    return (
+
+  return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
       {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL */}
@@ -490,7 +491,8 @@ const UserDashboard: React.FC = () => {
             )}
           </button>
         </div>
-                {/* VISTAS DINÂMICAS */}
+
+        {/* VISTAS DINÂMICAS */}
         {view === 'marketplace' && <ProductMarketplace />}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
@@ -561,10 +563,19 @@ const UserDashboard: React.FC = () => {
         {view === 'events' && (
            <div className="space-y-4 animate-in fade-in duration-500">
               <h3 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter mb-4 flex items-center gap-2"><CalendarPlus className="text-blue-500" /> Agenda da Freguesia</h3>
-              {events.map((ev: any) => (
+              {events.map((ev: any) => {
+                 const eventImage = ev.imageUrl || ev.imageBase64 || '';
+                 return (
                  <div key={ev.id} className="bg-white border-4 border-blue-500 rounded-[30px] p-6 shadow-lg flex flex-col md:flex-row gap-6">
                     <div className="w-full md:w-48 shrink-0 bg-slate-100 rounded-2xl border-2 border-slate-200 overflow-hidden flex items-center justify-center p-2">
-                       <img src={ev.imageUrl} alt="Cartaz" className="w-full h-auto max-h-48 object-contain" />
+                       {eventImage ? (
+                          <img src={eventImage} alt="Cartaz do evento" className="w-full h-auto max-h-48 object-contain" />
+                       ) : (
+                          <div className="flex flex-col items-center justify-center text-slate-300 py-8">
+                             <CalendarPlus size={32} className="mb-2" />
+                             <span className="text-[8px] font-black uppercase">Sem imagem</span>
+                          </div>
+                       )}
                     </div>
                     <div className="flex-1">
                         <h4 className="font-black uppercase text-[#0a2540] text-xl mb-1">{ev.title}</h4>
@@ -581,7 +592,8 @@ const UserDashboard: React.FC = () => {
                         </div>
                     </div>
                  </div>
-              ))}
+                 );
+              })}
               {events.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhum evento agendado para breve.</p>}
            </div>
         )}

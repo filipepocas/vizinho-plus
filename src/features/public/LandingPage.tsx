@@ -13,7 +13,6 @@ import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
 
-// CORREÇÃO: O caminho foi atualizado para apontar corretamente para a raiz dos componentes
 import ImageCropperModal from '../../components/ImageCropperModal';
 
 const MERCH_CATEGORIES = [
@@ -34,6 +33,7 @@ const LandingPage: React.FC = () => {
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showExternalModal, setShowExternalModal] = useState(false);
   const [showEventModal, setShowEventModal] = useState(false);
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [activeTab, setActiveTab] = useState<'banner' | 'leaflet'>('banner');
   const [loading, setLoading] = useState(false);
   const [loadingPartner, setLoadingPartner] = useState(false);
@@ -79,7 +79,6 @@ const LandingPage: React.FC = () => {
   const [showContactModal, setShowContactModal] = useState(false);
   const [emailCopied, setEmailCopied] = useState(false);
 
-  // NOVO: Estado para a ferramenta de crop
   const [fileToCrop, setFileToCrop] = useState<File | null>(null);
   const [cropType, setCropType] = useState<'banner' | 'leaflet' | 'event'>('banner');
 
@@ -108,7 +107,6 @@ const LandingPage: React.FC = () => {
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
 
-  // NOVO: Quando escolhe um ficheiro, abre o modal em vez de gravar direto (se for Banner)
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>, type: 'banner' | 'leaflet' | 'event') => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -116,7 +114,7 @@ const LandingPage: React.FC = () => {
     if (type === 'banner') {
       setCropType('banner');
       setFileToCrop(file);
-      e.target.value = ''; // Reset do input
+      e.target.value = '';
       return;
     }
 
@@ -191,7 +189,7 @@ const LandingPage: React.FC = () => {
         });
 
         const count = clients.length;
-        const totalCost = count * 0.03 * days; // Simulação genérica
+        const totalCost = count * 0.03 * days;
         setBannerSimulation({ count, cost: totalCost, days });
     } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
   };
@@ -324,8 +322,7 @@ const LandingPage: React.FC = () => {
   const extFreguesias = bannerForm.distrito && bannerForm.concelho ? (locations[bannerForm.distrito][bannerForm.concelho] || []).sort() : [];
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
-
-  return (
+    return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
       {campaigns.length > 0 && (
@@ -334,13 +331,13 @@ const LandingPage: React.FC = () => {
         </div>
       )}
       
+      {/* BARRA AMARELA - COM CONTADOR DE MEMBROS */}
       <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md">
-        ⭐ Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis! ⭐
+        Já somos <span className="text-2xl md:text-3xl font-black italic">{membersCount}</span> membros! Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis!
       </div>
 
+      {/* NAVEGAÇÃO - BOTÃO PRINCIPAL */}
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
-        <img src={logoPath} alt="Vizinho+" className="h-14 w-auto object-contain" />
-        
         <div className="w-full flex justify-center mt-2">
             <button 
                 onClick={() => setShowCommunityModal(true)} 
@@ -348,7 +345,7 @@ const LandingPage: React.FC = () => {
             >
                 <div className="flex items-center gap-3">
                     <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
-                    <span>Apoiar o Bairro</span>
+                    <span>Anuncie dentro da comunidade</span>
                 </div>
                 <span className="text-[10px] font-bold text-green-900 tracking-normal opacity-90">Promover Negócio, Evento ou Anúncio Local</span>
             </button>
@@ -357,114 +354,32 @@ const LandingPage: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
         
-        {sysConfig.showMemberCount !== false && (
-          <div className="w-full max-w-xl bg-[#0a2540] text-white px-8 py-6 rounded-[30px] font-black uppercase text-xl md:text-2xl italic tracking-tighter shadow-2xl mb-12 animate-in slide-in-from-top-10 border-4 border-[#00d66f]">
-            Já somos <span className="text-[#00d66f]">{membersCount} membros!</span><br /> 
-            <span className="text-sm tracking-widest opacity-80 not-italic">Junte-se a nós. Aqui todos ganhamos!</span>
-          </div>
-        )}
-
+        {/* LOGOTIPO GRANDE CENTRAL */}
         <div className="mb-12 animate-in fade-in zoom-in duration-1000">
           <img src={logoPath} alt="Vizinho+" className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" />
         </div>
+        
         <div className="space-y-6 max-w-3xl mb-12">
           <h1 className="text-4xl md:text-6xl font-black text-[#0a2540] leading-tight tracking-tighter uppercase italic">
             Valorize o que é nosso. <br />
             <span className="text-[#00d66f]">Ganhe em cada compra.</span>
           </h1>
           <p className="text-lg md:text-xl text-slate-500 font-medium leading-relaxed">
-            A plataforma de fidelização que une os vizinhos e fortalece a economia local. Acumule cashback real em todas as lojas aderentes.
+            A plataforma de fidelização que fortalece a economia local
           </p>
         </div>
         
-        <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40 mb-20 z-10">
-          Entrar / Recuperar Password
-          <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
-        </button>
+        {/* DOIS BOTÕES LADO A LADO */}
+        <div className="flex flex-col sm:flex-row gap-4 mb-20 z-10">
+          <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40">
+            Entrar / Recuperar Password
+            <Lock className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
+          </button>
 
-        <div className="grid lg:grid-cols-2 gap-8 w-full max-w-6xl text-left">
-            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#00d66f] shadow-[16px_16px_0px_#0a2540] flex flex-col">
-              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><UserPlus className="text-[#00d66f]" size={32} /> Adesão Gratuita Cliente</h2>
-              <form onSubmit={handleClientRegister} className="space-y-4 flex-grow">
-                  <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-sm" />
-                  <div className="grid grid-cols-1 gap-4">
-                     <input required type="email" placeholder="E-mail" value={clientForm.email} onChange={e=>setClientForm({...clientForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                     <input required type="email" placeholder="Repita o E-mail" value={confirmEmail} onChange={e=>setConfirmEmail(e.target.value)} className="w-full p-4 bg-white border-2 border-[#00d66f] rounded-2xl font-black text-[#0a2540] focus:border-[#0a2540] outline-none text-xs" />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                     <input required type="password" placeholder="Repita a Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-4 bg-slate-50 border-2 border-[#00d66f] rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
-                     <p className="text-[10px] font-black uppercase text-slate-400">Morada (Acesso à rede local)</p>
-                     <select required value={clientForm.distrito} onChange={e=>setClientForm({...clientForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540]">
-                        <option value="">Distrito</option>
-                        {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                     </select>
-                     <select required disabled={!clientForm.distrito} value={clientForm.concelho} onChange={e=>setClientForm({...clientForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540] disabled:opacity-50">
-                        <option value="">Concelho</option>
-                        {clientConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                     </select>
-                     <select required disabled={!clientForm.concelho} value={clientForm.freguesia} onChange={e=>setClientForm({...clientForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#0a2540] disabled:opacity-50">
-                        <option value="">Freguesia</option>
-                        {clientFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                     </select>
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
-                     <div className="relative"><label className="absolute -top-2 left-4 bg-white px-1 text-[8px] font-black uppercase text-[#00d66f]">Data Nasc.</label><input required type="date" value={clientForm.birthDate} onChange={e=>setClientForm({...clientForm, birthDate: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none" /></div>
-                     <input required type="text" maxLength={8} placeholder="Cód. Postal" value={clientForm.zipCode} onChange={e=>setClientForm({...clientForm, zipCode: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                  </div>
-                  <input required type="tel" placeholder="Telemóvel" value={clientForm.phone} onChange={e=>setClientForm({...clientForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                  <button disabled={clientLoading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-6 rounded-2xl font-black uppercase tracking-widest hover:scale-[1.02] transition-transform flex justify-center items-center gap-3 mt-6 border-b-4 border-[#0a2540]">
-                    {clientLoading ? <Loader2 className="animate-spin" /> : <><CheckCircle2 size={20} /> Aderir à Comunidade</>}
-                  </button>
-              </form>
-            </div>
-
-            <div className="bg-white p-8 md:p-12 rounded-[40px] border-4 border-[#0a2540] shadow-[16px_16px_0px_#0a2540] flex flex-col text-left">
-              <h2 className="text-2xl md:text-3xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3"><Store className="text-[#00d66f]" size={32} /> Lojista? Junte-se à Rede!</h2>
-              <form onSubmit={handlePartnerSubmit} className="space-y-4 flex-grow">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input required type="text" placeholder="Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                    <input required type="text" placeholder="Nome do Responsável" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input required type="tel" placeholder="Telefone / Tlm" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                    <input required type="email" placeholder="E-mail Comercial" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                  </div>
-                  <div className="grid grid-cols-1 gap-4">
-                    <input required type="password" placeholder="Password de Acesso" value={partnerForm.password} onChange={e=>setPartnerForm({...partnerForm, password: e.target.value})} className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs" />
-                    <select required className="w-full p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold focus:border-[#0a2540] outline-none text-xs appearance-none" value={partnerForm.category} onChange={e => setPartnerForm({...partnerForm, category: e.target.value})}>
-                      <option value="">SELECIONE O SETOR DE ATIVIDADE...</option>
-                      {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
-                    </select>
-                  </div>
-                  <div className="grid grid-cols-1 gap-4 p-4 bg-slate-50 rounded-2xl border-2 border-slate-100">
-                     <p className="text-[10px] font-black uppercase text-slate-400">Localização Comercial</p>
-                     <select required value={partnerForm.distrito} onChange={e=>setPartnerForm({...partnerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f]">
-                        <option value="">Distrito</option>
-                        {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                     </select>
-                     <select required disabled={!partnerForm.distrito} value={partnerForm.concelho} onChange={e=>setPartnerForm({...partnerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                        <option value="">Concelho</option>
-                        {partnerConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                     </select>
-                     <select required disabled={!partnerForm.concelho} value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] disabled:opacity-50">
-                        <option value="">Freguesia</option>
-                        {partnerFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                     </select>
-                     <input required placeholder="Morada Exata (Rua, Número)" value={partnerForm.address} onChange={e=>setPartnerForm({...partnerForm, address: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
-                     <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> {
-                       let val = e.target.value.replace(/\D/g, '');
-                       if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
-                       setPartnerForm({...partnerForm, zipCode: val});
-                     }} className="w-full p-3 rounded-xl font-bold text-xs outline-none focus:border-[#00d66f] border border-slate-200" />
-                  </div>
-                  <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-6 rounded-2xl font-black uppercase tracking-widest hover:bg-black transition-all flex justify-center items-center gap-3 mt-6 shadow-xl">
-                    {loadingPartner ? <Loader2 className="animate-spin" /> : <><Send size={20} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
-                  </button>
-              </form>
-            </div>
+          <button onClick={() => setShowRegisterModal(true)} className="group relative flex items-center gap-4 bg-[#0a2540] text-amber-400 px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40">
+            Registar / Aderir Grátis
+            <UserPlus className="group-hover:scale-110 transition-transform" size={20} strokeWidth={3} />
+          </button>
         </div>
       </main>
 
@@ -475,7 +390,155 @@ const LandingPage: React.FC = () => {
         </div>
         <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
+            {/* MODAL DE REGISTO (CLIENTE + LOJISTA) */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 z-[300] bg-[#0a2540]/95 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-[40px] border-4 border-amber-400 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300 relative">
+            
+            {/* HEADER DO MODAL */}
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center shrink-0 border-b-4 border-amber-400">
+              <div className="flex items-center gap-3">
+                <div className="bg-amber-400 p-2 rounded-xl">
+                  <UserPlus size={24} className="text-[#0a2540]" strokeWidth={3} />
+                </div>
+                <h2 className="font-black uppercase italic tracking-tighter text-xl md:text-2xl">
+                  Já somos <span className="text-amber-400">{membersCount}</span> membros! Junte-se a nós.
+                </h2>
+              </div>
+              <button 
+                onClick={() => setShowRegisterModal(false)} 
+                className="bg-white/10 hover:bg-red-500 p-3 rounded-xl transition-all duration-300 hover:rotate-90"
+                title="Fechar"
+              >
+                <X size={24} />
+              </button>
+            </div>
 
+            {/* CORPO DO MODAL - DOIS FORMULÁRIOS LADO A LADO */}
+            <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
+              <div className="grid lg:grid-cols-2 gap-8">
+                
+                {/* FORMULÁRIO CLIENTE */}
+                <div className="bg-white rounded-[30px] border-4 border-[#00d66f] p-6 md:p-8 flex flex-col">
+                  <h2 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3">
+                    <UserPlus className="text-[#00d66f]" size={28} /> Adesão Gratuita Cliente
+                  </h2>
+                  <form onSubmit={(e) => { e.preventDefault(); handleClientRegister(e); }} className="space-y-3 flex-grow">
+                      <input required type="text" placeholder="Nome Completo" value={clientForm.name} onChange={e=>setClientForm({...clientForm, name: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                      <div className="grid grid-cols-1 gap-3">
+                         <input required type="email" placeholder="E-mail" value={clientForm.email} onChange={e=>setClientForm({...clientForm, email: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                         <input required type="email" placeholder="Repita o E-mail" value={confirmEmail} onChange={e=>setConfirmEmail(e.target.value)} className="w-full p-3 bg-white border-2 border-[#00d66f] rounded-xl font-black text-[#0a2540] focus:border-[#0a2540] outline-none text-xs" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                         <input required type="password" placeholder="Definir Password" value={clientForm.password} onChange={e=>setClientForm({...clientForm, password: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                         <input required type="password" placeholder="Repita a Password" value={confirmPassword} onChange={e=>setConfirmPassword(e.target.value)} className="w-full p-3 bg-slate-50 border-2 border-[#00d66f] rounded-xl font-bold focus:border-[#0a2540] outline-none text-xs" />
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                         <p className="text-[9px] font-black uppercase text-slate-400">Morada (Acesso à rede local)</p>
+                         <select required value={clientForm.distrito} onChange={e=>setClientForm({...clientForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#0a2540] border border-slate-200">
+                            <option value="">Distrito</option>
+                            {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                         </select>
+                         <select required disabled={!clientForm.distrito} value={clientForm.concelho} onChange={e=>setClientForm({...clientForm, concelho: e.target.value, freguesia: ''})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#0a2540] border border-slate-200 disabled:opacity-50">
+                            <option value="">Concelho</option>
+                            {clientConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                         <select required disabled={!clientForm.concelho} value={clientForm.freguesia} onChange={e=>setClientForm({...clientForm, freguesia: e.target.value})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#0a2540] border border-slate-200 disabled:opacity-50">
+                            <option value="">Freguesia</option>
+                            {clientFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                         </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                         <div className="relative"><label className="absolute -top-2 left-3 bg-white px-1 text-[7px] font-black uppercase text-[#00d66f]">Data Nasc.</label><input required type="date" value={clientForm.birthDate} onChange={e=>setClientForm({...clientForm, birthDate: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold text-[10px] outline-none" /></div>
+                         <input required type="text" maxLength={8} placeholder="Cód. Postal" value={clientForm.zipCode} onChange={e=>setClientForm({...clientForm, zipCode: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                      </div>
+                      <input required type="tel" placeholder="Telemóvel" value={clientForm.phone} onChange={e=>setClientForm({...clientForm, phone: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                      <button disabled={clientLoading} type="submit" className="w-full bg-[#00d66f] text-[#0a2540] p-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:scale-[1.02] transition-transform flex justify-center items-center gap-2 mt-2 border-b-4 border-[#0a2540]">
+                        {clientLoading ? <Loader2 className="animate-spin" size={16} /> : <><CheckCircle2 size={16} /> Aderir à Comunidade</>}
+                      </button>
+                  </form>
+                </div>
+
+                {/* FORMULÁRIO LOJISTA */}
+                <div className="bg-white rounded-[30px] border-4 border-[#0a2540] p-6 md:p-8 flex flex-col">
+                  <h2 className="text-xl md:text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-4 flex items-center gap-3">
+                    <Store className="text-[#00d66f]" size={28} /> Lojista? Junte-se à Rede!
+                  </h2>
+                  <form onSubmit={(e) => { e.preventDefault(); handlePartnerSubmit(e); }} className="space-y-3 flex-grow">
+                      <div className="grid grid-cols-2 gap-3">
+                        <input required type="text" placeholder="Nome da Loja" value={partnerForm.shopName} onChange={e=>setPartnerForm({...partnerForm, shopName: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                        <input required type="text" placeholder="Nome do Responsável" value={partnerForm.responsibleName} onChange={e=>setPartnerForm({...partnerForm, responsibleName: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <input required type="tel" placeholder="Telefone / Tlm" value={partnerForm.phone} onChange={e=>setPartnerForm({...partnerForm, phone: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                        <input required type="email" placeholder="E-mail Comercial" value={partnerForm.email} onChange={e=>setPartnerForm({...partnerForm, email: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                      </div>
+                      <div className="grid grid-cols-1 gap-3">
+                        <input required type="password" placeholder="Password de Acesso" value={partnerForm.password} onChange={e=>setPartnerForm({...partnerForm, password: e.target.value})} className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px]" />
+                        <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg font-bold focus:border-[#0a2540] outline-none text-[10px] appearance-none" value={partnerForm.category} onChange={e => setPartnerForm({...partnerForm, category: e.target.value})}>
+                          <option value="">SELECIONE O SETOR DE ATIVIDADE...</option>
+                          {MERCH_CATEGORIES.map(cat => <option key={cat} value={cat}>{cat.toUpperCase()}</option>)}
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-1 gap-3 p-3 bg-slate-50 rounded-xl border border-slate-100">
+                         <p className="text-[9px] font-black uppercase text-slate-400">Localização Comercial</p>
+                         <select required value={partnerForm.distrito} onChange={e=>setPartnerForm({...partnerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200">
+                            <option value="">Distrito</option>
+                            {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                         </select>
+                         <select required disabled={!partnerForm.distrito} value={partnerForm.concelho} onChange={e=>setPartnerForm({...partnerForm, concelho: e.target.value, freguesia: ''})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200 disabled:opacity-50">
+                            <option value="">Concelho</option>
+                            {partnerConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                         </select>
+                         <select required disabled={!partnerForm.concelho} value={partnerForm.freguesia} onChange={e=>setPartnerForm({...partnerForm, freguesia: e.target.value})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200 disabled:opacity-50">
+                            <option value="">Freguesia</option>
+                            {partnerFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                         </select>
+                         <input required placeholder="Morada Exata (Rua, Número)" value={partnerForm.address} onChange={e=>setPartnerForm({...partnerForm, address: e.target.value})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200" />
+                         <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> {
+                           let val = e.target.value.replace(/\D/g, '');
+                           if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
+                           setPartnerForm({...partnerForm, zipCode: val});
+                         }} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200" />
+                      </div>
+                      <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all flex justify-center items-center gap-2 mt-2 shadow-lg">
+                        {loadingPartner ? <Loader2 className="animate-spin" size={16} /> : <><Send size={16} className="text-[#00d66f]" /> Enviar Pedido de Adesão</>}
+                      </button>
+                  </form>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL DE CONTACTO */}
+      {showContactModal && (
+        <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
+          <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in duration-300">
+            <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <Mail className="text-[#00d66f]" size={20} />
+                <h2 className="font-black uppercase italic tracking-tighter text-lg">Apoio ao Cliente</h2>
+              </div>
+              <button onClick={() => setShowContactModal(false)}><X size={20} /></button>
+            </div>
+            <div className="p-8 space-y-6 text-center">
+              <p className="text-sm font-bold text-slate-500">{sysConfig.supportEmail}</p>
+              <div className="space-y-3">
+                <button onClick={handleOpenEmailApp} className="w-full bg-[#0a2540] text-white p-4 rounded-xl font-black uppercase text-[10px] tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3">
+                  Abrir App de Email
+                </button>
+                <button onClick={handleCopyEmail} className="w-full p-4 rounded-xl font-black uppercase text-[10px] tracking-widest border-2 border-slate-100 hover:bg-slate-50 transition-all">
+                  {emailCopied ? 'Copiado!' : 'Copiar Email'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL COMUNICAR NA COMUNIDADE */}
       {showCommunityModal && (
          <div className="fixed inset-0 z-[100] bg-[#0a2540]/90 backdrop-blur-sm p-6 flex flex-col items-center justify-center">
              <div className="bg-white w-full max-w-lg rounded-[40px] shadow-2xl overflow-hidden border-4 border-[#0a2540] animate-in zoom-in">
@@ -492,6 +555,7 @@ const LandingPage: React.FC = () => {
          </div>
       )}
 
+      {/* MODAL EVENTO */}
       {showEventModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-blue-500 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
@@ -577,6 +641,7 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
+      {/* MODAL EXTERNO */}
       {showExternalModal && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
@@ -610,7 +675,6 @@ const LandingPage: React.FC = () => {
                               <div className="relative"><label className="text-[8px] font-black uppercase text-[#0a2540] ml-2">Fim</label><input required type="date" value={bannerForm.endDate} onChange={e=>setBannerForm({...bannerForm, endDate: e.target.value})} className="w-full p-3 bg-slate-50 border-2 border-slate-100 rounded-xl font-bold text-xs" /></div>
                            </div>
                            
-                           {/* NOVO SISTEMA MULTI-ZONA PARA BANNER */}
                            <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-100 grid grid-cols-1 gap-3">
                               <p className="text-[10px] font-black uppercase text-[#0a2540]">Quais Zonas vão ver o Banner?</p>
                               <select value={bannerForm.distrito} onChange={e=>setBannerForm({...bannerForm, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-blue-200">
@@ -709,7 +773,6 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      {/* NOVO: Modal de Recorte de Imagem */}
       {fileToCrop && (
         <ImageCropperModal 
           file={fileToCrop} 
