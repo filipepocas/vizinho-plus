@@ -1,3 +1,5 @@
+// src/features/merchant/components/BusinessIntelligence.tsx
+
 import React, { useMemo, useState, useEffect } from 'react';
 import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
@@ -6,7 +8,6 @@ import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy,
 
 interface BIProps {
   merchantId: string;
-  transactions: Transaction[];
 }
 
 interface MonthStat {
@@ -18,25 +19,40 @@ interface MonthStat {
   daysInMonth: number;
 }
 
-const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) => {
+const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [feedbacks, setFeedbacks] = useState<Feedback[]>([]);
+  const [loadingTx, setLoadingTx] = useState(true);
   const [loadingFeedbacks, setLoadingFeedbacks] = useState(true);
 
   useEffect(() => {
-    const q = query(
+    // Carregar transações do comerciante
+    const qTx = query(
+      collection(db, 'transactions'),
+      where('merchantId', '==', merchantId),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubTx = onSnapshot(qTx, (snap: any) => {
+      setTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+      setLoadingTx(false);
+    });
+
+    // Carregar feedbacks do comerciante
+    const qFb = query(
       collection(db, 'feedbacks'),
       where('merchantId', '==', merchantId),
       orderBy('createdAt', 'desc'),
       limit(50)
     );
-    
-    // CORREÇÃO: Adicionado (snap: any) e (d: any) para o TypeScript
-    const unsubscribe = onSnapshot(q, (snap: any) => {
+    const unsubFb = onSnapshot(qFb, (snap: any) => {
       setFeedbacks(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback)));
       setLoadingFeedbacks(false);
     });
 
-    return () => unsubscribe();
+    return () => {
+      unsubTx();
+      unsubFb();
+    };
   }, [merchantId]);
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
@@ -183,6 +199,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
 
+        {/* SAÚDE DO NEGÓCIO */}
         <div className="bg-[#0a2540] p-8 rounded-[40px] border-4 border-[#00d66f] shadow-[8px_8px_0px_#00d66f] text-white">
            <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-6">
               <div className="bg-[#00d66f]/20 p-2 rounded-xl"><Activity size={16} /></div> Saúde do Negócio: Últimos 6 Meses vs Mês Atual
@@ -217,7 +234,9 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
            </div>
         </div>
 
+        {/* CARDS DE ESTATÍSTICAS */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+          {/* VOLUME SEMANAL */}
           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col relative overflow-hidden">
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
               <div className="bg-slate-100 p-2 rounded-xl"><BarChart3 size={16} /></div> Volume Semanal
@@ -249,6 +268,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             </div>
           </div>
 
+          {/* VOLUME MENSAL */}
           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col">
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-8">
               <div className="bg-slate-100 p-2 rounded-xl"><TrendingUp size={16} /></div> Volume Mensal
@@ -271,6 +291,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             </div>
           </div>
 
+          {/* GESTÃO DE SALDO */}
           <div className="bg-[#0a2540] p-8 rounded-[40px] text-white shadow-2xl flex flex-col relative overflow-hidden border-4 border-[#0a2540]">
             <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none"><Wallet size={120} /></div>
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#00d66f] mb-8 relative z-10">
@@ -296,6 +317,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
             </div>
           </div>
 
+          {/* SATISFAÇÃO */}
           <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#0a2540] flex flex-col h-[480px]">
             <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6 shrink-0">
               <div className="bg-amber-100 p-2 rounded-xl"><Star size={16} className="text-amber-500 fill-amber-500" /></div> Satisfação
@@ -337,6 +359,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId, transactions }) =
           </div>
         </div>
 
+        {/* TOP CLIENTES */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[8px_8px_0px_#00d66f]">
               <h3 className="flex items-center gap-3 font-black uppercase text-[10px] tracking-widest text-[#0a2540] mb-6">

@@ -13,7 +13,6 @@ import UserHistory from './components/UserHistory';
 import BannerCarousel from './components/BannerCarousel';
 import ProductMarketplace from './components/ProductMarketplace';
 import ShoppingListModal from './components/ShoppingListModal';
-// CORREÇÃO: Importação do UserExplore reposta
 import UserExplore from './components/UserExplore';
 
 import { 
@@ -301,8 +300,7 @@ const UserDashboard: React.FC = () => {
   const distritos = Object.keys(locations).sort();
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
-
-  return (
+    return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
       {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL */}
@@ -338,10 +336,12 @@ const UserDashboard: React.FC = () => {
       {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
       <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[420px]'}`}>
         
+        {/* BOTÃO DE APOIO AO MUNÍCIPE - SEMPRE VISÍVEL */}
         <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
           <Building2 size={20} /> Apoio ao Munícipe
         </button>
         
+        {/* CARTÃO DIGITAL */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
              <Printer size={20} />
@@ -371,6 +371,7 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* NOTIFICAÇÃO POP-UP */}
         {appNotification && (
           <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
             <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
@@ -383,43 +384,113 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* NAVEGAÇÃO PRINCIPAL */}
-        <div className="grid grid-cols-2 gap-4">
-          <button onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-4 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}>
-            <ShoppingBag size={18} /> Lista de Compras
-          </button>
-          
-          <button onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} className={`flex items-center justify-center gap-3 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}>
-            <Wallet size={18} /> O meu Saldo
-          </button>
-        </div>
-
-        {/* VISTAS DINÂMICAS */}
-        {view === 'home' && (
-          <div className="space-y-6 animate-in fade-in">
-             <button onClick={() => setView('explore')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-[#0a2540] transition-all font-black uppercase text-[10px] tracking-widest text-slate-500">
-               <Store size={18} /> Ver Lojas Parceiras
-             </button>
-             <div className="grid grid-cols-2 gap-4">
-                <button onClick={() => setView('history')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 relative hover:border-[#0a2540] transition-all">
-                   {pendingEvaluations.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{pendingEvaluations.length}</span>}
-                   <MessageSquare className="text-[#0a2540]" />
-                   <span className="text-[9px] font-black uppercase text-slate-400">Avaliar Lojas</span>
+        {/* SECÇÃO DE AVALIAÇÕES PENDENTES - VISÍVEL SEMPRE QUE HOUVER PARA AVALIAR */}
+        {pendingEvaluations.length > 0 && (
+          <div className="bg-amber-50 border-4 border-amber-200 rounded-[30px] p-6 shadow-md animate-in fade-in">
+            <h3 className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Star size={16} className="fill-amber-500 text-amber-500" /> Lojas por Avaliar ({pendingEvaluations.length})
+            </h3>
+            <p className="text-[9px] font-bold text-amber-700 mb-4 uppercase">
+              Avalie as lojas onde fez compras recentemente e ajude a comunidade.
+            </p>
+            <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+              {pendingEvaluations.slice(0, 5).map((t) => (
+                <div key={`eval-${t.id}`} className="bg-white p-4 rounded-2xl border-2 border-amber-100 flex items-center justify-between shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Store size={18}/></div>
+                    <div>
+                      <p className="text-xs font-black text-[#0a2540] uppercase truncate max-w-[150px]">{t.merchantName}</p>
+                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                        {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente'} • {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(t.amount)}
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setSelectedTxForFeedback(t)} className="bg-[#0a2540] text-[#00d66f] px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-md">
+                    Avaliar
+                  </button>
+                </div>
+              ))}
+              {pendingEvaluations.length > 5 && (
+                <button onClick={() => setView('history')} className="w-full text-center text-[9px] font-black text-amber-600 uppercase hover:underline py-2">
+                  Ver todas ({pendingEvaluations.length}) →
                 </button>
-                <button onClick={() => setView('events')} className="bg-white p-5 rounded-2xl border-2 border-slate-100 flex flex-col items-center gap-2 hover:border-blue-500 transition-all">
-                   {events.length > 0 && <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{events.length}</span>}
-                   <CalendarPlus className="text-blue-500" />
-                   <span className="text-[9px] font-black uppercase text-slate-400">Eventos Locais</span>
-                </button>
-             </div>
-             <button onClick={() => setView('anti_waste')} className="w-full bg-white p-5 rounded-2xl border-2 border-slate-100 flex items-center justify-center gap-3 hover:border-green-500 transition-all relative">
-                {wasteItems.length > 0 && <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">{wasteItems.length}</span>}
-                <Leaf className="text-green-500" />
-                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">Desperdício Zero</span>
-             </button>
+              )}
+            </div>
           </div>
         )}
 
+        {/* NAVEGAÇÃO PRINCIPAL - BOTÕES SEMPRE VISÍVEIS */}
+        <div className="grid grid-cols-2 gap-3">
+          {/* BOTÃO 1: MERCADO DE PRODUTOS (CATÁLOGO) */}
+          <button 
+            onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} 
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}
+          >
+            <ShoppingBag size={22} strokeWidth={3} />
+            <span>Produtos Locais</span>
+          </button>
+          
+          {/* BOTÃO 2: LOJAS PARCEIRAS */}
+          <button 
+            onClick={() => setView(view === 'explore' ? 'home' : 'explore')} 
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+          >
+            <Store size={22} />
+            <span>Lojas Parceiras</span>
+          </button>
+
+          {/* BOTÃO 3: AVALIAR LOJAS */}
+          <button 
+            onClick={() => setView('history')} 
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+          >
+            <MessageSquare size={22} />
+            <span>Avaliar Compras</span>
+            {pendingEvaluations.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">
+                {pendingEvaluations.length}
+              </span>
+            )}
+          </button>
+
+          {/* BOTÃO 4: SALDO */}
+          <button 
+            onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} 
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+          >
+            <Wallet size={22} />
+            <span>O Meu Saldo</span>
+          </button>
+        </div>
+
+        {/* LINHA SECUNDÁRIA DE BOTÕES */}
+        <div className="grid grid-cols-2 gap-3">
+          <button 
+            onClick={() => setView(view === 'events' ? 'home' : 'events')} 
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+          >
+            <CalendarPlus size={22} className="text-blue-500" />
+            <span>Eventos</span>
+            {events.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
+                {events.length}
+              </span>
+            )}
+          </button>
+          <button 
+            onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} 
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+          >
+            <Leaf size={22} className="text-green-500" />
+            <span>Desperdício Zero</span>
+            {wasteItems.length > 0 && (
+              <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
+                {wasteItems.length}
+              </span>
+            )}
+          </button>
+        </div>
+                {/* VISTAS DINÂMICAS */}
         {view === 'marketplace' && <ProductMarketplace />}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
@@ -536,6 +607,7 @@ const UserDashboard: React.FC = () => {
            </div>
         )}
 
+        {/* BOTÃO FOLHETO DIGITAL */}
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
             <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
@@ -570,6 +642,7 @@ const UserDashboard: React.FC = () => {
           )}
         </div>
 
+        {/* VANTAGENS VIP */}
         {sysConfig.vantagensUrl && (
           <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>

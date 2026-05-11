@@ -11,7 +11,7 @@ import {
   ShieldCheck, Store, TrendingUp, Users, Settings, LogOut, 
   MessageSquare, CheckSquare, Bell, Megaphone, Crown, 
   FileText, Receipt, CalendarPlus, Leaf, MapPin, 
-  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate, ListTree
+  Image as ImageIcon, LayoutDashboard, Euro, LayoutTemplate, ListTree, Building2
 } from 'lucide-react';
 import { User as UserProfile, Transaction } from '../../types';
 
@@ -33,7 +33,8 @@ import AdminLocations from './AdminLocations';
 import BannerManager from './BannerManager';
 import AdminPricing from './AdminPricing';
 import AdminFlyerGenerator from './AdminFlyerGenerator';
-import AdminTaxonomy from './AdminTaxonomy'; // NOVO COMPONENTE
+import AdminTaxonomy from './AdminTaxonomy';
+import AdminMunicipalities from './AdminMunicipalities';
 
 const AdminDashboard: React.FC = () => {
   const { logout } = useStore();
@@ -104,7 +105,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'users', label: 'Vizinhos', icon: Users },
     { id: 'billing', label: 'Cobranças', icon: Receipt }, 
     { id: 'pricing', label: 'Motor Preços', icon: Euro }, 
-    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree }, // NOVO ITEM NO MENU
+    { id: 'taxonomy', label: 'Taxonomia', icon: ListTree },
     { id: 'locations', label: 'Zonas', icon: MapPin },
     { id: 'admin_msg', label: 'Comunicados', icon: MessageSquare }
   ];
@@ -118,6 +119,7 @@ const AdminDashboard: React.FC = () => {
     { id: 'vantagens', label: 'Vantagens VIP', icon: Crown },
     { id: 'banners', label: 'Banners', icon: ImageIcon },
     { id: 'notifications', label: 'Avisos App', icon: Bell },
+    { id: 'municipalities', label: 'Munícipios', icon: Building2 },
     { id: 'reviews', label: 'Feedback', icon: MessageSquare, badge: badFeedbacks }
   ];
 
@@ -165,7 +167,8 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
         {currentView === 'flyer_gen' && <AdminFlyerGenerator />} 
-        {currentView === 'taxonomy' && <AdminTaxonomy />} {/* NOVO COMPONENTE RENDERS AQUI */}
+        {currentView === 'taxonomy' && <AdminTaxonomy />}
+        {currentView === 'municipalities' && <AdminMunicipalities />}
         {currentView === 'billing' && <AdminBilling />} 
         {currentView === 'leaflets' && <AdminLeaflets />} 
         {currentView === 'vantagens' && <AdminVantagens />} 

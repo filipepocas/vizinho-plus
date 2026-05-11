@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile, Transaction } from '../../types';
@@ -52,6 +52,9 @@ const MerchantDashboard: React.FC = () => {
   const [wasteZones, setWasteZones] = useState<string[]>([]);
   const [activeWasteOffers, setActiveWasteOffers] = useState<any[]>([]);
   const [loadingWaste, setLoadingWaste] = useState(false);
+  
+  // NOVO: Estado para transações do comerciante (alimenta o BI)
+  const [merchantTransactions, setMerchantTransactions] = useState<Transaction[]>([]);
 
   const distritos = Object.keys(locations || {}).sort();
   const concelhos = wasteDistrito ? Object.keys(locations[wasteDistrito] || {}).sort() : [];
@@ -89,7 +92,17 @@ const MerchantDashboard: React.FC = () => {
         setActiveWasteOffers(snap.docs.map((d: any) => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
     });
 
-    return () => { unsubMsg(); unsubWaste(); };
+    // NOVA SUBSCRIÇÃO: Carregar transações do comerciante para o BI
+    const qTx = query(
+      collection(db, 'transactions'), 
+      where('merchantId', '==', currentUser.id),
+      orderBy('createdAt', 'desc')
+    );
+    const unsubTx = onSnapshot(qTx, (snap: any) => {
+      setMerchantTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+    });
+
+    return () => { unsubMsg(); unsubWaste(); unsubTx(); };
   }, [currentUser?.id]);
 
   useEffect(() => {
@@ -165,8 +178,7 @@ const MerchantDashboard: React.FC = () => {
   };
 
   if (!currentUser) return null;
-
-  return (
+    return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col pb-20 font-sans">
       
       <header className="bg-[#0f172a] p-6 lg:p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
@@ -219,7 +231,7 @@ const MerchantDashboard: React.FC = () => {
         )}
 
         {view === 'catalog' && <MerchantCatalog merchant={currentUser} />}
-        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} transactions={[]} />}
+        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} />}
         {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
