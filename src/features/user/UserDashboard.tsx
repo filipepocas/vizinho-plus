@@ -304,44 +304,40 @@ const UserDashboard: React.FC = () => {
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
-      {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL */}
-      <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[238px]' : 'h-[280px] md:h-[400px]'}`}>
+      {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL - APENAS BANNER */}
+      <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[190px]' : 'h-[224px] md:h-[280px]'}`}>
         <BannerCarousel isScrolled={isScrolled} />
+      </div>
+
+      {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
+      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[206px]' : 'pt-[240px] md:pt-[296px]'}`}>
         
-        <div className={`absolute left-0 right-0 p-6 flex justify-between items-center bg-gradient-to-b from-black/80 via-black/40 to-transparent z-50 transition-all duration-300 ${isScrolled ? 'top-[-10px]' : 'top-0'}`}>
-          <div className={`bg-white/10 backdrop-blur-sm rounded-2xl border border-white/20 transition-all duration-300 origin-top-left ${isScrolled ? 'p-1 scale-[0.70]' : 'p-2 scale-100'}`}>
-            <img src="/logo-vizinho.png" alt="Vizinho+" className="h-10 w-auto object-contain" />
+        {/* BARRA COM LOGO E BOTÕES - ABAIXO DO BANNER */}
+        <div className="flex justify-between items-center bg-[#0a2540] -mx-6 px-6 py-3 rounded-b-[20px] shadow-lg">
+          <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-1.5">
+            <img src="/logo-vizinho.png" alt="Vizinho+" className="h-8 w-auto object-contain" />
           </div>
           
-          <div className={`flex gap-3 transition-all duration-300 origin-top-right ${isScrolled ? 'scale-[0.75]' : 'scale-100'}`}>
-            <button onClick={() => setShowCart(true)} className="relative bg-[#00d66f] p-3 rounded-full text-[#0a2540] border-2 border-[#0a2540] shadow-lg hover:scale-110 transition-all">
-              <ShoppingBag size={22} strokeWidth={3} />
+          <div className="flex gap-2">
+            <button onClick={() => setShowCart(true)} className="relative bg-[#00d66f] p-2.5 rounded-full text-[#0a2540] border-2 border-[#0a2540] shadow-lg hover:scale-110 transition-all">
+              <ShoppingBag size={18} strokeWidth={3} />
               {shoppingList.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-[#0a2540] animate-bounce">
+                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[8px] font-black w-4 h-4 rounded-full flex items-center justify-center border-2 border-[#0a2540]">
                   {shoppingList.length}
                 </span>
               )}
             </button>
             
-            <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-3 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
-              <Settings size={20} />
+            <button onClick={() => navigate('/settings')} className="bg-white/20 backdrop-blur-md p-2.5 rounded-full text-white border border-white/30 hover:bg-white/40 transition-all">
+              <Settings size={18} />
             </button>
             
-            <button onClick={handleLogout} className="bg-red-500/80 backdrop-blur-md p-3 rounded-full text-white border border-red-400/30 hover:bg-red-600 transition-all">
-              <LogOut size={20} />
+            <button onClick={handleLogout} className="bg-red-500/80 backdrop-blur-md p-2.5 rounded-full text-white border border-red-400/30 hover:bg-red-600 transition-all">
+              <LogOut size={18} />
             </button>
           </div>
         </div>
-      </div>
 
-      {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
-      <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[260px]' : 'pt-[290px] md:pt-[420px]'}`}>
-        
-        {/* BOTÃO DE APOIO AO MUNÍCIPE - SEMPRE VISÍVEL */}
-        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
-          <Building2 size={20} /> Apoio ao Munícipe
-        </button>
-        
         {/* CARTÃO DIGITAL */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
@@ -372,6 +368,11 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* BOTÃO DE APOIO AO MUNÍCIPE - ABAIXO DO CARTÃO */}
+        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+          <Building2 size={20} /> Apoio ao Munícipe
+        </button>
+
         {/* NOTIFICAÇÃO POP-UP */}
         {appNotification && (
           <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
@@ -385,7 +386,7 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* SECÇÃO DE AVALIAÇÕES PENDENTES - VISÍVEL SEMPRE QUE HOUVER PARA AVALIAR */}
+        {/* SECÇÃO DE AVALIAÇÕES PENDENTES */}
         {pendingEvaluations.length > 0 && (
           <div className="bg-amber-50 border-4 border-amber-200 rounded-[30px] p-6 shadow-md animate-in fade-in">
             <h3 className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
@@ -422,7 +423,6 @@ const UserDashboard: React.FC = () => {
 
         {/* NAVEGAÇÃO PRINCIPAL - BOTÕES SEMPRE VISÍVEIS */}
         <div className="grid grid-cols-2 gap-3">
-          {/* BOTÃO 1: MERCADO DE PRODUTOS (CATÁLOGO) */}
           <button 
             onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}
@@ -431,7 +431,6 @@ const UserDashboard: React.FC = () => {
             <span>Produtos Locais</span>
           </button>
           
-          {/* BOTÃO 2: LOJAS PARCEIRAS */}
           <button 
             onClick={() => setView(view === 'explore' ? 'home' : 'explore')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
@@ -440,7 +439,6 @@ const UserDashboard: React.FC = () => {
             <span>Lojas Parceiras</span>
           </button>
 
-          {/* BOTÃO 3: AVALIAR LOJAS */}
           <button 
             onClick={() => setView('history')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
@@ -454,7 +452,6 @@ const UserDashboard: React.FC = () => {
             )}
           </button>
 
-          {/* BOTÃO 4: SALDO */}
           <button 
             onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
@@ -623,10 +620,10 @@ const UserDashboard: React.FC = () => {
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
             <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
-              <Star size={32} className="text-[#00d66f]" />
+              <span className="text-4xl">🐷</span>
             </div>
             <div className="p-6 text-left flex-1">
-              <h4 className="text-lg font-black uppercase italic leading-none text-[#0a2540]">Oportunidades da Semana</h4>
+              <h4 className="text-lg font-black uppercase italic leading-none text-[#0a2540]">Oportunidades</h4>
               <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mt-1">{activeLeaflets.length > 0 ? 'Clique para abrir o folheto digital' : 'Não existem folhetos ativos'}</p>
             </div>
             {activeLeaflets.length > 0 && <div className="pr-6"><ExternalLink size={20} className="text-[#0a2540] opacity-30" /></div>}
