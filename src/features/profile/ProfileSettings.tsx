@@ -5,13 +5,15 @@ import { doc, updateDoc, getDoc } from 'firebase/firestore';
 import { deleteUser } from 'firebase/auth';
 import { 
   ArrowLeft, User as UserIcon, Phone, MapPin, Save, 
-  ShieldCheck, Trash2, AlertTriangle, RefreshCw, Mail, Bell, BellOff 
+  ShieldCheck, Trash2, AlertTriangle, RefreshCw, Mail, Bell, BellOff, Smartphone 
 } from 'lucide-react';
 import { getLocalDeviceId, removeCurrentDeviceNotification } from '../../utils/notifications';
 import toast from 'react-hot-toast';
+import { usePWAInstall } from '../../hooks/usePWAInstall';
 
 const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentUser, deleteUserWithHistory, locations } = useStore();
+  const { isInstallable, installApp } = usePWAInstall();
   
   const [loading, setLoading] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -106,6 +108,26 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
       </header>
 
       <main className="max-w-xl mx-auto p-6 space-y-6 mt-4">
+        
+        {/* OPÇÃO DE INSTALAR A APP (PWA) */}
+        {isInstallable && (
+          <div className="bg-[#0a2540] p-6 rounded-[30px] shadow-[8px_8px_0px_#00d66f] border-4 border-[#00d66f] flex items-center justify-between animate-in fade-in">
+            <div>
+              <h3 className="text-white font-black uppercase text-sm flex items-center gap-2">
+                <Smartphone className="text-[#00d66f]"/> Instalar App
+              </h3>
+              <p className="text-[10px] text-slate-300 font-bold mt-1">Adicione o Vizinho+ ao ecrã principal.</p>
+            </div>
+            <button 
+              type="button" 
+              onClick={installApp} 
+              className="bg-[#00d66f] text-[#0a2540] px-5 py-3 rounded-xl font-black uppercase text-[10px] shadow-md hover:scale-105 transition-transform"
+            >
+              Instalar
+            </button>
+          </div>
+        )}
+
         <form onSubmit={handleSave} className="space-y-6">
           
           <div className="bg-white p-6 rounded-[30px] border-2 border-slate-100 shadow-sm">
@@ -113,7 +135,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
                <div className="flex items-center gap-3"><h3 className="font-black uppercase text-xs text-[#0a2540] flex items-center gap-2">{isThisDeviceLinked ? <Bell className="text-[#00d66f]" size={20} /> : <BellOff className="text-slate-300" size={20} />} Alertas da App</h3></div>
                {isThisDeviceLinked ? <button type="button" onClick={handleDisableNotifications} className="text-[10px] font-black text-red-500 uppercase hover:underline transition-all">Desativar</button> : <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Inativo</span>}
             </div>
-            <p className="text-[10px] text-slate-500 font-bold leading-tight">{isThisDeviceLinked ? "Este telemóvel está configurado para receber notificações em tempo real." : "As notificações estão desligadas neste aparelho."}</p>
+            <p className="text-[10px] text-slate-500 font-bold leading-tight">{isThisDeviceLinked ? "Este telemóvel está configurado para receber notificações em tempo real." : "As notificações estão desligadas neste aparelho. (Para ativar, vá ao ecrã principal da App)"}</p>
           </div>
 
           <div className="bg-white p-8 rounded-[40px] shadow-sm border-4 border-[#0a2540]">

@@ -5,11 +5,11 @@ import { User as UserProfile } from '../../../types';
 import { doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../../config/firebase';
 import { updatePassword } from 'firebase/auth';
-import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock } from 'lucide-react';
+import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock, Smartphone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../../store/useStore';
-// CORREÇÃO: Caminho atualizado para recuar 4 níveis até à pasta utils
 import { translateDay } from '../../../utils/timeUtils';
+import { usePWAInstall } from '../../../hooks/usePWAInstall';
 
 interface MerchantSettingsProps {
   currentUser: UserProfile;
@@ -27,6 +27,7 @@ const defaultHours = {
 
 const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
   const { locations } = useStore();
+  const { isInstallable, installApp } = usePWAInstall();
 
   const [shopName, setShopName] = useState<string>(currentUser.shopName || currentUser.name || '');
   const [cashbackPercent, setCashbackPercent] = useState<string>(currentUser.cashbackPercent?.toString() || '0');
@@ -144,6 +145,25 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
   return (
     <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 animate-in fade-in pb-20">
       
+      {/* OPÇÃO DE INSTALAR A APP (PWA) */}
+      {isInstallable && (
+        <div className="xl:col-span-2 bg-[#0a2540] p-6 md:p-8 rounded-[40px] shadow-[8px_8px_0px_#00d66f] border-4 border-[#00d66f] flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-white font-black uppercase text-sm flex items-center gap-2">
+              <Smartphone className="text-[#00d66f]"/> Instalar App de Lojista
+            </h3>
+            <p className="text-[10px] text-slate-300 font-bold mt-1">Adicione o painel Vizinho+ ao ecrã principal do seu telemóvel ou tablet.</p>
+          </div>
+          <button 
+            type="button" 
+            onClick={installApp} 
+            className="w-full md:w-auto bg-[#00d66f] text-[#0a2540] px-6 py-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:scale-105 transition-transform"
+          >
+            Instalar Agora
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-[40px] shadow-[12px_12px_0px_#0a2540] border-4 border-[#0a2540] p-8 md:p-10 flex flex-col">
         <h2 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-8 flex items-center gap-3">
             <Store className="text-[#00d66f]" /> Informações da Loja

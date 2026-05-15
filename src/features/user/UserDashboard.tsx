@@ -18,7 +18,7 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -368,10 +368,15 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* BOTÃO DE APOIO AO MUNÍCIPE - ABAIXO DO CARTÃO */}
-        <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[11px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
-          <Building2 size={20} /> Apoio ao Munícipe
-        </button>
+        {/* BOTÕES DE UTILIDADE - ABAIXO DO CARTÃO */}
+        <div className="grid grid-cols-2 gap-3">
+          <button onClick={() => setShowFaqModal(true)} className="w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in bg-amber-500 text-white border-amber-700 hover:bg-amber-600">
+            <HelpCircle size={18} /> Guia da App
+          </button>
+          <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+            <Building2 size={18} /> Munícipe
+          </button>
+        </div>
 
         {/* NOTIFICAÇÃO POP-UP */}
         {appNotification && (
@@ -619,8 +624,8 @@ const UserDashboard: React.FC = () => {
         {/* BOTÃO FOLHETO DIGITAL */}
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
-            <div className={`p-8 ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
-              <span className="text-4xl">🐷</span>
+            <div className={`p-8 flex items-center justify-center ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
+              <Gift size={32} className={activeLeaflets.length > 0 ? "text-[#00d66f]" : "text-slate-200"} />
             </div>
             <div className="p-6 text-left flex-1">
               <h4 className="text-lg font-black uppercase italic leading-none text-[#0a2540]">Oportunidades</h4>
