@@ -2,11 +2,11 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../../config/firebase';
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   Package, Plus, Trash2, Tag, Image as ImageIcon, 
-  Loader2, Euro, CheckCircle2, X, Edit3, Save, Eye, Store, Clock
+  Loader2, Euro, CheckCircle2, X, Edit3, Eye, Store, Clock
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../../store/useStore';
@@ -49,26 +49,44 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
+      // CORREÇÃO: Removido o orderBy e o where(createdAt) da query para evitar erro de Index no Firebase.
+      // A filtragem e ordenação são feitas agora em memória (JavaScript).
       const qMine = query(
         collection(db, 'products'), 
-        where('merchantId', '==', merchant.id),
-        where('createdAt', '>=', seteDiasAtras),
-        orderBy('createdAt', 'desc')
+        where('merchantId', '==', merchant.id)
       );
       const snapMine = await getDocs(qMine);
-      setProducts(snapMine.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product)));
+      const myProducts = snapMine.docs
+        .map((d: any) => ({ id: d.id, ...d.data() } as Product))
+        .filter(p => {
+            const pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
+            return pDate >= seteDiasAtras;
+        })
+        .sort((a, b) => {
+            const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+            const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+            return dateB - dateA;
+        });
+      setProducts(myProducts);
 
       if (merchant.freguesia) {
         const qComp = query(
           collection(db, 'products'), 
-          where('freguesia', '==', merchant.freguesia),
-          where('createdAt', '>=', seteDiasAtras),
-          orderBy('createdAt', 'desc')
+          where('freguesia', '==', merchant.freguesia)
         );
         const snapComp = await getDocs(qComp);
-        const allLocalProducts = snapComp.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
-        // CORREÇÃO: Tipagem (p: Product) adicionada
-        setCompetitionProducts(allLocalProducts.filter((p: Product) => p.merchantId !== merchant.id));
+        const compProducts = snapComp.docs
+          .map((d: any) => ({ id: d.id, ...d.data() } as Product))
+          .filter(p => {
+              const pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
+              return p.merchantId !== merchant.id && pDate >= seteDiasAtras;
+          })
+          .sort((a, b) => {
+              const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+              const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+              return dateB - dateA;
+          });
+        setCompetitionProducts(compProducts);
       }
     } catch (err) {
       console.error("Erro ao carregar catálogo:", err);
@@ -104,16 +122,23 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
          const seteDiasAtras = new Date();
          seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
+         // CORREÇÃO: Removido o where(createdAt) para evitar erro de Index no Firebase.
          const qDuplicate = query(
            collection(db, 'products'),
-           where('freguesia', '==', merchant.freguesia),
-           where('productType', '==', formData.productType),
-           where('createdAt', '>=', seteDiasAtras)
+           where('freguesia', '==', merchant.freguesia || ''),
+           where('productType', '==', formData.productType)
          );
          
          const snapDuplicate = await getDocs(qDuplicate);
          
-         if (!snapDuplicate.empty) {
+         // Validação feita em memória
+         const hasRecent = snapDuplicate.docs.some(d => {
+             const data = d.data();
+             const dDate = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
+             return dDate >= seteDiasAtras;
+         });
+         
+         if (hasRecent) {
             setSaving(false);
             return toast.error(`Já existe um artigo do tipo "${formData.productType}" ativo na sua Freguesia. Vá ao separador 'Concorrência' para ver quando expira.`, { id: toastId, duration: 6000 });
          }
@@ -164,7 +189,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       loadProducts();
     } catch (err) {
       console.error("Erro ao guardar produto:", err);
-      toast.error("Erro ao guardar.", { id: toastId });
+      toast.error("Erro ao guardar. Tente novamente.", { id: toastId });
     } finally {
       setSaving(false);
     }

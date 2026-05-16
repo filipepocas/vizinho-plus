@@ -1,7 +1,7 @@
 // src/features/merchant/components/BusinessIntelligence.tsx
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { collection, query, where, orderBy, onSnapshot, limit } from 'firebase/firestore';
+import { collection, query, where, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { Transaction, Feedback } from '../../../types';
 import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy, Activity } from 'lucide-react';
@@ -26,26 +26,38 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
   const [loadingFeedbacks, setLoadingFeedbacks] = useState(true);
 
   useEffect(() => {
-    // Carregar transações do comerciante
+    // Carregar transações do comerciante (Sem orderBy para evitar erro de Index)
     const qTx = query(
       collection(db, 'transactions'),
-      where('merchantId', '==', merchantId),
-      orderBy('createdAt', 'desc')
+      where('merchantId', '==', merchantId)
     );
     const unsubTx = onSnapshot(qTx, (snap: any) => {
-      setTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+      const sortedTx = snap.docs
+        .map((d: any) => ({ id: d.id, ...d.data() } as Transaction))
+        .sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return dateB - dateA;
+        });
+      setTransactions(sortedTx);
       setLoadingTx(false);
     });
 
-    // Carregar feedbacks do comerciante
+    // Carregar feedbacks do comerciante (Sem orderBy para evitar erro de Index)
     const qFb = query(
       collection(db, 'feedbacks'),
-      where('merchantId', '==', merchantId),
-      orderBy('createdAt', 'desc'),
-      limit(50)
+      where('merchantId', '==', merchantId)
     );
     const unsubFb = onSnapshot(qFb, (snap: any) => {
-      setFeedbacks(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback)));
+      const sortedFb = snap.docs
+        .map((d: any) => ({ id: d.id, ...d.data() } as Feedback))
+        .sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
+          return dateB - dateA;
+        })
+        .slice(0, 50); // Limita aos últimos 50 em memória
+      setFeedbacks(sortedFb);
       setLoadingFeedbacks(false);
     });
 
