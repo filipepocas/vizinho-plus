@@ -25,7 +25,7 @@ import { usePWAInstall } from '../../hooks/usePWAInstall';
 import { requestNotificationPermission } from '../../utils/notifications';
 
 const UserDashboard: React.FC = () => {
-  const { transactions, logout, currentUser, shoppingList, locations } = useStore();
+  const { transactions, logout, currentUser, shoppingList, locations, subscribeToTransactions } = useStore();
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
@@ -78,6 +78,13 @@ const UserDashboard: React.FC = () => {
     };
     fetchData();
   }, []);
+
+  // CORREÇÃO: Subscrever transações do cliente para histórico e avaliações
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    const unsub = subscribeToTransactions('client', currentUser.id);
+    return () => unsub();
+  }, [currentUser?.id, subscribeToTransactions]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
