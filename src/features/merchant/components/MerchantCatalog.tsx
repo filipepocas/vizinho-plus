@@ -157,7 +157,8 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         distrito: merchant.distrito || '',
         concelho: merchant.concelho || '',
         freguesia: merchant.freguesia || '',
-        coords: (merchant.latitude && merchant.longitude) ? { lat: merchant.latitude, lng: merchant.longitude } : undefined,
+        // CORREÇÃO: Alterado de undefined para null
+        coords: (merchant.latitude && merchant.longitude) ? { lat: merchant.latitude, lng: merchant.longitude } : null,
         description: formData.description,
         imageUrl: imageUrl,
         price: Number(formData.price),
