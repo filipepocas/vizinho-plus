@@ -1,6 +1,8 @@
+// src/features/admin/AdminNotifications.tsx
+
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy, limit, updateDoc } from 'firebase/firestore';
 import { Bell, Send, Trash2, AlertCircle, Loader2, Clock, CheckCircle, XCircle, Users, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../store/useStore';
@@ -26,7 +28,6 @@ const AdminNotifications: React.FC = () => {
   const [freguesia, setFreguesia] = useState('');
   const [targetZones, setTargetZones] = useState<string[]>([]);
 
-  // PONTO 10: Gera intervalos de 30 minutos
   const availableHours = Array.from({ length: 48 }, (_, i) => {
     const h = Math.floor(i / 2).toString().padStart(2, '0');
     const m = i % 2 === 0 ? '00' : '30';
@@ -38,10 +39,8 @@ const AdminNotifications: React.FC = () => {
   const freguesias = distrito && concelho ? (locations[distrito][concelho] || []).sort() : [];
 
   useEffect(() => {
-    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'));
-    // CORREÇÃO: Adicionado (snap: any) para TS Strict
+    const q = query(collection(db, 'notifications'), orderBy('createdAt', 'desc'), limit(100));
     return onSnapshot(q, (snap: any) => {
-      // CORREÇÃO: Adicionado (d: any) para TS Strict
       setRequests(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as NotificationRequest)));
     });
   }, []);

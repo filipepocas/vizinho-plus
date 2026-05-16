@@ -1,7 +1,7 @@
 // src/features/merchant/components/BusinessIntelligence.tsx
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { Transaction, Feedback } from '../../../types';
 import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy, Activity } from 'lucide-react';
@@ -26,44 +26,49 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
   const [loadingFeedbacks, setLoadingFeedbacks] = useState(true);
 
   useEffect(() => {
-    // Carregar transações do comerciante (Sem orderBy para evitar erro de Index)
-    const qTx = query(
-      collection(db, 'transactions'),
-      where('merchantId', '==', merchantId)
-    );
-    const unsubTx = onSnapshot(qTx, (snap: any) => {
-      const sortedTx = snap.docs
-        .map((d: any) => ({ id: d.id, ...d.data() } as Transaction))
-        .sort((a, b) => {
-          const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-          const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-          return dateB - dateA;
-        });
-      setTransactions(sortedTx);
-      setLoadingTx(false);
-    });
+    let isMounted = true;
 
-    // Carregar feedbacks do comerciante (Sem orderBy para evitar erro de Index)
-    const qFb = query(
-      collection(db, 'feedbacks'),
-      where('merchantId', '==', merchantId)
-    );
-    const unsubFb = onSnapshot(qFb, (snap: any) => {
-      const sortedFb = snap.docs
-        .map((d: any) => ({ id: d.id, ...d.data() } as Feedback))
-        .sort((a, b) => {
-          const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-          const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-          return dateB - dateA;
-        })
-        .slice(0, 50); // Limita aos últimos 50 em memória
-      setFeedbacks(sortedFb);
-      setLoadingFeedbacks(false);
-    });
+    const loadData = async () => {
+      try {
+        const [txSnap, fbSnap] = await Promise.all([
+          getDocs(query(
+            collection(db, 'transactions'), 
+            where('merchantId', '==', merchantId),
+            orderBy('createdAt', 'desc'),
+            limit(200)
+          )),
+          getDocs(query(
+            collection(db, 'feedbacks'), 
+            where('merchantId', '==', merchantId),
+            orderBy('createdAt', 'desc'),
+            limit(50)
+          ))
+        ]);
+
+        if (!isMounted) return;
+
+        setTransactions(txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+        setLoadingTx(false);
+
+        setFeedbacks(fbSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback)));
+        setLoadingFeedbacks(false);
+      } catch (err) {
+        console.error("Erro ao carregar BI:", err);
+        if (isMounted) {
+          setLoadingTx(false);
+          setLoadingFeedbacks(false);
+        }
+      }
+    };
+
+    loadData();
+
+    // Polling a cada 5 minutos
+    const interval = setInterval(loadData, 5 * 60 * 1000);
 
     return () => {
-      unsubTx();
-      unsubFb();
+      isMounted = false;
+      clearInterval(interval);
     };
   }, [merchantId]);
 
@@ -101,6 +106,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
 
   const monthStats = useMemo(() => {
     const months: MonthStat[] = [];
+    
     for (let i = 5; i >= 0; i--) {
       const d = new Date();
       d.setMonth(d.getMonth() - i);

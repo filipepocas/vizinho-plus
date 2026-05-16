@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
 import { Leaf, Trash2, MapPin, Store, Edit3, Save, X, Clock } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AntiWasteItem } from '../../types';
@@ -12,7 +12,7 @@ const AdminAntiWaste: React.FC = () => {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'anti_waste'), orderBy('createdAt', 'desc'), limit(50));
     return onSnapshot(q, (snap: any) => setItems(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as AntiWasteItem))));
   }, []);
 

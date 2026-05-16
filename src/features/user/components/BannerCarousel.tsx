@@ -1,49 +1,88 @@
 // src/features/user/components/BannerCarousel.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../../config/firebase';
-import { collection, query, where, onSnapshot } from 'firebase/firestore';
+import { collection, query, where, getDocs } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useStore } from '../../../store/useStore';
 
 interface Props {
   isScrolled?: boolean;
 }
 
 const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
-  const { currentUser } = useStore();
   const [activeBanners, setActiveBanners] = useState<any[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const shuffledOrderRef = useRef<number[]>([]);
+  const shuffleIndexRef = useRef<number>(0);
+
+  // Função para gerar ordem aleatória dos índices
+  const shuffleArray = (length: number): number[] => {
+    const arr = Array.from({ length }, (_, i) => i);
+    for (let i = arr.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  };
 
   useEffect(() => {
-    if (!currentUser) return;
-    const userZipBase = currentUser.zipCode?.substring(0, 4);
+    let isMounted = true;
 
-    const q = query(collection(db, 'banners'), where('active', '==', true));
-    
-    const unsubscribe = onSnapshot(q, (snap: any) => {
-      const now = new Date();
-      const valid = snap.docs
-        .map((d: any) => ({ id: d.id, ...d.data() }))
-        .filter((b: any) => {
-          const start = b.startDate && typeof b.startDate.toDate === 'function' ? b.startDate.toDate() : new Date();
-          const end = b.endDate && typeof b.endDate.toDate === 'function' ? b.endDate.toDate() : new Date();
-          
-          const isTimeValid = now >= start && now <= end;
-          const hasTargetZips = b.targetZipCodes && b.targetZipCodes.length > 0;
-          const isZipValid = !hasTargetZips || (userZipBase && b.targetZipCodes?.includes(userZipBase));
+    const fetchBanners = async () => {
+      try {
+        const q = query(collection(db, 'banners'), where('active', '==', true));
+        const snap = await getDocs(q);
+        
+        if (!isMounted) return;
 
-          return isTimeValid && isZipValid;
-        });
-      setActiveBanners(valid);
-    });
+        const now = new Date();
+        const valid = snap.docs
+          .map((d: any) => ({ id: d.id, ...d.data() }))
+          .filter((b: any) => {
+            const end = b.endDate?.toDate ? b.endDate.toDate() : new Date();
+            return now <= end;
+          });
+        
+        // Se os banners mudaram, gerar nova ordem aleatória
+        const currentIds = valid.map((b: any) => b.id).join(',');
+        const previousIds = activeBanners.map((b: any) => b.id).join(',');
+        
+        if (currentIds !== previousIds || shuffledOrderRef.current.length === 0) {
+          shuffledOrderRef.current = shuffleArray(valid.length);
+          shuffleIndexRef.current = 0;
+          setCurrentIndex(shuffledOrderRef.current[0] || 0);
+        }
+        
+        setActiveBanners(valid);
+      } catch (error) {
+        console.error("Erro ao carregar banners:", error);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [currentUser]);
+    fetchBanners();
+
+    const interval = setInterval(fetchBanners, 5 * 60 * 1000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, []);
 
   useEffect(() => {
     if (activeBanners.length <= 1) return;
-    const timer = setInterval(() => setCurrentIndex((prev) => (prev + 1) % activeBanners.length), 4500);
+
+    const timer = setInterval(() => {
+      shuffleIndexRef.current = (shuffleIndexRef.current + 1) % activeBanners.length;
+      
+      // Se completou um ciclo, reembaralhar
+      if (shuffleIndexRef.current === 0) {
+        shuffledOrderRef.current = shuffleArray(activeBanners.length);
+      }
+      
+      setCurrentIndex(shuffledOrderRef.current[shuffleIndexRef.current]);
+    }, 4500);
+
     return () => clearInterval(timer);
   }, [activeBanners]);
 
@@ -53,8 +92,8 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
     <div className={`relative w-full overflow-hidden bg-[#0a2540] transition-all duration-300 ease-in-out ${isScrolled ? 'h-[190px]' : 'h-[224px] md:h-[280px]'}`}>
       <AnimatePresence mode="wait">
         <motion.img
-          key={activeBanners[currentIndex].id}
-          src={activeBanners[currentIndex].imageUrl}
+          key={activeBanners[currentIndex]?.id || 'fallback'}
+          src={activeBanners[currentIndex]?.imageUrl || ''}
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}

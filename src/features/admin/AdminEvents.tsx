@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
 import { CalendarPlus, CheckCircle, Trash2, MapPin, Loader2, Info, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { AppEvent } from '../../types';
@@ -17,7 +17,7 @@ const AdminEvents: React.FC = () => {
   const [editingZones, setEditingZones] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
-    const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'));
+    const q = query(collection(db, 'events'), orderBy('createdAt', 'desc'), limit(50));
     return onSnapshot(q, (snap: any) => {
       const evs = snap.docs.map((d: any) => ({id: d.id, ...d.data()} as AppEvent));
       setEvents(evs);

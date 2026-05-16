@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile, Transaction } from '../../types';
@@ -10,7 +10,8 @@ import {
   LogOut, Settings, X, 
   Smartphone, AlertTriangle, Megaphone, 
   MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
-  Loader2, Trash2, BookOpen, Leaf, ArrowRight, HelpCircle, Package, Activity
+  Loader2, Trash2, BookOpen, Leaf, ArrowRight, HelpCircle, Package, Activity,
+  Search, History
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -27,7 +28,7 @@ const MerchantDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'terminal' | 'catalog' | 'bi' | 'settings' | 'marketing' | 'anti_waste'>('terminal');
+  const [view, setView] = useState<'terminal' | 'catalog' | 'bi' | 'settings' | 'marketing' | 'anti_waste' | 'history'>('terminal');
   
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
@@ -45,7 +46,6 @@ const MerchantDashboard: React.FC = () => {
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
 
-  // Estados de Desperdício
   const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00' });
   const [wasteDistrito, setWasteDistrito] = useState('');
   const [wasteConcelho, setWasteConcelho] = useState('');
@@ -53,8 +53,10 @@ const MerchantDashboard: React.FC = () => {
   const [activeWasteOffers, setActiveWasteOffers] = useState<any[]>([]);
   const [loadingWaste, setLoadingWaste] = useState(false);
   
-  // NOVO: Estado para transações do comerciante (alimenta o BI)
   const [merchantTransactions, setMerchantTransactions] = useState<Transaction[]>([]);
+  const [txSearch, setTxSearch] = useState('');
+  const [txStartDate, setTxStartDate] = useState('');
+  const [txEndDate, setTxEndDate] = useState('');
 
   const distritos = Object.keys(locations || {}).sort();
   const concelhos = wasteDistrito ? Object.keys(locations[wasteDistrito] || {}).sort() : [];
@@ -67,6 +69,33 @@ const MerchantDashboard: React.FC = () => {
     const percent = currentUser?.cashbackPercent || 0;
     return (numAmount * percent) / 100;
   }, [amount, currentUser?.cashbackPercent]);
+
+  const filteredMerchantTransactions = useMemo(() => {
+    return merchantTransactions.filter((t: any) => {
+      const search = txSearch.toLowerCase().trim();
+      const matchSearch = search === '' || 
+        (t.clientName || '').toLowerCase().includes(search) ||
+        (t.clientCardNumber || '').includes(search) ||
+        (t.clientNif || '').includes(search) ||
+        (t.documentNumber || '').toLowerCase().includes(search);
+      
+      const txDate = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt?.seconds * 1000 || 0);
+      const matchStart = !txStartDate || txDate >= new Date(txStartDate);
+      const matchEnd = !txEndDate || txDate <= new Date(txEndDate + 'T23:59:59');
+      
+      return matchSearch && matchStart && matchEnd;
+    });
+  }, [merchantTransactions, txSearch, txStartDate, txEndDate]);
+
+  const txTotals = useMemo(() => {
+    let emitido = 0, descontado = 0;
+    filteredMerchantTransactions.forEach((t: any) => {
+      if (t.status === 'cancelled') return;
+      if (t.type === 'earn') emitido += (t.cashbackAmount || 0);
+      else if (t.type === 'redeem') descontado += (t.cashbackAmount || 0);
+    });
+    return { emitido, descontado, total: filteredMerchantTransactions.length };
+  }, [filteredMerchantTransactions]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -92,11 +121,11 @@ const MerchantDashboard: React.FC = () => {
         setActiveWasteOffers(snap.docs.map((d: any) => ({id: d.id, ...d.data()})).filter((w: any) => w.endTime.toDate() > now));
     });
 
-    // NOVA SUBSCRIÇÃO: Carregar transações do comerciante para o BI
     const qTx = query(
       collection(db, 'transactions'), 
       where('merchantId', '==', currentUser.id),
-      orderBy('createdAt', 'desc')
+      orderBy('createdAt', 'desc'),
+      limit(200)
     );
     const unsubTx = onSnapshot(qTx, (snap: any) => {
       setMerchantTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
@@ -178,7 +207,15 @@ const MerchantDashboard: React.FC = () => {
   };
 
   if (!currentUser) return null;
-    return (
+
+  const parseTxDate = (createdAt: any) => {
+    if (!createdAt) return new Date();
+    if (createdAt.toDate) return createdAt.toDate();
+    if (createdAt.seconds) return new Date(createdAt.seconds * 1000);
+    return new Date(createdAt);
+  };
+
+  return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col pb-20 font-sans">
       
       <header className="bg-[#0f172a] p-6 lg:p-8 rounded-b-[40px] shadow-2xl flex flex-col lg:flex-row justify-between items-center mb-8 gap-6 border-b-8 border-[#00d66f]">
@@ -196,6 +233,7 @@ const MerchantDashboard: React.FC = () => {
           <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> Catálogo</button>
           <button onClick={() => setView('marketing')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
           <button onClick={() => setView('anti_waste')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'anti_waste' ? 'bg-[#22c55e] text-white' : 'text-green-400 hover:bg-green-500/20'}`}>Desperdício</button>
+          <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'history' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><History size={14} className="inline mr-1"/> Histórico</button>
           <button onClick={() => setView('bi')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Activity size={14} className="inline mr-1"/> B.I.</button>
           <button onClick={() => setView('settings')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Settings size={14} className="inline mr-1"/></button>
           <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
@@ -234,6 +272,113 @@ const MerchantDashboard: React.FC = () => {
         {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} />}
         {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
+
+        {view === 'history' && (
+          <div className="space-y-6 animate-in fade-in duration-500 pb-10">
+            <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
+              <div className="flex items-center gap-4 mb-8">
+                <div className="bg-[#0a2540] p-4 rounded-2xl">
+                  <History size={28} className="text-[#00d66f]" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] leading-none">Histórico de Transações</h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-2">Consulte e filtre os movimentos da sua loja</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+                <div className="bg-green-50 p-6 rounded-[25px] border-2 border-green-200 text-center">
+                  <p className="text-[9px] font-black uppercase text-green-700 tracking-widest mb-1">Cashback Emitido</p>
+                  <p className="text-2xl font-black text-green-600">{formatCurrency(txTotals.emitido)}</p>
+                </div>
+                <div className="bg-blue-50 p-6 rounded-[25px] border-2 border-blue-200 text-center">
+                  <p className="text-[9px] font-black uppercase text-blue-700 tracking-widest mb-1">Saldo Descontado</p>
+                  <p className="text-2xl font-black text-blue-600">{formatCurrency(txTotals.descontado)}</p>
+                </div>
+                <div className="bg-slate-50 p-6 rounded-[25px] border-2 border-slate-200 text-center">
+                  <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1">Total Movimentos</p>
+                  <p className="text-2xl font-black text-slate-600">{txTotals.total}</p>
+                </div>
+              </div>
+
+              <div className="bg-slate-50 p-6 rounded-[30px] border-2 border-slate-100 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                    <input 
+                      type="text" 
+                      placeholder="Cliente, NIF ou Doc..." 
+                      value={txSearch} 
+                      onChange={e => setTxSearch(e.target.value)}
+                      className="w-full pl-12 p-4 bg-white border-2 border-slate-200 rounded-2xl font-bold text-xs uppercase outline-none focus:border-[#00d66f]"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl p-1 px-4">
+                    <Calendar size={16} className="text-slate-300" />
+                    <input type="date" value={txStartDate} onChange={e => setTxStartDate(e.target.value)} className="bg-transparent outline-none text-[10px] font-black w-full" />
+                  </div>
+                  <div className="flex items-center gap-2 bg-white border-2 border-slate-200 rounded-2xl p-1 px-4">
+                    <Calendar size={16} className="text-slate-300" />
+                    <input type="date" value={txEndDate} onChange={e => setTxEndDate(e.target.value)} className="bg-transparent outline-none text-[10px] font-black w-full" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left min-w-[700px]">
+                  <thead>
+                    <tr className="border-b-4 border-slate-100 text-[9px] font-black uppercase text-slate-400 tracking-widest">
+                      <th className="pb-4 pl-2">Data / Hora</th>
+                      <th className="pb-4">Cliente</th>
+                      <th className="pb-4 text-center">Doc / NIF</th>
+                      <th className="pb-4 text-right">Fatura (€)</th>
+                      <th className="pb-4 text-right">Cashback (€)</th>
+                      <th className="pb-4 text-center">Tipo</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y-2 divide-slate-50">
+                    {filteredMerchantTransactions.map((t: any) => {
+                      const date = parseTxDate(t.createdAt);
+                      return (
+                        <tr key={t.id} className="hover:bg-slate-50 transition-colors text-xs">
+                          <td className="py-4 pl-2">
+                            <p className="font-bold text-slate-500">{date.toLocaleDateString()}</p>
+                            <p className="text-[9px] text-slate-400">{date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}</p>
+                          </td>
+                          <td className="py-4 font-black uppercase text-[#0a2540]">
+                            {t.clientName || '---'}
+                            <span className="block text-[9px] text-slate-400 lowercase font-bold">{t.clientCardNumber || t.clientNif || ''}</span>
+                          </td>
+                          <td className="py-4 text-center font-mono font-bold text-slate-400">{t.documentNumber || '---'}</td>
+                          <td className="py-4 text-right font-black text-slate-500">{Number(t.amount || 0).toFixed(2)} €</td>
+                          <td className={`py-4 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                            {t.type === 'earn' ? '+' : '-'}{Number(t.cashbackAmount || 0).toFixed(2)} €
+                          </td>
+                          <td className="py-4 text-center">
+                            <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${
+                              t.type === 'earn' ? 'bg-green-100 text-green-700' : 
+                              t.type === 'redeem' ? 'bg-blue-100 text-blue-700' : 
+                              'bg-red-100 text-red-700'
+                            }`}>
+                              {t.type === 'earn' ? 'Emitido' : t.type === 'redeem' ? 'Descontado' : 'Anulado'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {filteredMerchantTransactions.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-slate-400 font-bold text-xs uppercase">
+                          {merchantTransactions.length === 0 ? 'Nenhuma transação registada.' : 'Nenhum movimento encontrado para estes filtros.'}
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
         {view === 'anti_waste' && (
            <div className="grid lg:grid-cols-2 gap-8 animate-in fade-in duration-500">

@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, onSnapshot, getCountFromServer, setDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, getCountFromServer, setDoc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -84,25 +84,44 @@ const LandingPage: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
-      const pSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
-      if (pSnap.exists()) setPrices(pSnap.data());
-      const cSnap = await getDoc(doc(db, 'system', 'config'));
-      if (cSnap.exists()) setSysConfig(cSnap.data() as any);
-
       try {
-        const collUsers = collection(db, 'users');
-        const snapshot = await getCountFromServer(collUsers);
-        setMembersCount(snapshot.data().count);
-      } catch (err) { setMembersCount(1250); }
+        const cachedConfig = sessionStorage.getItem('vplus_landing_config');
+        if (cachedConfig) {
+          try { setSysConfig(JSON.parse(cachedConfig)); } catch(e) {}
+        }
+        const pSnap = await getDoc(doc(db, 'system', 'marketing_prices'));
+        if (pSnap.exists()) setPrices(pSnap.data());
+        const cSnap = await getDoc(doc(db, 'system', 'config'));
+        if (cSnap.exists()) {
+          const configData = cSnap.data() as any;
+          setSysConfig(configData);
+          sessionStorage.setItem('vplus_landing_config', JSON.stringify(configData));
+        }
+
+        const cachedCount = sessionStorage.getItem('vplus_members_count');
+        const cachedCountTime = sessionStorage.getItem('vplus_members_count_time');
+        const now = Date.now();
+        if (cachedCount && cachedCountTime && (now - Number(cachedCountTime)) < 3600000) {
+          setMembersCount(Number(cachedCount));
+        } else {
+          try {
+            const collUsers = collection(db, 'users');
+            const snapshot = await getCountFromServer(collUsers);
+            const count = snapshot.data().count;
+            setMembersCount(count);
+            sessionStorage.setItem('vplus_members_count', String(count));
+            sessionStorage.setItem('vplus_members_count_time', String(now));
+          } catch (err) { setMembersCount(1250); }
+        }
+
+        const now2 = new Date();
+        const cSnap2 = await getDocs(query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc')));
+        setCampaigns(cSnap2.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now2));
+      } catch (err) {
+        console.error("Erro ao carregar landing:", err);
+      }
     };
     fetchData();
-
-    const qCam = query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc'));
-    const unsubCam = onSnapshot(qCam, (snap: any) => {
-        const now = new Date();
-        setCampaigns(snap.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now));
-    });
-    return () => unsubCam();
   }, []);
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
@@ -322,7 +341,8 @@ const LandingPage: React.FC = () => {
   const extFreguesias = bannerForm.distrito && bannerForm.concelho ? (locations[bannerForm.distrito][bannerForm.concelho] || []).sort() : [];
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
-    return (
+
+  return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
       {campaigns.length > 0 && (
@@ -331,17 +351,15 @@ const LandingPage: React.FC = () => {
         </div>
       )}
       
-      {/* BARRA AMARELA - COM CONTADOR DE MEMBROS */}
       <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md">
         Já somos <span className="text-2xl md:text-3xl font-black italic">{membersCount}</span> membros! Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis!
       </div>
 
-      {/* NAVEGAÇÃO - BOTÃO PRINCIPAL */}
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
         <div className="w-full flex justify-center mt-2">
             <button 
                 onClick={() => setShowCommunityModal(true)} 
-                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all animate-[bounce_3s_infinite] relative z-20"
+                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all relative z-20"
             >
                 <div className="flex items-center gap-3">
                     <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
@@ -354,7 +372,6 @@ const LandingPage: React.FC = () => {
 
       <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
         
-        {/* LOGOTIPO GRANDE CENTRAL */}
         <div className="mb-12 animate-in fade-in zoom-in duration-1000">
           <img src={logoPath} alt="Vizinho+" className="h-32 md:h-48 w-auto object-contain drop-shadow-2xl" />
         </div>
@@ -369,7 +386,6 @@ const LandingPage: React.FC = () => {
           </p>
         </div>
         
-        {/* DOIS BOTÕES LADO A LADO */}
         <div className="flex flex-col sm:flex-row gap-4 mb-20 z-10">
           <button onClick={() => navigate('/login')} className="group relative flex items-center gap-4 bg-[#0a2540] text-white px-10 py-6 rounded-[30px] font-black text-sm uppercase tracking-[0.2em] shadow-2xl hover:bg-black hover:scale-105 transition-all duration-300 border-b-8 border-black/40">
             Entrar / Recuperar Password
@@ -390,12 +406,12 @@ const LandingPage: React.FC = () => {
         </div>
         <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
-            {/* MODAL DE REGISTO (CLIENTE + LOJISTA) */}
+
+      {/* MODAL DE REGISTO */}
       {showRegisterModal && (
         <div className="fixed inset-0 z-[300] bg-[#0a2540]/95 backdrop-blur-sm flex items-center justify-center p-4 overflow-y-auto">
           <div className="bg-white w-full max-w-6xl max-h-[90vh] rounded-[40px] border-4 border-amber-400 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in duration-300 relative">
             
-            {/* HEADER DO MODAL */}
             <div className="bg-[#0a2540] p-6 text-white flex justify-between items-center shrink-0 border-b-4 border-amber-400">
               <div className="flex items-center gap-3">
                 <div className="bg-amber-400 p-2 rounded-xl">
@@ -414,7 +430,6 @@ const LandingPage: React.FC = () => {
               </button>
             </div>
 
-            {/* CORPO DO MODAL - DOIS FORMULÁRIOS LADO A LADO */}
             <div className="flex-1 overflow-y-auto p-6 md:p-8 custom-scrollbar">
               <div className="grid lg:grid-cols-2 gap-8">
                 
@@ -495,10 +510,10 @@ const LandingPage: React.FC = () => {
                             {partnerFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                          </select>
                          <input required placeholder="Morada Exata (Rua, Número)" value={partnerForm.address} onChange={e=>setPartnerForm({...partnerForm, address: e.target.value})} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200" />
-                         <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> {
-                           let val = e.target.value.replace(/\D/g, '');
-                           if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7);
-                           setPartnerForm({...partnerForm, zipCode: val});
+                         <input required placeholder="Cód. Postal (0000-000)" value={partnerForm.zipCode} onChange={e=> { 
+                           let val = e.target.value.replace(/\D/g, ''); 
+                           if (val.length > 4) val = val.substring(0, 4) + '-' + val.substring(4, 7); 
+                           setPartnerForm({...partnerForm, zipCode: val}); 
                          }} className="w-full p-2.5 rounded-lg font-bold text-[10px] outline-none focus:border-[#00d66f] border border-slate-200" />
                       </div>
                       <button disabled={loadingPartner} type="submit" className="w-full bg-[#0a2540] text-white p-4 rounded-xl font-black uppercase tracking-widest text-[10px] hover:bg-black transition-all flex justify-center items-center gap-2 mt-2 shadow-lg">

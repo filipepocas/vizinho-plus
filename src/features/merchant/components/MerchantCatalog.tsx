@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db, storage } from '../../../config/firebase';
-import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
+import { collection, addDoc, query, where, getDocs, deleteDoc, doc, serverTimestamp, updateDoc, limit } from 'firebase/firestore';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { 
   Package, Plus, Trash2, Tag, Image as ImageIcon, 
@@ -51,7 +51,8 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
       const qMine = query(
         collection(db, 'products'), 
-        where('merchantId', '==', merchant.id)
+        where('merchantId', '==', merchant.id),
+        limit(100)
       );
       const snapMine = await getDocs(qMine);
       const myProducts = snapMine.docs
@@ -70,7 +71,8 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       if (merchant.freguesia) {
         const qComp = query(
           collection(db, 'products'), 
-          where('freguesia', '==', merchant.freguesia)
+          where('freguesia', '==', merchant.freguesia),
+          limit(100)
         );
         const snapComp = await getDocs(qComp);
         const compProducts = snapComp.docs
@@ -125,15 +127,15 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
            where('freguesia', '==', merchant.freguesia || ''),
            where('productType', '==', formData.productType)
          );
-         
+          
          const snapDuplicate = await getDocs(qDuplicate);
-         
+          
          const hasRecent = snapDuplicate.docs.some((d: any) => {
              const data = d.data();
              const dDate = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
              return dDate >= seteDiasAtras;
          });
-         
+          
          if (hasRecent) {
             setSaving(false);
             return toast.error(`Já existe um artigo do tipo "${formData.productType}" ativo na sua Freguesia. Vá ao separador 'Concorrência' para ver quando expira.`, { id: toastId, duration: 6000 });
@@ -157,7 +159,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         distrito: merchant.distrito || '',
         concelho: merchant.concelho || '',
         freguesia: merchant.freguesia || '',
-        // CORREÇÃO: Alterado de undefined para null
         coords: (merchant.latitude && merchant.longitude) ? { lat: merchant.latitude, lng: merchant.longitude } : null,
         description: formData.description,
         imageUrl: imageUrl,

@@ -8,7 +8,7 @@ service cloud.firestore {
     function isAuthenticated() { return request.auth != null; }
 
     match /users/{userId} {
-      allow read: if true; 
+      allow read: if isAdmin() || request.auth.uid == userId;
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
     }
@@ -46,9 +46,9 @@ service cloud.firestore {
     }
 
     match /merchant_messages/{msgId} {
-      allow read: if isAdmin() || (isAuthenticated() && resource.data.targetId == request.auth.uid) || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
+      allow read: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
       allow create: if isAdmin();
-      allow update, delete: if isAdmin() || (isAuthenticated() && (resource.data.targetId == request.auth.uid || resource.data.merchantId == request.auth.uid));
+      allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
     }
 
     match /notifications/{notifId} {
@@ -69,14 +69,12 @@ service cloud.firestore {
       allow delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
     }
 
-    // NOVA REGRA: PRODUTOS (CATÁLOGO / MARKETPLACE)
     match /products/{productId} {
       allow read: if true;
       allow create: if isAuthenticated() && request.resource.data.merchantId == request.auth.uid;
       allow update, delete: if isAdmin() || (isAuthenticated() && resource.data.merchantId == request.auth.uid);
     }
     
-    // NOVA REGRA: MUNICÍPIOS (Apoio ao Munícipe)
     match /municipalities_faqs/{faqId} {
       allow read: if true;
       allow write: if isAdmin();

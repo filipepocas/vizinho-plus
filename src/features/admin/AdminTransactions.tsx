@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Transaction, User as UserProfile } from '../../types';
 import { Search, Download, Calendar, Hash, IdCard, AlertCircle } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -34,28 +34,31 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
 
   const hasActiveFilter = searchQuery !== '' || searchNif !== '' || searchCard !== '' || searchDistrito !== '' || searchConcelho !== '' || searchFreguesia !== '' || startDate !== '' || endDate !== '';
 
-  const filteredTransactions = transactions.filter((t: any) => {
-    if (!hasActiveFilter) return false;
+  const filteredTransactions = useMemo(() => {
+    return transactions.filter((t: any) => {
+      // Se não há filtros ativos, mostrar todas as transações
+      if (!hasActiveFilter) return true;
 
-    const c = clients.find((cl: any) => cl.id === t.clientId);
-    const m = merchants.find((me: any) => me.id === t.merchantId);
+      const c = clients.find((cl: any) => cl.id === t.clientId);
+      const m = merchants.find((me: any) => me.id === t.merchantId);
 
-    const q = searchQuery.toLowerCase();
-    const matchText = q === '' || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q) || (t.clientName || '').toLowerCase().includes(q);
-    
-    const matchNif = searchNif === '' || t.clientNif === searchNif || c?.nif === searchNif || m?.nif === searchNif;
-    const matchCard = searchCard === '' || t.clientCardNumber === searchCard || c?.customerNumber === searchCard;
+      const q = searchQuery.toLowerCase();
+      const matchText = q === '' || (t.merchantName || '').toLowerCase().includes(q) || (t.documentNumber || '').toLowerCase().includes(q) || (t.clientName || '').toLowerCase().includes(q);
+      
+      const matchNif = searchNif === '' || t.clientNif === searchNif || c?.nif === searchNif || m?.nif === searchNif;
+      const matchCard = searchCard === '' || t.clientCardNumber === searchCard || c?.customerNumber === searchCard;
 
-    const matchDistrito = searchDistrito === '' || c?.distrito === searchDistrito || m?.distrito === searchDistrito;
-    const matchConcelho = searchConcelho === '' || c?.concelho === searchConcelho || m?.concelho === searchConcelho;
-    const matchFreguesia = searchFreguesia === '' || c?.freguesia === searchFreguesia || m?.freguesia === searchFreguesia;
+      const matchDistrito = searchDistrito === '' || c?.distrito === searchDistrito || m?.distrito === searchDistrito;
+      const matchConcelho = searchConcelho === '' || c?.concelho === searchConcelho || m?.concelho === searchConcelho;
+      const matchFreguesia = searchFreguesia === '' || c?.freguesia === searchFreguesia || m?.freguesia === searchFreguesia;
 
-    const txDate = parseDate(t.createdAt);
-    const matchStart = !startDate || txDate >= new Date(startDate);
-    const matchEnd = !endDate || txDate <= new Date(endDate + 'T23:59:59');
+      const txDate = parseDate(t.createdAt);
+      const matchStart = !startDate || txDate >= new Date(startDate);
+      const matchEnd = !endDate || txDate <= new Date(endDate + 'T23:59:59');
 
-    return matchText && matchStart && matchEnd && matchNif && matchCard && matchDistrito && matchConcelho && matchFreguesia;
-  });
+      return matchText && matchStart && matchEnd && matchNif && matchCard && matchDistrito && matchConcelho && matchFreguesia;
+    });
+  }, [transactions, clients, merchants, hasActiveFilter, searchQuery, searchNif, searchCard, searchDistrito, searchConcelho, searchFreguesia, startDate, endDate]);
 
   const exportToExcel = () => {
     const ws = XLSX.utils.json_to_sheet(filteredTransactions.map((t: any) => {
@@ -108,20 +111,17 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
               </div>
           </div>
 
-          <button onClick={exportToExcel} disabled={!hasActiveFilter || filteredTransactions.length === 0} className="w-full bg-[#00d66f] text-[#0a2540] py-4 rounded-2xl font-black text-xs uppercase shadow-[4px_4px_0px_#0a2540] border-2 border-[#0a2540] disabled:opacity-50">
+          <button onClick={exportToExcel} disabled={filteredTransactions.length === 0} className="w-full bg-[#00d66f] text-[#0a2540] py-4 rounded-2xl font-black text-xs uppercase shadow-[4px_4px_0px_#0a2540] border-2 border-[#0a2540] disabled:opacity-50">
               <Download size={16} className="inline mr-2" strokeWidth={3} /> Descarregar Excel
           </button>
       </div>
 
-      {!hasActiveFilter ? (
-        <div className="text-center p-20 bg-slate-50 border-4 border-dashed border-slate-200 rounded-[40px]">
-           <Search size={48} className="mx-auto text-slate-300 mb-4" />
-           <p className="font-black uppercase tracking-widest text-slate-400 text-xs">Utilize os filtros acima para listar movimentos.</p>
-        </div>
-      ) : filteredTransactions.length === 0 ? (
+      {filteredTransactions.length === 0 ? (
         <div className="text-center p-20 bg-slate-50 border-4 border-dashed border-slate-200 rounded-[40px]">
            <AlertCircle size={48} className="mx-auto text-slate-300 mb-4" />
-           <p className="font-black uppercase tracking-widest text-slate-400 text-xs">Nenhum movimento encontrado.</p>
+           <p className="font-black uppercase tracking-widest text-slate-400 text-xs">
+             {hasActiveFilter ? 'Nenhum movimento encontrado para estes filtros.' : 'Nenhum movimento registado no sistema.'}
+           </p>
         </div>
       ) : (
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-xl overflow-hidden w-full">

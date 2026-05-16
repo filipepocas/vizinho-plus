@@ -79,12 +79,15 @@ const UserDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  // CORREÇÃO: Subscrever transações do cliente para histórico e avaliações
+  // Subscrição de transações do cliente para histórico e avaliações
   useEffect(() => {
     if (!currentUser?.id) return;
     const unsub = subscribeToTransactions('client', currentUser.id);
-    return () => unsub();
-  }, [currentUser?.id, subscribeToTransactions]);
+    return () => {
+      if (unsub) unsub();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
 
   useEffect(() => {
     if (!currentUser?.id) return;
@@ -300,9 +303,6 @@ const UserDashboard: React.FC = () => {
   };
 
   if (!currentUser) return null;
-
-  const hasNotificationsInDB = currentUser.notificationsEnabled === true && currentUser.fcmTokens && currentUser.fcmTokens.length > 0;
-  const isButtonHidden = hasNotificationsInDB || localNotifGranted || Notification.permission === 'granted';
 
   const distritos = Object.keys(locations).sort();
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];

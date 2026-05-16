@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { 
-  collection, query, where, onSnapshot, orderBy, doc, writeBatch, limit, getDocs, deleteDoc
+  collection, query, where, orderBy, doc, writeBatch, limit, getDocs, deleteDoc, onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useStore } from '../../store/useStore';
@@ -54,21 +54,33 @@ const AdminDashboard: React.FC = () => {
   const [badFeedbacks, setBadFeedbacks] = useState(0);
 
   useEffect(() => {
-    const qTx = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(5000));
-    const unsubTx = onSnapshot(qTx, (snap: any) => {
-      setGlobalTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
-    });
-    
-    const qMerchants = query(collection(db, 'users'), where('role', '==', 'merchant'));
-    const unsubMerchants = onSnapshot(qMerchants, (snap: any) => {
-      setGlobalMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
-    });
-    
-    const qClients = query(collection(db, 'users'), where('role', '==', 'client'));
-    const unsubClients = onSnapshot(qClients, (snap: any) => {
-      setGlobalClients(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
-    });
+    // Carregar dados uma vez e depois com polling
+    const loadAllData = async () => {
+      try {
+        const [txSnap, mSnap, cSnap] = await Promise.all([
+          getDocs(query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'client')))
+        ]);
+        
+        setGlobalTransactions(txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+        setGlobalMerchants(mSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
+        setGlobalClients(cSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
+      } catch (err) {
+        console.error("Erro ao carregar dados:", err);
+      }
+    };
 
+    loadAllData();
+
+    // Polling a cada 2 minutos (em vez de tempo real)
+    const interval = setInterval(loadAllData, 2 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    // Estes precisam de tempo real para badges/alertas
     const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMerchants(snap.size));
     const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMarketing(snap.size));
     const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), (snap: any) => setPendingEvents(snap.size));
@@ -79,20 +91,22 @@ const AdminDashboard: React.FC = () => {
     
     const cleanupExpiredData = async () => {
        const now = new Date();
-       const eventsSnap = await getDocs(collection(db, 'events'));
-       eventsSnap.forEach((docSnap: any) => {
-          const ev = docSnap.data();
-          if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(console.error);
-       });
-       const wasteSnap = await getDocs(collection(db, 'anti_waste'));
-       wasteSnap.forEach((docSnap: any) => {
-          const w = docSnap.data();
-          if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(console.error);
-       });
+       try {
+         const eventsSnap = await getDocs(collection(db, 'events'));
+         eventsSnap.forEach((docSnap: any) => {
+            const ev = docSnap.data();
+            if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(() => {});
+         });
+         const wasteSnap = await getDocs(collection(db, 'anti_waste'));
+         wasteSnap.forEach((docSnap: any) => {
+            const w = docSnap.data();
+            if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(() => {});
+         });
+       } catch(e) {}
     };
     cleanupExpiredData();
 
-    return () => { unsubTx(); unsubMerchants(); unsubClients(); unsub1(); unsub2(); unsub3(); unsub4(); };
+    return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
 
   const hasGestaoAlert = pendingMerchants > 0;

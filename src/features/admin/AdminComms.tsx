@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
-import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
 import { Trash2, Users, CheckSquare, Search, FileText, MapPin, Phone, Mail, Image as ImageIcon, Bell, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { MarketingRequest, User as UserProfile } from '../../types';
@@ -10,14 +10,13 @@ const AdminComms: React.FC = () => {
   const [merchants, setMerchants] = useState<UserProfile[]>([]);
 
   useEffect(() => {
-    // Carrega APENAS os pedidos pendentes ou rejeitados (Os aprovados vão para cobranças)
-    const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'));
+    const qReq = query(collection(db, 'marketing_requests'), orderBy('createdAt', 'desc'), limit(100));
     const unsubReq = onSnapshot(qReq, (snap: any) => {
         const allReqs = snap.docs.map((d: any) => ({id: d.id, ...d.data()} as MarketingRequest));
         setRequests(allReqs.filter((r: any) => r.status !== 'approved'));
     });
 
-    const unsubMerchants = onSnapshot(collection(db, 'users'), (snap: any) => {
+    const unsubMerchants = onSnapshot(query(collection(db, 'users'), limit(100)), (snap: any) => {
         setMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
     });
 
@@ -42,8 +41,6 @@ const AdminComms: React.FC = () => {
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-20">
         
-        {/* PONTO 13: Tabela de Preços e Planeamento Removidos. Este ecrã foca-se agora apenas na Análise de Pedidos */}
-        
         <div className="bg-white p-8 rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_#0a2540]">
             <h3 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-2 flex items-center gap-3">
               <CheckSquare className="text-[#00d66f]" size={28}/> Aprovação de Campanhas Publicitárias
@@ -55,12 +52,11 @@ const AdminComms: React.FC = () => {
             <div className="grid grid-cols-1 gap-8">
                 {requests.map((r: any) => {
                     const merch = r.isExternal ? null : getMerchantDetails(r.merchantId || '');
-                    const targetZones = (r as any).targetZones || []; // ARRAY COM AS ZONAS
+                    const targetZones = (r as any).targetZones || [];
 
                     return (
                       <div key={r.id} className={`bg-white border-4 p-8 rounded-[40px] flex flex-col md:flex-row gap-8 items-start transition-all ${r.status === 'rejected' ? 'border-red-200 opacity-70 bg-red-50' : r.isExternal ? 'border-purple-600 shadow-[8px_8px_0px_#9333ea] hover:shadow-none hover:translate-y-1' : 'border-blue-400 shadow-[8px_8px_0px_#60a5fa] hover:shadow-none hover:translate-y-1'}`}>
                           
-                          {/* Coluna Esquerda: Dados do Solicitante */}
                           <div className="md:w-1/3 w-full shrink-0 border-b-2 md:border-b-0 md:border-r-2 border-slate-100 pb-6 md:pb-0 md:pr-6">
                               <div className="flex items-center gap-2 mb-3">
                                 {r.isExternal && <span className="bg-purple-600 text-white px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest shadow-sm">EXTERNO</span>}
@@ -79,7 +75,6 @@ const AdminComms: React.FC = () => {
                               </div>
                           </div>
 
-                          {/* Coluna Central: Detalhes Técnicos do Pedido */}
                           <div className="flex-1 w-full flex flex-col h-full">
                               <div className="text-xs font-bold text-slate-500 space-y-3 bg-white p-6 rounded-3xl border-2 border-slate-100 mb-6 shadow-sm flex-grow">
                                   {r.type === 'push_notification' ? (
@@ -132,7 +127,6 @@ const AdminComms: React.FC = () => {
                               </div>
                           </div>
                           
-                          {/* Coluna Direita: Imagem */}
                           {r.imageUrl ? (
                             <div className="w-full md:w-48 h-48 shrink-0 bg-slate-50 rounded-[30px] border-4 border-slate-200 overflow-hidden flex items-center justify-center p-3 shadow-inner">
                                 <img src={r.imageUrl} className="w-full h-full object-contain" alt="Design Associado" />

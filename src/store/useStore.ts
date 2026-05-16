@@ -73,9 +73,26 @@ export const useStore = create<StoreState>((set, get) => ({
 
   fetchTaxonomy: async () => {
     try {
+      // Cache: verificar sessionStorage primeiro
+      const cached = sessionStorage.getItem('vplus_taxonomy');
+      const cacheTime = sessionStorage.getItem('vplus_taxonomy_time');
+      const now = Date.now();
+      
+      if (cached && cacheTime && (now - Number(cacheTime)) < 3600000) {
+        set({ taxonomy: JSON.parse(cached) });
+        return;
+      }
+
       const docSnap = await getDoc(doc(db, 'system', 'products_taxonomy'));
-      if (docSnap.exists()) set({ taxonomy: docSnap.data() as ProductTaxonomy });
-    } catch(e) { console.error(e); }
+      if (docSnap.exists()) {
+        const data = docSnap.data() as ProductTaxonomy;
+        sessionStorage.setItem('vplus_taxonomy', JSON.stringify(data));
+        sessionStorage.setItem('vplus_taxonomy_time', String(now));
+        set({ taxonomy: data });
+      }
+    } catch(e) { 
+      console.error(e); 
+    }
   },
 
   fetchProducts: async (filters: any = {}, isNextPage: boolean = false) => {
@@ -83,40 +100,54 @@ export const useStore = create<StoreState>((set, get) => ({
     const { products, lastVisibleProduct } = get();
     
     try {
-      const seteDiasAtras = new Date();
-      seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
-
       let q = query(
         collection(db, 'products'), 
-        where('createdAt', '>=', seteDiasAtras),
         orderBy('createdAt', 'desc'), 
-        limit(20)
+        limit(100)
       );
-
-      // CORREÇÃO: Filtros Múltiplos Seguros (Arrays)
-      if (filters.distrito) q = query(q, where('distrito', '==', filters.distrito));
-      if (filters.concelho && filters.concelho.length > 0) q = query(q, where('concelho', 'in', filters.concelho));
-      if (filters.freguesia && filters.freguesia.length > 0) q = query(q, where('freguesia', 'in', filters.freguesia));
-      
-      if (filters.category) q = query(q, where('category', '==', filters.category));
-      if (filters.family) q = query(q, where('family', '==', filters.family));
-      if (filters.productType) q = query(q, where('productType', '==', filters.productType));
 
       if (isNextPage && lastVisibleProduct) {
         q = query(q, startAfter(lastVisibleProduct));
       }
 
       const snap = await getDocs(q);
-      const newProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+      let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+
+      const seteDiasAtras = new Date();
+      seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+
+      const hasAnyFilter = filters.distrito || 
+        (filters.concelho && filters.concelho.length > 0) || 
+        (filters.freguesia && filters.freguesia.length > 0) || 
+        filters.category || 
+        filters.family || 
+        filters.productType;
+
+      fetchedProducts = fetchedProducts.filter((p: Product) => {
+        const pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt?.seconds * 1000 || 0);
+        if (pDate < seteDiasAtras) return false;
+
+        if (!hasAnyFilter) return true;
+
+        if (filters.distrito && p.distrito !== filters.distrito) return false;
+        if (filters.concelho && filters.concelho.length > 0 && !filters.concelho.includes(p.concelho)) return false;
+        if (filters.freguesia && filters.freguesia.length > 0 && !filters.freguesia.includes(p.freguesia)) return false;
+        if (filters.category && p.category !== filters.category) return false;
+        if (filters.family && p.family !== filters.family) return false;
+        if (filters.productType && p.productType !== filters.productType) return false;
+
+        return true;
+      });
 
       set({
-        products: isNextPage ? [...products, ...newProducts] : newProducts,
+        products: isNextPage ? [...products, ...fetchedProducts] : fetchedProducts,
         lastVisibleProduct: snap.docs[snap.docs.length - 1],
-        hasMoreProducts: snap.docs.length === 20,
+        hasMoreProducts: snap.docs.length === 100,
         isLoading: false
       });
     } catch(e) {
-      console.error(e);
+      console.error("Erro ao carregar produtos:", e);
+      toast.error("Erro ao carregar produtos. Tente novamente.");
       set({ isLoading: false });
     }
   },
@@ -173,15 +204,25 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       const newTxRef = doc(collection(db, 'transactions'));
       await setDoc(newTxRef, {
-        clientId: tx.clientId, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name,
-        amount: Number(tx.amount), invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
-        type: tx.type, status: 'pending', createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber || "", documentNumber: tx.documentNumber || "",
-        clientName: tx.clientName || "Desconhecido", clientCardNumber: tx.clientCardNumber || "---", clientBirthDate: tx.clientBirthDate || ""
+        clientId: tx.clientId,
+        merchantId: currentUser.id,
+        merchantName: currentUser.shopName || currentUser.name,
+        amount: Number(tx.amount),
+        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
+        type: tx.type,
+        status: 'pending',
+        createdAt: serverTimestamp(),
+        clientNif: tx.documentNumber || "",
+        documentNumber: tx.documentNumber || "",
+        clientName: tx.clientName || "Desconhecido",
+        clientCardNumber: tx.clientCardNumber || "---",
+        clientBirthDate: tx.clientBirthDate || ""
       });
       toast.success("MOVIMENTO ENVIADO!");
       return newTxRef.id;
-    } catch (e) { toast.error("ERRO NO REGISTO."); }
+    } catch (e) {
+      toast.error("ERRO NO REGISTO.");
+    }
   },
 
   updateTransactionDocument: async (transactionId: string, documentNumber: string) => {
@@ -189,7 +230,9 @@ export const useStore = create<StoreState>((set, get) => ({
         const txRef = doc(db, 'transactions', transactionId);
         await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
         toast.success("Fatura associada!");
-    } catch(e) { toast.error("Erro."); }
+    } catch(e) {
+      toast.error("Erro.");
+    }
   },
 
   cancelTransaction: async (id: string) => {
@@ -197,7 +240,9 @@ export const useStore = create<StoreState>((set, get) => ({
       const txRef = doc(db, 'transactions', id);
       await updateDoc(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
       toast.success("PEDIDO DE ANULAÇÃO ENVIADO.");
-    } catch (e) { toast.error("ERRO."); }
+    } catch (e) {
+      toast.error("ERRO.");
+    }
   },
 
   subscribeToTransactions: (role?: string, id?: string) => {
@@ -215,7 +260,18 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   initializeAuth: () => {
-    const unsubLocs = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => set({ locations: docSnap.data()?.data || {} }));
+    // Cache locations em sessionStorage
+    const cachedLocs = sessionStorage.getItem('vplus_locations');
+    if (cachedLocs) {
+      try { set({ locations: JSON.parse(cachedLocs) }); } catch(e) {}
+    }
+
+    const unsubLocs = onSnapshot(doc(db, 'system', 'locations'), (docSnap: any) => {
+      const data = docSnap.data()?.data || {};
+      sessionStorage.setItem('vplus_locations', JSON.stringify(data));
+      set({ locations: data });
+    });
+
     const unsubAuth = onAuthStateChanged(auth, (user: any) => {
       if (user) {
         onSnapshot(doc(db, 'users', user.uid), (d: any) => {
@@ -236,6 +292,8 @@ export const useStore = create<StoreState>((set, get) => ({
       batch.delete(doc(db, 'users', userId));
       await batch.commit();
       toast.success("DADOS APAGADOS.");
-    } catch (e) { toast.error("ERRO."); }
+    } catch (e) {
+      toast.error("ERRO.");
+    }
   }
 }));
