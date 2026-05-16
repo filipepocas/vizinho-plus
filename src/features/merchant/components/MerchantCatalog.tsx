@@ -49,8 +49,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-      // CORREÇÃO: Removido o orderBy e o where(createdAt) da query para evitar erro de Index no Firebase.
-      // A filtragem e ordenação são feitas agora em memória (JavaScript).
       const qMine = query(
         collection(db, 'products'), 
         where('merchantId', '==', merchant.id)
@@ -58,11 +56,11 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
       const snapMine = await getDocs(qMine);
       const myProducts = snapMine.docs
         .map((d: any) => ({ id: d.id, ...d.data() } as Product))
-        .filter(p => {
+        .filter((p: Product) => {
             const pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
             return pDate >= seteDiasAtras;
         })
-        .sort((a, b) => {
+        .sort((a: Product, b: Product) => {
             const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
             const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
             return dateB - dateA;
@@ -77,11 +75,11 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         const snapComp = await getDocs(qComp);
         const compProducts = snapComp.docs
           .map((d: any) => ({ id: d.id, ...d.data() } as Product))
-          .filter(p => {
+          .filter((p: Product) => {
               const pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date();
               return p.merchantId !== merchant.id && pDate >= seteDiasAtras;
           })
-          .sort((a, b) => {
+          .sort((a: Product, b: Product) => {
               const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
               const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
               return dateB - dateA;
@@ -122,7 +120,6 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
          const seteDiasAtras = new Date();
          seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
 
-         // CORREÇÃO: Removido o where(createdAt) para evitar erro de Index no Firebase.
          const qDuplicate = query(
            collection(db, 'products'),
            where('freguesia', '==', merchant.freguesia || ''),
@@ -131,8 +128,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
          
          const snapDuplicate = await getDocs(qDuplicate);
          
-         // Validação feita em memória
-         const hasRecent = snapDuplicate.docs.some(d => {
+         const hasRecent = snapDuplicate.docs.some((d: any) => {
              const data = d.data();
              const dDate = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
              return dDate >= seteDiasAtras;
