@@ -15,8 +15,8 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
   const shuffledOrderRef = useRef<number[]>([]);
   const shuffleIndexRef = useRef<number>(0);
 
-  // Função para gerar ordem aleatória dos índices
   const shuffleArray = (length: number): number[] => {
+    if (length <= 1) return [0];
     const arr = Array.from({ length }, (_, i) => i);
     for (let i = arr.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -43,17 +43,16 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
             return now <= end;
           });
         
-        // Se os banners mudaram, gerar nova ordem aleatória
         const currentIds = valid.map((b: any) => b.id).join(',');
         const previousIds = activeBanners.map((b: any) => b.id).join(',');
         
         if (currentIds !== previousIds || shuffledOrderRef.current.length === 0) {
-          shuffledOrderRef.current = shuffleArray(valid.length);
+          shuffledOrderRef.current = shuffleArray(valid.length || 1);
           shuffleIndexRef.current = 0;
           setCurrentIndex(shuffledOrderRef.current[0] || 0);
         }
         
-        setActiveBanners(valid);
+        setActiveBanners(valid.length > 0 ? valid : []);
       } catch (error) {
         console.error("Erro ao carregar banners:", error);
       }
@@ -75,18 +74,19 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
     const timer = setInterval(() => {
       shuffleIndexRef.current = (shuffleIndexRef.current + 1) % activeBanners.length;
       
-      // Se completou um ciclo, reembaralhar
       if (shuffleIndexRef.current === 0) {
         shuffledOrderRef.current = shuffleArray(activeBanners.length);
       }
       
-      setCurrentIndex(shuffledOrderRef.current[shuffleIndexRef.current]);
+      setCurrentIndex(shuffledOrderRef.current[shuffleIndexRef.current] || 0);
     }, 4500);
 
     return () => clearInterval(timer);
   }, [activeBanners]);
 
-  if (activeBanners.length === 0) return <div className={`w-full bg-[#0a2540] transition-all duration-300 ${isScrolled ? 'h-[190px]' : 'h-[224px] md:h-[280px]'}`} />;
+  if (activeBanners.length === 0 || !activeBanners[currentIndex]) {
+    return <div className={`w-full bg-[#0a2540] transition-all duration-300 ${isScrolled ? 'h-[190px]' : 'h-[224px] md:h-[280px]'}`} />;
+  }
 
   return (
     <div className={`relative w-full overflow-hidden bg-[#0a2540] transition-all duration-300 ease-in-out ${isScrolled ? 'h-[190px]' : 'h-[224px] md:h-[280px]'}`}>

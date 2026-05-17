@@ -9,7 +9,6 @@ import ShoppingListModal from './ShoppingListModal';
 const ProductMarketplace: React.FC = () => {
   const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList } = useStore();
   
-  // ESTADO DE FILTROS: Concelho e Freguesia são Arrays para permitir seleção múltipla
   const [filters, setFilters] = useState<{
     distrito: string;
     concelho: string[];
@@ -17,19 +16,20 @@ const ProductMarketplace: React.FC = () => {
     category: string;
     family: string;
     productType: string;
+    searchQuery: string;
   }>({
     distrito: '',
     concelho: [],
     freguesia: [],
     category: '',
     family: '',
-    productType: ''
+    productType: '',
+    searchQuery: ''
   });
   
   const [showFilters, setShowFilters] = useState(false);
   const [showCart, setShowCart] = useState(false);
 
-  // Carregamento inicial ao montar o componente
   useEffect(() => {
     fetchProducts(filters);
   }, []);
@@ -47,21 +47,17 @@ const ProductMarketplace: React.FC = () => {
 
   const formatPrice = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Geografia)
   const distritos = Object.keys(locations).sort();
   const availableConcelhos = filters.distrito ? Object.keys(locations[filters.distrito] || {}).sort() : [];
   
-  // Agrega todas as freguesias dos concelhos que o utilizador selecionou
   const availableFreguesias = (filters.distrito && filters.concelho.length > 0)
     ? filters.concelho.flatMap((c: string) => locations[filters.distrito][c] || []).sort()
     : [];
 
-  // LÓGICA DE OPÇÕES EM CASCATA (Taxonomia)
   const categories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
   const families = (taxonomy && filters.category) ? Object.keys(taxonomy.categories[filters.category].families).sort() : [];
   const types = (taxonomy && filters.category && filters.family) ? taxonomy.categories[filters.category].families[filters.family].sort() : [];
 
-  // HANDLERS PARA SELEÇÃO MÚLTIPLA (TAGS GEOGRÁFICAS)
   const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (!val || filters.concelho.includes(val)) return;
@@ -73,7 +69,7 @@ const ProductMarketplace: React.FC = () => {
     setFilters({ 
       ...filters, 
       concelho: remainingConcelhos,
-      freguesia: [] // Reset de freguesias para evitar inconsistência na query 'in'
+      freguesia: []
     });
   };
 
@@ -87,16 +83,28 @@ const ProductMarketplace: React.FC = () => {
     setFilters({ ...filters, freguesia: filters.freguesia.filter(f => f !== val) });
   };
 
+  // CORREÇÃO: Filtrar produtos localmente pelo searchQuery
+  const filteredProducts = products.filter((p: Product) => {
+    if (!filters.searchQuery) return true;
+    const q = filters.searchQuery.toLowerCase().trim();
+    return (
+      (p.description || '').toLowerCase().includes(q) ||
+      (p.shopName || '').toLowerCase().includes(q) ||
+      (p.productType || '').toLowerCase().includes(q)
+    );
+  });
+
   return (
     <div className="space-y-6 animate-in fade-in duration-500 pb-20">
       
-      {/* BARRA DE PESQUISA E ACESSO À LISTA */}
       <div className="bg-white p-4 rounded-[30px] border-4 border-[#0a2540] shadow-lg sticky top-24 z-40">
         <div className="flex gap-2">
           <div className="flex-1 relative">
             <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
             <input 
               placeholder="O que procuras hoje?..." 
+              value={filters.searchQuery}
+              onChange={e => setFilters({...filters, searchQuery: e.target.value})}
               className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"
             />
           </div>
@@ -119,12 +127,9 @@ const ProductMarketplace: React.FC = () => {
           </button>
         </div>
 
-        {/* PAINEL DE FILTROS AVANÇADOS */}
         {showFilters && (
           <div className="mt-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6 animate-in slide-in-from-top-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              
-              {/* Grupo 1: Localização Múltipla */}
               <div className="space-y-3">
                 <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><MapPin size={10}/> Localização (Múltipla)</p>
                 
@@ -147,7 +152,6 @@ const ProductMarketplace: React.FC = () => {
                   {availableConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
                 </select>
 
-                {/* Tags de Concelhos Selecionados */}
                 <div className="flex flex-wrap gap-1">
                     {filters.concelho.map(c => (
                         <span key={c} className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-blue-200">
@@ -166,7 +170,6 @@ const ProductMarketplace: React.FC = () => {
                   {availableFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
                 </select>
 
-                {/* Tags de Freguesias Selecionadas */}
                 <div className="flex flex-wrap gap-1">
                     {filters.freguesia.map(f => (
                         <span key={f} className="bg-green-100 text-green-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-green-200">
@@ -176,7 +179,6 @@ const ProductMarketplace: React.FC = () => {
                 </div>
               </div>
 
-              {/* Grupo 2: Taxonomia de Produtos */}
               <div className="space-y-3">
                 <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><Tag size={10}/> Categoria e Tipo</p>
                 
@@ -223,7 +225,7 @@ const ProductMarketplace: React.FC = () => {
 
       {/* GRELHA DE PRODUTOS (Infinite Scroll) */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {products.map((p: Product) => (
+        {filteredProducts.map((p: Product) => (
           <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#00d66f] transition-all">
              <div className="aspect-square relative overflow-hidden bg-slate-50">
                 <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={p.description} />
@@ -256,7 +258,6 @@ const ProductMarketplace: React.FC = () => {
         ))}
       </div>
 
-      {/* TRIGGER DE CARREGAMENTO (Infinite Scroll) */}
       {hasMoreProducts && (
         <button 
           onClick={loadMore} 
@@ -267,15 +268,13 @@ const ProductMarketplace: React.FC = () => {
         </button>
       )}
 
-      {/* ESTADO VAZIO */}
-      {!isLoading && products.length === 0 && (
+      {!isLoading && filteredProducts.length === 0 && (
         <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
            <Package size={48} className="mx-auto text-slate-200 mb-4" />
            <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto encontrado para estes filtros.</p>
         </div>
       )}
 
-      {/* MODAL DA LISTA DE COMPRAS */}
       {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
     </div>
   );

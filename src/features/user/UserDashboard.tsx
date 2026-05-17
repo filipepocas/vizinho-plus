@@ -79,7 +79,7 @@ const UserDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  // Subscrição de transações do cliente para histórico e avaliações
+  // Subscrever transações do cliente para histórico e avaliações
   useEffect(() => {
     if (!currentUser?.id) return;
     const unsub = subscribeToTransactions('client', currentUser.id);
@@ -504,7 +504,7 @@ const UserDashboard: React.FC = () => {
         {/* VISTAS DINÂMICAS */}
         {view === 'marketplace' && <ProductMarketplace />}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-        {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={[]} vantagensUrl="" />}
+        {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
 
         {view === 'municipalities' && (

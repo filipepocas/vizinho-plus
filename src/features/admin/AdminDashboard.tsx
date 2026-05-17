@@ -54,11 +54,10 @@ const AdminDashboard: React.FC = () => {
   const [badFeedbacks, setBadFeedbacks] = useState(0);
 
   useEffect(() => {
-    // Carregar dados uma vez e depois com polling
     const loadAllData = async () => {
       try {
         const [txSnap, mSnap, cSnap] = await Promise.all([
-          getDocs(query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500))),
+          getDocs(query(collection(db, 'transactions'), limit(500))),
           getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'))),
           getDocs(query(collection(db, 'users'), where('role', '==', 'client')))
         ]);
@@ -73,14 +72,12 @@ const AdminDashboard: React.FC = () => {
 
     loadAllData();
 
-    // Polling a cada 2 minutos (em vez de tempo real)
     const interval = setInterval(loadAllData, 2 * 60 * 1000);
 
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
-    // Estes precisam de tempo real para badges/alertas
     const unsub1 = onSnapshot(query(collection(db, 'merchant_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMerchants(snap.size));
     const unsub2 = onSnapshot(query(collection(db, 'marketing_requests'), where('status', '==', 'pending')), (snap: any) => setPendingMarketing(snap.size));
     const unsub3 = onSnapshot(query(collection(db, 'events'), where('status', '==', 'pending')), (snap: any) => setPendingEvents(snap.size));
@@ -139,6 +136,13 @@ const AdminDashboard: React.FC = () => {
 
   const currentMenuItems = activeMenu === 'gestao' ? gestaoItems : marketingItems;
 
+  // CORREÇÃO: Função wrapper para writeBatch
+  const handleUpdateMerchantStatus = async (id: string, newStatus: string) => {
+    const batch = writeBatch(db);
+    batch.update(doc(db, 'users', id), { status: newStatus });
+    await batch.commit();
+  };
+
   return (
     <div className="min-h-screen bg-[#f8fafc] flex flex-col overflow-x-hidden">
       <header className="bg-[#0a2540] text-white p-6 md:p-10 rounded-b-[40px] md:rounded-b-[50px] border-b-[8px] md:border-b-[10px] border-[#00d66f] shadow-2xl z-20">
@@ -176,7 +180,7 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'overview' && <div className="bg-white rounded-[30px] border-4 border-[#0a2540] p-6 shadow-xl w-full overflow-hidden"><h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Auditoria de Transações</h2><AdminTransactions transactions={globalTransactions} clients={globalClients} merchants={globalMerchants} /></div>}
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
-        {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={async (id, s) => { await writeBatch(db).update(doc(db, 'users', id), { status: s }).commit(); }} onOpenModal={() => setIsModalOpen(true)} />}
+        {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={handleUpdateMerchantStatus} onOpenModal={() => setIsModalOpen(true)} />}
         {currentView === 'events' && <AdminEvents />} 
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}

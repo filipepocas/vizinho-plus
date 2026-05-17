@@ -1,10 +1,10 @@
 // src/features/public/LandingPage.tsx
 
 import React, { useState, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { 
-  ArrowRight, ShieldCheck, Store, Heart, Zap, Crown, 
-  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Copy, Mail, AlertCircle, Image as ImageIcon, ExternalLink, Tag, MapPin, Phone, User
+  ArrowRight, ShieldCheck, Store, Zap, Crown, 
+  Megaphone, X, Loader2, Send, UserPlus, CheckCircle2, Lock, CalendarPlus, Lightbulb, Mail, AlertCircle, Image as ImageIcon, ExternalLink, Tag, MapPin, Phone
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
@@ -304,7 +304,7 @@ const LandingPage: React.FC = () => {
         ...clientForm
       });
       toast.success("Registo efetuado com sucesso!");
-      navigate('/login');
+      navigate('/dashboard');
     } catch (err: any) { 
         if (err.code === 'auth/email-already-in-use') toast.error("Este email já está registado.");
         else toast.error("Erro ao criar conta."); 

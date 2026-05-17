@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { 
-  collection, onSnapshot, query, orderBy, where, serverTimestamp, 
+  collection, onSnapshot, query, where, serverTimestamp, 
   doc, getDocs, writeBatch, limit, updateDoc, setDoc, arrayUnion, startAfter, getDoc
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
@@ -73,7 +73,6 @@ export const useStore = create<StoreState>((set, get) => ({
 
   fetchTaxonomy: async () => {
     try {
-      // Cache: verificar sessionStorage primeiro
       const cached = sessionStorage.getItem('vplus_taxonomy');
       const cacheTime = sessionStorage.getItem('vplus_taxonomy_time');
       const now = Date.now();
@@ -102,7 +101,6 @@ export const useStore = create<StoreState>((set, get) => ({
     try {
       let q = query(
         collection(db, 'products'), 
-        orderBy('createdAt', 'desc'), 
         limit(100)
       );
 
@@ -112,6 +110,12 @@ export const useStore = create<StoreState>((set, get) => ({
 
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+
+      fetchedProducts.sort((a: Product, b: Product) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds * 1000 || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds * 1000 || 0);
+        return dateB - dateA;
+      });
 
       const seteDiasAtras = new Date();
       seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
@@ -216,7 +220,8 @@ export const useStore = create<StoreState>((set, get) => ({
         documentNumber: tx.documentNumber || "",
         clientName: tx.clientName || "Desconhecido",
         clientCardNumber: tx.clientCardNumber || "---",
-        clientBirthDate: tx.clientBirthDate || ""
+        clientBirthDate: tx.clientBirthDate || "",
+        cashbackPercent: currentUser.cashbackPercent || 0
       });
       toast.success("MOVIMENTO ENVIADO!");
       return newTxRef.id;
@@ -247,20 +252,30 @@ export const useStore = create<StoreState>((set, get) => ({
 
   subscribeToTransactions: (role?: string, id?: string) => {
     if (!id && role !== 'admin') return () => {};
+    
     let q: any;
     if (role === 'admin') {
-      q = query(collection(db, 'transactions'), orderBy('createdAt', 'desc'), limit(500));
+      q = query(collection(db, 'transactions'), limit(500));
     } else if (role === 'merchant') {
-      q = query(collection(db, 'transactions'), where('merchantId', '==', id), orderBy('createdAt', 'desc'), limit(150));
+      q = query(collection(db, 'transactions'), where('merchantId', '==', id), limit(200));
     } else {
-      q = query(collection(db, 'transactions'), where('clientId', '==', id), orderBy('createdAt', 'desc'), limit(150));
+      q = query(collection(db, 'transactions'), where('clientId', '==', id), limit(150));
     }
     
-    return onSnapshot(q, (snap: any) => set({ transactions: snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)) }));
+    return onSnapshot(q, (snap: any) => {
+      let docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+      
+      docs.sort((a: Transaction, b: Transaction) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds * 1000 || 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds * 1000 || 0);
+        return dateB - dateA;
+      });
+      
+      set({ transactions: docs });
+    });
   },
 
   initializeAuth: () => {
-    // Cache locations em sessionStorage
     const cachedLocs = sessionStorage.getItem('vplus_locations');
     if (cachedLocs) {
       try { set({ locations: JSON.parse(cachedLocs) }); } catch(e) {}
@@ -285,7 +300,11 @@ export const useStore = create<StoreState>((set, get) => ({
 
   deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {
     try {
-      const q = query(collection(db, 'transactions'), where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId));
+      const q = query(
+        collection(db, 'transactions'), 
+        where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId),
+        limit(500)
+      );
       const snap = await getDocs(q);
       const batch = writeBatch(db);
       snap.docs.forEach((d: any) => batch.delete(d.ref));

@@ -8,7 +8,7 @@ service cloud.firestore {
     function isAuthenticated() { return request.auth != null; }
 
     match /users/{userId} {
-      allow read: if isAdmin() || request.auth.uid == userId;
+      allow read: if isAdmin() || request.auth.uid == userId || resource.data.role == 'merchant';
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
     }
@@ -35,7 +35,7 @@ service cloud.firestore {
 
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
-      allow create: if true; 
+      allow create: if true;
       allow update, delete: if isAdmin();
     }
 
