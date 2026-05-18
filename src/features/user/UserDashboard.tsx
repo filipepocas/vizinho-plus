@@ -247,6 +247,17 @@ const UserDashboard: React.FC = () => {
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
+  const switchView = (newView: 'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities') => {
+    setView(newView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const toggleMunicipalities = () => {
+    const nextView = view === 'municipalities' ? 'home' : 'municipalities';
+    setView(nextView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const enableNotifications = async () => {
     setIsNotifLoading(true);
     try {
@@ -389,7 +400,7 @@ const UserDashboard: React.FC = () => {
           <button onClick={() => setShowFaqModal(true)} className="w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in bg-amber-500 text-white border-amber-700 hover:bg-amber-600">
             <HelpCircle size={18} /> Guia da App
           </button>
-          <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+          <button onClick={toggleMunicipalities} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
             <Building2 size={18} /> Munícipe
           </button>
         </div>
@@ -408,7 +419,7 @@ const UserDashboard: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => setView('marketplace')} 
+            onClick={() => switchView('marketplace')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <ShoppingBag size={22} className={view === 'marketplace' ? 'text-[#00d66f]' : ''} />
@@ -416,7 +427,7 @@ const UserDashboard: React.FC = () => {
           </button>
           
           <button 
-            onClick={() => setView('explore')} 
+            onClick={() => switchView('explore') 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <Store size={22} className={view === 'explore' ? 'text-[#00d66f]' : ''} />
@@ -424,7 +435,7 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setView('history')} 
+            onClick={() => switchView('history') 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <MessageSquare size={22} className={view === 'history' ? 'text-[#00d66f]' : ''} />
@@ -437,7 +448,7 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setView('wallets')} 
+            onClick={() => switchView('wallets') 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <Wallet size={22} className={view === 'wallets' ? 'text-[#00d66f]' : ''} />
@@ -447,7 +458,7 @@ const UserDashboard: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => setView('events')} 
+            onClick={() => switchView('events') 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <CalendarPlus size={22} className={view === 'events' ? 'text-[#00d66f]' : 'text-blue-500'} />
@@ -459,7 +470,7 @@ const UserDashboard: React.FC = () => {
             )}
           </button>
           <button 
-            onClick={() => setView('anti_waste')} 
+            onClick={() => switchView('anti_waste') 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <Leaf size={22} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-green-500'} />

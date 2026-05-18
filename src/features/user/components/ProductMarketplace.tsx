@@ -18,9 +18,9 @@ const ProductMarketplace: React.FC = () => {
     productType: string;
     searchQuery: string;
   }>({
-    distrito: currentUser?.distrito || '',
-    concelho: currentUser?.concelho ? [currentUser.concelho] : [],
-    freguesia: currentUser?.freguesia ? [currentUser.freguesia] : [],
+    distrito: '',
+    concelho: [],
+    freguesia: [],
     category: '',
     family: '',
     productType: '',
@@ -31,15 +31,26 @@ const ProductMarketplace: React.FC = () => {
   const [showCart, setShowCart] = useState(false);
 
   useEffect(() => {
-    // Se tem um distrito, busca produtos desse distrito
-    if (filters.distrito) {
-      fetchProducts(filters);
+    if (!currentUser) return;
+
+    const initialFilters = {
+      distrito: currentUser.distrito || '',
+      concelho: currentUser.concelho ? [currentUser.concelho] : [],
+      freguesia: currentUser.freguesia ? [currentUser.freguesia] : [],
+      category: '',
+      family: '',
+      productType: '',
+      searchQuery: ''
+    };
+
+    setFilters(initialFilters);
+
+    if (initialFilters.distrito) {
+      fetchProducts(initialFilters);
     } else {
-      // Se não tem distrito, busca TODOS os produtos
       fetchProducts({});
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [currentUser, fetchProducts]);
 
   const handleApplyFilters = () => {
     fetchProducts(filters);
