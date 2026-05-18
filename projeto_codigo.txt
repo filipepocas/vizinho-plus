@@ -1,6 +1,6 @@
-
-=== FICHEIRO: ./.firebase/auth/ForgotPassword.tsx ===
-
+========================================
+FILE: ./.firebase/auth/ForgotPassword.tsx
+========================================
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { sendPasswordResetEmail } from 'firebase/auth';
@@ -100,9 +100,9 @@ const ForgotPassword: React.FC = () => {
 export default ForgotPassword;
 
 
-
-=== FICHEIRO: ./.firebase/auth/AdminRoute.tsx ===
-
+========================================
+FILE: ./.firebase/auth/AdminRoute.tsx
+========================================
 // src/features/auth/AdminRoute.tsx
 import React, { useState, useEffect } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
@@ -145,9 +145,9 @@ const AdminRoute: React.FC<AdminRouteProps> = ({ children }) => {
 export default AdminRoute;
 
 
-
-=== FICHEIRO: ./.firebase/auth/LoginPage.tsx ===
-
+========================================
+FILE: ./.firebase/auth/LoginPage.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth } from '../../config/firebase';
@@ -293,9 +293,9 @@ const LoginPage: React.FC = () => {
 export default LoginPage;
 
 
-
-=== FICHEIRO: ./api/maturar.ts ===
-
+========================================
+FILE: ./api/maturar.ts
+========================================
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import * as admin from 'firebase-admin';
 
@@ -372,9 +372,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 }
 
 
-
-=== FICHEIRO: ./functions/src/index.ts ===
-
+========================================
+FILE: ./functions/src/index.ts
+========================================
 // functions/src/index.ts
 
 import * as v2 from "firebase-functions/v2";
@@ -745,9 +745,9 @@ export const memberCounter = v2.firestore.onDocumentWritten(
 );
 
 
-
-=== FICHEIRO: ./src/features/profile/ProfileSettings.tsx ===
-
+========================================
+FILE: ./src/features/profile/ProfileSettings.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { db, auth } from '../../config/firebase';
@@ -943,9 +943,9 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
 export default ProfileSettings;
 
 
-
-=== FICHEIRO: ./src/features/merchant/MerchantDashboard.tsx ===
-
+========================================
+FILE: ./src/features/merchant/MerchantDashboard.tsx
+========================================
 // src/features/merchant/MerchantDashboard.tsx
 
 import React, { useState, useEffect, useMemo } from 'react';
@@ -1496,9 +1496,9 @@ const MerchantDashboard: React.FC = () => {
 export default MerchantDashboard;
 
 
-
-=== FICHEIRO: ./src/features/merchant/components/QRScannerModal.tsx ===
-
+========================================
+FILE: ./src/features/merchant/components/QRScannerModal.tsx
+========================================
 import React, { useState } from 'react';
 import { Scanner } from '@yudiel/react-qr-scanner';
 import { X, Camera, AlertTriangle } from 'lucide-react';
@@ -1575,9 +1575,9 @@ const QRScannerModal: React.FC<QRScannerModalProps> = ({ onScan, onClose }) => {
 export default QRScannerModal;
 
 
-
-=== FICHEIRO: ./src/features/merchant/components/MerchantSettings.tsx ===
-
+========================================
+FILE: ./src/features/merchant/components/MerchantSettings.tsx
+========================================
 // src/features/merchant/components/MerchantSettings.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -1891,9 +1891,9 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
 export default MerchantSettings;
 
 
-
-=== FICHEIRO: ./src/features/merchant/components/BusinessIntelligence.tsx ===
-
+========================================
+FILE: ./src/features/merchant/components/BusinessIntelligence.tsx
+========================================
 // src/features/merchant/components/BusinessIntelligence.tsx
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -2342,9 +2342,9 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
 export default BusinessIntelligence;
 
 
-
-=== FICHEIRO: ./src/features/merchant/components/MerchantTerminal.tsx ===
-
+========================================
+FILE: ./src/features/merchant/components/MerchantTerminal.tsx
+========================================
 import React, { useState } from 'react';
 import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
@@ -2511,9 +2511,9 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
 export default MerchantTerminal;
 
 
-
-=== FICHEIRO: ./src/features/merchant/components/MerchantMarketing.tsx ===
-
+========================================
+FILE: ./src/features/merchant/components/MerchantMarketing.tsx
+========================================
 // src/features/merchant/components/MerchantMarketing.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -3044,9 +3044,9 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
 export default MerchantMarketing;
 
 
-
-=== FICHEIRO: ./src/features/merchant/components/MerchantCatalog.tsx ===
-
+========================================
+FILE: ./src/features/merchant/components/MerchantCatalog.tsx
+========================================
 // src/features/merchant/components/MerchantCatalog.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -3500,9 +3500,9 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 export default MerchantCatalog;
 
 
-
-=== FICHEIRO: ./src/features/public/VantagensPage.tsx ===
-
+========================================
+FILE: ./src/features/public/VantagensPage.tsx
+========================================
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
@@ -3671,9 +3671,9 @@ const VantagensPage: React.FC = () => {
 export default VantagensPage;
 
 
-
-=== FICHEIRO: ./src/features/public/LandingPage.tsx ===
-
+========================================
+FILE: ./src/features/public/LandingPage.tsx
+========================================
 // src/features/public/LandingPage.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -3775,12 +3775,32 @@ const LandingPage: React.FC = () => {
         }
 
         // Contagem via documento público mantido pela Cloud Function
-        const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
-        if (countSnap.exists()) {
-          setMembersCount(countSnap.data().count || 0);
-        } else {
-          setMembersCount(0);
+        let memberCount = 0;
+        try {
+          const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
+          if (countSnap.exists()) {
+            memberCount = countSnap.data().count || 0;
+            console.log('[LandingPage] memberCount from system/memberCount:', memberCount);
+          } else {
+            // Fallback: contar usuários diretamente se o documento não existir
+            console.log('[LandingPage] system/memberCount não existe, contando usuários...');
+            const usersSnap = await getDocs(collection(db, 'users'));
+            memberCount = usersSnap.size;
+            console.log('[LandingPage] memberCount fallback:', memberCount);
+          }
+        } catch (err) {
+          console.error('[LandingPage] Erro ao contar membros:', err);
+          // Fallback final: tentar contar mesmo com erro
+          try {
+            const usersSnap = await getDocs(collection(db, 'users'));
+            memberCount = usersSnap.size;
+            console.log('[LandingPage] memberCount fallback (from error):', memberCount);
+          } catch (err2) {
+            console.error('[LandingPage] Erro ao contar fallback:', err2);
+            memberCount = 0;
+          }
         }
+        setMembersCount(memberCount);
 
         const now2 = new Date();
         const cSnap2 = await getDocs(query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc')));
@@ -4472,9 +4492,9 @@ const LandingPage: React.FC = () => {
 export default LandingPage;
 
 
-
-=== FICHEIRO: ./src/features/public/TermsPage.tsx ===
-
+========================================
+FILE: ./src/features/public/TermsPage.tsx
+========================================
 // src/features/public/TermsPage.tsx
 
 import React from 'react';
@@ -4633,9 +4653,9 @@ const TermsPage: React.FC = () => {
 export default TermsPage;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminLeaflets.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminLeaflets.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
@@ -4861,9 +4881,9 @@ const AdminLeaflets: React.FC = () => {
 export default AdminLeaflets;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminAntiWaste.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminAntiWaste.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
@@ -4995,9 +5015,9 @@ const AdminAntiWaste: React.FC = () => {
 export default AdminAntiWaste;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminTaxonomy.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminTaxonomy.tsx
+========================================
 // src/features/admin/AdminTaxonomy.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -5224,9 +5244,9 @@ const AdminTaxonomy: React.FC = () => {
 export default AdminTaxonomy;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminDashboard.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminDashboard.tsx
+========================================
 // src/features/admin/AdminDashboard.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -5435,9 +5455,9 @@ const AdminDashboard: React.FC = () => {
 export default AdminDashboard;
 
 
-
-=== FICHEIRO: ./src/features/admin/MerchantModal.tsx ===
-
+========================================
+FILE: ./src/features/admin/MerchantModal.tsx
+========================================
 // src/features/admin/MerchantModal.tsx
 
 import React, { useState } from 'react';
@@ -5683,9 +5703,9 @@ const MerchantModal: React.FC<MerchantModalProps> = ({ isOpen, onClose, onSucces
 export default MerchantModal;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminMerchants.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminMerchants.tsx
+========================================
 // src/features/admin/AdminMerchants.tsx
 
 import React, { useState } from 'react';
@@ -6030,9 +6050,9 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
 export default AdminMerchants;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminVantagens.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminVantagens.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, addDoc, query, onSnapshot, deleteDoc, doc, serverTimestamp, orderBy } from 'firebase/firestore';
@@ -6221,9 +6241,9 @@ const AdminVantagens: React.FC = () => {
 export default AdminVantagens;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminMediaGenerator.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminMediaGenerator.tsx
+========================================
 import React, { useState, useRef } from 'react';
 import html2canvas from 'html2canvas';
 import { Image as ImageIcon, LayoutTemplate, Download, Trash2, Plus, Sparkles } from 'lucide-react';
@@ -6425,9 +6445,9 @@ const AdminMediaGenerator: React.FC = () => {
 export default AdminMediaGenerator;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminUsers.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminUsers.tsx
+========================================
 // src/features/admin/AdminUsers.tsx
 
 import React, { useState } from 'react';
@@ -6668,9 +6688,9 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
 export default AdminUsers;
 
 
-
-=== FICHEIRO: ./src/features/admin/BannerManager.tsx ===
-
+========================================
+FILE: ./src/features/admin/BannerManager.tsx
+========================================
 // src/features/admin/BannerManager.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -7035,9 +7055,9 @@ const BannerManager = () => {
 export default BannerManager;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminBilling.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminBilling.tsx
+========================================
 import React, { useState, useEffect, useMemo } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, doc, updateDoc, where, orderBy } from 'firebase/firestore';
@@ -7241,9 +7261,9 @@ const AdminBilling: React.FC = () => {
 export default AdminBilling;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminNotifications.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminNotifications.tsx
+========================================
 // src/features/admin/AdminNotifications.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -7509,9 +7529,9 @@ const AdminNotifications: React.FC = () => {
 export default AdminNotifications;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminSettings.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminSettings.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
@@ -7781,9 +7801,9 @@ const AdminSettings: React.FC = () => {
 export default AdminSettings;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminLocations.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminLocations.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
@@ -7991,9 +8011,9 @@ const AdminLocations: React.FC = () => {
 export default AdminLocations;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminComms.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminComms.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
@@ -8151,9 +8171,9 @@ const AdminComms: React.FC = () => {
 export default AdminComms;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminMunicipalities.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminMunicipalities.tsx
+========================================
 // src/features/admin/AdminMunicipalities.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -8449,9 +8469,9 @@ const AdminMunicipalities: React.FC = () => {
 export default AdminMunicipalities;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminFlyerGenerator.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminFlyerGenerator.tsx
+========================================
 // src/features/admin/AdminFlyerGenerator.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -8820,9 +8840,9 @@ const AdminFlyerGenerator: React.FC = () => {
 export default AdminFlyerGenerator;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminMerchantRequests.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminMerchantRequests.tsx
+========================================
 // src/features/admin/AdminMerchantRequests.tsx
 
 import React, { useState, useEffect } from 'react';
@@ -8968,9 +8988,9 @@ const AdminMerchantRequests: React.FC = () => {
 export default AdminMerchantRequests;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminEvents.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminEvents.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, deleteDoc, doc, updateDoc, orderBy, limit } from 'firebase/firestore';
@@ -9169,9 +9189,9 @@ const AdminEvents: React.FC = () => {
 export default AdminEvents;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminPricing.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminPricing.tsx
+========================================
 import React, { useState, useEffect } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, onSnapshot, deleteDoc, doc, setDoc, serverTimestamp, orderBy } from 'firebase/firestore';
@@ -9418,9 +9438,9 @@ const AdminPricing: React.FC = () => {
 export default AdminPricing;
 
 
-
-=== FICHEIRO: ./src/features/admin/AdminTransactions.tsx ===
-
+========================================
+FILE: ./src/features/admin/AdminTransactions.tsx
+========================================
 import React, { useState, useMemo } from 'react';
 import { Transaction, User as UserProfile } from '../../types';
 import { Search, Download, Calendar, Hash, IdCard, AlertCircle } from 'lucide-react';
@@ -9586,9 +9606,9 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
 export default AdminTransactions;
 
 
-
-=== FICHEIRO: ./src/features/user/UserDashboard.tsx ===
-
+========================================
+FILE: ./src/features/user/UserDashboard.tsx
+========================================
 // src/features/user/UserDashboard.tsx
 
 import React, { useEffect, useState, useMemo } from 'react';
@@ -9609,7 +9629,7 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift, ArrowLeft
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -9620,7 +9640,7 @@ const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
+  const [view, setView] = useState<'home' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
   const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '', merchantTerms: '' });
@@ -9800,7 +9820,21 @@ const UserDashboard: React.FC = () => {
     setAppNotification(null);
   };
 
-  const pendingEvaluations = useMemo(() => transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id)), [transactions, evaluatedIds]);
+  const pendingEvaluations = useMemo(() => {
+    const pending = transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+    const unique: Transaction[] = [];
+    const seen = new Set<string>();
+    for (const t of pending) {
+      const dateStr = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente';
+      const key = `${t.merchantId}_${dateStr}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(t);
+      }
+    }
+    return unique;
+  }, [transactions, evaluatedIds]);
+
   const stats = useMemo(() => ({ available: currentUser?.wallet?.available || 0, pending: 0 }), [currentUser?.wallet]);
 
   const handleLogout = async () => {
@@ -9821,6 +9855,17 @@ const UserDashboard: React.FC = () => {
     setEmailCopied(true);
     toast.success("E-mail copiado!");
     setTimeout(() => setEmailCopied(false), 3000);
+  };
+
+  const switchView = (newView: 'home' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities') => {
+    setView(newView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const toggleMunicipalities = () => {
+    const nextView = view === 'municipalities' ? 'home' : 'municipalities';
+    setView(nextView);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const enableNotifications = async () => {
@@ -9898,28 +9943,6 @@ const UserDashboard: React.FC = () => {
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
 
-  // Se estiver em marketplace, mostra apenas essa view com botão para voltar
-  if (view === 'marketplace') {
-    return (
-      <div className="min-h-screen bg-[#f1f5f9] font-sans pb-20">
-        <div className="sticky top-0 z-50 bg-[#0a2540] p-4 flex items-center justify-between shadow-lg">
-          <button 
-            onClick={() => setView('home')} 
-            className="bg-white/10 text-white p-2 rounded-xl hover:bg-white/20 transition-all flex items-center gap-2"
-          >
-            <ArrowLeft size={20} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Voltar</span>
-          </button>
-          <h2 className="text-white font-black uppercase italic tracking-tighter text-lg">Produtos Locais</h2>
-          <div className="w-16"></div>
-        </div>
-        <div className="max-w-2xl mx-auto px-4 pt-4">
-          <ProductMarketplace />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
@@ -9987,7 +10010,7 @@ const UserDashboard: React.FC = () => {
           <button onClick={() => setShowFaqModal(true)} className="w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in bg-amber-500 text-white border-amber-700 hover:bg-amber-600">
             <HelpCircle size={18} /> Guia da App
           </button>
-          <button onClick={() => setView(view === 'municipalities' ? 'home' : 'municipalities')} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+          <button onClick={toggleMunicipalities} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
             <Building2 size={18} /> Munícipe
           </button>
         </div>
@@ -10006,26 +10029,26 @@ const UserDashboard: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => setView('marketplace')} 
-            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]"
+            onClick={() => navigate('/dashboard/marketplace')} 
+            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]"
           >
-            <ShoppingBag size={22} strokeWidth={3} />
+            <ShoppingBag size={22} className="text-[#0a2540]" />
             <span>Produtos Locais</span>
           </button>
           
           <button 
-            onClick={() => setView(view === 'explore' ? 'home' : 'explore')} 
+            onClick={() => switchView('explore')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <Store size={22} />
+            <Store size={22} className={view === 'explore' ? 'text-[#00d66f]' : ''} />
             <span>Lojas Parceiras</span>
           </button>
 
           <button 
-            onClick={() => setView('history')} 
+            onClick={() => switchView('history')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <MessageSquare size={22} />
+            <MessageSquare size={22} className={view === 'history' ? 'text-[#00d66f]' : ''} />
             <span>Avaliar Compras</span>
             {pendingEvaluations.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">
@@ -10035,20 +10058,20 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} 
+            onClick={() => switchView('wallets')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <Wallet size={22} />
+            <Wallet size={22} className={view === 'wallets' ? 'text-[#00d66f]' : ''} />
             <span>O Meu Saldo</span>
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => setView(view === 'events' ? 'home' : 'events')} 
+            onClick={() => switchView('events')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <CalendarPlus size={22} className="text-blue-500" />
+            <CalendarPlus size={22} className={view === 'events' ? 'text-[#00d66f]' : 'text-blue-500'} />
             <span>Eventos</span>
             {events.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
@@ -10057,10 +10080,10 @@ const UserDashboard: React.FC = () => {
             )}
           </button>
           <button 
-            onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} 
+            onClick={() => switchView('anti_waste')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <Leaf size={22} className="text-green-500" />
+            <Leaf size={22} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-green-500'} />
             <span>Desperdício Zero</span>
             {wasteItems.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
@@ -10070,46 +10093,14 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* VISTAS DINÂMICAS (exceto marketplace que já foi tratado) */}
-        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-        {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
+        {/* VISTAS DINÂMICAS */}
+        <div>
+          {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
+          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">
-            {pendingEvaluations.length > 0 && (
-              <div className="bg-amber-50 border-4 border-amber-200 rounded-[30px] p-6 shadow-md">
-                <h3 className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Star size={16} className="fill-amber-500 text-amber-500" /> Lojas por Avaliar ({pendingEvaluations.length})
-                </h3>
-                <p className="text-[9px] font-bold text-amber-700 mb-4 uppercase">
-                  Avalie as lojas onde fez compras recentemente e ajude a comunidade.
-                </p>
-                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                  {pendingEvaluations.slice(0, 5).map((t) => (
-                    <div key={`eval-${t.id}`} className="bg-white p-4 rounded-2xl border-2 border-amber-100 flex items-center justify-between shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Store size={18}/></div>
-                        <div>
-                          <p className="text-xs font-black text-[#0a2540] uppercase truncate max-w-[150px]">{t.merchantName}</p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                            {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente'} • {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(t.amount)}
-                          </p>
-                        </div>
-                      </div>
-                      <button onClick={() => setSelectedTxForFeedback(t)} className="bg-[#0a2540] text-[#00d66f] px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-md">
-                        Avaliar
-                      </button>
-                    </div>
-                  ))}
-                  {pendingEvaluations.length > 5 && (
-                    <p className="text-center text-[9px] font-black text-amber-600 uppercase py-2">
-                      E mais {pendingEvaluations.length - 5} por avaliar abaixo no histórico
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
-            <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />
+            <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} pendingEvaluations={pendingEvaluations} />
           </div>
         )}
 
@@ -10233,6 +10224,7 @@ const UserDashboard: React.FC = () => {
               {wasteItems.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhuma oportunidade hoje. Tente mais tarde!</p>}
            </div>
         )}
+        </div>
 
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
@@ -10385,19 +10377,63 @@ const UserDashboard: React.FC = () => {
 export default UserDashboard;
 
 
+========================================
+FILE: ./src/features/user/MarketplacePage.tsx
+========================================
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
+import ProductMarketplace from './components/ProductMarketplace';
 
-=== FICHEIRO: ./src/features/user/components/ProductMarketplace.tsx ===
+const MarketplacePage: React.FC = () => {
+  const navigate = useNavigate();
 
+  return (
+    <div className="min-h-screen bg-[#f1f5f9] pb-20">
+      <div className="max-w-6xl mx-auto px-6 py-6">
+        <button
+          onClick={() => navigate('/dashboard')}
+          className="inline-flex items-center gap-2 rounded-3xl border-2 border-slate-200 bg-white px-5 py-3 text-sm font-black uppercase tracking-widest text-[#0a2540] shadow-sm transition hover:border-[#00d66f] hover:text-[#00d66f]"
+        >
+          <ChevronLeft size={18} /> Voltar ao Dashboard
+        </button>
+
+        <div className="mt-8 bg-white p-6 rounded-[40px] border-4 border-[#0a2540] shadow-xl">
+          <h1 className="text-2xl font-black uppercase tracking-[0.3em] text-[#0a2540] mb-4">Produtos Locais</h1>
+          <p className="text-sm font-bold text-slate-500 mb-6">Aqui estão os produtos publicados pelos comerciantes locais. Adicione ao seu carrinho ou filtre por categoria e localização.</p>
+          <ProductMarketplace />
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default MarketplacePage;
+
+
+
+========================================
+FILE: ./src/features/user/components/ProductMarketplace.tsx
+========================================
 // src/features/user/components/ProductMarketplace.tsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Search, Filter, ShoppingCart, ChevronDown, Loader2, Package, X, MapPin, Tag } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
 
 const ProductMarketplace: React.FC = () => {
-  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList } = useStore();
+  const products = useStore(state => state.products);
+  const fetchProducts = useStore(state => state.fetchProducts);
+  const hasMoreProducts = useStore(state => state.hasMoreProducts);
+  const isLoading = useStore(state => state.isLoading);
+  const locations = useStore(state => state.locations);
+  const taxonomy = useStore(state => state.taxonomy);
+  const addToShoppingList = useStore(state => state.addToShoppingList);
+  const shoppingList = useStore(state => state.shoppingList);
+  const currentUser = useStore(state => state.currentUser);
+  const currentUserIdRef = useRef<string | null>(null);
   
   const [filters, setFilters] = useState<{
     distrito: string;
@@ -10421,11 +10457,58 @@ const ProductMarketplace: React.FC = () => {
   const [showCart, setShowCart] = useState(false);
 
   useEffect(() => {
-    fetchProducts(filters);
-  }, []);
+    const userId = currentUser?.id || null;
+    if (!userId || currentUserIdRef.current === userId) return;
+    currentUserIdRef.current = userId;
+
+    const initialFilters = {
+      distrito: currentUser.distrito?.trim() || '',
+      concelho: currentUser.concelho ? [currentUser.concelho.trim()] : [],
+      freguesia: currentUser.freguesia ? [currentUser.freguesia.trim()] : [],
+      category: '',
+      family: '',
+      productType: '',
+      searchQuery: ''
+    };
+
+    setFilters(initialFilters);
+
+    const storeFetch = useStore.getState().fetchProducts;
+    if (initialFilters.distrito) {
+      storeFetch(initialFilters);
+    } else {
+      storeFetch({});
+    }
+  // Depend only on user id to avoid re-running when store function identities change
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentUser?.id]);
+
+  const defaultFilters = React.useMemo(() => ({
+    distrito: currentUser?.distrito?.trim() || '',
+    concelho: currentUser?.concelho ? [currentUser.concelho.trim()] : [],
+    freguesia: currentUser?.freguesia ? [currentUser.freguesia.trim()] : [],
+    category: '',
+    family: '',
+    productType: '',
+    searchQuery: ''
+  }), [currentUser?.distrito, currentUser?.concelho, currentUser?.freguesia]);
+
+  const isDefaultFilters = JSON.stringify(filters) === JSON.stringify(defaultFilters);
+
+  const clearFilters = () => {
+    setFilters(defaultFilters);
+  };
 
   const handleApplyFilters = () => {
-    fetchProducts(filters);
+    fetchProducts({
+      distrito: filters.distrito.trim(),
+      concelho: filters.concelho.map((value) => value.trim()),
+      freguesia: filters.freguesia.map((value) => value.trim()),
+      category: filters.category.trim(),
+      family: filters.family.trim(),
+      productType: filters.productType.trim(),
+      searchQuery: filters.searchQuery.trim()
+    });
     setShowFilters(false);
   };
 
@@ -10449,7 +10532,7 @@ const ProductMarketplace: React.FC = () => {
   const types = (taxonomy && filters.category && filters.family) ? taxonomy.categories[filters.category].families[filters.family].sort() : [];
 
   const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
+    const val = e.target.value.trim();
     if (!val || filters.concelho.includes(val)) return;
     setFilters({ ...filters, concelho: [...filters.concelho, val] });
   };
@@ -10464,7 +10547,7 @@ const ProductMarketplace: React.FC = () => {
   };
 
   const handleAddFreguesia = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
+    const val = e.target.value.trim();
     if (!val || filters.freguesia.includes(val)) return;
     setFilters({ ...filters, freguesia: [...filters.freguesia, val] });
   };
@@ -10603,12 +10686,22 @@ const ProductMarketplace: React.FC = () => {
               </div>
             </div>
 
-            <button 
-                onClick={handleApplyFilters} 
-                className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:bg-black transition-all"
-            >
-                Aplicar Filtros e Pesquisar
-            </button>
+            <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3">
+              <button 
+                  onClick={handleApplyFilters} 
+                  className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:bg-black transition-all"
+              >
+                  Aplicar Filtros e Pesquisar
+              </button>
+              <button
+                type="button"
+                onClick={clearFilters}
+                disabled={isDefaultFilters}
+                className="w-full bg-slate-200 text-slate-600 p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-sm hover:bg-slate-300 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Limpar filtros
+              </button>
+            </div>
           </div>
         )}
       </div>
@@ -10695,9 +10788,9 @@ const ProductMarketplace: React.FC = () => {
 export default ProductMarketplace;
 
 
-
-=== FICHEIRO: ./src/features/user/components/BannerCarousel.tsx ===
-
+========================================
+FILE: ./src/features/user/components/BannerCarousel.tsx
+========================================
 // src/features/user/components/BannerCarousel.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -10816,9 +10909,9 @@ const BannerCarousel: React.FC<Props> = ({ isScrolled }) => {
 export default BannerCarousel;
 
 
-
-=== FICHEIRO: ./src/features/user/components/UserHistory.tsx ===
-
+========================================
+FILE: ./src/features/user/components/UserHistory.tsx
+========================================
 import React from 'react';
 import { ArrowUpRight, ArrowDownLeft, MessageSquare, CheckCircle, Store } from 'lucide-react';
 import { Transaction } from '../../../types';
@@ -10827,12 +10920,15 @@ interface UserHistoryProps {
   transactions: Transaction[];
   evaluatedIds: string[];
   onSelectTxForFeedback: (tx: Transaction) => void;
+  pendingEvaluations?: Transaction[];
 }
 
-const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, onSelectTxForFeedback }) => {
+const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, onSelectTxForFeedback, pendingEvaluations: propPendingEvaluations }) => {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  const pendingEvaluations = transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+  // Usar pendingEvaluations passado como prop se disponível, caso contrário calcular localmente
+  const pendingEvaluations = propPendingEvaluations || transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+  const historyTransactions = transactions.filter(t => t.type !== 'earn' || evaluatedIds.includes(t.id));
 
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-4 duration-500 pb-10">
@@ -10866,7 +10962,7 @@ const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, o
       <div className="space-y-4">
         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Histórico Completo</h3>
         
-        {transactions.length > 0 ? transactions.map((t) => (
+        {historyTransactions.length > 0 ? historyTransactions.map((t) => (
             <div key={t.id} className="bg-white p-5 rounded-[30px] border-2 border-slate-50 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-2xl ${t.type === 'earn' ? 'bg-green-50 text-[#00d66f]' : 'bg-red-50 text-red-500'}`}>
@@ -10906,9 +11002,9 @@ const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, o
 export default UserHistory;
 
 
-
-=== FICHEIRO: ./src/features/user/components/ShoppingListModal.tsx ===
-
+========================================
+FILE: ./src/features/user/components/ShoppingListModal.tsx
+========================================
 // src/features/user/components/ShoppingListModal.tsx
 
 import React from 'react';
@@ -11098,9 +11194,9 @@ const ShoppingListModal: React.FC<Props> = ({ onClose }) => {
 export default ShoppingListModal;
 
 
-
-=== FICHEIRO: ./src/features/user/components/UserHome.tsx ===
-
+========================================
+FILE: ./src/features/user/components/UserHome.tsx
+========================================
 import React, { useMemo } from 'react';
 import { Store, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
@@ -11163,9 +11259,9 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
 export default UserHome;
 
 
-
-=== FICHEIRO: ./src/features/user/components/UserExplore.tsx ===
-
+========================================
+FILE: ./src/features/user/components/UserExplore.tsx
+========================================
 // src/features/user/components/UserExplore.tsx
 
 import React, { useState, useMemo } from 'react';
@@ -11330,9 +11426,9 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
 export default UserExplore;
 
 
-
-=== FICHEIRO: ./src/features/auth/ForgotPassword.tsx ===
-
+========================================
+FILE: ./src/features/auth/ForgotPassword.tsx
+========================================
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
@@ -11423,9 +11519,9 @@ const ForgotPassword: React.FC<ForgotPasswordProps> = ({ onBack }) => {
 export default ForgotPassword;
 
 
-
-=== FICHEIRO: ./src/features/auth/LoginPage.tsx ===
-
+========================================
+FILE: ./src/features/auth/LoginPage.tsx
+========================================
 // src/features/auth/LoginPage.tsx
 
 import React, { useState } from 'react';
@@ -11632,9 +11728,9 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
 export default LoginPage;
 
 
-
-=== FICHEIRO: ./src/features/auth/RegisterPage.tsx ===
-
+========================================
+FILE: ./src/features/auth/RegisterPage.tsx
+========================================
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
@@ -11816,9 +11912,9 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
 export default RegisterPage;
 
 
-
-=== FICHEIRO: ./src/hooks/usePWAInstall.ts ===
-
+========================================
+FILE: ./src/hooks/usePWAInstall.ts
+========================================
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 
@@ -11900,9 +11996,9 @@ export const usePWAInstall = () => {
 };
 
 
-
-=== FICHEIRO: ./src/store/useStore.ts ===
-
+========================================
+FILE: ./src/store/useStore.ts
+========================================
 // src/store/useStore.ts
 
 import { create } from 'zustand';
@@ -12021,19 +12117,44 @@ export const useStore = create<StoreState>((set, get) => ({
     const { products, lastVisibleProduct } = get();
     
     try {
-      let q = query(
-        collection(db, 'products'), 
-        limit(100)
-      );
+      // Construir constraints dinamicamente
+      const constraints: any[] = [];
+      const canQueryConcelho = Array.isArray(filters.concelho) && filters.concelho.length > 0 && filters.concelho.length <= 10;
+      const canQueryFreguesia = Array.isArray(filters.freguesia) && filters.freguesia.length > 0 && filters.freguesia.length <= 10;
+      const useConcelhoQuery = canQueryConcelho;
+      const useFreguesiaQuery = !useConcelhoQuery && canQueryFreguesia;
+
+      // Otimização: Filtra direto no Firestore por campos exatos quando possível
+      if (filters.distrito) {
+        constraints.push(where('distrito', '==', filters.distrito));
+      }
+      if (useConcelhoQuery) {
+        constraints.push(where('concelho', 'in', filters.concelho));
+      } else if (useFreguesiaQuery) {
+        constraints.push(where('freguesia', 'in', filters.freguesia));
+      }
+      if (filters.category) {
+        constraints.push(where('category', '==', filters.category));
+      }
+      if (filters.family) {
+        constraints.push(where('family', '==', filters.family));
+      }
+      if (filters.productType) {
+        constraints.push(where('productType', '==', filters.productType));
+      }
+      
+      constraints.push(limit(100));
 
       if (isNextPage && lastVisibleProduct) {
-        q = query(q, startAfter(lastVisibleProduct));
+        constraints.push(startAfter(lastVisibleProduct));
       }
 
+      // Construir query corretamente com todos os constraints
+      const q = query(collection(db, 'products'), ...constraints);
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // Ordenação robusta
+      // Ordenação robusta no cliente (evita necessidade de índices compostos complexos no Firestore)
       fetchedProducts.sort((a: Product, b: Product) => {
         const dateA = getProductDate(a);
         const dateB = getProductDate(b);
@@ -12043,22 +12164,40 @@ export const useStore = create<StoreState>((set, get) => ({
         return dateB - dateA;
       });
 
-      // Filtros geográficos e taxonomia (sem filtro de data)
-      const hasAnyFilter = filters.distrito || 
-        (filters.concelho && filters.concelho.length > 0) || 
-        (filters.freguesia && filters.freguesia.length > 0) || 
-        filters.category || 
-        filters.family || 
-        filters.productType;
+      // Filtros geográficos e taxonomia adicionais no cliente
+      const normalizeValue = (value: any) => {
+        if (value === undefined || value === null) return '';
+        return String(value).trim().toLowerCase();
+      };
+
+      const normalizedFilters = {
+        concelho: (filters.concelho || []).map(normalizeValue).filter(Boolean),
+        freguesia: (filters.freguesia || []).map(normalizeValue).filter(Boolean),
+        category: normalizeValue(filters.category),
+        family: normalizeValue(filters.family),
+        productType: normalizeValue(filters.productType)
+      };
+
+      const hasAnyFilter = 
+        normalizedFilters.concelho.length > 0 || 
+        normalizedFilters.freguesia.length > 0 || 
+        normalizedFilters.category !== '' || 
+        normalizedFilters.family !== '' || 
+        normalizedFilters.productType !== '';
 
       if (hasAnyFilter) {
         fetchedProducts = fetchedProducts.filter((p: Product) => {
-          if (filters.distrito && p.distrito !== filters.distrito) return false;
-          if (filters.concelho && filters.concelho.length > 0 && !filters.concelho.includes(p.concelho)) return false;
-          if (filters.freguesia && filters.freguesia.length > 0 && !filters.freguesia.includes(p.freguesia)) return false;
-          if (filters.category && p.category !== filters.category) return false;
-          if (filters.family && p.family !== filters.family) return false;
-          if (filters.productType && p.productType !== filters.productType) return false;
+          const productConcelho = normalizeValue(p.concelho);
+          const productFreguesia = normalizeValue(p.freguesia);
+          const productCategory = normalizeValue(p.category);
+          const productFamily = normalizeValue(p.family);
+          const productType = normalizeValue(p.productType);
+
+          if (normalizedFilters.concelho.length > 0 && !normalizedFilters.concelho.includes(productConcelho)) return false;
+          if (normalizedFilters.freguesia.length > 0 && !normalizedFilters.freguesia.includes(productFreguesia)) return false;
+          if (normalizedFilters.category !== '' && productCategory !== normalizedFilters.category) return false;
+          if (normalizedFilters.family !== '' && productFamily !== normalizedFilters.family) return false;
+          if (normalizedFilters.productType !== '' && productType !== normalizedFilters.productType) return false;
           return true;
         });
       }
@@ -12236,9 +12375,9 @@ export const useStore = create<StoreState>((set, get) => ({
 }));
 
 
-
-=== FICHEIRO: ./src/store/StoreProvider.tsx ===
-
+========================================
+FILE: ./src/store/StoreProvider.tsx
+========================================
 // src/store/StoreProvider.tsx
 import React, { createContext, useContext } from 'react';
 import { useStore } from './useStore';
@@ -12255,9 +12394,9 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 };
 
 
-
-=== FICHEIRO: ./src/serviceWorkerRegistration.ts ===
-
+========================================
+FILE: ./src/serviceWorkerRegistration.ts
+========================================
 const isLocalhost = Boolean(
   window.location.hostname === 'localhost' ||
     window.location.hostname === '[::1]' ||
@@ -12341,9 +12480,9 @@ export function unregister() {
 }
 
 
-
-=== FICHEIRO: ./src/App.test.tsx ===
-
+========================================
+FILE: ./src/App.test.tsx
+========================================
 import React from 'react';
 import { render, screen } from '@testing-library/react';
 import App from './App';
@@ -12356,9 +12495,9 @@ test('renders learn react link', () => {
 
 
 
-
-=== FICHEIRO: ./src/config/firebase.ts ===
-
+========================================
+FILE: ./src/config/firebase.ts
+========================================
 // src/config/firebase.ts
 
 import { initializeApp, getApp, getApps } from 'firebase/app';
@@ -12402,9 +12541,9 @@ export const provisionAuth = (() => {
 export default app;
 
 
-
-=== FICHEIRO: ./src/types/index.ts ===
-
+========================================
+FILE: ./src/types/index.ts
+========================================
 // src/types/index.ts
 
 export interface User {
@@ -12521,9 +12660,9 @@ export interface MunicipalityFAQ {
 }
 
 
-
-=== FICHEIRO: ./src/setupTests.ts ===
-
+========================================
+FILE: ./src/setupTests.ts
+========================================
 // jest-dom adds custom jest matchers for asserting on DOM nodes.
 // allows you to do things like:
 // expect(element).toHaveTextContent(/react/i)
@@ -12532,9 +12671,9 @@ import '@testing-library/jest-dom';
 
 
 
-
-=== FICHEIRO: ./src/App.tsx ===
-
+========================================
+FILE: ./src/App.tsx
+========================================
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useStore } from './store/useStore';
@@ -12550,6 +12689,7 @@ import VantagensPage from './features/public/VantagensPage';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
+import MarketplacePage from './features/user/MarketplacePage';
 import ProfileSettings from './features/profile/ProfileSettings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredRole?: 'admin' | 'merchant' | 'client' }> = ({ children, requiredRole }) => {
@@ -12629,6 +12769,7 @@ function App() {
           <Route path="/vantagens" element={<VantagensPage />} />
           <Route path="/admin/*" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/merchant/*" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
+          <Route path="/dashboard/marketplace" element={<ProtectedRoute requiredRole="client"><MarketplacePage /></ProtectedRoute>} />
           <Route path="/dashboard/*" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><ProfileSettings onBack={handleBack} /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />
@@ -12641,9 +12782,9 @@ function App() {
 export default App;
 
 
-
-=== FICHEIRO: ./src/reportWebVitals.ts ===
-
+========================================
+FILE: ./src/reportWebVitals.ts
+========================================
 import { ReportHandler } from 'web-vitals';
 
 const reportWebVitals = (onPerfEntry?: ReportHandler) => {
@@ -12662,9 +12803,9 @@ export default reportWebVitals;
 
 
 
-
-=== FICHEIRO: ./src/react-app-env.d.ts ===
-
+========================================
+FILE: ./src/react-app-env.d.ts
+========================================
 /// <reference types="react-scripts" />
 declare module '*.css';
 declare module 'firebase/app';
@@ -12675,9 +12816,9 @@ declare module 'firebase/messaging';
 declare module 'firebase/analytics';
 
 
-
-=== FICHEIRO: ./src/index.tsx ===
-
+========================================
+FILE: ./src/index.tsx
+========================================
 // src/index.tsx
 
 import React from 'react';
@@ -12709,9 +12850,9 @@ serviceWorkerRegistration.register();
 reportWebVitals();
 
 
-
-=== FICHEIRO: ./src/utils/timeUtils.ts ===
-
+========================================
+FILE: ./src/utils/timeUtils.ts
+========================================
 // src/utils/timeUtils.ts
 
 export const isOpenNow = (businessHours?: Record<string, { open: string; close: string; closed: boolean }>): boolean => {
@@ -12744,9 +12885,9 @@ export const translateDay = (day: string): string => {
 };
 
 
-
-=== FICHEIRO: ./src/utils/notifications.ts ===
-
+========================================
+FILE: ./src/utils/notifications.ts
+========================================
 // src/utils/notifications.ts
 
 import { db, messaging, VAPID_KEY } from "../config/firebase";
@@ -12877,9 +13018,9 @@ export const onMessageListener = () =>
   });
 
 
-
-=== FICHEIRO: ./src/utils/imageUtils.ts ===
-
+========================================
+FILE: ./src/utils/imageUtils.ts
+========================================
 // src/utils/imageUtils.ts
 
 /**
@@ -12932,9 +13073,9 @@ export const dataURLtoBlob = (dataurl: string) => {
 };
 
 
-
-=== FICHEIRO: ./src/components/admin/FeedbackList.tsx ===
-
+========================================
+FILE: ./src/components/admin/FeedbackList.tsx
+========================================
 import React, { useEffect, useState } from 'react';
 import { db } from '../../config/firebase';
 import { collection, query, orderBy, onSnapshot, doc, updateDoc, deleteDoc } from 'firebase/firestore';
@@ -13128,9 +13269,9 @@ const FeedbackList: React.FC = () => {
 export default FeedbackList;
 
 
-
-=== FICHEIRO: ./src/components/ImageCropperModal.tsx ===
-
+========================================
+FILE: ./src/components/ImageCropperModal.tsx
+========================================
 // src/components/ImageCropperModal.tsx
 
 import React, { useState, useRef, useEffect } from 'react';
@@ -13249,9 +13390,9 @@ const ImageCropperModal: React.FC<Props> = ({ file, onCrop, onCancel }) => {
 export default ImageCropperModal;
 
 
-
-=== FICHEIRO: ./src/components/dashboard/FeedbackForm.tsx ===
-
+========================================
+FILE: ./src/components/dashboard/FeedbackForm.tsx
+========================================
 import React, { useState } from 'react';
 import { db, auth } from '../../config/firebase'; 
 import { collection, addDoc, serverTimestamp } from 'firebase/firestore';

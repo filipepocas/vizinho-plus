@@ -20,6 +20,7 @@ interface StoreState {
   shoppingList: Product[];
   taxonomy: ProductTaxonomy | null;
   isLoading: boolean;
+  isProductsLoading: boolean;
   isInitialized: boolean;
   
   setCurrentUser: (user: UserProfile | null) => void;
@@ -70,6 +71,7 @@ export const useStore = create<StoreState>((set, get) => ({
   shoppingList: JSON.parse(localStorage.getItem('vplus_shopping_list') || '[]'),
   taxonomy: null,
   isLoading: true,
+  isProductsLoading: false,
   isInitialized: false,
 
   setCurrentUser: (user) => set({ currentUser: user, isLoading: false, isInitialized: true }),
@@ -112,16 +114,34 @@ export const useStore = create<StoreState>((set, get) => ({
   },
 
   fetchProducts: async (filters: any = {}, isNextPage: boolean = false) => {
-    set({ isLoading: true });
+    set({ isProductsLoading: true });
     const { products, lastVisibleProduct } = get();
     
     try {
       // Construir constraints dinamicamente
       const constraints: any[] = [];
-      
-      // Otimização: Filtra logo no Firestore pelo distrito para garantir que os produtos locais vêm primeiro
+      const canQueryConcelho = Array.isArray(filters.concelho) && filters.concelho.length > 0 && filters.concelho.length <= 10;
+      const canQueryFreguesia = Array.isArray(filters.freguesia) && filters.freguesia.length > 0 && filters.freguesia.length <= 10;
+      const useConcelhoQuery = canQueryConcelho;
+      const useFreguesiaQuery = !useConcelhoQuery && canQueryFreguesia;
+
+      // Otimização: Filtra direto no Firestore por campos exatos quando possível
       if (filters.distrito) {
         constraints.push(where('distrito', '==', filters.distrito));
+      }
+      if (useConcelhoQuery) {
+        constraints.push(where('concelho', 'in', filters.concelho));
+      } else if (useFreguesiaQuery) {
+        constraints.push(where('freguesia', 'in', filters.freguesia));
+      }
+      if (filters.category) {
+        constraints.push(where('category', '==', filters.category));
+      }
+      if (filters.family) {
+        constraints.push(where('family', '==', filters.family));
+      }
+      if (filters.productType) {
+        constraints.push(where('productType', '==', filters.productType));
       }
       
       constraints.push(limit(100));
@@ -135,8 +155,6 @@ export const useStore = create<StoreState>((set, get) => ({
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      console.log(`[fetchProducts] Filtros:`, filters, `| Produtos encontrados:`, fetchedProducts.length);
-
       // Ordenação robusta no cliente (evita necessidade de índices compostos complexos no Firestore)
       fetchedProducts.sort((a: Product, b: Product) => {
         const dateA = getProductDate(a);
@@ -148,20 +166,39 @@ export const useStore = create<StoreState>((set, get) => ({
       });
 
       // Filtros geográficos e taxonomia adicionais no cliente
+      const normalizeValue = (value: any) => {
+        if (value === undefined || value === null) return '';
+        return String(value).trim().toLowerCase();
+      };
+
+      const normalizedFilters = {
+        concelho: (filters.concelho || []).map(normalizeValue).filter(Boolean),
+        freguesia: (filters.freguesia || []).map(normalizeValue).filter(Boolean),
+        category: normalizeValue(filters.category),
+        family: normalizeValue(filters.family),
+        productType: normalizeValue(filters.productType)
+      };
+
       const hasAnyFilter = 
-        (filters.concelho && filters.concelho.length > 0) || 
-        (filters.freguesia && filters.freguesia.length > 0) || 
-        filters.category || 
-        filters.family || 
-        filters.productType;
+        normalizedFilters.concelho.length > 0 || 
+        normalizedFilters.freguesia.length > 0 || 
+        normalizedFilters.category !== '' || 
+        normalizedFilters.family !== '' || 
+        normalizedFilters.productType !== '';
 
       if (hasAnyFilter) {
         fetchedProducts = fetchedProducts.filter((p: Product) => {
-          if (filters.concelho && filters.concelho.length > 0 && !filters.concelho.includes(p.concelho)) return false;
-          if (filters.freguesia && filters.freguesia.length > 0 && !filters.freguesia.includes(p.freguesia)) return false;
-          if (filters.category && p.category !== filters.category) return false;
-          if (filters.family && p.family !== filters.family) return false;
-          if (filters.productType && p.productType !== filters.productType) return false;
+          const productConcelho = normalizeValue(p.concelho);
+          const productFreguesia = normalizeValue(p.freguesia);
+          const productCategory = normalizeValue(p.category);
+          const productFamily = normalizeValue(p.family);
+          const productType = normalizeValue(p.productType);
+
+          if (normalizedFilters.concelho.length > 0 && !normalizedFilters.concelho.includes(productConcelho)) return false;
+          if (normalizedFilters.freguesia.length > 0 && !normalizedFilters.freguesia.includes(productFreguesia)) return false;
+          if (normalizedFilters.category !== '' && productCategory !== normalizedFilters.category) return false;
+          if (normalizedFilters.family !== '' && productFamily !== normalizedFilters.family) return false;
+          if (normalizedFilters.productType !== '' && productType !== normalizedFilters.productType) return false;
           return true;
         });
       }
@@ -170,12 +207,12 @@ export const useStore = create<StoreState>((set, get) => ({
         products: isNextPage ? [...products, ...fetchedProducts] : fetchedProducts,
         lastVisibleProduct: snap.docs[snap.docs.length - 1],
         hasMoreProducts: snap.docs.length === 100,
-        isLoading: false
+        isProductsLoading: false
       });
     } catch(e) {
       console.error("Erro ao carregar produtos:", e);
       toast.error("Erro ao carregar produtos. Tente novamente.");
-      set({ isLoading: false });
+      set({ isProductsLoading: false });
     }
   },
 

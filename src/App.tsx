@@ -13,6 +13,7 @@ import VantagensPage from './features/public/VantagensPage';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
+import MarketplacePage from './features/user/MarketplacePage';
 import ProfileSettings from './features/profile/ProfileSettings';
 
 const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredRole?: 'admin' | 'merchant' | 'client' }> = ({ children, requiredRole }) => {
@@ -92,6 +93,7 @@ function App() {
           <Route path="/vantagens" element={<VantagensPage />} />
           <Route path="/admin/*" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/merchant/*" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
+          <Route path="/dashboard/marketplace" element={<ProtectedRoute requiredRole="client"><MarketplacePage /></ProtectedRoute>} />
           <Route path="/dashboard/*" element={<ProtectedRoute requiredRole="client"><UserDashboard /></ProtectedRoute>} />
           <Route path="/settings" element={<ProtectedRoute><ProfileSettings onBack={handleBack} /></ProtectedRoute>} />
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -1,6 +1,6 @@
 // src/features/user/UserDashboard.tsx
 
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -29,7 +29,7 @@ const UserDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
+  const [view, setView] = useState<'home' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
   const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
   const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '', merchantTerms: '' });
@@ -52,7 +52,6 @@ const UserDashboard: React.FC = () => {
   const [showRulesModal, setShowRulesModal] = useState(false); 
   const [showFaqModal, setShowFaqModal] = useState(false); 
   const [emailCopied, setEmailCopied] = useState(false);
-  const marketplaceRef = useRef<HTMLDivElement | null>(null);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
@@ -247,16 +246,9 @@ const UserDashboard: React.FC = () => {
     setTimeout(() => setEmailCopied(false), 3000);
   };
 
-  const switchView = (newView: 'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities') => {
+  const switchView = (newView: 'home' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities') => {
     setView(newView);
-
-    if (newView === 'marketplace') {
-      window.setTimeout(() => {
-        marketplaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      }, 100);
-    } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
-    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const toggleMunicipalities = () => {
@@ -426,10 +418,10 @@ const UserDashboard: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => switchView('marketplace')} 
-            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+            onClick={() => navigate('/dashboard/marketplace')} 
+            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]"
           >
-            <ShoppingBag size={22} className={view === 'marketplace' ? 'text-[#00d66f]' : ''} />
+            <ShoppingBag size={22} className="text-[#0a2540]" />
             <span>Produtos Locais</span>
           </button>
           
@@ -491,8 +483,7 @@ const UserDashboard: React.FC = () => {
         </div>
 
         {/* VISTAS DINÂMICAS */}
-        <div ref={marketplaceRef}>
-          {view === 'marketplace' && <ProductMarketplace />}
+        <div>
           {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
           {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         

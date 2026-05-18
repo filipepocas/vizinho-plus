@@ -1,321 +1,506 @@
 // src/features/user/components/ProductMarketplace.tsx
 
-import React, { useState, useEffect } from 'react';
-import { Search, Filter, ShoppingCart, ChevronDown, Loader2, Package, X, MapPin, Tag } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useStore } from '../../../store/useStore';
 import { Product } from '../../../types';
-import ShoppingListModal from './ShoppingListModal';
+import { ShoppingBag, Search, MapPin, Grid, Layers, ArrowLeft, SlidersHorizontal, Check } from 'lucide-react';
+import BannerCarousel from './BannerCarousel';
 
-const ProductMarketplace: React.FC = () => {
-  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList, currentUser } = useStore();
-  
-  const [filters, setFilters] = useState<{
-    distrito: string;
-    concelho: string[];
-    freguesia: string[];
-    category: string;
-    family: string;
-    productType: string;
-    searchQuery: string;
-  }>({
-    distrito: '',
-    concelho: [],
-    freguesia: [],
-    category: '',
-    family: '',
-    productType: '',
-    searchQuery: ''
-  });
-  
-  const [showFilters, setShowFilters] = useState(false);
-  const [showCart, setShowCart] = useState(false);
+interface ProductMarketplaceProps {
+  onBack?: () => void;
+}
 
-  useEffect(() => {
-    if (!currentUser) return;
+const ProductMarketplace: React.FC<ProductMarketplaceProps> = ({ onBack }) => {
+  const { 
+    products, 
+    isProductsLoading,
+    currentUser, 
+    locations, 
+    taxonomy,
+    fetchProducts, 
+    addToShoppingList, 
+    shoppingList,
+    fetchTaxonomy
+  } = useStore();
 
-    const initialFilters = {
-      distrito: currentUser.distrito || '',
-      concelho: currentUser.concelho ? [currentUser.concelho] : [],
-      freguesia: currentUser.freguesia ? [currentUser.freguesia] : [],
+  const isFirstMount = useRef(true);
+
+  const initialFilters = useMemo(() => {
+    return {
+      distrito: currentUser?.distrito?.trim() || '',
+      concelho: currentUser?.concelho ? [currentUser.concelho.trim()] : [],
+      freguesia: currentUser?.freguesia ? [currentUser.freguesia.trim()] : [],
       category: '',
       family: '',
       productType: '',
-      searchQuery: ''
+      search: ''
     };
+  }, [currentUser]);
 
-    setFilters(initialFilters);
+  const [filters, setFilters] = useState(initialFilters);
+  const [localSearch, setLocalSearch] = useState('');
+  const [showFiltersModal, setShowFiltersModal] = useState(false);
+  const [geoMode, setGeoMode] = useState<'all' | 'concelho' | 'freguesia'>('freguesia');
 
-    if (initialFilters.distrito) {
+  // Carregar taxonomia no mount
+  useEffect(() => {
+    fetchTaxonomy();
+  }, [fetchTaxonomy]);
+
+  // Efeito principal de carregamento de produtos controlado para evitar loops infinitos
+  useEffect(() => {
+    if (isFirstMount.current) {
+      isFirstMount.current = false;
       fetchProducts(initialFilters);
-    } else {
-      fetchProducts({});
+      return;
     }
-  }, [currentUser, fetchProducts]);
 
-  const handleApplyFilters = () => {
-    fetchProducts(filters);
-    setShowFilters(false);
-  };
+    const timer = setTimeout(() => {
+      fetchProducts(filters);
+    }, 400);
 
-  const loadMore = () => {
-    if (!isLoading && hasMoreProducts) {
-      fetchProducts(filters, true);
-    }
-  };
+    return () => clearTimeout(timer);
+  }, [filters, fetchProducts, initialFilters]);
 
-  const formatPrice = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
-
-  const distritos = Object.keys(locations).sort();
-  const availableConcelhos = filters.distrito ? Object.keys(locations[filters.distrito] || {}).sort() : [];
+  // Listas auxiliares baseadas na hierarquia de localizações (Correção do Erro 7015 de Index Signature)
+  const distritosDisponiveis = useMemo(() => Object.keys(locations || {}), [locations]);
   
-  const availableFreguesias = (filters.distrito && filters.concelho.length > 0)
-    ? filters.concelho.flatMap((c: string) => locations[filters.distrito][c] || []).sort()
-    : [];
+  const concelhosDisponiveis = useMemo(() => {
+    if (!filters.distrito || !locations) return [];
+    const locData = (locations as any)[filters.distrito];
+    if (!locData || !locData.concelhos) return [];
+    return Object.keys(locData.concelhos);
+  }, [filters.distrito, locations]);
 
-  const categories = taxonomy ? Object.keys(taxonomy.categories).sort() : [];
-  const families = (taxonomy && filters.category) ? Object.keys(taxonomy.categories[filters.category].families).sort() : [];
-  const types = (taxonomy && filters.category && filters.family) ? taxonomy.categories[filters.category].families[filters.family].sort() : [];
+  const freguesiasDisponiveis = useMemo(() => {
+    if (!filters.distrito || !filters.concelho || filters.concelho.length !== 1 || !locations) return [];
+    const targetConcelho = filters.concelho[0];
+    const locData = (locations as any)[filters.distrito];
+    const concelhoData = locData?.concelhos?.[targetConcelho];
+    return concelhoData ? concelhoData.freguesias : [];
+  }, [filters.distrito, filters.concelho, locations]);
 
-  const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (!val || filters.concelho.includes(val)) return;
-    setFilters({ ...filters, concelho: [...filters.concelho, val] });
+  // Listas auxiliares da taxonomia de produtos (Correção dos Erros 18047 de 'taxonomy' possivelmente 'null')
+  const categoriesDisponiveis = useMemo(() => {
+    if (!taxonomy || !taxonomy.categories) return [];
+    return Object.keys(taxonomy.categories);
+  }, [taxonomy]);
+
+  const familiesDisponiveis = useMemo(() => {
+    if (!taxonomy || !taxonomy.categories || !filters.category) return [];
+    const cats = taxonomy.categories as any;
+    if (!cats[filters.category]) return [];
+    return Object.keys(cats[filters.category].families || {});
+  }, [filters.category, taxonomy]);
+
+  const typesDisponiveis = useMemo(() => {
+    if (!taxonomy || !taxonomy.categories || !filters.category || !filters.family) return [];
+    const cats = taxonomy.categories as any;
+    if (!cats[filters.category]?.families?.[filters.family]) return [];
+    return cats[filters.category].families[filters.family] || [];
+  }, [filters.category, filters.family, taxonomy]);
+
+  // Handlers Geográficos Dinâmicos
+  const handleGeoModeChange = (mode: 'all' | 'concelho' | 'freguesia') => {
+    setGeoMode(mode);
+    if (!currentUser) return;
+
+    if (mode === 'all') {
+      setFilters(prev => ({ ...prev, distrito: '', concelho: [], freguesia: [] }));
+    } else if (mode === 'concelho') {
+      setFilters(prev => ({
+        ...prev,
+        distrito: currentUser.distrito?.trim() || '',
+        concelho: currentUser.concelho ? [currentUser.concelho.trim()] : [],
+        freguesia: []
+      }));
+    } else if (mode === 'freguesia') {
+      setFilters(prev => ({
+        ...prev,
+        distrito: currentUser.distrito?.trim() || '',
+        concelho: currentUser.concelho ? [currentUser.concelho.trim()] : [],
+        freguesia: currentUser.freguesia ? [currentUser.freguesia.trim()] : []
+      }));
+    }
   };
 
-  const handleRemoveConcelho = (val: string) => {
-    const remainingConcelhos = filters.concelho.filter(c => c !== val);
-    setFilters({ 
-      ...filters, 
-      concelho: remainingConcelhos,
-      freguesia: []
+  const handleSearchSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    setFilters(prev => ({ ...prev, search: localSearch }));
+  };
+
+  const clearAllFilters = () => {
+    setFilters({
+      distrito: '',
+      concelho: [],
+      freguesia: [],
+      category: '',
+      family: '',
+      productType: '',
+      search: ''
     });
+    setLocalSearch('');
+    setGeoMode('all');
   };
 
-  const handleAddFreguesia = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (!val || filters.freguesia.includes(val)) return;
-    setFilters({ ...filters, freguesia: [...filters.freguesia, val] });
-  };
-
-  const handleRemoveFreguesia = (val: string) => {
-    setFilters({ ...filters, freguesia: filters.freguesia.filter(f => f !== val) });
-  };
-
-  // Filtragem local por texto
-  const filteredProducts = products.filter((p: Product) => {
-    if (!filters.searchQuery) return true;
-    const q = filters.searchQuery.toLowerCase().trim();
-    return (
-      (p.description || '').toLowerCase().includes(q) ||
-      (p.shopName || '').toLowerCase().includes(q) ||
-      (p.productType || '').toLowerCase().includes(q)
+  // Filtragem local final com tipagem segura
+  const filteredProducts = useMemo(() => {
+    if (!filters.search.trim()) return products;
+    const term = filters.search.toLowerCase().trim();
+    return products.filter((p: any) => 
+      (p.name || '').toLowerCase().includes(term) ||
+      (p.description || '').toLowerCase().includes(term) ||
+      (p.merchantName || '').toLowerCase().includes(term)
     );
-  });
+  }, [products, filters.search]);
 
   return (
-    <div className="space-y-6 animate-in fade-in duration-500 pb-20">
-      
-      <div className="bg-white p-4 rounded-[30px] border-4 border-[#0a2540] shadow-lg sticky top-24 z-40">
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-            <input 
-              placeholder="O que procuras hoje?..." 
-              value={filters.searchQuery}
-              onChange={e => setFilters({...filters, searchQuery: e.target.value})}
-              className="w-full pl-12 p-4 bg-slate-50 border-2 border-slate-100 rounded-2xl font-bold text-xs outline-none focus:border-[#00d66f]"
-            />
-          </div>
-          <button 
-            onClick={() => setShowFilters(!showFilters)}
-            className={`p-4 rounded-2xl transition-all ${showFilters ? 'bg-[#00d66f] text-[#0a2540]' : 'bg-[#0a2540] text-white'}`}
-          >
-            <Filter size={20} />
-          </button>
-          <button 
-            onClick={() => setShowCart(true)} 
-            className="relative bg-amber-500 text-white p-4 rounded-2xl shadow-md hover:scale-105 transition-transform"
-          >
-            <ShoppingCart size={20} />
-            {shoppingList.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white">
-                    {shoppingList.length}
-                </span>
-            )}
-          </button>
-        </div>
-
-        {showFilters && (
-          <div className="mt-4 p-6 bg-slate-50 rounded-3xl border-2 border-slate-100 space-y-6 animate-in slide-in-from-top-2">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <div className="space-y-3">
-                <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><MapPin size={10}/> Localização (Múltipla)</p>
-                
-                <select 
-                    value={filters.distrito} 
-                    onChange={e=>setFilters({...filters, distrito: e.target.value, concelho:[], freguesia:[]})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f]"
+    <div className="min-h-screen bg-[#f8fafc] text-[#0f172a] pb-24 font-sans antialiased">
+      {/* HEADER BRUTALISTA */}
+      <header className="bg-white border-b-4 border-[#0f172a] sticky top-0 z-40 px-4 py-4 shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              {onBack && (
+                <button 
+                  onClick={onBack}
+                  className="p-2 border-2 border-[#0f172a] bg-slate-100 hover:bg-slate-200 rounded-xl transition-all active:translate-y-0.5"
                 >
-                  <option value="">Escolha o Distrito</option>
-                  {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                
-                <select 
-                    disabled={!filters.distrito} 
-                    value="" 
-                    onChange={handleAddConcelho} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
-                  <option value="">+ Adicionar Concelho</option>
-                  {availableConcelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                </select>
-
-                <div className="flex flex-wrap gap-1">
-                    {filters.concelho.map(c => (
-                        <span key={c} className="bg-blue-100 text-blue-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-blue-200">
-                            {c} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveConcelho(c)}/>
-                        </span>
-                    ))}
-                </div>
-
-                <select 
-                    disabled={filters.concelho.length === 0} 
-                    value="" 
-                    onChange={handleAddFreguesia} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
-                  <option value="">+ Adicionar Freguesia</option>
-                  {availableFreguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-
-                <div className="flex flex-wrap gap-1">
-                    {filters.freguesia.map(f => (
-                        <span key={f} className="bg-green-100 text-green-700 px-2 py-1 rounded-lg text-[9px] font-black uppercase flex items-center gap-1 border border-green-200">
-                            {f} <X size={12} className="cursor-pointer hover:text-red-500" onClick={() => handleRemoveFreguesia(f)}/>
-                        </span>
-                    ))}
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <p className="text-[9px] font-black uppercase text-slate-400 ml-2 flex items-center gap-1"><Tag size={10}/> Categoria e Tipo</p>
-                
-                <select 
-                    value={filters.category} 
-                    onChange={e=>setFilters({...filters, category: e.target.value, family:'', productType:''})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f]"
-                >
-                  <option value="">Todas as Categorias</option>
-                  {categories.map(c => <option key={c} value={c}>{c.toUpperCase()}</option>)}
-                </select>
-
-                <select 
-                    disabled={!filters.category} 
-                    value={filters.family} 
-                    onChange={e=>setFilters({...filters, family: e.target.value, productType:''})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
-                  <option value="">Família de Produto...</option>
-                  {families.map(f => <option key={f} value={f}>{f}</option>)}
-                </select>
-
-                <select 
-                    disabled={!filters.family} 
-                    value={filters.productType} 
-                    onChange={e=>setFilters({...filters, productType: e.target.value})} 
-                    className="w-full p-3 rounded-xl border-2 border-white font-bold text-[10px] outline-none focus:border-[#00d66f] disabled:opacity-50"
-                >
-                  <option value="">Tipo de Artigo...</option>
-                  {types.map(t => <option key={t} value={t}>{t}</option>)}
-                </select>
+                  <ArrowLeft className="w-5 h-5 text-[#0f172a]" />
+                </button>
+              )}
+              <div>
+                <h1 className="text-xl sm:text-2xl font-black uppercase italic tracking-tight text-[#0f172a]">
+                  Marketplace Local
+                </h1>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+                  Montra de Produtos e Campanhas
+                </p>
               </div>
             </div>
 
-            <button 
-                onClick={handleApplyFilters} 
-                className="w-full bg-[#0a2540] text-[#00d66f] p-4 rounded-2xl font-black uppercase text-[10px] tracking-widest shadow-md hover:bg-black transition-all"
+            <button
+              onClick={() => setShowFiltersModal(true)}
+              className="flex items-center gap-2 px-4 py-2.5 border-4 border-[#0f172a] bg-[#00d66f] text-[#0f172a] font-black uppercase italic tracking-tighter rounded-xl hover:bg-emerald-400 transition-all shadow-[4px_4px_0px_0px_#0f172a] active:translate-y-1 active:shadow-none"
             >
-                Aplicar Filtros e Pesquisar
+              <SlidersHorizontal className="w-4 h-4" />
+              <span className="hidden sm:inline">Filtros Avançados</span>
             </button>
           </div>
-        )}
-      </div>
 
-      {/* ESTADO DE CARREGAMENTO */}
-      {isLoading && (
-        <div className="py-20 text-center">
-          <Loader2 size={48} className="mx-auto text-[#00d66f] animate-spin mb-4" />
-          <p className="text-[10px] font-black uppercase text-slate-400">A carregar produtos...</p>
-        </div>
-      )}
+          {/* MOTOR DE BUSCA & SELETOR DE RAIO */}
+          <div className="flex flex-col md:flex-row gap-3">
+            <form onSubmit={handleSearchSubmit} className="flex-1 flex gap-2">
+              <div className="relative flex-1">
+                <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+                <input
+                  type="text"
+                  placeholder="O que procura hoje? (ex: pão, pizza, oficina...)"
+                  value={localSearch}
+                  onChange={(e) => setLocalSearch(e.target.value)}
+                  className="w-full pl-12 pr-4 py-3 bg-slate-50 border-3 border-[#0f172a] rounded-xl font-bold text-sm focus:bg-white focus:ring-0 outline-none transition-colors"
+                />
+              </div>
+              <button
+                type="submit"
+                className="px-6 py-3 bg-[#0f172a] text-white border-3 border-[#0f172a] font-black uppercase italic tracking-wider rounded-xl hover:bg-slate-800 transition-all active:translate-y-0.5"
+              >
+                Procurar
+              </button>
+            </form>
 
-      {/* ESTADO VAZIO (sem produtos na coleção) */}
-      {!isLoading && products.length === 0 && (
-        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
-           <Package size={48} className="mx-auto text-slate-200 mb-4" />
-           <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto disponível de momento.</p>
-           <p className="text-[8px] font-bold text-slate-400 mt-2">Os lojistas ainda não publicaram artigos ou os mesmos já expiraram.</p>
-        </div>
-      )}
-
-      {/* GRELHA DE PRODUTOS */}
-      {!isLoading && products.length > 0 && filteredProducts.length === 0 && (
-        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
-           <Search size={48} className="mx-auto text-slate-200 mb-4" />
-           <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto encontrado para estes filtros.</p>
-           <p className="text-[8px] font-bold text-slate-400 mt-2">Tente alterar os critérios de pesquisa ou limpar os filtros.</p>
-        </div>
-      )}
-
-      {!isLoading && filteredProducts.length > 0 && (
-        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {filteredProducts.map((p: Product) => (
-            <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#00d66f] transition-all">
-               <div className="aspect-square relative overflow-hidden bg-slate-50">
-                  <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={p.description} />
-                  {p.hasPromo && (
-                      <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full font-black text-[7px] uppercase shadow-lg border border-white">
-                          Oferta
-                      </div>
-                  )}
-               </div>
-               <div className="p-4 flex flex-col flex-1">
-                  <p className="text-[7px] font-black uppercase text-slate-400 mb-1 truncate">{p.shopName} • {p.freguesia}</p>
-                  <h4 className="font-black text-[#0a2540] uppercase text-[11px] leading-tight mb-3 line-clamp-2 h-8">{p.description}</h4>
-                  
-                  <div className="mt-auto flex items-center justify-between">
-                     <div className="flex flex-col">
-                        <span className={`font-black text-sm italic ${p.hasPromo ? 'text-red-500' : 'text-[#0a2540]'}`}>
-                          {formatPrice(p.hasPromo ? p.promoPrice! : p.price)}
-                        </span>
-                        {p.hasPromo && <span className="text-[8px] text-slate-300 line-through">{formatPrice(p.price)}</span>}
-                     </div>
-                     <button 
-                       onClick={() => addToShoppingList(p)}
-                       className="bg-[#00d66f] text-[#0a2540] p-2.5 rounded-xl hover:bg-[#0a2540] hover:text-[#00d66f] transition-all shadow-sm"
-                     >
-                       <ShoppingCart size={16} strokeWidth={3}/>
-                     </button>
-                  </div>
-               </div>
+            {/* SELETOR DE ATALHO GEOGRÁFICO */}
+            <div className="flex items-center bg-slate-100 p-1 border-3 border-[#0f172a] rounded-xl overflow-x-auto whitespace-nowrap scrollbar-none">
+              <button
+                onClick={() => handleGeoModeChange('freguesia')}
+                className={`px-4 py-2 rounded-lg font-extrabold text-xs uppercase tracking-tight transition-all ${geoMode === 'freguesia' ? 'bg-[#0f172a] text-white' : 'text-slate-600 hover:bg-slate-200'}`}
+              >
+                Minha Freguesia
+              </button>
+              <button
+                onClick={() => handleGeoModeChange('concelho')}
+                className={`px-4 py-2 rounded-lg font-extrabold text-xs uppercase tracking-tight transition-all ${geoMode === 'concelho' ? 'bg-[#0f172a] text-white' : 'text-slate-600 hover:bg-slate-200'}`}
+              >
+                Meu Concelho
+              </button>
+              <button
+                onClick={() => handleGeoModeChange('all')}
+                className={`px-4 py-2 rounded-lg font-extrabold text-xs uppercase tracking-tight transition-all ${geoMode === 'all' ? 'bg-[#0f172a] text-white' : 'text-slate-600 hover:bg-slate-200'}`}
+              >
+                Ver Todo o País
+              </button>
             </div>
-          ))}
+          </div>
+        </div>
+      </header>
+
+      {/* CONTEÚDO PRINCIPAL */}
+      <main className="max-w-7xl mx-auto px-4 mt-6">
+        {/* APRESENTAÇÃO DE DESTAQUES / BANNERS */}
+        <div className="mb-8">
+          <BannerCarousel />
+        </div>
+
+        {/* FEED DE PRODUTOS */}
+        {isProductsLoading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-12 h-12 border-4 border-[#00d66f] border-t-transparent rounded-full animate-spin"></div>
+            <p className="font-black uppercase italic text-sm tracking-wider text-slate-500 animate-pulse">
+              A atualizar montra de produtos locais...
+            </p>
+          </div>
+        ) : filteredProducts.length === 0 ? (
+          <div className="text-center py-16 bg-white border-4 border-dashed border-slate-200 rounded-2xl p-8 max-w-md mx-auto">
+            <ShoppingBag className="w-12 h-12 text-slate-300 mx-auto mb-4" />
+            <h3 className="font-black uppercase text-lg text-[#0f172a] tracking-tight">
+              Nenhum produto encontrado
+            </h3>
+            <p className="text-sm font-bold text-slate-500 mt-1">
+              Tente alargar o seu raio de pesquisa geográfica ou limpar os filtros ativos.
+            </p>
+            <button
+              onClick={clearAllFilters}
+              className="mt-6 px-5 py-2.5 bg-slate-100 border-2 border-[#0f172a] text-xs font-black uppercase tracking-wider rounded-xl hover:bg-slate-200 transition-all active:translate-y-0.5"
+            >
+              Limpar Todos os Filtros
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-6">
+            {filteredProducts.map((product: any) => {
+              const inList = shoppingList.some(item => item.id === product.id);
+              return (
+                <div 
+                  key={product.id}
+                  className="bg-white border-4 border-[#0f172a] rounded-2xl overflow-hidden flex flex-col shadow-[4px_4px_0px_0px_#0f172a] hover:shadow-[6px_6px_0px_0px_#0f172a] transition-all hover:-translate-y-0.5"
+                >
+                  {/* IMAGEM E PREÇO */}
+                  <div className="relative aspect-square bg-slate-50 border-b-4 border-[#0f172a] overflow-hidden group">
+                    {product.imageUrl ? (
+                      <img 
+                        src={product.imageUrl} 
+                        alt={product.name} 
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                        loading="lazy"
+                      />
+                    ) : (
+                      <div className="w-full h-full flex items-center justify-center text-slate-300">
+                        <ShoppingBag className="w-12 h-12" />
+                      </div>
+                    )}
+                    
+                    {/* PREÇO BRUTALISTA */}
+                    <div className="absolute bottom-3 left-3 bg-[#0f172a] text-white px-3 py-1.5 rounded-lg font-black text-sm tracking-tight border border-white/20 shadow-md">
+                      {Number(product.price).toFixed(2)}€
+                    </div>
+
+                    {/* BADGE DE UNIDADE */}
+                    {product.unit && (
+                      <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-sm text-white px-2 py-0.5 rounded-md font-bold text-[10px] uppercase tracking-wider">
+                        / {product.unit}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* INFO DO PRODUTO */}
+                  <div className="p-3 sm:p-4 flex-1 flex flex-col justify-between gap-3">
+                    <div>
+                      <div className="flex items-center gap-1 text-[10px] font-black text-slate-400 uppercase tracking-wider">
+                        <MapPin className="w-3 h-3 flex-shrink-0" />
+                        <span className="truncate">{product.merchantName || 'Comércio Local'}</span>
+                      </div>
+                      
+                      <h3 className="font-black text-sm sm:text-base text-[#0f172a] mt-0.5 uppercase tracking-tight line-clamp-1">
+                        {product.name}
+                      </h3>
+                      
+                      {product.description && (
+                        <p className="text-xs font-bold text-slate-500 mt-1 line-clamp-2 leading-snug">
+                          {product.description}
+                        </p>
+                      )}
+                    </div>
+
+                    {/* BOTÃO ADICIONAR À LISTA */}
+                    <button
+                      onClick={() => addToShoppingList(product)}
+                      disabled={inList}
+                      className={`w-full py-2.5 px-3 border-3 border-[#0f172a] rounded-xl font-black uppercase italic tracking-tighter text-xs flex items-center justify-center gap-2 transition-all ${
+                        inList 
+                          ? 'bg-slate-100 text-slate-400 border-slate-300 cursor-not-allowed' 
+                          : 'bg-[#00d66f] text-[#0f172a] hover:bg-emerald-400 shadow-[2px_2px_0px_0px_#0f172a] active:translate-y-0.5 active:shadow-none'
+                      }`}
+                    >
+                      {inList ? (
+                        <>
+                          <Check className="w-3.5 h-3.5" />
+                          <span>Na minha Lista</span>
+                        </>
+                      ) : (
+                        <>
+                          <ShoppingBag className="w-3.5 h-3.5" />
+                          <span>Adicionar à Lista</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </main>
+
+      {/* MODAL DE FILTROS AVANÇADOS BRUTALISTA */}
+      {showFiltersModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="bg-white border-4 border-[#0f172a] rounded-3xl w-full max-w-xl max-h-[85vh] flex flex-col overflow-hidden shadow-[8px_8px_0px_0px_#0f172a]">
+            {/* MODAL HEADER */}
+            <div className="p-5 border-b-4 border-[#0f172a] bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <SlidersHorizontal className="w-5 h-5 text-[#0f172a]" />
+                <h2 className="text-lg font-black uppercase italic tracking-tight text-[#0f172a]">
+                  Filtros Disponíveis
+                </h2>
+              </div>
+              <button
+                onClick={() => setShowFiltersModal(false)}
+                className="px-3 py-1 bg-slate-200 border-2 border-[#0f172a] font-bold text-xs uppercase rounded-lg hover:bg-slate-300"
+              >
+                Fechar
+              </button>
+            </div>
+
+            {/* MODAL BODY (SCROLLABLE) */}
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              
+              {/* FILTROS GEOGRÁFICOS */}
+              <div className="space-y-3">
+                <h4 className="font-black text-xs uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5" /> Localização Geográfica
+                </h4>
+                
+                <div className="grid grid-cols-1 gap-3">
+                  {/* DISTRITO */}
+                  <div>
+                    <label className="block text-xs font-black uppercase mb-1 text-slate-700">Distrito</label>
+                    <select
+                      value={filters.distrito}
+                      onChange={(e) => setFilters(prev => ({ ...prev, distrito: e.target.value, concelho: [], freguesia: [] }))}
+                      className="w-full p-2.5 bg-slate-50 border-2 border-[#0f172a] rounded-xl font-bold text-xs focus:ring-0 outline-none"
+                    >
+                      <option value="">Todos os Distritos</option>
+                      {distritosDisponiveis.map((d: string) => <option key={d} value={d}>{d}</option>)}
+                    </select>
+                  </div>
+
+                  {/* CONCELHO */}
+                  <div>
+                    <label className="block text-xs font-black uppercase mb-1 text-slate-700">Concelho</label>
+                    <select
+                      value={filters.concelho[0] || ''}
+                      disabled={!filters.distrito}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilters(prev => ({ ...prev, concelho: val ? [val] : [], freguesia: [] }));
+                      }}
+                      className="w-full p-2.5 bg-slate-50 border-2 border-[#0f172a] rounded-xl font-bold text-xs focus:ring-0 outline-none disabled:opacity-50"
+                    >
+                      <option value="">Todos os Concelhos</option>
+                      {concelhosDisponiveis.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  {/* FREGUESIA */}
+                  <div>
+                    <label className="block text-xs font-black uppercase mb-1 text-slate-700">Freguesia</label>
+                    <select
+                      value={filters.freguesia[0] || ''}
+                      disabled={filters.concelho.length !== 1}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setFilters(prev => ({ ...prev, freguesia: val ? [val] : [] }));
+                      }}
+                      className="w-full p-2.5 bg-slate-50 border-2 border-[#0f172a] rounded-xl font-bold text-xs focus:ring-0 outline-none disabled:opacity-50"
+                    >
+                      <option value="">Todas as Freguesias</option>
+                      {freguesiasDisponiveis.map((f: string) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* FILTROS DE TAXONOMIA */}
+              <div className="space-y-3 pt-4 border-t-2 border-dashed border-slate-200">
+                <h4 className="font-black text-xs uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <Grid className="w-3.5 h-3.5" /> Categorias e Setores
+                </h4>
+
+                <div className="grid grid-cols-1 gap-3">
+                  {/* CATEGORIA */}
+                  <div>
+                    <label className="block text-xs font-black uppercase mb-1 text-slate-700">Categoria Geral</label>
+                    <select
+                      value={filters.category}
+                      onChange={(e) => setFilters(prev => ({ ...prev, category: e.target.value, family: '', productType: '' }))}
+                      className="w-full p-2.5 bg-slate-50 border-2 border-[#0f172a] rounded-xl font-bold text-xs focus:ring-0 outline-none"
+                    >
+                      <option value="">Todas as Categorias</option>
+                      {categoriesDisponiveis.map((c: string) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+
+                  {/* FAMÍLIA */}
+                  <div>
+                    <label className="block text-xs font-black uppercase mb-1 text-slate-700">Família / Subcategoria</label>
+                    <select
+                      value={filters.family}
+                      disabled={!filters.category}
+                      onChange={(e) => setFilters(prev => ({ ...prev, family: e.target.value, productType: '' }))}
+                      className="w-full p-2.5 bg-slate-50 border-2 border-[#0f172a] rounded-xl font-bold text-xs focus:ring-0 outline-none disabled:opacity-50"
+                    >
+                      <option value="">Todas as Famílias</option>
+                      {familiesDisponiveis.map((f: string) => <option key={f} value={f}>{f}</option>)}
+                    </select>
+                  </div>
+
+                  {/* TIPO DE PRODUTO */}
+                  <div>
+                    <label className="block text-xs font-black uppercase mb-1 text-slate-700">Tipo Específico de Produto</label>
+                    <select
+                      value={filters.productType}
+                      disabled={!filters.family}
+                      onChange={(e) => setFilters(prev => ({ ...prev, productType: e.target.value }))}
+                      className="w-full p-2.5 bg-slate-50 border-2 border-[#0f172a] rounded-xl font-bold text-xs focus:ring-0 outline-none disabled:opacity-50"
+                    >
+                      <option value="">Todos os Tipos</option>
+                      {typesDisponiveis.map((t: string) => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* MODAL FOOTER */}
+            <div className="p-4 bg-slate-50 border-t-4 border-[#0f172a] flex items-center justify-between gap-3">
+              <button
+                onClick={clearAllFilters}
+                className="px-4 py-3 bg-white border-2 border-slate-400 font-bold text-xs uppercase tracking-tight rounded-xl hover:bg-slate-100 transition-colors"
+              >
+                Limpar Tudo
+              </button>
+              <button
+                onClick={() => setShowFiltersModal(false)}
+                className="flex-1 py-3 bg-[#00d66f] text-[#0f172a] border-3 border-[#0f172a] font-black uppercase italic text-xs tracking-wider rounded-xl text-center shadow-[2px_2px_0px_0px_#0f172a] hover:bg-emerald-400 transition-all active:translate-y-0.5 active:shadow-none"
+              >
+                Aplicar Filtros Selecionados
+              </button>
+            </div>
+
+          </div>
         </div>
       )}
 
-      {/* CARREGAR MAIS */}
-      {hasMoreProducts && filteredProducts.length > 0 && (
-        <button 
-          onClick={loadMore} 
-          disabled={isLoading}
-          className="w-full p-6 bg-white border-4 border-dashed border-slate-200 rounded-[35px] text-slate-400 font-black uppercase text-[10px] tracking-widest hover:border-[#00d66f] hover:text-[#00d66f] transition-all flex justify-center items-center gap-3"
-        >
-          {isLoading ? <Loader2 className="animate-spin" /> : <ChevronDown />} Carregar mais produtos
-        </button>
-      )}
-
-      {/* MODAL DA LISTA DE COMPRAS */}
-      {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
     </div>
   );
 };
