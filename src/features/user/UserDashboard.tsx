@@ -209,7 +209,22 @@ const UserDashboard: React.FC = () => {
     setAppNotification(null);
   };
 
-  const pendingEvaluations = useMemo(() => transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id)), [transactions, evaluatedIds]);
+  // CORREÇÃO: Agrupar avaliações pendentes por loja e por data para evitar duplicados no mesmo dia
+  const pendingEvaluations = useMemo(() => {
+    const pending = transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+    const unique: Transaction[] = [];
+    const seen = new Set<string>();
+    for (const t of pending) {
+      const dateStr = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente';
+      const key = `${t.merchantId}_${dateStr}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(t);
+      }
+    }
+    return unique;
+  }, [transactions, evaluatedIds]);
+
   const stats = useMemo(() => ({ available: currentUser?.wallet?.available || 0, pending: 0 }), [currentUser?.wallet]);
 
   const handleLogout = async () => {
@@ -307,7 +322,6 @@ const UserDashboard: React.FC = () => {
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
 
-  // Se estiver em marketplace, mostra apenas essa view com botão para voltar
   if (view === 'marketplace') {
     return (
       <div className="min-h-screen bg-[#f1f5f9] font-sans pb-20">
@@ -431,7 +445,7 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setView('history')} 
+            onClick={() => setView(view === 'history' ? 'home' : 'history')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <MessageSquare size={22} />
@@ -479,7 +493,6 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* VISTAS DINÂMICAS (exceto marketplace que já foi tratado) */}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         

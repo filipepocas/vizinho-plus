@@ -1,6 +1,7 @@
 // functions/src/index.ts
 
-import * as functions from "firebase-functions";
+import * as v2 from "firebase-functions/v2";
+import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 
 admin.initializeApp();
@@ -11,10 +12,10 @@ const roundToTwo = (num: number) => Math.round((num + Number.EPSILON) * 100) / 1
 /**
  * 1. PROCESSAR NOVAS TRANSAÇÕES E ATRIBUIR SALDO
  */
-export const processNewTransaction = functions.region("us-central1").firestore
-  .document("transactions/{transactionId}")
-  .onCreate(async (snap, context) => {
-    const tx = snap.data();
+export const txProcessor = v2.firestore.onDocumentCreated(
+  "transactions/{transactionId}",
+  async (event) => {
+    const tx = event.data?.data();
     if (!tx || tx.processedByBackend) return;
 
     const clientRef = db.collection("users").doc(tx.clientId);
@@ -24,7 +25,7 @@ export const processNewTransaction = functions.region("us-central1").firestore
       await db.runTransaction(async (transaction) => {
         const clientDoc = await transaction.get(clientRef);
         const merchantDoc = await transaction.get(merchantRef);
-        
+
         if (!clientDoc.exists || !merchantDoc.exists) throw new Error("Documentos não encontrados.");
 
         const merchantData = merchantDoc.data();
@@ -36,30 +37,29 @@ export const processNewTransaction = functions.region("us-central1").firestore
 
         let secureCashbackAmount = 0;
         let newCashbackEarned = 0;
-        
+
         if (tx.type === 'earn') {
-            if (isLeaving) throw new Error("Loja em processo de saída.");
-            secureCashbackAmount = roundToTwo(baseAmount * (merchantCashbackPercent / 100));
-        } 
-        else if (tx.type === 'redeem') {
-            secureCashbackAmount = baseAmount; 
-            const invoiceAmount = Number(tx.invoiceAmount) || 0; 
+          if (isLeaving) throw new Error("Loja em processo de saída.");
+          secureCashbackAmount = roundToTwo(baseAmount * (merchantCashbackPercent / 100));
+        } else if (tx.type === 'redeem') {
+          secureCashbackAmount = baseAmount;
+          const invoiceAmount = Number(tx.invoiceAmount) || 0;
 
-            if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
-                throw new Error("Fraude: Resgate superior a 50%.");
-            }
+          if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
+            throw new Error("Fraude: Resgate superior a 50%.");
+          }
 
-            if (!isLeaving && invoiceAmount > secureCashbackAmount) {
-                const amountPaid = invoiceAmount - secureCashbackAmount;
-                newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
-            }
-        } 
+          if (!isLeaving && invoiceAmount > secureCashbackAmount) {
+            const amountPaid = invoiceAmount - secureCashbackAmount;
+            newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
+          }
+        }
 
-        transaction.update(snap.ref, {
-            cashbackAmount: secureCashbackAmount,
-            cashbackEarned: newCashbackEarned,
-            cashbackPercent: tx.type === 'earn' ? merchantCashbackPercent : 0,
-            processedByBackend: true 
+        transaction.update(event.data!.ref, {
+          cashbackAmount: secureCashbackAmount,
+          cashbackEarned: newCashbackEarned,
+          cashbackPercent: tx.type === 'earn' ? merchantCashbackPercent : 0,
+          processedByBackend: true
         });
 
         const userData = clientDoc.data();
@@ -67,15 +67,14 @@ export const processNewTransaction = functions.region("us-central1").firestore
 
         let storeWallets = userData.storeWallets || {};
         const mId = tx.merchantId;
-        
+
         if (!storeWallets[mId]) storeWallets[mId] = { available: 0, pending: 0, merchantName: tx.merchantName };
 
         let currentAvailable = storeWallets[mId].available || 0;
 
         if (tx.type === 'earn') {
           storeWallets[mId].available = roundToTwo(currentAvailable + secureCashbackAmount);
-        } 
-        else if (tx.type === 'redeem') {
+        } else if (tx.type === 'redeem') {
           if (currentAvailable < secureCashbackAmount) throw new Error("Saldo insuficiente.");
           storeWallets[mId].available = roundToTwo(currentAvailable - secureCashbackAmount + newCashbackEarned);
         }
@@ -90,50 +89,50 @@ export const processNewTransaction = functions.region("us-central1").firestore
         });
       });
 
-      // ALERTA DE 50 EUROS NO TELEMÓVEL (PUSH)
       const clientDocAfter = await clientRef.get();
       const clientData = clientDocAfter.data();
       if (clientData && clientData.wallet) {
-          const totalAvailable = clientData.wallet.available || 0;
-          if (totalAvailable >= 50 && clientData.fcmTokens && clientData.fcmTokens.length > 0) {
-              const message = {
-                  notification: {
-                      title: "Saldo de 50€ Atingido! 🎉",
-                      body: `Parabéns! Já tens ${totalAvailable.toFixed(2)}€ acumulados no Vizinho+!`,
-                  },
-                  tokens: clientData.fcmTokens,
-                  webpush: {
-                      headers: { Urgency: "high" },
-                      notification: {
-                          icon: "/logo192.png",
-                          badge: "/logo192.png",
-                          requireInteraction: true,
-                          vibrate: [200, 100, 200, 100, 200]
-                      }
-                  }
-              };
-              await admin.messaging().sendEachForMulticast(message);
-          }
+        const totalAvailable = clientData.wallet.available || 0;
+        if (totalAvailable >= 50 && clientData.fcmTokens && clientData.fcmTokens.length > 0) {
+          const message = {
+            notification: {
+              title: "Saldo de 50€ Atingido! 🎉",
+              body: `Parabéns! Já tens ${totalAvailable.toFixed(2)}€ acumulados no Vizinho+!`,
+            },
+            tokens: clientData.fcmTokens,
+            webpush: {
+              headers: { Urgency: "high" },
+              notification: {
+                icon: "/logo192.png",
+                badge: "/logo192.png",
+                requireInteraction: true,
+                vibrate: [200, 100, 200, 100, 200]
+              }
+            }
+          };
+          await admin.messaging().sendEachForMulticast(message);
+        }
       }
-      
+
     } catch (error: any) {
-      console.error("Erro Transação:", error);
-      await snap.ref.update({ status: "rejected", rejectReason: error.message });
+      logger.error("Erro Transação:", error);
+      await event.data?.ref.update({ status: "rejected", rejectReason: error.message });
     }
-  });
+  }
+);
 
 /**
  * 2. REVERTER ANULAÇÕES
  */
-export const revertCancelledTransaction = functions.region("us-central1").firestore
-  .document("transactions/{transactionId}")
-  .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
+export const txReverser = v2.firestore.onDocumentUpdated(
+  "transactions/{transactionId}",
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
 
     if (before && after && before.status !== 'cancelled' && after.status === 'cancelled') {
       const clientRef = db.collection("users").doc(after.clientId);
-      
+
       await db.runTransaction(async (transaction) => {
         const clientDoc = await transaction.get(clientRef);
         const userData = clientDoc.data();
@@ -162,167 +161,172 @@ export const revertCancelledTransaction = functions.region("us-central1").firest
         });
       });
     }
-  });
+  }
+);
 
 /**
  * 3. AVALIAÇÕES DAS LOJAS (Feedback)
  */
-export const onNewFeedback = functions.region("us-central1").firestore
-  .document("feedbacks/{feedbackId}")
-  .onCreate(async (snap, context) => {
-    const feedback = snap.data();
+export const feedbackNotifier = v2.firestore.onDocumentCreated(
+  "feedbacks/{feedbackId}",
+  async (event) => {
+    const feedback = event.data?.data();
     if (!feedback) return;
     try {
       const merchantDoc = await db.collection("users").doc(feedback.merchantId).get();
       const merchantData = merchantDoc.data();
       if (merchantData && merchantData.fcmTokens && merchantData.fcmTokens.length > 0) {
         const message = {
-          notification: { 
-              title: "Nova Avaliação de Cliente!", 
-              body: `${feedback.userName} deu-te ${feedback.rating} estrelas.` 
+          notification: {
+            title: "Nova Avaliação de Cliente!",
+            body: `${feedback.userName} deu-te ${feedback.rating} estrelas.`
           },
           tokens: merchantData.fcmTokens,
           webpush: {
-              headers: { Urgency: "high" },
-              notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] }
+            headers: { Urgency: "high" },
+            notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] }
           }
         };
         await admin.messaging().sendEachForMulticast(message);
       }
-    } catch (error) {}
-  });
+    } catch (error) {
+      logger.error("Erro feedback:", error);
+    }
+  }
+);
 
 /**
- * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN (Para Clientes)
+ * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN
  */
-export const dispatchAdminNotifications = functions.region("us-central1").firestore
-  .document("notifications/{notifId}")
-  .onWrite(async (change, context) => {
-    const notif = change.after.data();
-    
+export const notifDispatcher = v2.firestore.onDocumentWritten(
+  "notifications/{notifId}",
+  async (event) => {
+    const notif = event.data?.after.data();
+
     if (!notif || notif.status !== 'approved' || notif.sent === true) return;
 
     const scheduledFor = notif.scheduledFor?.toDate ? notif.scheduledFor.toDate() : new Date(notif.scheduledFor);
-    if (scheduledFor > new Date()) return; 
+    if (scheduledFor > new Date()) return;
 
     try {
-        const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
-        let tokens: string[] = [];
+      const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
+      let tokens: string[] = [];
 
-        usersSnap.forEach(doc => {
-            const user = doc.data();
-            if (!user.fcmTokens || user.fcmTokens.length === 0) return;
+      usersSnap.forEach(doc => {
+        const user = doc.data();
+        if (!user.fcmTokens || user.fcmTokens.length === 0) return;
 
-            let matches = false;
+        let matches = false;
 
-            if (notif.targetType === 'all') matches = true;
-            else if (notif.targetType === 'email') {
-                if (user.email === notif.targetValue?.toLowerCase()) matches = true;
-            } 
-            else if (notif.targetType === 'birthDate') {
-                if (user.birthDate && user.birthDate.split('-')[1] === notif.targetValue) matches = true;
-            } 
-            else if (notif.targetType === 'zonas') {
-                const zones = notif.targetZones || [];
-                if (zones.some((z: string) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`))) {
-                    matches = true;
-                }
-            }
-
-            if (matches) tokens.push(...user.fcmTokens);
-        });
-
-        if (tokens.length > 0) {
-            const uniqueTokens = [...new Set(tokens)];
-            const message = {
-                notification: { title: notif.title, body: notif.message },
-                webpush: {
-                    headers: { Urgency: "high" },
-                    notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true, vibrate: [200, 100, 200, 100, 200] }
-                }
-            };
-
-            const chunkSize = 500;
-            for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
-                const chunk = uniqueTokens.slice(i, i + chunkSize);
-                await admin.messaging().sendEachForMulticast({ ...message, tokens: chunk });
-            }
+        if (notif.targetType === 'all') matches = true;
+        else if (notif.targetType === 'email') {
+          if (user.email === notif.targetValue?.toLowerCase()) matches = true;
+        } else if (notif.targetType === 'birthDate') {
+          if (user.birthDate && user.birthDate.split('-')[1] === notif.targetValue) matches = true;
+        } else if (notif.targetType === 'zonas') {
+          const zones = notif.targetZones || [];
+          if (zones.some((z: string) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`))) {
+            matches = true;
+          }
         }
 
-        await change.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length });
+        if (matches) tokens.push(...user.fcmTokens);
+      });
+
+      if (tokens.length > 0) {
+        const uniqueTokens = [...new Set(tokens)];
+        const message = {
+          notification: { title: notif.title, body: notif.message },
+          webpush: {
+            headers: { Urgency: "high" },
+            notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true, vibrate: [200, 100, 200, 100, 200] }
+          }
+        };
+
+        const chunkSize = 500;
+        for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
+          const chunk = uniqueTokens.slice(i, i + chunkSize);
+          await admin.messaging().sendEachForMulticast({ ...message, tokens: chunk });
+        }
+      }
+
+      await event.data?.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length });
 
     } catch (error) {
-        console.error("Erro fatal no disparo de Push Admin:", error);
+      logger.error("Erro fatal no disparo de Push Admin:", error);
     }
-  });
+  }
+);
 
 /**
  * 5. MOTOR DE DISPARO DO LOJISTA
  */
-export const dispatchMerchantPushCampaigns = functions.region("us-central1").firestore
-  .document("marketing_requests/{reqId}")
-  .onUpdate(async (change, context) => {
-     const before = change.before.data();
-     const after = change.after.data();
+export const merchantPushDispatcher = v2.firestore.onDocumentUpdated(
+  "marketing_requests/{reqId}",
+  async (event) => {
+    const before = event.data?.before.data();
+    const after = event.data?.after.data();
 
-     if (before.status !== 'approved' && after.status === 'approved' && after.type === 'push_notification' && after.sent !== true) {
-         
-        try {
-            const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
-            let tokens: string[] = [];
+    if (before?.status !== 'approved' && after?.status === 'approved' && after?.type === 'push_notification' && after?.sent !== true) {
 
-            usersSnap.forEach(doc => {
-                const user = doc.data();
-                if (!user.fcmTokens || user.fcmTokens.length === 0) return;
+      try {
+        const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
+        let tokens: string[] = [];
 
-                let matches = false;
+        usersSnap.forEach(doc => {
+          const user = doc.data();
+          if (!user.fcmTokens || user.fcmTokens.length === 0) return;
 
-                if (after.targetType === 'all') matches = true;
-                else if (after.targetType === 'birthDate') {
-                    const cm = new Date().getMonth() + 1;
-                    if (user.birthDate && parseInt(user.birthDate.split('-')[1]) === cm) matches = true;
-                } 
-                else if (after.targetType === 'zonas') {
-                    const zones = after.targetZones || [];
-                    if (zones.some((z: string) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`))) {
-                        matches = true;
-                    }
-                }
+          let matches = false;
 
-                if (matches) tokens.push(...user.fcmTokens);
-            });
-
-            if (tokens.length > 0) {
-                const uniqueTokens = [...new Set(tokens)];
-                const message = {
-                    notification: { title: after.title, body: after.text },
-                    webpush: {
-                        headers: { Urgency: "high" },
-                        notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true, vibrate: [200, 100, 200, 100, 200] }
-                    }
-                };
-
-                const chunkSize = 500;
-                for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
-                    const chunk = uniqueTokens.slice(i, i + chunkSize);
-                    await admin.messaging().sendEachForMulticast({ ...message, tokens: chunk });
-                }
+          if (after.targetType === 'all') matches = true;
+          else if (after.targetType === 'birthDate') {
+            const cm = new Date().getMonth() + 1;
+            if (user.birthDate && parseInt(user.birthDate.split('-')[1]) === cm) matches = true;
+          } else if (after.targetType === 'zonas') {
+            const zones = after.targetZones || [];
+            if (zones.some((z: string) => z.includes(`Freguesia: ${user.freguesia}`) || z.includes(`Concelho: ${user.concelho}`) || z.includes(`Distrito: ${user.distrito}`))) {
+              matches = true;
             }
+          }
 
-            await change.after.ref.update({ sent: true });
+          if (matches) tokens.push(...user.fcmTokens);
+        });
 
-        } catch (error) {
-            console.error("Erro no Push do Lojista:", error);
+        if (tokens.length > 0) {
+          const uniqueTokens = [...new Set(tokens)];
+          const message = {
+            notification: { title: after.title, body: after.text },
+            webpush: {
+              headers: { Urgency: "high" },
+              notification: { icon: "/logo192.png", badge: "/logo192.png", requireInteraction: true, vibrate: [200, 100, 200, 100, 200] }
+            }
+          };
+
+          const chunkSize = 500;
+          for (let i = 0; i < uniqueTokens.length; i += chunkSize) {
+            const chunk = uniqueTokens.slice(i, i + chunkSize);
+            await admin.messaging().sendEachForMulticast({ ...message, tokens: chunk });
+          }
         }
-     }
-  });
+
+        await event.data?.after.ref.update({ sent: true });
+
+      } catch (error) {
+        logger.error("Erro no Push do Lojista:", error);
+      }
+    }
+  }
+);
 
 /**
- * 6. MENSAGEM MANUAL DO ADMIN PARA LOJISTAS E CLIENTES ESPECÍFICOS (Legacy)
+ * 6. MENSAGEM MANUAL DO ADMIN
  */
-export const sendAdminNotification = functions.region("us-central1").https.onCall(async (data, context) => {
-  if (context.auth?.token.email !== "rochap.filipe@gmail.com") throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
-  const { targetUserId, title, body } = data;
+export const adminMessenger = v2.https.onCall(async (request) => {
+  if (request.auth?.token.email !== "rochap.filipe@gmail.com") {
+    throw new v2.https.HttpsError("permission-denied", "Acesso restrito.");
+  }
+  const { targetUserId, title, body } = request.data;
   try {
     let tokens: string[] = [];
     if (targetUserId === "all") {
@@ -333,29 +337,32 @@ export const sendAdminNotification = functions.region("us-central1").https.onCal
       tokens = userDoc.data()?.fcmTokens || [];
     }
     if (tokens.length === 0) return { success: false };
-    const message = { 
-        notification: { title, body }, tokens, 
-        webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] } } 
+    const message = {
+      notification: { title, body }, tokens,
+      webpush: { headers: { Urgency: "high" }, notification: { icon: "/logo192.png", badge: "/logo192.png", vibrate: [200, 100, 200] } }
     };
     const response = await admin.messaging().sendEachForMulticast(message);
     return { success: true, sentCount: response.successCount };
-  } catch (error: any) { throw new functions.https.HttpsError("internal", error.message); }
+  } catch (error: any) {
+    throw new v2.https.HttpsError("internal", error.message);
+  }
 });
 
 /**
  * 7. CONTADOR DE MEMBROS
  */
-export const updateMemberCount = functions.region("us-central1").firestore
-  .document("users/{userId}")
-  .onWrite(async (change, context) => {
+export const memberCounter = v2.firestore.onDocumentWritten(
+  "users/{userId}",
+  async () => {
     try {
       const usersSnap = await db.collection("users").get();
       const count = usersSnap.size;
-      await db.doc("system/memberCount").set({ 
-        count, 
-        updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      await db.doc("system/memberCount").set({
+        count,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
     } catch (error) {
-      console.error("Erro ao atualizar contador:", error);
+      logger.error("Erro ao atualizar contador:", error);
     }
-  });
+  }
+);

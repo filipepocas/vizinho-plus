@@ -7,7 +7,7 @@ import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
 
 const ProductMarketplace: React.FC = () => {
-  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList } = useStore();
+  const { products, fetchProducts, hasMoreProducts, isLoading, locations, taxonomy, addToShoppingList, shoppingList, currentUser } = useStore();
   
   const [filters, setFilters] = useState<{
     distrito: string;
@@ -18,9 +18,9 @@ const ProductMarketplace: React.FC = () => {
     productType: string;
     searchQuery: string;
   }>({
-    distrito: '',
-    concelho: [],
-    freguesia: [],
+    distrito: currentUser?.distrito || '',
+    concelho: currentUser?.concelho ? [currentUser.concelho] : [],
+    freguesia: currentUser?.freguesia ? [currentUser.freguesia] : [],
     category: '',
     family: '',
     productType: '',
@@ -32,6 +32,7 @@ const ProductMarketplace: React.FC = () => {
 
   useEffect(() => {
     fetchProducts(filters);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleApplyFilters = () => {

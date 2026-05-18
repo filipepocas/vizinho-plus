@@ -34,8 +34,9 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.sendAdminNotification = exports.dispatchMerchantPushCampaigns = exports.dispatchAdminNotifications = exports.onNewFeedback = exports.revertCancelledTransaction = exports.processNewTransaction = void 0;
-const functions = __importStar(require("firebase-functions"));
+exports.memberCounter = exports.adminMessenger = exports.merchantPushDispatcher = exports.notifDispatcher = exports.feedbackNotifier = exports.txReverser = exports.txProcessor = void 0;
+const v2 = __importStar(require("firebase-functions/v2"));
+const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
@@ -43,10 +44,9 @@ const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
 /**
  * 1. PROCESSAR NOVAS TRANSAÇÕES E ATRIBUIR SALDO
  */
-exports.processNewTransaction = functions.region("us-central1").firestore
-    .document("transactions/{transactionId}")
-    .onCreate(async (snap, context) => {
-    const tx = snap.data();
+exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionId}", async (event) => {
+    var _a, _b;
+    const tx = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
     if (!tx || tx.processedByBackend)
         return;
     const clientRef = db.collection("users").doc(tx.clientId);
@@ -81,7 +81,7 @@ exports.processNewTransaction = functions.region("us-central1").firestore
                     newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
                 }
             }
-            transaction.update(snap.ref, {
+            transaction.update(event.data.ref, {
                 cashbackAmount: secureCashbackAmount,
                 cashbackEarned: newCashbackEarned,
                 cashbackPercent: tx.type === 'earn' ? merchantCashbackPercent : 0,
@@ -111,7 +111,6 @@ exports.processNewTransaction = functions.region("us-central1").firestore
                 wallet: { available: roundToTwo(globalAvailable), pending: 0 }
             });
         });
-        // ALERTA DE 50 EUROS NO TELEMÓVEL (PUSH)
         const clientDocAfter = await clientRef.get();
         const clientData = clientDocAfter.data();
         if (clientData && clientData.wallet) {
@@ -138,18 +137,17 @@ exports.processNewTransaction = functions.region("us-central1").firestore
         }
     }
     catch (error) {
-        console.error("Erro Transação:", error);
-        await snap.ref.update({ status: "rejected", rejectReason: error.message });
+        logger.error("Erro Transação:", error);
+        await ((_b = event.data) === null || _b === void 0 ? void 0 : _b.ref.update({ status: "rejected", rejectReason: error.message }));
     }
 });
 /**
  * 2. REVERTER ANULAÇÕES
  */
-exports.revertCancelledTransaction = functions.region("us-central1").firestore
-    .document("transactions/{transactionId}")
-    .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
+exports.txReverser = v2.firestore.onDocumentUpdated("transactions/{transactionId}", async (event) => {
+    var _a, _b;
+    const before = (_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data();
+    const after = (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data();
     if (before && after && before.status !== 'cancelled' && after.status === 'cancelled') {
         const clientRef = db.collection("users").doc(after.clientId);
         await db.runTransaction(async (transaction) => {
@@ -182,10 +180,9 @@ exports.revertCancelledTransaction = functions.region("us-central1").firestore
 /**
  * 3. AVALIAÇÕES DAS LOJAS (Feedback)
  */
-exports.onNewFeedback = functions.region("us-central1").firestore
-    .document("feedbacks/{feedbackId}")
-    .onCreate(async (snap, context) => {
-    const feedback = snap.data();
+exports.feedbackNotifier = v2.firestore.onDocumentCreated("feedbacks/{feedbackId}", async (event) => {
+    var _a;
+    const feedback = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
     if (!feedback)
         return;
     try {
@@ -206,22 +203,19 @@ exports.onNewFeedback = functions.region("us-central1").firestore
             await admin.messaging().sendEachForMulticast(message);
         }
     }
-    catch (error) { }
+    catch (error) {
+        logger.error("Erro feedback:", error);
+    }
 });
 /**
- * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN (Para Clientes)
- * Lê os filtros e acorda os telemóveis bloqueados.
+ * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN
  */
-exports.dispatchAdminNotifications = functions.region("us-central1").firestore
-    .document("notifications/{notifId}")
-    .onWrite(async (change, context) => {
-    var _a;
-    const notif = change.after.data();
-    // Se não está aprovada ou já foi enviada, ignora.
+exports.notifDispatcher = v2.firestore.onDocumentWritten("notifications/{notifId}", async (event) => {
+    var _a, _b, _c;
+    const notif = (_a = event.data) === null || _a === void 0 ? void 0 : _a.after.data();
     if (!notif || notif.status !== 'approved' || notif.sent === true)
         return;
-    // Proteção para agendamentos futuros
-    const scheduledFor = ((_a = notif.scheduledFor) === null || _a === void 0 ? void 0 : _a.toDate) ? notif.scheduledFor.toDate() : new Date(notif.scheduledFor);
+    const scheduledFor = ((_b = notif.scheduledFor) === null || _b === void 0 ? void 0 : _b.toDate) ? notif.scheduledFor.toDate() : new Date(notif.scheduledFor);
     if (scheduledFor > new Date())
         return;
     try {
@@ -267,24 +261,20 @@ exports.dispatchAdminNotifications = functions.region("us-central1").firestore
                 await admin.messaging().sendEachForMulticast(Object.assign(Object.assign({}, message), { tokens: chunk }));
             }
         }
-        // Marca como enviada para não disparar em loop
-        await change.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length });
+        await ((_c = event.data) === null || _c === void 0 ? void 0 : _c.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length }));
     }
     catch (error) {
-        console.error("Erro fatal no disparo de Push Admin:", error);
+        logger.error("Erro fatal no disparo de Push Admin:", error);
     }
 });
 /**
  * 5. MOTOR DE DISPARO DO LOJISTA
- * Dispara o Push quando o Admin aprova o pedido de Marketing.
  */
-exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestore
-    .document("marketing_requests/{reqId}")
-    .onUpdate(async (change, context) => {
-    const before = change.before.data();
-    const after = change.after.data();
-    // Apenas avança se o Admin acabou de aprovar um Push
-    if (before.status !== 'approved' && after.status === 'approved' && after.type === 'push_notification' && after.sent !== true) {
+exports.merchantPushDispatcher = v2.firestore.onDocumentUpdated("marketing_requests/{reqId}", async (event) => {
+    var _a, _b, _c;
+    const before = (_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data();
+    const after = (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data();
+    if ((before === null || before === void 0 ? void 0 : before.status) !== 'approved' && (after === null || after === void 0 ? void 0 : after.status) === 'approved' && (after === null || after === void 0 ? void 0 : after.type) === 'push_notification' && (after === null || after === void 0 ? void 0 : after.sent) !== true) {
         try {
             const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
             let tokens = [];
@@ -306,8 +296,6 @@ exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestor
                         matches = true;
                     }
                 }
-                // Nota: top_20 é filtrado no backend para segurança, podemos expandir no futuro, 
-                // mas a validação base é feita acima.
                 if (matches)
                     tokens.push(...user.fcmTokens);
             });
@@ -326,22 +314,22 @@ exports.dispatchMerchantPushCampaigns = functions.region("us-central1").firestor
                     await admin.messaging().sendEachForMulticast(Object.assign(Object.assign({}, message), { tokens: chunk }));
                 }
             }
-            // Marcar como enviado
-            await change.after.ref.update({ sent: true });
+            await ((_c = event.data) === null || _c === void 0 ? void 0 : _c.after.ref.update({ sent: true }));
         }
         catch (error) {
-            console.error("Erro no Push do Lojista:", error);
+            logger.error("Erro no Push do Lojista:", error);
         }
     }
 });
 /**
- * 6. MENSAGEM MANUAL DO ADMIN PARA LOJISTAS E CLIENTES ESPECÍFICOS (Legacy)
+ * 6. MENSAGEM MANUAL DO ADMIN
  */
-exports.sendAdminNotification = functions.region("us-central1").https.onCall(async (data, context) => {
+exports.adminMessenger = v2.https.onCall(async (request) => {
     var _a, _b;
-    if (((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com")
-        throw new functions.https.HttpsError("permission-denied", "Acesso restrito.");
-    const { targetUserId, title, body } = data;
+    if (((_a = request.auth) === null || _a === void 0 ? void 0 : _a.token.email) !== "rochap.filipe@gmail.com") {
+        throw new v2.https.HttpsError("permission-denied", "Acesso restrito.");
+    }
+    const { targetUserId, title, body } = request.data;
     try {
         let tokens = [];
         if (targetUserId === "all") {
@@ -363,7 +351,23 @@ exports.sendAdminNotification = functions.region("us-central1").https.onCall(asy
         return { success: true, sentCount: response.successCount };
     }
     catch (error) {
-        throw new functions.https.HttpsError("internal", error.message);
+        throw new v2.https.HttpsError("internal", error.message);
+    }
+});
+/**
+ * 7. CONTADOR DE MEMBROS
+ */
+exports.memberCounter = v2.firestore.onDocumentWritten("users/{userId}", async () => {
+    try {
+        const usersSnap = await db.collection("users").get();
+        const count = usersSnap.size;
+        await db.doc("system/memberCount").set({
+            count,
+            updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+    }
+    catch (error) {
+        logger.error("Erro ao atualizar contador:", error);
     }
 });
 //# sourceMappingURL=index.js.map

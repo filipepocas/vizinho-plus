@@ -116,10 +116,14 @@ export const useStore = create<StoreState>((set, get) => ({
     const { products, lastVisibleProduct } = get();
     
     try {
-      let q = query(
-        collection(db, 'products'), 
-        limit(100)
-      );
+      let q: any = collection(db, 'products');
+      
+      // Otimização: Filtra logo no Firestore pelo distrito para garantir que os produtos locais vêm primeiro
+      if (filters.distrito) {
+        q = query(q, where('distrito', '==', filters.distrito));
+      }
+      
+      q = query(q, limit(100));
 
       if (isNextPage && lastVisibleProduct) {
         q = query(q, startAfter(lastVisibleProduct));
@@ -128,7 +132,7 @@ export const useStore = create<StoreState>((set, get) => ({
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // Ordenação robusta
+      // Ordenação robusta no cliente (evita necessidade de índices compostos complexos no Firestore)
       fetchedProducts.sort((a: Product, b: Product) => {
         const dateA = getProductDate(a);
         const dateB = getProductDate(b);
@@ -138,8 +142,8 @@ export const useStore = create<StoreState>((set, get) => ({
         return dateB - dateA;
       });
 
-      // Filtros geográficos e taxonomia (sem filtro de data)
-      const hasAnyFilter = filters.distrito || 
+      // Filtros geográficos e taxonomia adicionais no cliente
+      const hasAnyFilter = 
         (filters.concelho && filters.concelho.length > 0) || 
         (filters.freguesia && filters.freguesia.length > 0) || 
         filters.category || 
@@ -148,7 +152,6 @@ export const useStore = create<StoreState>((set, get) => ({
 
       if (hasAnyFilter) {
         fetchedProducts = fetchedProducts.filter((p: Product) => {
-          if (filters.distrito && p.distrito !== filters.distrito) return false;
           if (filters.concelho && filters.concelho.length > 0 && !filters.concelho.includes(p.concelho)) return false;
           if (filters.freguesia && filters.freguesia.length > 0 && !filters.freguesia.includes(p.freguesia)) return false;
           if (filters.category && p.category !== filters.category) return false;
