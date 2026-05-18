@@ -1,6 +1,6 @@
 // src/features/user/UserDashboard.tsx
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useStore } from '../../store/useStore';
 import { QRCodeCanvas } from 'qrcode.react';
@@ -52,6 +52,7 @@ const UserDashboard: React.FC = () => {
   const [showRulesModal, setShowRulesModal] = useState(false); 
   const [showFaqModal, setShowFaqModal] = useState(false); 
   const [emailCopied, setEmailCopied] = useState(false);
+  const marketplaceRef = useRef<HTMLDivElement | null>(null);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
 
