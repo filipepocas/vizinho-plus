@@ -31,7 +31,13 @@ const ProductMarketplace: React.FC = () => {
   const [showCart, setShowCart] = useState(false);
 
   useEffect(() => {
-    fetchProducts(filters);
+    // Se tem um distrito, busca produtos desse distrito
+    if (filters.distrito) {
+      fetchProducts(filters);
+    } else {
+      // Se não tem distrito, busca TODOS os produtos
+      fetchProducts({});
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

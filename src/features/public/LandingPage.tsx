@@ -99,12 +99,32 @@ const LandingPage: React.FC = () => {
         }
 
         // Contagem via documento público mantido pela Cloud Function
-        const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
-        if (countSnap.exists()) {
-          setMembersCount(countSnap.data().count || 0);
-        } else {
-          setMembersCount(0);
+        let memberCount = 0;
+        try {
+          const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
+          if (countSnap.exists()) {
+            memberCount = countSnap.data().count || 0;
+            console.log('[LandingPage] memberCount from system/memberCount:', memberCount);
+          } else {
+            // Fallback: contar usuários diretamente se o documento não existir
+            console.log('[LandingPage] system/memberCount não existe, contando usuários...');
+            const usersSnap = await getDocs(collection(db, 'users'));
+            memberCount = usersSnap.size;
+            console.log('[LandingPage] memberCount fallback:', memberCount);
+          }
+        } catch (err) {
+          console.error('[LandingPage] Erro ao contar membros:', err);
+          // Fallback final: tentar contar mesmo com erro
+          try {
+            const usersSnap = await getDocs(collection(db, 'users'));
+            memberCount = usersSnap.size;
+            console.log('[LandingPage] memberCount fallback (from error):', memberCount);
+          } catch (err2) {
+            console.error('[LandingPage] Erro ao contar fallback:', err2);
+            memberCount = 0;
+          }
         }
+        setMembersCount(memberCount);
 
         const now2 = new Date();
         const cSnap2 = await getDocs(query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc')));

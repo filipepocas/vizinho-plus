@@ -6,12 +6,14 @@ interface UserHistoryProps {
   transactions: Transaction[];
   evaluatedIds: string[];
   onSelectTxForFeedback: (tx: Transaction) => void;
+  pendingEvaluations?: Transaction[];
 }
 
-const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, onSelectTxForFeedback }) => {
+const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, onSelectTxForFeedback, pendingEvaluations: propPendingEvaluations }) => {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
 
-  const pendingEvaluations = transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+  // Usar pendingEvaluations passado como prop se disponível, caso contrário calcular localmente
+  const pendingEvaluations = propPendingEvaluations || transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
 
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-4 duration-500 pb-10">

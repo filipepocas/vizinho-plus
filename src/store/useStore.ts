@@ -116,21 +116,26 @@ export const useStore = create<StoreState>((set, get) => ({
     const { products, lastVisibleProduct } = get();
     
     try {
-      let q: any = collection(db, 'products');
+      // Construir constraints dinamicamente
+      const constraints: any[] = [];
       
       // Otimização: Filtra logo no Firestore pelo distrito para garantir que os produtos locais vêm primeiro
       if (filters.distrito) {
-        q = query(q, where('distrito', '==', filters.distrito));
+        constraints.push(where('distrito', '==', filters.distrito));
       }
       
-      q = query(q, limit(100));
+      constraints.push(limit(100));
 
       if (isNextPage && lastVisibleProduct) {
-        q = query(q, startAfter(lastVisibleProduct));
+        constraints.push(startAfter(lastVisibleProduct));
       }
 
+      // Construir query corretamente com todos os constraints
+      const q = query(collection(db, 'products'), ...constraints);
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
+
+      console.log(`[fetchProducts] Filtros:`, filters, `| Produtos encontrados:`, fetchedProducts.length);
 
       // Ordenação robusta no cliente (evita necessidade de índices compostos complexos no Firestore)
       fetchedProducts.sort((a: Product, b: Product) => {
