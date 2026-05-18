@@ -18,7 +18,7 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift, ArrowLeft
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -209,7 +209,6 @@ const UserDashboard: React.FC = () => {
     setAppNotification(null);
   };
 
-  // CORREÇÃO: Agrupar avaliações pendentes por loja e por data para evitar duplicados no mesmo dia
   const pendingEvaluations = useMemo(() => {
     const pending = transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
     const unique: Transaction[] = [];
@@ -322,27 +321,6 @@ const UserDashboard: React.FC = () => {
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
 
-  if (view === 'marketplace') {
-    return (
-      <div className="min-h-screen bg-[#f1f5f9] font-sans pb-20">
-        <div className="sticky top-0 z-50 bg-[#0a2540] p-4 flex items-center justify-between shadow-lg">
-          <button 
-            onClick={() => setView('home')} 
-            className="bg-white/10 text-white p-2 rounded-xl hover:bg-white/20 transition-all flex items-center gap-2"
-          >
-            <ArrowLeft size={20} />
-            <span className="text-[10px] font-black uppercase tracking-widest">Voltar</span>
-          </button>
-          <h2 className="text-white font-black uppercase italic tracking-tighter text-lg">Produtos Locais</h2>
-          <div className="w-16"></div>
-        </div>
-        <div className="max-w-2xl mx-auto px-4 pt-4">
-          <ProductMarketplace />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
@@ -430,25 +408,25 @@ const UserDashboard: React.FC = () => {
         <div className="grid grid-cols-2 gap-3">
           <button 
             onClick={() => setView('marketplace')} 
-            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]"
+            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <ShoppingBag size={22} strokeWidth={3} />
+            <ShoppingBag size={22} className={view === 'marketplace' ? 'text-[#00d66f]' : ''} />
             <span>Produtos Locais</span>
           </button>
           
           <button 
-            onClick={() => setView(view === 'explore' ? 'home' : 'explore')} 
+            onClick={() => setView('explore')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <Store size={22} />
+            <Store size={22} className={view === 'explore' ? 'text-[#00d66f]' : ''} />
             <span>Lojas Parceiras</span>
           </button>
 
           <button 
-            onClick={() => setView(view === 'history' ? 'home' : 'history')} 
+            onClick={() => setView('history')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <MessageSquare size={22} />
+            <MessageSquare size={22} className={view === 'history' ? 'text-[#00d66f]' : ''} />
             <span>Avaliar Compras</span>
             {pendingEvaluations.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">
@@ -458,20 +436,20 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => setView(view === 'wallets' ? 'home' : 'wallets')} 
+            onClick={() => setView('wallets')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <Wallet size={22} />
+            <Wallet size={22} className={view === 'wallets' ? 'text-[#00d66f]' : ''} />
             <span>O Meu Saldo</span>
           </button>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => setView(view === 'events' ? 'home' : 'events')} 
+            onClick={() => setView('events')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <CalendarPlus size={22} className="text-blue-500" />
+            <CalendarPlus size={22} className={view === 'events' ? 'text-[#00d66f]' : 'text-blue-500'} />
             <span>Eventos</span>
             {events.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
@@ -480,10 +458,10 @@ const UserDashboard: React.FC = () => {
             )}
           </button>
           <button 
-            onClick={() => setView(view === 'anti_waste' ? 'home' : 'anti_waste')} 
+            onClick={() => setView('anti_waste')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
-            <Leaf size={22} className="text-green-500" />
+            <Leaf size={22} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-green-500'} />
             <span>Desperdício Zero</span>
             {wasteItems.length > 0 && (
               <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
@@ -493,44 +471,13 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
+        {/* VISTAS DINÂMICAS */}
+        {view === 'marketplace' && <ProductMarketplace />}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">
-            {pendingEvaluations.length > 0 && (
-              <div className="bg-amber-50 border-4 border-amber-200 rounded-[30px] p-6 shadow-md">
-                <h3 className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-                  <Star size={16} className="fill-amber-500 text-amber-500" /> Lojas por Avaliar ({pendingEvaluations.length})
-                </h3>
-                <p className="text-[9px] font-bold text-amber-700 mb-4 uppercase">
-                  Avalie as lojas onde fez compras recentemente e ajude a comunidade.
-                </p>
-                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-                  {pendingEvaluations.slice(0, 5).map((t) => (
-                    <div key={`eval-${t.id}`} className="bg-white p-4 rounded-2xl border-2 border-amber-100 flex items-center justify-between shadow-sm">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Store size={18}/></div>
-                        <div>
-                          <p className="text-xs font-black text-[#0a2540] uppercase truncate max-w-[150px]">{t.merchantName}</p>
-                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                            {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente'} • {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(t.amount)}
-                          </p>
-                        </div>
-                      </div>
-                      <button onClick={() => setSelectedTxForFeedback(t)} className="bg-[#0a2540] text-[#00d66f] px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-md">
-                        Avaliar
-                      </button>
-                    </div>
-                  ))}
-                  {pendingEvaluations.length > 5 && (
-                    <p className="text-center text-[9px] font-black text-amber-600 uppercase py-2">
-                      E mais {pendingEvaluations.length - 5} por avaliar abaixo no histórico
-                    </p>
-                  )}
-                </div>
-              </div>
-            )}
             <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />
           </div>
         )}
