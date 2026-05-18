@@ -427,7 +427,7 @@ const UserDashboard: React.FC = () => {
           </button>
           
           <button 
-            onClick={() => switchView('explore') 
+            onClick={() => switchView('explore')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'explore' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <Store size={22} className={view === 'explore' ? 'text-[#00d66f]' : ''} />
@@ -435,7 +435,7 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => switchView('history') 
+            onClick={() => switchView('history')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <MessageSquare size={22} className={view === 'history' ? 'text-[#00d66f]' : ''} />
@@ -448,7 +448,7 @@ const UserDashboard: React.FC = () => {
           </button>
 
           <button 
-            onClick={() => switchView('wallets') 
+            onClick={() => switchView('wallets')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <Wallet size={22} className={view === 'wallets' ? 'text-[#00d66f]' : ''} />
@@ -458,7 +458,7 @@ const UserDashboard: React.FC = () => {
 
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => switchView('events') 
+            onClick={() => switchView('events')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <CalendarPlus size={22} className={view === 'events' ? 'text-[#00d66f]' : 'text-blue-500'} />
@@ -470,7 +470,7 @@ const UserDashboard: React.FC = () => {
             )}
           </button>
           <button 
-            onClick={() => switchView('anti_waste') 
+            onClick={() => switchView('anti_waste')} 
             className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
           >
             <Leaf size={22} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-green-500'} />
