@@ -194,17 +194,14 @@ export const onNewFeedback = functions.region("us-central1").firestore
 
 /**
  * 4. MOTOR DE DISPARO DE NOTIFICAÇÕES DO ADMIN (Para Clientes)
- * Lê os filtros e acorda os telemóveis bloqueados.
  */
 export const dispatchAdminNotifications = functions.region("us-central1").firestore
   .document("notifications/{notifId}")
   .onWrite(async (change, context) => {
     const notif = change.after.data();
     
-    // Se não está aprovada ou já foi enviada, ignora.
     if (!notif || notif.status !== 'approved' || notif.sent === true) return;
 
-    // Proteção para agendamentos futuros
     const scheduledFor = notif.scheduledFor?.toDate ? notif.scheduledFor.toDate() : new Date(notif.scheduledFor);
     if (scheduledFor > new Date()) return; 
 
@@ -252,7 +249,6 @@ export const dispatchAdminNotifications = functions.region("us-central1").firest
             }
         }
 
-        // Marca como enviada para não disparar em loop
         await change.after.ref.update({ sent: true, sentAt: admin.firestore.FieldValue.serverTimestamp(), reachCount: tokens.length });
 
     } catch (error) {
@@ -262,7 +258,6 @@ export const dispatchAdminNotifications = functions.region("us-central1").firest
 
 /**
  * 5. MOTOR DE DISPARO DO LOJISTA
- * Dispara o Push quando o Admin aprova o pedido de Marketing.
  */
 export const dispatchMerchantPushCampaigns = functions.region("us-central1").firestore
   .document("marketing_requests/{reqId}")
@@ -270,7 +265,6 @@ export const dispatchMerchantPushCampaigns = functions.region("us-central1").fir
      const before = change.before.data();
      const after = change.after.data();
 
-     // Apenas avança se o Admin acabou de aprovar um Push
      if (before.status !== 'approved' && after.status === 'approved' && after.type === 'push_notification' && after.sent !== true) {
          
         try {
@@ -294,8 +288,6 @@ export const dispatchMerchantPushCampaigns = functions.region("us-central1").fir
                         matches = true;
                     }
                 }
-                // Nota: top_20 é filtrado no backend para segurança, podemos expandir no futuro, 
-                // mas a validação base é feita acima.
 
                 if (matches) tokens.push(...user.fcmTokens);
             });
@@ -317,7 +309,6 @@ export const dispatchMerchantPushCampaigns = functions.region("us-central1").fir
                 }
             }
 
-            // Marcar como enviado
             await change.after.ref.update({ sent: true });
 
         } catch (error) {
@@ -350,3 +341,21 @@ export const sendAdminNotification = functions.region("us-central1").https.onCal
     return { success: true, sentCount: response.successCount };
   } catch (error: any) { throw new functions.https.HttpsError("internal", error.message); }
 });
+
+/**
+ * 7. CONTADOR DE MEMBROS
+ */
+export const updateMemberCount = functions.region("us-central1").firestore
+  .document("users/{userId}")
+  .onWrite(async (change, context) => {
+    try {
+      const usersSnap = await db.collection("users").get();
+      const count = usersSnap.size;
+      await db.doc("system/memberCount").set({ 
+        count, 
+        updatedAt: admin.firestore.FieldValue.serverTimestamp() 
+      });
+    } catch (error) {
+      console.error("Erro ao atualizar contador:", error);
+    }
+  });

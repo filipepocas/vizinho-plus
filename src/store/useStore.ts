@@ -43,32 +43,20 @@ interface StoreState {
   fetchTaxonomy: () => Promise<void>;
 }
 
-// Função auxiliar para extrair data de qualquer formato
+// Extrai data em ms de qualquer formato
 const getProductDate = (p: Product): number => {
   if (!p.createdAt) return 0;
-  if (p.createdAt.toDate && typeof p.createdAt.toDate === 'function') {
-    return p.createdAt.toDate().getTime();
-  }
-  if (p.createdAt.seconds) {
-    return p.createdAt.seconds * 1000;
-  }
-  if (typeof p.createdAt === 'string') {
-    return new Date(p.createdAt).getTime();
-  }
-  if (typeof p.createdAt === 'number') {
-    return p.createdAt;
-  }
+  if (p.createdAt.toDate && typeof p.createdAt.toDate === 'function') return p.createdAt.toDate().getTime();
+  if (p.createdAt.seconds) return p.createdAt.seconds * 1000;
+  if (typeof p.createdAt === 'string') return new Date(p.createdAt).getTime();
+  if (typeof p.createdAt === 'number') return p.createdAt;
   return 0;
 };
 
 const getTransactionDate = (t: Transaction): number => {
   if (!t.createdAt) return 0;
-  if (t.createdAt.toDate && typeof t.createdAt.toDate === 'function') {
-    return t.createdAt.toDate().getTime();
-  }
-  if (t.createdAt.seconds) {
-    return t.createdAt.seconds * 1000;
-  }
+  if (t.createdAt.toDate && typeof t.createdAt.toDate === 'function') return t.createdAt.toDate().getTime();
+  if (t.createdAt.seconds) return t.createdAt.seconds * 1000;
   return 0;
 };
 
@@ -140,16 +128,17 @@ export const useStore = create<StoreState>((set, get) => ({
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // Ordenação robusta em memória
+      // Ordenação robusta
       fetchedProducts.sort((a: Product, b: Product) => {
         const dateA = getProductDate(a);
         const dateB = getProductDate(b);
+        if (dateA === 0 && dateB === 0) return 0;
+        if (dateA === 0) return -1;
+        if (dateB === 0) return 1;
         return dateB - dateA;
       });
 
-      // Filtro de 7 dias robusto
-      const seteDiasAtras = Date.now() - (7 * 24 * 60 * 60 * 1000);
-
+      // Filtros geográficos e taxonomia (sem filtro de data)
       const hasAnyFilter = filters.distrito || 
         (filters.concelho && filters.concelho.length > 0) || 
         (filters.freguesia && filters.freguesia.length > 0) || 
@@ -157,23 +146,17 @@ export const useStore = create<StoreState>((set, get) => ({
         filters.family || 
         filters.productType;
 
-      fetchedProducts = fetchedProducts.filter((p: Product) => {
-        const pDate = getProductDate(p);
-        
-        // Só filtrar por data se o produto tem data válida
-        if (pDate > 0 && pDate < seteDiasAtras) return false;
-
-        if (!hasAnyFilter) return true;
-
-        if (filters.distrito && p.distrito !== filters.distrito) return false;
-        if (filters.concelho && filters.concelho.length > 0 && !filters.concelho.includes(p.concelho)) return false;
-        if (filters.freguesia && filters.freguesia.length > 0 && !filters.freguesia.includes(p.freguesia)) return false;
-        if (filters.category && p.category !== filters.category) return false;
-        if (filters.family && p.family !== filters.family) return false;
-        if (filters.productType && p.productType !== filters.productType) return false;
-
-        return true;
-      });
+      if (hasAnyFilter) {
+        fetchedProducts = fetchedProducts.filter((p: Product) => {
+          if (filters.distrito && p.distrito !== filters.distrito) return false;
+          if (filters.concelho && filters.concelho.length > 0 && !filters.concelho.includes(p.concelho)) return false;
+          if (filters.freguesia && filters.freguesia.length > 0 && !filters.freguesia.includes(p.freguesia)) return false;
+          if (filters.category && p.category !== filters.category) return false;
+          if (filters.family && p.family !== filters.family) return false;
+          if (filters.productType && p.productType !== filters.productType) return false;
+          return true;
+        });
+      }
 
       set({
         products: isNextPage ? [...products, ...fetchedProducts] : fetchedProducts,

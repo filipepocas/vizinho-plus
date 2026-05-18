@@ -35,7 +35,7 @@ service cloud.firestore {
 
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
-      allow create: if true;
+      allow create: if true; 
       allow update, delete: if isAdmin();
     }
 

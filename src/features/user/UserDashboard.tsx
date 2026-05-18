@@ -18,7 +18,7 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift, ArrowLeft
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -79,7 +79,6 @@ const UserDashboard: React.FC = () => {
     fetchData();
   }, []);
 
-  // Subscrever transações do cliente para histórico e avaliações
   useEffect(() => {
     if (!currentUser?.id) return;
     const unsub = subscribeToTransactions('client', currentUser.id);
@@ -308,18 +307,37 @@ const UserDashboard: React.FC = () => {
   const concelhos = munFilters.distrito ? Object.keys(locations[munFilters.distrito] || {}).sort() : [];
   const freguesias = munFilters.distrito && munFilters.concelho ? (locations[munFilters.distrito][munFilters.concelho] || []).sort() : [];
 
+  // Se estiver em marketplace, mostra apenas essa view com botão para voltar
+  if (view === 'marketplace') {
+    return (
+      <div className="min-h-screen bg-[#f1f5f9] font-sans pb-20">
+        <div className="sticky top-0 z-50 bg-[#0a2540] p-4 flex items-center justify-between shadow-lg">
+          <button 
+            onClick={() => setView('home')} 
+            className="bg-white/10 text-white p-2 rounded-xl hover:bg-white/20 transition-all flex items-center gap-2"
+          >
+            <ArrowLeft size={20} />
+            <span className="text-[10px] font-black uppercase tracking-widest">Voltar</span>
+          </button>
+          <h2 className="text-white font-black uppercase italic tracking-tighter text-lg">Produtos Locais</h2>
+          <div className="w-16"></div>
+        </div>
+        <div className="max-w-2xl mx-auto px-4 pt-4">
+          <ProductMarketplace />
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f1f5f9] font-sans pb-32">
       
-      {/* HEADER FIXO COM ANIMAÇÃO DE SCROLL - APENAS BANNER */}
       <div className={`fixed top-0 left-0 w-full z-50 transition-all duration-300 ease-in-out shadow-xl ${isScrolled ? 'h-[190px]' : 'h-[224px] md:h-[280px]'}`}>
         <BannerCarousel isScrolled={isScrolled} />
       </div>
 
-      {/* CONTEÚDO PRINCIPAL COM COMPENSAÇÃO DE ALTURA */}
       <main className={`max-w-2xl mx-auto px-6 relative z-20 space-y-6 transition-all duration-300 ease-in-out ${isScrolled ? 'pt-[206px]' : 'pt-[240px] md:pt-[296px]'}`}>
         
-        {/* BARRA COM LOGO E BOTÕES - ABAIXO DO BANNER */}
         <div className="flex justify-between items-center bg-[#0a2540] -mx-6 px-6 py-3 rounded-b-[20px] shadow-lg">
           <div className="bg-white/10 backdrop-blur-sm rounded-xl border border-white/20 p-1.5">
             <img src="/logo-vizinho.png" alt="Vizinho+" className="h-8 w-auto object-contain" />
@@ -345,7 +363,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* CARTÃO DIGITAL */}
         <div className="bg-white rounded-[32px] shadow-xl border border-slate-200 overflow-hidden relative group">
           <button onClick={handlePrintCard} className="absolute top-4 right-4 bg-slate-100 hover:bg-[#00d66f] hover:text-[#0a2540] text-slate-400 p-3 rounded-full transition-colors z-10" title="Imprimir Cartão">
              <Printer size={20} />
@@ -375,7 +392,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </div>
 
-        {/* BOTÕES DE UTILIDADE - ABAIXO DO CARTÃO */}
         <div className="grid grid-cols-2 gap-3">
           <button onClick={() => setShowFaqModal(true)} className="w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in bg-amber-500 text-white border-amber-700 hover:bg-amber-600">
             <HelpCircle size={18} /> Guia da App
@@ -385,7 +401,6 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* NOTIFICAÇÃO POP-UP */}
         {appNotification && (
           <div className="bg-[#0a2540] rounded-3xl p-6 shadow-lg flex items-start gap-4 animate-in slide-in-from-top-10 relative border-l-8 border-[#00d66f]">
             <div className="bg-[#00d66f]/10 text-[#00d66f] p-3 rounded-2xl shrink-0"><Bell size={24} /></div>
@@ -398,11 +413,10 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* NAVEGAÇÃO PRINCIPAL - BOTÕES SEMPRE VISÍVEIS */}
         <div className="grid grid-cols-2 gap-3">
           <button 
-            onClick={() => setView(view === 'marketplace' ? 'home' : 'marketplace')} 
-            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'marketplace' ? 'bg-[#0a2540] border-[#0a2540] text-[#00d66f]' : 'bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]'}`}
+            onClick={() => setView('marketplace')} 
+            className="flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest bg-white border-[#00d66f] text-[#0a2540] shadow-md hover:scale-[1.02]"
           >
             <ShoppingBag size={22} strokeWidth={3} />
             <span>Produtos Locais</span>
@@ -438,7 +452,6 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* LINHA SECUNDÁRIA DE BOTÕES */}
         <div className="grid grid-cols-2 gap-3">
           <button 
             onClick={() => setView(view === 'events' ? 'home' : 'events')} 
@@ -466,8 +479,7 @@ const UserDashboard: React.FC = () => {
           </button>
         </div>
 
-        {/* VISTAS DINÂMICAS */}
-        {view === 'marketplace' && <ProductMarketplace />}
+        {/* VISTAS DINÂMICAS (exceto marketplace que já foi tratado) */}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         
@@ -631,7 +643,6 @@ const UserDashboard: React.FC = () => {
            </div>
         )}
 
-        {/* BOTÃO FOLHETO DIGITAL */}
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
             <div className={`p-8 flex items-center justify-center ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
@@ -645,7 +656,6 @@ const UserDashboard: React.FC = () => {
           </div>
         </button>
 
-        {/* BOTÕES DE SUPORTE E PWA */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
           {isInstallable && (
             <button onClick={installApp} className="bg-slate-800 text-white rounded-2xl p-4 flex items-center gap-3 border-b-4 border-black active:translate-y-1 transition-all">
@@ -666,7 +676,6 @@ const UserDashboard: React.FC = () => {
           )}
         </div>
 
-        {/* VANTAGENS VIP */}
         {sysConfig.vantagensUrl && (
           <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
@@ -685,7 +694,6 @@ const UserDashboard: React.FC = () => {
 
       </main>
 
-      {/* MODAIS */}
       {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
       {selectedTxForFeedback && <FeedbackForm transactionId={selectedTxForFeedback.id} merchantId={selectedTxForFeedback.merchantId} merchantName={selectedTxForFeedback.merchantName} userId={currentUser.id} userName={currentUser.name || 'Vizinho'} onClose={() => setSelectedTxForFeedback(null)} />}
       

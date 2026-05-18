@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import { db, auth } from '../../config/firebase';
 import { createUserWithEmailAndPassword, signOut } from 'firebase/auth';
-import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, getCountFromServer, setDoc } from 'firebase/firestore';
+import { collection, addDoc, serverTimestamp, getDoc, doc, getDocs, query, where, orderBy, setDoc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { LeafletCampaign } from '../../types';
 import { useStore } from '../../store/useStore';
@@ -98,14 +98,12 @@ const LandingPage: React.FC = () => {
           sessionStorage.setItem('vplus_landing_config', JSON.stringify(configData));
         }
 
-        // Contagem de membros sem cache, sem fallback hardcoded
-        try {
-          const collUsers = collection(db, 'users');
-          const snapshot = await getCountFromServer(collUsers);
-          setMembersCount(snapshot.data().count);
-        } catch (err) {
-          console.error("Erro ao contar membros:", err);
-          setMembersCount(null);
+        // Contagem via documento público mantido pela Cloud Function
+        const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
+        if (countSnap.exists()) {
+          setMembersCount(countSnap.data().count || 0);
+        } else {
+          setMembersCount(0);
         }
 
         const now2 = new Date();
@@ -336,7 +334,6 @@ const LandingPage: React.FC = () => {
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
 
-  // Texto do contador de membros
   const membersText = membersCount !== null ? `${membersCount}` : '...';
 
   return (
