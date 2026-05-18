@@ -249,7 +249,14 @@ const UserDashboard: React.FC = () => {
 
   const switchView = (newView: 'home' | 'marketplace' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities') => {
     setView(newView);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+
+    if (newView === 'marketplace') {
+      window.setTimeout(() => {
+        marketplaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 100);
+    } else {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
   };
 
   const toggleMunicipalities = () => {
@@ -484,9 +491,10 @@ const UserDashboard: React.FC = () => {
         </div>
 
         {/* VISTAS DINÂMICAS */}
-        {view === 'marketplace' && <ProductMarketplace />}
-        {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-        {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
+        <div ref={marketplaceRef}>
+          {view === 'marketplace' && <ProductMarketplace />}
+          {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
+          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">
@@ -614,6 +622,7 @@ const UserDashboard: React.FC = () => {
               {wasteItems.length === 0 && <p className="text-center p-10 bg-white border-4 border-dashed border-slate-200 rounded-[30px] font-bold text-slate-400 text-xs uppercase">Nenhuma oportunidade hoje. Tente mais tarde!</p>}
            </div>
         )}
+        </div>
 
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
