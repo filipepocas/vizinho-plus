@@ -398,41 +398,6 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {/* SECÇÃO DE AVALIAÇÕES PENDENTES */}
-        {pendingEvaluations.length > 0 && (
-          <div className="bg-amber-50 border-4 border-amber-200 rounded-[30px] p-6 shadow-md animate-in fade-in">
-            <h3 className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Star size={16} className="fill-amber-500 text-amber-500" /> Lojas por Avaliar ({pendingEvaluations.length})
-            </h3>
-            <p className="text-[9px] font-bold text-amber-700 mb-4 uppercase">
-              Avalie as lojas onde fez compras recentemente e ajude a comunidade.
-            </p>
-            <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
-              {pendingEvaluations.slice(0, 5).map((t) => (
-                <div key={`eval-${t.id}`} className="bg-white p-4 rounded-2xl border-2 border-amber-100 flex items-center justify-between shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Store size={18}/></div>
-                    <div>
-                      <p className="text-xs font-black text-[#0a2540] uppercase truncate max-w-[150px]">{t.merchantName}</p>
-                      <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
-                        {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente'} • {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(t.amount)}
-                      </p>
-                    </div>
-                  </div>
-                  <button onClick={() => setSelectedTxForFeedback(t)} className="bg-[#0a2540] text-[#00d66f] px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-md">
-                    Avaliar
-                  </button>
-                </div>
-              ))}
-              {pendingEvaluations.length > 5 && (
-                <button onClick={() => setView('history')} className="w-full text-center text-[9px] font-black text-amber-600 uppercase hover:underline py-2">
-                  Ver todas ({pendingEvaluations.length}) →
-                </button>
-              )}
-            </div>
-          </div>
-        )}
-
         {/* NAVEGAÇÃO PRINCIPAL - BOTÕES SEMPRE VISÍVEIS */}
         <div className="grid grid-cols-2 gap-3">
           <button 
@@ -505,7 +470,45 @@ const UserDashboard: React.FC = () => {
         {view === 'marketplace' && <ProductMarketplace />}
         {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
         {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
-        {view === 'history' && <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />}
+        
+        {view === 'history' && (
+          <div className="space-y-4 animate-in fade-in duration-500">
+            {pendingEvaluations.length > 0 && (
+              <div className="bg-amber-50 border-4 border-amber-200 rounded-[30px] p-6 shadow-md">
+                <h3 className="text-[10px] font-black text-amber-800 uppercase tracking-widest mb-4 flex items-center gap-2">
+                  <Star size={16} className="fill-amber-500 text-amber-500" /> Lojas por Avaliar ({pendingEvaluations.length})
+                </h3>
+                <p className="text-[9px] font-bold text-amber-700 mb-4 uppercase">
+                  Avalie as lojas onde fez compras recentemente e ajude a comunidade.
+                </p>
+                <div className="space-y-3 max-h-[250px] overflow-y-auto pr-2 custom-scrollbar">
+                  {pendingEvaluations.slice(0, 5).map((t) => (
+                    <div key={`eval-${t.id}`} className="bg-white p-4 rounded-2xl border-2 border-amber-100 flex items-center justify-between shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="bg-amber-100 text-amber-600 p-2 rounded-xl"><Store size={18}/></div>
+                        <div>
+                          <p className="text-xs font-black text-[#0a2540] uppercase truncate max-w-[150px]">{t.merchantName}</p>
+                          <p className="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+                            {t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente'} • {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(t.amount)}
+                          </p>
+                        </div>
+                      </div>
+                      <button onClick={() => setSelectedTxForFeedback(t)} className="bg-[#0a2540] text-[#00d66f] px-4 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest hover:scale-105 transition-transform shadow-md">
+                        Avaliar
+                      </button>
+                    </div>
+                  ))}
+                  {pendingEvaluations.length > 5 && (
+                    <p className="text-center text-[9px] font-black text-amber-600 uppercase py-2">
+                      E mais {pendingEvaluations.length - 5} por avaliar abaixo no histórico
+                    </p>
+                  )}
+                </div>
+              </div>
+            )}
+            <UserHistory transactions={transactions} evaluatedIds={evaluatedIds} onSelectTxForFeedback={setSelectedTxForFeedback} />
+          </div>
+        )}
 
         {view === 'municipalities' && (
            <div className="space-y-6 animate-in fade-in duration-500">

@@ -83,7 +83,7 @@ const ProductMarketplace: React.FC = () => {
     setFilters({ ...filters, freguesia: filters.freguesia.filter(f => f !== val) });
   };
 
-  // CORREÇÃO: Filtrar produtos localmente pelo searchQuery
+  // Filtragem local por texto
   const filteredProducts = products.filter((p: Product) => {
     if (!filters.searchQuery) return true;
     const q = filters.searchQuery.toLowerCase().trim();
@@ -223,42 +223,70 @@ const ProductMarketplace: React.FC = () => {
         )}
       </div>
 
-      {/* GRELHA DE PRODUTOS (Infinite Scroll) */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {filteredProducts.map((p: Product) => (
-          <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#00d66f] transition-all">
-             <div className="aspect-square relative overflow-hidden bg-slate-50">
-                <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={p.description} />
-                {p.hasPromo && (
-                    <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full font-black text-[7px] uppercase shadow-lg border border-white">
-                        Oferta
-                    </div>
-                )}
-             </div>
-             <div className="p-4 flex flex-col flex-1">
-                <p className="text-[7px] font-black uppercase text-slate-400 mb-1 truncate">{p.shopName} • {p.freguesia}</p>
-                <h4 className="font-black text-[#0a2540] uppercase text-[11px] leading-tight mb-3 line-clamp-2 h-8">{p.description}</h4>
-                
-                <div className="mt-auto flex items-center justify-between">
-                   <div className="flex flex-col">
-                      <span className={`font-black text-sm italic ${p.hasPromo ? 'text-red-500' : 'text-[#0a2540]'}`}>
-                        {formatPrice(p.hasPromo ? p.promoPrice! : p.price)}
-                      </span>
-                      {p.hasPromo && <span className="text-[8px] text-slate-300 line-through">{formatPrice(p.price)}</span>}
-                   </div>
-                   <button 
-                     onClick={() => addToShoppingList(p)}
-                     className="bg-[#00d66f] text-[#0a2540] p-2.5 rounded-xl hover:bg-[#0a2540] hover:text-[#00d66f] transition-all shadow-sm"
-                   >
-                     <ShoppingCart size={16} strokeWidth={3}/>
-                   </button>
-                </div>
-             </div>
-          </div>
-        ))}
-      </div>
+      {/* ESTADO DE CARREGAMENTO */}
+      {isLoading && (
+        <div className="py-20 text-center">
+          <Loader2 size={48} className="mx-auto text-[#00d66f] animate-spin mb-4" />
+          <p className="text-[10px] font-black uppercase text-slate-400">A carregar produtos...</p>
+        </div>
+      )}
 
-      {hasMoreProducts && (
+      {/* ESTADO VAZIO (sem produtos na coleção) */}
+      {!isLoading && products.length === 0 && (
+        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
+           <Package size={48} className="mx-auto text-slate-200 mb-4" />
+           <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto disponível de momento.</p>
+           <p className="text-[8px] font-bold text-slate-400 mt-2">Os lojistas ainda não publicaram artigos ou os mesmos já expiraram.</p>
+        </div>
+      )}
+
+      {/* GRELHA DE PRODUTOS */}
+      {!isLoading && products.length > 0 && filteredProducts.length === 0 && (
+        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
+           <Search size={48} className="mx-auto text-slate-200 mb-4" />
+           <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto encontrado para estes filtros.</p>
+           <p className="text-[8px] font-bold text-slate-400 mt-2">Tente alterar os critérios de pesquisa ou limpar os filtros.</p>
+        </div>
+      )}
+
+      {!isLoading && filteredProducts.length > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+          {filteredProducts.map((p: Product) => (
+            <div key={p.id} className="bg-white rounded-[30px] border-2 border-slate-100 overflow-hidden flex flex-col shadow-sm group hover:border-[#00d66f] transition-all">
+               <div className="aspect-square relative overflow-hidden bg-slate-50">
+                  <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500" alt={p.description} />
+                  {p.hasPromo && (
+                      <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-1 rounded-full font-black text-[7px] uppercase shadow-lg border border-white">
+                          Oferta
+                      </div>
+                  )}
+               </div>
+               <div className="p-4 flex flex-col flex-1">
+                  <p className="text-[7px] font-black uppercase text-slate-400 mb-1 truncate">{p.shopName} • {p.freguesia}</p>
+                  <h4 className="font-black text-[#0a2540] uppercase text-[11px] leading-tight mb-3 line-clamp-2 h-8">{p.description}</h4>
+                  
+                  <div className="mt-auto flex items-center justify-between">
+                     <div className="flex flex-col">
+                        <span className={`font-black text-sm italic ${p.hasPromo ? 'text-red-500' : 'text-[#0a2540]'}`}>
+                          {formatPrice(p.hasPromo ? p.promoPrice! : p.price)}
+                        </span>
+                        {p.hasPromo && <span className="text-[8px] text-slate-300 line-through">{formatPrice(p.price)}</span>}
+                     </div>
+                     <button 
+                       onClick={() => addToShoppingList(p)}
+                       className="bg-[#00d66f] text-[#0a2540] p-2.5 rounded-xl hover:bg-[#0a2540] hover:text-[#00d66f] transition-all shadow-sm"
+                     >
+                       <ShoppingCart size={16} strokeWidth={3}/>
+                     </button>
+                  </div>
+               </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* CARREGAR MAIS */}
+      {hasMoreProducts && filteredProducts.length > 0 && (
         <button 
           onClick={loadMore} 
           disabled={isLoading}
@@ -268,13 +296,7 @@ const ProductMarketplace: React.FC = () => {
         </button>
       )}
 
-      {!isLoading && filteredProducts.length === 0 && (
-        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
-           <Package size={48} className="mx-auto text-slate-200 mb-4" />
-           <p className="text-[10px] font-black uppercase text-slate-300">Nenhum produto encontrado para estes filtros.</p>
-        </div>
-      )}
-
+      {/* MODAL DA LISTA DE COMPRAS */}
       {showCart && <ShoppingListModal onClose={() => setShowCart(false)} />}
     </div>
   );
