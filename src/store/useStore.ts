@@ -43,6 +43,35 @@ interface StoreState {
   fetchTaxonomy: () => Promise<void>;
 }
 
+// Função auxiliar para extrair data de qualquer formato
+const getProductDate = (p: Product): number => {
+  if (!p.createdAt) return 0;
+  if (p.createdAt.toDate && typeof p.createdAt.toDate === 'function') {
+    return p.createdAt.toDate().getTime();
+  }
+  if (p.createdAt.seconds) {
+    return p.createdAt.seconds * 1000;
+  }
+  if (typeof p.createdAt === 'string') {
+    return new Date(p.createdAt).getTime();
+  }
+  if (typeof p.createdAt === 'number') {
+    return p.createdAt;
+  }
+  return 0;
+};
+
+const getTransactionDate = (t: Transaction): number => {
+  if (!t.createdAt) return 0;
+  if (t.createdAt.toDate && typeof t.createdAt.toDate === 'function') {
+    return t.createdAt.toDate().getTime();
+  }
+  if (t.createdAt.seconds) {
+    return t.createdAt.seconds * 1000;
+  }
+  return 0;
+};
+
 export const useStore = create<StoreState>((set, get) => ({
   transactions: [],
   currentUser: null,
@@ -111,14 +140,15 @@ export const useStore = create<StoreState>((set, get) => ({
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
+      // Ordenação robusta em memória
       fetchedProducts.sort((a: Product, b: Product) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds * 1000 || 0);
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds * 1000 || 0);
+        const dateA = getProductDate(a);
+        const dateB = getProductDate(b);
         return dateB - dateA;
       });
 
-      const seteDiasAtras = new Date();
-      seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+      // Filtro de 7 dias robusto
+      const seteDiasAtras = Date.now() - (7 * 24 * 60 * 60 * 1000);
 
       const hasAnyFilter = filters.distrito || 
         (filters.concelho && filters.concelho.length > 0) || 
@@ -128,8 +158,10 @@ export const useStore = create<StoreState>((set, get) => ({
         filters.productType;
 
       fetchedProducts = fetchedProducts.filter((p: Product) => {
-        const pDate = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt?.seconds * 1000 || 0);
-        if (pDate < seteDiasAtras) return false;
+        const pDate = getProductDate(p);
+        
+        // Só filtrar por data se o produto tem data válida
+        if (pDate > 0 && pDate < seteDiasAtras) return false;
 
         if (!hasAnyFilter) return true;
 
@@ -266,9 +298,7 @@ export const useStore = create<StoreState>((set, get) => ({
       let docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
       
       docs.sort((a: Transaction, b: Transaction) => {
-        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds * 1000 || 0);
-        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds * 1000 || 0);
-        return dateB - dateA;
+        return getTransactionDate(b) - getTransactionDate(a);
       });
       
       set({ transactions: docs });

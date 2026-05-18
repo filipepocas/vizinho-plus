@@ -41,7 +41,7 @@ const LandingPage: React.FC = () => {
   
   const [prices, setPrices] = useState<any>({});
   const [campaigns, setCampaigns] = useState<LeafletCampaign[]>([]);
-  const [membersCount, setMembersCount] = useState(0);
+  const [membersCount, setMembersCount] = useState<number | null>(null);
 
   const [showTerms, setShowTerms] = useState(false);
   const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', showMemberCount: true });
@@ -98,20 +98,14 @@ const LandingPage: React.FC = () => {
           sessionStorage.setItem('vplus_landing_config', JSON.stringify(configData));
         }
 
-        const cachedCount = sessionStorage.getItem('vplus_members_count');
-        const cachedCountTime = sessionStorage.getItem('vplus_members_count_time');
-        const now = Date.now();
-        if (cachedCount && cachedCountTime && (now - Number(cachedCountTime)) < 3600000) {
-          setMembersCount(Number(cachedCount));
-        } else {
-          try {
-            const collUsers = collection(db, 'users');
-            const snapshot = await getCountFromServer(collUsers);
-            const count = snapshot.data().count;
-            setMembersCount(count);
-            sessionStorage.setItem('vplus_members_count', String(count));
-            sessionStorage.setItem('vplus_members_count_time', String(now));
-          } catch (err) { setMembersCount(1250); }
+        // Contagem de membros sem cache, sem fallback hardcoded
+        try {
+          const collUsers = collection(db, 'users');
+          const snapshot = await getCountFromServer(collUsers);
+          setMembersCount(snapshot.data().count);
+        } catch (err) {
+          console.error("Erro ao contar membros:", err);
+          setMembersCount(null);
         }
 
         const now2 = new Date();
@@ -342,6 +336,9 @@ const LandingPage: React.FC = () => {
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
 
+  // Texto do contador de membros
+  const membersText = membersCount !== null ? `${membersCount}` : '...';
+
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
       
@@ -352,7 +349,7 @@ const LandingPage: React.FC = () => {
       )}
       
       <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md">
-        Já somos <span className="text-2xl md:text-3xl font-black italic">{membersCount}</span> membros! Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis!
+        Já somos <span className="text-2xl md:text-3xl font-black italic">{membersText}</span> membros! Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis!
       </div>
 
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
@@ -418,7 +415,7 @@ const LandingPage: React.FC = () => {
                   <UserPlus size={24} className="text-[#0a2540]" strokeWidth={3} />
                 </div>
                 <h2 className="font-black uppercase italic tracking-tighter text-xl md:text-2xl">
-                  Já somos <span className="text-amber-400">{membersCount}</span> membros! Junte-se a nós.
+                  Já somos <span className="text-amber-400">{membersText}</span> membros! Junte-se a nós.
                 </h2>
               </div>
               <button 
