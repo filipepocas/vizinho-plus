@@ -14,6 +14,7 @@ const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, o
 
   // Usar pendingEvaluations passado como prop se disponível, caso contrário calcular localmente
   const pendingEvaluations = propPendingEvaluations || transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+  const historyTransactions = transactions.filter(t => t.type !== 'earn' || evaluatedIds.includes(t.id));
 
   return (
     <div className="space-y-10 animate-in slide-in-from-bottom-4 duration-500 pb-10">
@@ -47,7 +48,7 @@ const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, o
       <div className="space-y-4">
         <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest ml-2">Histórico Completo</h3>
         
-        {transactions.length > 0 ? transactions.map((t) => (
+        {historyTransactions.length > 0 ? historyTransactions.map((t) => (
             <div key={t.id} className="bg-white p-5 rounded-[30px] border-2 border-slate-50 flex items-center justify-between shadow-sm">
             <div className="flex items-center gap-4">
                 <div className={`p-3 rounded-2xl ${t.type === 'earn' ? 'bg-green-50 text-[#00d66f]' : 'bg-red-50 text-red-500'}`}>

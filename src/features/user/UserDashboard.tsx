@@ -210,7 +210,18 @@ const UserDashboard: React.FC = () => {
   };
 
   const pendingEvaluations = useMemo(() => {
-    return transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+    const pending = transactions.filter(t => t.type === 'earn' && !evaluatedIds.includes(t.id));
+    const unique: Transaction[] = [];
+    const seen = new Set<string>();
+    for (const t of pending) {
+      const dateStr = t.createdAt?.toDate ? t.createdAt.toDate().toLocaleDateString() : 'Recente';
+      const key = `${t.merchantId}_${dateStr}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(t);
+      }
+    }
+    return unique;
   }, [transactions, evaluatedIds]);
 
   const stats = useMemo(() => ({ available: currentUser?.wallet?.available || 0, pending: 0 }), [currentUser?.wallet]);
