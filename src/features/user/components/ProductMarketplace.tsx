@@ -326,8 +326,8 @@ const ProductMarketplace: React.FC = () => {
             <div key={p.id} className="bg-white rounded-[25px] sm:rounded-[35px] border-2 sm:border-4 border-[#0a2540] overflow-hidden flex flex-col shadow-[4px_4px_0px_#0a2540] sm:shadow-[8px_8px_0px_#0a2540] group hover:translate-y-[-2px] transition-all">
                
                {/* IMAGEM SEM PREÇO - Aspect Ratio Dinâmico */}
-               <div className="aspect-[16/10] sm:aspect-square relative overflow-hidden bg-slate-50 border-b-2 sm:border-b-4 border-[#0a2540]">
-                  <img src={p.imageUrl} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500" alt={p.description} />
+               <div className="aspect-square relative overflow-hidden bg-slate-50 border-b-2 sm:border-b-4 border-[#0a2540]">
+                  <img src={p.imageUrl} className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-500" alt={p.description} />
                   
                   {p.hasPromo && (
                      <div className="absolute top-3 right-3 bg-red-500 text-white px-3 py-1.5 rounded-xl font-black text-[10px] uppercase shadow-md border-2 border-[#0a2540]">
