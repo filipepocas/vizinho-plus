@@ -1,10 +1,11 @@
 // src/features/user/components/ProductMarketplace.tsx
 
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, Filter, ShoppingCart, ChevronDown, Loader2, Package, X, MapPin, Tag, Store } from 'lucide-react';
+import { Search, Filter, ShoppingCart, ChevronDown, Loader2, Package, X, MapPin, Tag, Store, Clock } from 'lucide-react';
 import { useStore } from '../../../store/useStore';
 import { Product } from '../../../types';
 import ShoppingListModal from './ShoppingListModal';
+import { isOpenNow } from '../../../utils/timeUtils';
 
 const ProductMarketplace: React.FC = () => {
   const products = useStore(state => state.products);
@@ -45,9 +46,9 @@ const ProductMarketplace: React.FC = () => {
     currentUserIdRef.current = userId;
 
     const initialFilters = {
-      distrito: currentUser.distrito?.trim() || '',
-      concelho: currentUser.concelho ? [currentUser.concelho.trim()] : [],
-      freguesia: currentUser.freguesia ? [currentUser.freguesia.trim()] : [],
+      distrito: currentUser?.distrito?.trim() || '',
+      concelho: currentUser?.concelho ? [currentUser.concelho.trim()] : [],
+      freguesia: currentUser?.freguesia ? [currentUser.freguesia.trim()] : [],
       category: '',
       family: '',
       productType: '',
@@ -302,10 +303,10 @@ const ProductMarketplace: React.FC = () => {
         </div>
       )}
 
-      {/* ESTADO VAZIO */}
+      {/* ESTADO VAZIO (sem produtos na coleção) */}
       {!isLoading && products.length === 0 && (
-        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-200">
-           <Package size={48} className="mx-auto text-slate-300 mb-4" />
+        <div className="py-20 text-center bg-white rounded-[40px] border-4 border-dashed border-slate-100">
+           <Package size={48} className="mx-auto text-slate-200 mb-4" />
            <p className="text-[10px] font-black uppercase text-slate-400">Nenhum produto disponível de momento.</p>
         </div>
       )}
