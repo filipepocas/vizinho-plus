@@ -82,6 +82,49 @@ const LandingPage: React.FC = () => {
   const [fileToCrop, setFileToCrop] = useState<File | null>(null);
   const [cropType, setCropType] = useState<'banner' | 'leaflet' | 'event'>('banner');
 
+  const fetchMemberCount = async () => {
+    try {
+      const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
+      if (countSnap.exists()) {
+        const count = countSnap.data()?.count;
+        if (typeof count === 'number') {
+          setMembersCount(count);
+          console.log('[LandingPage] memberCount from system/memberCount:', count);
+          return;
+        }
+      }
+
+      // Fallback via HTTP Cloud Function público que conta todos os utilizadores.
+      try {
+        const response = await fetch('https://us-central1-vizinho-plus.cloudfunctions.net/getMemberCount');
+        if (response.ok) {
+          const data = await response.json();
+          const count = Number(data.count) || 0;
+          setMembersCount(count);
+          console.log('[LandingPage] memberCount from Cloud Function fallback:', count);
+          return;
+        }
+        console.warn('[LandingPage] getMemberCount HTTP fallback retornou status:', response.status);
+      } catch (fnErr) {
+        console.warn('[LandingPage] Fallback getMemberCount function falhou:', fnErr);
+      }
+
+      // Fallback adicional apenas para casos onde o documento não existe e a função não responde.
+      try {
+        const usersSnap = await getDocs(query(collection(db, 'users'), where('isPublic', '==', true)));
+        const count = usersSnap.size;
+        setMembersCount(count);
+        console.log('[LandingPage] memberCount public users fallback:', count);
+        return;
+      } catch (queryErr) {
+        console.warn('[LandingPage] Query de public users falhou, contagem final falhou:', queryErr);
+      }
+    } catch (err) {
+      console.error('[LandingPage] Erro ao contar membros:', err);
+    }
+    setMembersCount(0);
+  };
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -98,33 +141,6 @@ const LandingPage: React.FC = () => {
           sessionStorage.setItem('vplus_landing_config', JSON.stringify(configData));
         }
 
-        // Contagem via documento público mantido pela Cloud Function
-        let memberCount = 0;
-        try {
-          const countSnap = await getDoc(doc(db, 'system', 'memberCount'));
-          if (countSnap.exists()) {
-            memberCount = countSnap.data().count || 0;
-            console.log('[LandingPage] memberCount from system/memberCount:', memberCount);
-          } else {
-            // Se o documento não existe, tentar contar e inicializar
-            console.log('[LandingPage] system/memberCount não existe, inicializando...');
-            try {
-              // Usar query com limite para contar sem permissões de admin
-              const usersSnap = await getDocs(query(collection(db, 'users'), where('isPublic', '==', true)));
-              memberCount = usersSnap.size;
-              console.log('[LandingPage] memberCount public users:', memberCount);
-            } catch (queryErr) {
-              // Se falhar a query de public, tentar contar todos (Cloud Function deveria ter criado o doc)
-              console.warn('[LandingPage] Query de public users falhou, usando contagem alternativa:', queryErr);
-              memberCount = 0;
-            }
-          }
-        } catch (err) {
-          console.error('[LandingPage] Erro ao contar membros:', err);
-          memberCount = 0;
-        }
-        setMembersCount(memberCount);
-
         const now2 = new Date();
         const cSnap2 = await getDocs(query(collection(db, 'leaflet_campaigns'), orderBy('limitDate', 'desc')));
         setCampaigns(cSnap2.docs.map((d: any) => ({id: d.id, ...d.data()} as LeafletCampaign)).filter((c: any) => c.limitDate.toDate() > now2));
@@ -133,6 +149,7 @@ const LandingPage: React.FC = () => {
       }
     };
     fetchData();
+    fetchMemberCount();
   }, []);
 
   const formatEuro = (val: any) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(Number(val));
@@ -353,7 +370,7 @@ const LandingPage: React.FC = () => {
   const eventConcelhos = eventForm.distrito ? Object.keys(locations[eventForm.distrito] || {}).sort() : [];
   const eventFreguesias = eventForm.distrito && eventForm.concelho ? (locations[eventForm.distrito][eventForm.concelho] || []).sort() : [];
 
-  const membersText = membersCount !== null ? `${membersCount}` : '...';
+  const membersText = membersCount !== null ? membersCount.toLocaleString('pt-PT') : '...';
 
   return (
     <div className="min-h-screen bg-[#f8fafc] font-sans selection:bg-[#00d66f] selection:text-[#0a2540]">
@@ -364,9 +381,11 @@ const LandingPage: React.FC = () => {
         </div>
       )}
       
-      <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md">
-        Já somos <span className="text-2xl md:text-3xl font-black italic">{membersText}</span> membros! Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis!
-      </div>
+      {sysConfig.showMemberCount && (
+        <div className="bg-amber-400 text-amber-900 text-center py-6 px-4 text-[11px] md:text-sm font-black uppercase tracking-widest shadow-md">
+          Já somos <span className="text-2xl md:text-3xl font-black italic">{membersText}</span> membros! Adira à nossa comunidade e aceda a todas as vantagens exclusivas. É grátis!
+        </div>
+      )}
 
       <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
         <div className="w-full flex justify-center mt-2">
