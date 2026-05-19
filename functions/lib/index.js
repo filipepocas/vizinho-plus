@@ -34,7 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.memberCounter = exports.adminMessenger = exports.merchantPushDispatcher = exports.notifDispatcher = exports.feedbackNotifier = exports.txReverser = exports.txProcessor = void 0;
+exports.getMemberCount = exports.memberCounter = exports.adminMessenger = exports.merchantPushDispatcher = exports.notifDispatcher = exports.feedbackNotifier = exports.txReverser = exports.txProcessor = void 0;
 const v2 = __importStar(require("firebase-functions/v2"));
 const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
@@ -361,6 +361,7 @@ exports.memberCounter = v2.firestore.onDocumentWritten("users/{userId}", async (
     try {
         const usersSnap = await db.collection("users").get();
         const count = usersSnap.size;
+        logger.info(`[memberCounter] Contando membros: ${count}`);
         await db.doc("system/memberCount").set({
             count,
             updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -368,6 +369,33 @@ exports.memberCounter = v2.firestore.onDocumentWritten("users/{userId}", async (
     }
     catch (error) {
         logger.error("Erro ao atualizar contador:", error);
+    }
+});
+/**
+ * 8. ENDPOINT HTTP - Retorna contagem de membros (público)
+ */
+exports.getMemberCount = v2.https.onRequest(async (req, res) => {
+    var _a;
+    try {
+        const countSnap = await db.doc("system/memberCount").get();
+        if (countSnap.exists) {
+            res.header("Cache-Control", "public, max-age=3600");
+            res.json({ count: ((_a = countSnap.data()) === null || _a === void 0 ? void 0 : _a.count) || 0 });
+        }
+        else {
+            // Se o documento não existe, contar e criar
+            const usersSnap = await db.collection("users").get();
+            const count = usersSnap.size;
+            await db.doc("system/memberCount").set({
+                count,
+                updatedAt: admin.firestore.FieldValue.serverTimestamp()
+            });
+            res.json({ count });
+        }
+    }
+    catch (error) {
+        logger.error("Erro em getMemberCount:", error);
+        res.status(500).json({ error: "Erro ao contar membros" });
     }
 });
 //# sourceMappingURL=index.js.map

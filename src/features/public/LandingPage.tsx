@@ -106,23 +106,22 @@ const LandingPage: React.FC = () => {
             memberCount = countSnap.data().count || 0;
             console.log('[LandingPage] memberCount from system/memberCount:', memberCount);
           } else {
-            // Fallback: contar usuários diretamente se o documento não existir
-            console.log('[LandingPage] system/memberCount não existe, contando usuários...');
-            const usersSnap = await getDocs(collection(db, 'users'));
-            memberCount = usersSnap.size;
-            console.log('[LandingPage] memberCount fallback:', memberCount);
+            // Se o documento não existe, tentar contar e inicializar
+            console.log('[LandingPage] system/memberCount não existe, inicializando...');
+            try {
+              // Usar query com limite para contar sem permissões de admin
+              const usersSnap = await getDocs(query(collection(db, 'users'), where('isPublic', '==', true)));
+              memberCount = usersSnap.size;
+              console.log('[LandingPage] memberCount public users:', memberCount);
+            } catch (queryErr) {
+              // Se falhar a query de public, tentar contar todos (Cloud Function deveria ter criado o doc)
+              console.warn('[LandingPage] Query de public users falhou, usando contagem alternativa:', queryErr);
+              memberCount = 0;
+            }
           }
         } catch (err) {
           console.error('[LandingPage] Erro ao contar membros:', err);
-          // Fallback final: tentar contar mesmo com erro
-          try {
-            const usersSnap = await getDocs(collection(db, 'users'));
-            memberCount = usersSnap.size;
-            console.log('[LandingPage] memberCount fallback (from error):', memberCount);
-          } catch (err2) {
-            console.error('[LandingPage] Erro ao contar fallback:', err2);
-            memberCount = 0;
-          }
+          memberCount = 0;
         }
         setMembersCount(memberCount);
 

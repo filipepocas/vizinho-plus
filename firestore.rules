@@ -8,7 +8,7 @@ service cloud.firestore {
     function isAuthenticated() { return request.auth != null; }
 
     match /users/{userId} {
-      allow read: if isAdmin() || request.auth.uid == userId || resource.data.role == 'merchant';
+      allow read: if isAdmin() || request.auth.uid == userId || resource.data.role == 'merchant' || resource.data.isPublic == true;
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
     }

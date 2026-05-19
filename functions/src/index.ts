@@ -357,6 +357,7 @@ export const memberCounter = v2.firestore.onDocumentWritten(
     try {
       const usersSnap = await db.collection("users").get();
       const count = usersSnap.size;
+      logger.info(`[memberCounter] Contando membros: ${count}`);
       await db.doc("system/memberCount").set({
         count,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
@@ -366,3 +367,28 @@ export const memberCounter = v2.firestore.onDocumentWritten(
     }
   }
 );
+
+/**
+ * 8. ENDPOINT HTTP - Retorna contagem de membros (público)
+ */
+export const getMemberCount = v2.https.onRequest(async (req, res) => {
+  try {
+    const countSnap = await db.doc("system/memberCount").get();
+    if (countSnap.exists) {
+      res.header("Cache-Control", "public, max-age=3600");
+      res.json({ count: countSnap.data()?.count || 0 });
+    } else {
+      // Se o documento não existe, contar e criar
+      const usersSnap = await db.collection("users").get();
+      const count = usersSnap.size;
+      await db.doc("system/memberCount").set({
+        count,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp()
+      });
+      res.json({ count });
+    }
+  } catch (error) {
+    logger.error("Erro em getMemberCount:", error);
+    res.status(500).json({ error: "Erro ao contar membros" });
+  }
+});
