@@ -10,6 +10,7 @@ import RegisterPage from './features/auth/RegisterPage';
 import ForgotPassword from './features/auth/ForgotPassword';
 import TermsPage from './features/public/TermsPage'; 
 import VantagensPage from './features/public/VantagensPage'; 
+import GuidePage from './features/public/GuidePage';
 import AdminDashboard from './features/admin/AdminDashboard';
 import MerchantDashboard from './features/merchant/MerchantDashboard';
 import UserDashboard from './features/user/UserDashboard';
@@ -91,6 +92,7 @@ function App() {
           <Route path="/forgot-password" element={<ForgotPassword onBack={handleBack} />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/vantagens" element={<VantagensPage />} />
+          <Route path="/guia-da-app" element={<GuidePage />} />
           <Route path="/admin/*" element={<ProtectedRoute requiredRole="admin"><AdminDashboard /></ProtectedRoute>} />
           <Route path="/merchant/*" element={<ProtectedRoute requiredRole="merchant"><MerchantDashboard /></ProtectedRoute>} />
           <Route path="/dashboard/marketplace" element={<ProtectedRoute requiredRole="client"><MarketplacePage /></ProtectedRoute>} />

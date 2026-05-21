@@ -20,21 +20,24 @@ const TermsPage: React.FC = () => {
     <div className="min-h-screen bg-[#f8fafc] p-6 md:p-12 font-sans text-[#0a2540]">
       <div className="max-w-3xl mx-auto">
         
-        <div className="flex items-center gap-6 mb-12">
-          <button 
-            onClick={handleGoBack}
-            className="bg-white p-4 rounded-2xl border-4 border-[#0a2540] shadow-[6px_6px_0px_0px_#0a2540] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all active:scale-95"
-          >
-            <ArrowLeft size={24} strokeWidth={3} />
-          </button>
-          <div>
-            <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">
-              Termos & <span className="text-[#00d66f]">Condições</span>
-            </h1>
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-2 italic">
-              Termos, Condições e Política de Privacidade – Vizinho+
-            </p>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-6 mb-12 justify-between">
+          <div className="flex items-center gap-6">
+            <button 
+              onClick={handleGoBack}
+              className="bg-white p-4 rounded-2xl border-4 border-[#0a2540] shadow-[6px_6px_0px_0px_#0a2540] hover:translate-x-1 hover:translate-y-1 hover:shadow-none transition-all active:scale-95"
+            >
+              <ArrowLeft size={24} strokeWidth={3} />
+            </button>
+            <div>
+              <h1 className="text-3xl font-black uppercase italic tracking-tighter leading-none">
+                Termos & <span className="text-[#00d66f]">Condições</span>
+              </h1>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-2 italic">
+                Termos, Condições e Política de Privacidade – Vizinho+
+              </p>
+            </div>
           </div>
+          <a href="/guia-da-app" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Guia da App</a>
         </div>
 
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12 space-y-10 overflow-hidden relative">
