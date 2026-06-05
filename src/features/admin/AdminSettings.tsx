@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { doc, setDoc, getDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { db, auth } from '../../config/firebase';
+import { updatePassword } from 'firebase/auth';
 import { ShieldCheck, Mail, Lock, Save, AlertCircle, CheckCircle2, ExternalLink, Star, Database, ScrollText, HelpCircle } from 'lucide-react';
 import { SystemConfig } from '../../types';
 
@@ -111,6 +112,27 @@ const AdminSettings: React.FC = () => {
       const adminRef = doc(db, 'users', currentUser?.id || 'admin');
       await setDoc(adminRef, { email: newEmail.toLowerCase().trim(), updatedAt: serverTimestamp() }, { merge: true });
       if (currentUser) setCurrentUser({ ...currentUser, email: newEmail });
+      // Update Firebase Auth password if provided
+      if (newPassword) {
+        try {
+          if (auth.currentUser) {
+            await updatePassword(auth.currentUser, newPassword);
+            // success message will be shown below
+          } else {
+            setMessage({ type: 'error', text: 'Erro: sessão de autenticação não encontrada. Faça logout e volte a entrar.' });
+          }
+        } catch (err: any) {
+          if (err.code === 'auth/requires-recent-login') {
+            setMessage({ type: 'error', text: 'Por segurança, faça logout e entre novamente para alterar a password.' });
+            setIsSaving(false);
+            return;
+          } else {
+            setMessage({ type: 'error', text: 'Erro ao atualizar password.' });
+            setIsSaving(false);
+            return;
+          }
+        }
+      }
       setMessage({ type: 'success', text: 'Credenciais atualizadas!' });
       setNewPassword(''); setConfirmPassword('');
     } catch (error) { setMessage({ type: 'error', text: 'Erro ao atualizar.' }); } finally { setIsSaving(false); }

@@ -115,32 +115,11 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
     if (!formData.category || !formData.family || !formData.productType) return toast.error("Selecione a classificação completa.");
 
     setSaving(true);
-    const toastId = toast.loading("A validar exclusividade...");
+    const toastId = toast.loading("A processar produto...");
 
     try {
-      if (!editingProduct || editingProduct.productType !== formData.productType) {
-         const seteDiasAtras = new Date();
-         seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
-
-         const qDuplicate = query(
-           collection(db, 'products'),
-           where('freguesia', '==', merchant.freguesia || ''),
-           where('productType', '==', formData.productType)
-         );
-          
-         const snapDuplicate = await getDocs(qDuplicate);
-          
-         const hasRecent = snapDuplicate.docs.some((d: any) => {
-             const data = d.data();
-             const dDate = data.createdAt?.toDate ? data.createdAt.toDate() : new Date();
-             return dDate >= seteDiasAtras;
-         });
-          
-         if (hasRecent) {
-            setSaving(false);
-            return toast.error(`Já existe um artigo do tipo "${formData.productType}" ativo na sua Freguesia. Vá ao separador 'Concorrência' para ver quando expira.`, { id: toastId, duration: 6000 });
-         }
-      }
+      // NOTE: Removed uniqueness/exclusivity check so merchants can publish products
+      // even if the same productType/category exists in the same freguesia.
 
       toast.loading("A processar imagem...", { id: toastId });
       let imageUrl = editingProduct?.imageUrl || '';
@@ -178,7 +157,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
         toast.success("Produto atualizado!", { id: toastId });
       } else {
         await addDoc(collection(db, 'products'), productData);
-        toast.success("Produto publicado com exclusividade!", { id: toastId });
+        toast.success("Produto publicado!", { id: toastId });
       }
       
       setShowAddForm(false);
@@ -194,7 +173,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm("Eliminar este anúncio permanentemente? O lugar ficará livre para a concorrência.")) return;
+    if (!window.confirm("Eliminar este anúncio permanentemente?")) return;
     try {
       await deleteDoc(doc(db, 'products', id));
       setProducts(products.filter(p => p.id !== id));
@@ -328,7 +307,7 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
                     </div>
 
                     <div className="bg-slate-50 p-6 rounded-[35px] border-2 border-slate-100">
-                        <p className="text-[10px] font-black uppercase text-[#0a2540] mb-4 flex items-center gap-2"><Tag size={14} className="text-[#00d66f]"/> Classificação do Artigo (Exclusividade Local)</p>
+                      <p className="text-[10px] font-black uppercase text-[#0a2540] mb-4 flex items-center gap-2"><Tag size={14} className="text-[#00d66f]"/> Classificação do Artigo</p>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <select 
                             required value={formData.category} 
@@ -406,10 +385,10 @@ const MerchantCatalog: React.FC<Props> = ({ merchant }) => {
 
       {activeTab === 'competition' && (
         <div className="space-y-6 animate-in fade-in">
-          <div className="bg-amber-50 p-6 rounded-[30px] border-4 border-amber-200 text-center">
+             <div className="bg-amber-50 p-6 rounded-[30px] border-4 border-amber-200 text-center">
              <h3 className="text-lg font-black uppercase text-amber-800 mb-2">Artigos na sua Freguesia</h3>
              <p className="text-[10px] font-bold text-amber-700 max-w-lg mx-auto leading-relaxed">
-               A plataforma Vizinho+ garante exclusividade por Tipo de Produto durante 7 dias. Se um concorrente já publicou "Pão", esse espaço está ocupado. Acompanhe aqui quando expiram os anúncios da concorrência para garantir o seu lugar.
+               Lista de artigos publicados na sua freguesia. Use esta vista para verificar a concorrência, preços e datas de publicação.
              </p>
           </div>
 
