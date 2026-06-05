@@ -387,33 +387,7 @@ const LandingPage: React.FC = () => {
         </div>
       )}
 
-      <nav className="max-w-7xl mx-auto px-8 py-10 flex flex-col items-center gap-8">
-        <div className="w-full flex justify-center mt-2">
-          <button
-            onClick={() => navigate('/guia-da-app')}
-            className="w-full max-w-xl bg-[#0a2540] text-[#00d66f] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(10,37,64,0.35)] border-b-8 border-[#071a32] flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all relative z-20"
-          >
-            <div className="flex items-center gap-3">
-              <Lightbulb size={28} fill="currentColor" className="text-[#00d66f]" />
-              <span>Como funciona?</span>
-            </div>
-            <span className="text-[10px] font-bold text-[#00d66f] tracking-normal opacity-90">Descobre como usar a app Vizinho+</span>
-          </button>
-        </div>
-
-        <div className="w-full flex justify-center mt-2">
-            <button 
-                onClick={() => setShowCommunityModal(true)} 
-                className="w-full max-w-xl bg-[#00d66f] text-[#0a2540] px-6 py-6 rounded-[30px] font-black uppercase text-sm md:text-lg tracking-widest shadow-[0_10px_20px_rgba(0,214,111,0.4)] border-b-8 border-green-700 flex flex-col items-center justify-center gap-2 hover:translate-y-1 hover:border-b-4 hover:shadow-lg transition-all relative z-20"
-            >
-                <div className="flex items-center gap-3">
-                    <Lightbulb size={28} fill="currentColor" className="text-[#0a2540]" /> 
-                    <span>Anuncie dentro da comunidade</span>
-                </div>
-                <span className="text-[10px] font-bold text-green-900 tracking-normal opacity-90">Promover Negócio, Evento ou Anúncio Local</span>
-            </button>
-        </div>
-      </nav>
+      <nav className="max-w-7xl mx-auto px-8 py-6 flex flex-col items-center gap-8" />
 
       <main className="max-w-6xl mx-auto px-8 pt-6 pb-24 text-center flex flex-col items-center">
         
@@ -449,6 +423,8 @@ const LandingPage: React.FC = () => {
           <button onClick={() => setShowContactModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors flex items-center gap-2"><Mail size={16}/> Apoio / Contacto</button>
           <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Termos & Privacidade</a>
           <a href="/guia-da-app" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Guia da App</a>
+          <button onClick={() => navigate('/guia-da-app')} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Como funciona?</button>
+          <button onClick={() => setShowCommunityModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Anuncie dentro da comunidade</button>
         </div>
         <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
