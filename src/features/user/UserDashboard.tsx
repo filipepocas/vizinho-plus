@@ -433,26 +433,30 @@ const UserDashboard: React.FC = () => {
             <span>Lojas Parceiras</span>
           </button>
 
-          <button 
-            onClick={() => switchView('history')} 
-            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
-          >
-            <MessageSquare size={22} className={view === 'history' ? 'text-[#00d66f]' : ''} />
-            <span>Avaliar Compras</span>
-            {pendingEvaluations.length > 0 && (
-              <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">
-                {pendingEvaluations.length}
-              </span>
-            )}
-          </button>
+          {sysConfig.showClientRatings !== false && (
+            <button 
+              onClick={() => switchView('history')} 
+              className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'history' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+            >
+              <MessageSquare size={22} className={view === 'history' ? 'text-[#00d66f]' : ''} />
+              <span>Avaliar Compras</span>
+              {pendingEvaluations.length > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white animate-bounce">
+                  {pendingEvaluations.length}
+                </span>
+              )}
+            </button>
+          )}
 
-          <button 
-            onClick={() => switchView('wallets')} 
-            className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
-          >
-            <Wallet size={22} className={view === 'wallets' ? 'text-[#00d66f]' : ''} />
-            <span>O Meu Saldo</span>
-          </button>
+          {sysConfig.showClientWallet !== false && (
+            <button 
+              onClick={() => switchView('wallets')} 
+              className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest ${view === 'wallets' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+            >
+              <Wallet size={22} className={view === 'wallets' ? 'text-[#00d66f]' : ''} />
+              <span>O Meu Saldo</span>
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -501,30 +505,35 @@ const UserDashboard: React.FC = () => {
                     <select value={munFilters.distrito} onChange={e=>setMunFilters({...munFilters, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400">
                        <option value="">Distrito</option>
                        {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <select disabled={!munFilters.distrito} value={munFilters.concelho} onChange={e=>setMunFilters({...munFilters, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
-                       <option value="">Concelho</option>
-                       {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
-                    </select>
-                    <select disabled={!munFilters.concelho} value={munFilters.freguesia} onChange={e=>setMunFilters({...munFilters, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
-                       <option value="">Freguesia (Opcional)</option>
-                       {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
-                    </select>
-                 </div>
-              </div>
+                    {sysConfig.showClientEvents !== false && (
+                      <button 
+                        onClick={() => switchView('events')} 
+                        className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+                      >
+                        <CalendarPlus size={22} className={view === 'events' ? 'text-[#00d66f]' : 'text-blue-500'} />
+                        <span>Eventos</span>
+                        {events.length > 0 && (
+                          <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
+                            {events.length}
+                          </span>
+                        )}
+                      </button>
+                    )}
 
-              <div className="grid grid-cols-1 gap-4">
-                 {municipalitiesFaqs.map(faq => (
-                    <details key={faq.id} className="bg-white border-2 border-slate-100 rounded-2xl shadow-sm group overflow-hidden">
-                       <summary className="p-5 font-black text-[#0a2540] text-sm cursor-pointer list-none flex justify-between items-center hover:bg-slate-50 transition-colors">
-                          <div className="flex items-center gap-3">
-                             <div className={`p-2 rounded-lg ${faq.type === 'camara' ? 'bg-blue-100 text-blue-600' : 'bg-amber-100 text-amber-600'}`}>
-                                <Building2 size={16} />
-                             </div>
-                             {faq.question}
-                          </div>
-                          <ChevronDown size={18} className="text-slate-400 group-open:rotate-180 transition-transform" />
-                       </summary>
+                    {sysConfig.showClientAntiWaste !== false && (
+                      <button 
+                        onClick={() => switchView('anti_waste')} 
+                        className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
+                      >
+                        <Leaf size={22} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-green-500'} />
+                        <span>Desperdício Zero</span>
+                        {wasteItems.length > 0 && (
+                          <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
+                            {wasteItems.length}
+                          </span>
+                        )}
+                      </button>
+                    )}
                        <div className="p-5 pt-0 text-sm font-bold text-slate-600 leading-relaxed border-t-2 border-slate-50 mt-2 whitespace-pre-wrap">
                           {faq.answer}
                           
