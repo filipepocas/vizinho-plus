@@ -32,7 +32,16 @@ const UserDashboard: React.FC = () => {
   const [view, setView] = useState<'home' | 'explore' | 'wallets' | 'history' | 'events' | 'anti_waste' | 'municipalities'>('home');
   const [showCart, setShowCart] = useState(false);
   const [selectedTxForFeedback, setSelectedTxForFeedback] = useState<Transaction | null>(null);
-  const [sysConfig, setSysConfig] = useState<any>({ supportEmail: 'ajuda@vizinho-plus.pt', vantagensUrl: '', clientFaqs: '', merchantTerms: '' });
+  const [sysConfig, setSysConfig] = useState<any>({ 
+    supportEmail: 'ajuda@vizinho-plus.pt', 
+    vantagensUrl: '', 
+    clientFaqs: '', 
+    merchantTerms: '',
+    showClientWallet: true,
+    showClientRatings: true,
+    showClientAntiWaste: true,
+    showClientEvents: true
+  });
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
   const [allMerchants, setAllMerchants] = useState<UserProfile[]>([]);

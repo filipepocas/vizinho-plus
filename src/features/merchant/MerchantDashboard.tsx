@@ -34,7 +34,14 @@ const MerchantDashboard: React.FC = () => {
   const [showInbox, setShowInbox] = useState(false);
   const [showRulesModal, setShowRulesModal] = useState(false); 
   const [showFaqModal, setShowFaqModal] = useState(false); 
-  const [sysConfig, setSysConfig] = useState({ merchantTerms: 'A carregar...', merchantFaqs: 'A carregar guia...' });
+  const [sysConfig, setSysConfig] = useState({ 
+    merchantTerms: 'A carregar...', 
+    merchantFaqs: 'A carregar guia...',
+    showMerchantTerminal: true,
+    showMerchantMarketing: true,
+    showMerchantAntiWaste: true,
+    showMerchantSettings: true
+  });
 
   const [showScanner, setShowScanner] = useState(false);
   const [cardNumber, setCardNumber] = useState('');
