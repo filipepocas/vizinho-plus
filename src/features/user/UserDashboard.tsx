@@ -497,72 +497,66 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-        {view === 'municipalities' && (
-           <div className="space-y-6 animate-in fade-in duration-500">
+          {view === 'municipalities' && (
+            <div className="space-y-6 animate-in fade-in duration-500">
               <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
-                 <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                    <select value={munFilters.distrito} onChange={e=>setMunFilters({...munFilters, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400">
-                       <option value="">Distrito</option>
-                       {distritos.map(d => <option key={d} value={d}>{d}</option>)}
-                    {sysConfig.showClientEvents !== false && (
-                      <button 
-                        onClick={() => switchView('events')} 
-                        className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'events' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
-                      >
-                        <CalendarPlus size={22} className={view === 'events' ? 'text-[#00d66f]' : 'text-blue-500'} />
-                        <span>Eventos</span>
-                        {events.length > 0 && (
-                          <span className="absolute -top-2 -right-2 bg-blue-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
-                            {events.length}
-                          </span>
-                        )}
-                      </button>
-                    )}
+                <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <select value={munFilters.distrito} onChange={e=>setMunFilters({...munFilters, distrito: e.target.value, concelho: '', freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400">
+                    <option value="">Distrito</option>
+                    {distritos.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
 
-                    {sysConfig.showClientAntiWaste !== false && (
-                      <button 
-                        onClick={() => switchView('anti_waste')} 
-                        className={`flex flex-col items-center justify-center gap-2 p-5 rounded-2xl border-2 transition-all font-black uppercase text-[10px] tracking-widest relative ${view === 'anti_waste' ? 'bg-[#0a2540] border-[#0a2540] text-white' : 'bg-white border-slate-200 text-slate-500 shadow-sm hover:scale-[1.02]'}`}
-                      >
-                        <Leaf size={22} className={view === 'anti_waste' ? 'text-[#00d66f]' : 'text-green-500'} />
-                        <span>Desperdício Zero</span>
-                        {wasteItems.length > 0 && (
-                          <span className="absolute -top-2 -right-2 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black border-2 border-white">
-                            {wasteItems.length}
-                          </span>
-                        )}
-                      </button>
-                    )}
-                       <div className="p-5 pt-0 text-sm font-bold text-slate-600 leading-relaxed border-t-2 border-slate-50 mt-2 whitespace-pre-wrap">
-                          {faq.answer}
-                          
-                          {(faq.contacts || faq.links) && (
-                             <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
-                                {faq.contacts && (
-                                   <div className="flex items-center gap-2 text-[11px] font-black uppercase text-[#0a2540]">
-                                      <Phone size={14} className="text-[#00d66f]" /> {faq.contacts}
-                                   </div>
-                                )}
-                                {faq.links && (
-                                   <a href={faq.links} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11px] font-black uppercase text-blue-500 hover:text-blue-700">
-                                      <Link2 size={14} /> Aceder ao Link
-                                   </a>
-                                )}
-                             </div>
-                          )}
-                       </div>
-                    </details>
-                 ))}
-                 {municipalitiesFaqs.length === 0 && (
-                    <div className="py-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
-                       <Building2 size={32} className="mx-auto text-slate-300 mb-3" />
-                       <p className="text-[10px] font-black uppercase text-slate-400">Nenhuma informação disponível para esta localidade.</p>
-                    </div>
-                 )}
+                  <select disabled={!munFilters.distrito} value={munFilters.concelho} onChange={e=>setMunFilters({...munFilters, concelho: e.target.value, freguesia: ''})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
+                    <option value="">Concelho</option>
+                    {concelhos.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+
+                  <select disabled={!munFilters.concelho} value={munFilters.freguesia} onChange={e=>setMunFilters({...munFilters, freguesia: e.target.value})} className="w-full p-3 rounded-xl font-bold text-xs outline-none border border-white focus:border-blue-400 disabled:opacity-50">
+                    <option value="">Freguesia (Opcional)</option>
+                    {freguesias.map(f => <option key={f} value={f}>{f}</option>)}
+                  </select>
+                </div>
               </div>
-           </div>
-        )}
+
+              <div className="grid grid-cols-1 gap-4">
+                {municipalitiesFaqs.map(faq => (
+                  <details key={faq.id} className="bg-white border-2 border-slate-100 rounded-2xl shadow-sm group overflow-hidden">
+                    <summary className="p-5 font-black text-[#0a2540] text-sm cursor-pointer list-none flex justify-between items-center hover:bg-slate-50 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <h4 className="font-black uppercase text-[#0a2540]">{faq.question}</h4>
+                      </div>
+                      <div className="text-[10px] font-black text-slate-400">Mais</div>
+                    </summary>
+                    <div className="p-5 pt-0 text-sm font-bold text-slate-600 leading-relaxed border-t-2 border-slate-50 mt-2 whitespace-pre-wrap">
+                      {faq.answer}
+                      {(faq.contacts || faq.links) && (
+                        <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+                          {faq.contacts && (
+                            <div className="flex items-center gap-2 text-[11px] font-black uppercase text-[#0a2540]">
+                              <Phone size={14} className="text-[#00d66f]" /> {faq.contacts}
+                            </div>
+                          )}
+                          {faq.links && (
+                            <a href={faq.links} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-[11px] font-black uppercase text-blue-500 hover:text-blue-700">
+                              <Link2 size={14} /> Aceder ao Link
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </details>
+                ))}
+
+                {municipalitiesFaqs.length === 0 && (
+                  <div className="py-12 text-center bg-white rounded-3xl border-2 border-dashed border-slate-200">
+                    <Building2 size={32} className="mx-auto text-slate-300 mb-3" />
+                    <p className="text-[10px] font-black uppercase text-slate-400">Nenhuma informação disponível para esta localidade.</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
 
         {view === 'events' && (
            <div className="space-y-4 animate-in fade-in duration-500">
