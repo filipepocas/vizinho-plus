@@ -185,47 +185,49 @@ const AdminSettings: React.FC = () => {
                   </label>
                   <p className="text-[10px] font-bold text-slate-500 ml-9">Se desativar esta opção, o quadro verde que diz quantos membros tem a plataforma ficará oculto na página principal.</p>
                 </div>
+              </div>
 
-                  <div className="space-y-4 md:col-span-2 bg-white p-6 rounded-3xl border-4 border-slate-100">
-                    <h4 className="font-black uppercase text-sm mb-3">Visibilidade - Perfis de Cliente</h4>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showClientWallet} onChange={e => setSysConfig({...sysConfig, showClientWallet: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar cartão/saldo no painel do Cliente
-                    </label>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showClientRatings} onChange={e => setSysConfig({...sysConfig, showClientRatings: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar opção "Avaliar Compras"
-                    </label>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showClientAntiWaste} onChange={e => setSysConfig({...sysConfig, showClientAntiWaste: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar "Desperdício Zero"
-                    </label>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showClientEvents} onChange={e => setSysConfig({...sysConfig, showClientEvents: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar "Eventos"
-                    </label>
-                  </div>
+              <div className="space-y-4 bg-white p-6 rounded-3xl border-4 border-slate-100">
+                <h4 className="font-black uppercase text-sm mb-3">Visibilidade - Perfis de Cliente</h4>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientWallet} onChange={e => setSysConfig({...sysConfig, showClientWallet: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar cartão/saldo no painel do Cliente
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientRatings} onChange={e => setSysConfig({...sysConfig, showClientRatings: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar opção "Avaliar Compras"
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientAntiWaste} onChange={e => setSysConfig({...sysConfig, showClientAntiWaste: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Desperdício Zero"
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientEvents} onChange={e => setSysConfig({...sysConfig, showClientEvents: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Eventos"
+                </label>
+              </div>
 
-                  <div className="space-y-4 md:col-span-2 bg-white p-6 rounded-3xl border-4 border-slate-100">
-                    <h4 className="font-black uppercase text-sm mb-3">Visibilidade - Perfis de Comerciante</h4>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showMerchantTerminal} onChange={e => setSysConfig({...sysConfig, showMerchantTerminal: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar "Terminal" no painel do Comerciante
-                    </label>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showMerchantMarketing} onChange={e => setSysConfig({...sysConfig, showMerchantMarketing: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar "Marketing" (Pedidos de Promoção)
-                    </label>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showMerchantAntiWaste} onChange={e => setSysConfig({...sysConfig, showMerchantAntiWaste: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar "Desperdício" no painel do Comerciante
-                    </label>
-                    <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
-                      <input type="checkbox" checked={sysConfig.showMerchantSettings} onChange={e => setSysConfig({...sysConfig, showMerchantSettings: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
-                      Mostrar "Definições" no painel do Comerciante
-                    </label>
-                  </div>
+              <div className="space-y-4 bg-white p-6 rounded-3xl border-4 border-slate-100">
+                <h4 className="font-black uppercase text-sm mb-3">Visibilidade - Perfis de Comerciante</h4>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showMerchantTerminal} onChange={e => setSysConfig({...sysConfig, showMerchantTerminal: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Terminal" no painel do Comerciante
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showMerchantMarketing} onChange={e => setSysConfig({...sysConfig, showMerchantMarketing: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Marketing" (Pedidos de Promoção)
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showMerchantAntiWaste} onChange={e => setSysConfig({...sysConfig, showMerchantAntiWaste: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Desperdício" no painel do Comerciante
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showMerchantSettings} onChange={e => setSysConfig({...sysConfig, showMerchantSettings: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Definições" no painel do Comerciante
+                </label>
+              </div>
 
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                 <div className="space-y-4">
                   <label className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-slate-500 ml-1">
                     <Mail size={16} className="text-[#00d66f]" /> E-mail Apoio ao Cliente (Rodapé)
