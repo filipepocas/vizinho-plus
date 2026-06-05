@@ -70,6 +70,12 @@ const AdminSettings: React.FC = () => {
     showMerchantSettings: true
   });
 
+  const tabOptions = [
+    { id: 'system', label: 'Plataforma' },
+    { id: 'legal', label: 'Textos & FAQs' },
+    { id: 'security', label: 'Segurança' }
+  ];
+
   const [isSaving, setIsSaving] = useState(false);
   const [message, setMessage] = useState({ type: '', text: '' });
 
@@ -155,7 +161,21 @@ const AdminSettings: React.FC = () => {
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.2em] mt-3 flex items-center gap-2"><Database size={12} /> Ajustes Globais da Plataforma</p>
           </div>
 
-          <div className="flex flex-wrap bg-[#0a2540] border-4 border-[#0a2540] p-1 rounded-3xl shadow-[6px_6px_0px_0px_#00d66f]">
+          <div className="md:hidden mb-4">
+            <label className="sr-only" htmlFor="admin-settings-tab-select">Selecionar secção</label>
+            <select
+              id="admin-settings-tab-select"
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value as 'system' | 'legal' | 'security')}
+              className="w-full p-4 rounded-3xl border-4 border-[#0a2540] bg-[#0a2540] text-white font-black uppercase tracking-widest appearance-none"
+            >
+              {tabOptions.map((tab) => (
+                <option key={tab.id} value={tab.id}>{tab.label}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="hidden md:flex flex-wrap bg-[#0a2540] border-4 border-[#0a2540] p-1 rounded-3xl shadow-[6px_6px_0px_0px_#00d66f]">
             <button onClick={() => setActiveTab('system')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'system' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Plataforma</button>
             <button onClick={() => setActiveTab('legal')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'legal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Textos & FAQs</button>
             <button onClick={() => setActiveTab('security')} className={`px-6 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === 'security' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white/60 hover:text-white'}`}>Segurança</button>
