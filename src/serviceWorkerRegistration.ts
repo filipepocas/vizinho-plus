@@ -11,9 +11,15 @@ export function register(config?: any) {
     const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
     if (publicUrl.origin !== window.location.origin) return;
 
-    window.addEventListener('load', () => {
-      const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+    const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+    const swExists = !!document.querySelector('script[src*="service-worker"]');
 
+    if (!swExists) {
+      console.info('Service worker genérico não está disponível; mantemos o registo de notificação via firebase-messaging-sw.js.');
+      return;
+    }
+
+    window.addEventListener('load', () => {
       if (isLocalhost) {
         checkValidServiceWorker(swUrl, config);
         navigator.serviceWorker.ready.then(() => {

@@ -61,9 +61,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
           toast.error("Conta não encontrada no sistema.");
           setLoading(false);
       }
-    } catch (error) { 
-        toast.error('EMAIL OU PASSWORD INCORRETOS.'); 
-        setLoading(false); 
+    } catch (error: any) {
+        const code = error?.code || '';
+        const messages: Record<string, string> = {
+          'auth/invalid-email': 'O email introduzido não é válido.',
+          'auth/user-disabled': 'Esta conta foi desativada.',
+          'auth/user-not-found': 'Nenhuma conta encontrada com este email.',
+          'auth/wrong-password': 'Password incorreta.',
+          'auth/invalid-credential': 'Email ou password inválidos.',
+          'auth/too-many-requests': 'Muitas tentativas. Tente novamente mais tarde.',
+          'auth/network-request-failed': 'Erro de rede. Verifique a ligação à internet.'
+        };
+        toast.error(messages[code] || 'EMAIL OU PASSWORD INCORRETOS.');
+        setLoading(false);
     }
   };
 
