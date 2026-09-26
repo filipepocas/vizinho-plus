@@ -11,11 +11,14 @@ interface UserHomeProps {
   hideHeader?: boolean;
 }
 
-const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
+const UserHome: React.FC<UserHomeProps> = ({ currentUser, merchantBalances }) => {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
   const [showDetails, setShowDetails] = useState(false);
 
-  const summary = useMemo(() => summarizeStoreWallets(currentUser?.storeWallets), [currentUser?.storeWallets]);
+  const summary = useMemo(
+    () => summarizeStoreWallets(merchantBalances && Object.keys(merchantBalances).length > 0 ? merchantBalances : currentUser?.storeWallets),
+    [merchantBalances, currentUser?.storeWallets]
+  );
 
   return (
     <div className="space-y-4">

@@ -7,7 +7,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, AntiWasteItem, MunicipalityFAQ } from '../../types';
-import { summarizeStoreWallets } from '../../utils/wallets';
+import { summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
@@ -64,7 +64,20 @@ const UserDashboard: React.FC = () => {
   const [emailCopied, setEmailCopied] = useState(false);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
-  const totalCardBalance = useMemo(() => summarizeStoreWallets(currentUser?.storeWallets).total, [currentUser?.storeWallets]);
+  const clientStoreBalanceSummary = useMemo(
+    () => summarizeClientStoreBalancesFromTransactions(transactions, currentUser?.id),
+    [transactions, currentUser?.id]
+  );
+  const totalCardBalance = useMemo(() => {
+    if (clientStoreBalanceSummary.total > 0 || transactions.length > 0) return clientStoreBalanceSummary.total;
+    return Object.values(currentUser?.storeWallets || {}).reduce((sum: number, wallet: any) => sum + Number(wallet?.available || 0), 0);
+  }, [clientStoreBalanceSummary.total, transactions.length, currentUser?.storeWallets]);
+  const merchantBalanceMap = useMemo(() => {
+    return clientStoreBalanceSummary.entries.reduce((acc: Record<string, { available: number; merchantName: string }>, entry) => {
+      acc[entry.id] = { available: entry.available, merchantName: entry.name };
+      return acc;
+    }, {} as Record<string, { available: number; merchantName: string }>);
+  }, [clientStoreBalanceSummary.entries]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -513,7 +526,7 @@ const UserDashboard: React.FC = () => {
         {/* VISTAS DINÂMICAS */}
         <div>
           {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
+          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={Object.keys(merchantBalanceMap).length > 0 ? merchantBalanceMap : (currentUser.storeWallets || {})} vantagensUrl="" />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">
