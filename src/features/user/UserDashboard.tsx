@@ -235,7 +235,7 @@ const UserDashboard: React.FC = () => {
     return unique;
   }, [transactions, evaluatedIds]);
 
-  const stats = useMemo(() => ({ available: currentUser?.wallet?.available || 0, pending: 0 }), [currentUser?.wallet]);
+  const stats = useMemo(() => ({ available: totalCardBalance, pending: 0 }), [totalCardBalance]);
 
   const handleLogout = async () => {
     await logout();
@@ -513,7 +513,7 @@ const UserDashboard: React.FC = () => {
         {/* VISTAS DINÂMICAS */}
         <div>
           {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: currentUser.wallet?.available || 0, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
+          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={currentUser.storeWallets || {}} vantagensUrl="" />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">
