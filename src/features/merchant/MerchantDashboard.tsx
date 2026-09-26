@@ -153,14 +153,30 @@ const MerchantDashboard: React.FC = () => {
       if (!isNifValid || !cleanNumber) { setFoundClient(null); return; }
       setIsSearching(true);
       try {
-        let q = query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client'));
-        let snap = await getDocs(q);
-        if (snap.empty) {
-          q = query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client'));
-          snap = await getDocs(q);
+        const queryStrategies = [
+          query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client')),
+          query(collection(db, 'users'), where('customerNumber', '==', cleanNumber)),
+          query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client')),
+          query(collection(db, 'users'), where('nif', '==', cleanNumber)),
+          query(collection(db, 'users'), where('customerNumber', '==', Number(cleanNumber)))
+        ];
+
+        let match: any = null;
+        for (const q of queryStrategies) {
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const candidate = snap.docs.find((docSnap: any) => {
+              const data = docSnap.data() as any;
+              return data?.role === 'client' || data?.role === undefined;
+            });
+            if (candidate) {
+              match = { id: candidate.id, ...candidate.data() } as UserProfile;
+              break;
+            }
+          }
         }
-        if (!snap.empty) setFoundClient({ id: snap.docs[0].id, ...snap.docs[0].data() } as UserProfile);
-        else setFoundClient(null);
+
+        setFoundClient(match);
       } catch (err) { setFoundClient(null); } finally { setIsSearching(false); }
     };
     const timeoutId = setTimeout(() => searchClient(), 500);
