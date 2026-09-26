@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
-import { Store, AlertTriangle } from 'lucide-react';
+import React, { useMemo, useState } from 'react';
+import { Store, AlertTriangle, ChevronDown, ChevronUp } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
+import { summarizeStoreWallets } from '../../../utils/wallets';
 
 interface UserHomeProps {
   currentUser: UserProfile;
@@ -12,21 +13,12 @@ interface UserHomeProps {
 
 const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
+  const [showDetails, setShowDetails] = useState(false);
 
-  const balances = useMemo(() => {
-    if (!currentUser?.storeWallets) return [];
-    return Object.entries(currentUser.storeWallets)
-      .map(([id, data]: [string, any]) => ({
-        id,
-        name: data.merchantName || 'Loja Parceira',
-        available: data.available || 0
-      }))
-      .filter(b => b.available > 0);
-  }, [currentUser?.storeWallets]);
+  const summary = useMemo(() => summarizeStoreWallets(currentUser?.storeWallets), [currentUser?.storeWallets]);
 
   return (
     <div className="space-y-4">
-      {/* NOVO AVISO SOBRE A REGRA DOS 50% */}
       <div className="bg-blue-50 border-2 border-blue-200 p-4 rounded-[20px] flex gap-3 items-start animate-in fade-in">
         <AlertTriangle size={18} className="text-blue-500 shrink-0 mt-0.5" />
         <div>
@@ -35,20 +27,40 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser }) => {
         </div>
       </div>
 
-      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Saldos Acumulados</h4>
-      {balances.length > 0 ? balances.map((m) => (
-        <div key={m.id} className="bg-white p-5 rounded-[30px] border-2 border-slate-50 flex items-center justify-between shadow-sm">
-          <div className="flex items-center gap-4">
-            <div className="bg-slate-50 p-3 rounded-2xl text-[#0a2540]">
-              <Store size={20} />
-            </div>
-            <div>
-              <p className="text-sm font-black text-[#0a2540] uppercase tracking-tighter">{m.name}</p>
-              <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">{formatCurrency(m.available)} disponível</p>
-            </div>
+      <div className="bg-white p-5 rounded-[30px] border-2 border-slate-100 shadow-sm">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Saldo disponível</p>
+            <p className="text-2xl font-black text-[#00d66f] italic">{formatCurrency(summary.total)}</p>
           </div>
+          <button
+            type="button"
+            onClick={() => setShowDetails((prev) => !prev)}
+            className="flex items-center gap-2 rounded-full bg-slate-100 px-3 py-2 text-[10px] font-black uppercase tracking-widest text-[#0a2540]"
+          >
+            {showDetails ? <>Ocultar <ChevronUp size={14} /></> : <>Ver por loja <ChevronDown size={14} /></>}
+          </button>
         </div>
-      )) : (
+      </div>
+
+      <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-2">Saldos Acumulados</h4>
+      {summary.entries.length > 0 ? (
+        <>
+          {showDetails && summary.entries.map((m) => (
+            <div key={m.id} className="bg-white p-5 rounded-[30px] border-2 border-slate-50 flex items-center justify-between shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="bg-slate-50 p-3 rounded-2xl text-[#0a2540]">
+                  <Store size={20} />
+                </div>
+                <div>
+                  <p className="text-sm font-black text-[#0a2540] uppercase tracking-tighter">{m.name}</p>
+                  <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-widest">{formatCurrency(m.available)} disponível</p>
+                </div>
+              </div>
+            </div>
+          ))}
+        </>
+      ) : (
         <div className="bg-slate-50 p-8 rounded-[30px] text-center text-slate-400 text-[10px] font-black uppercase">
           Ainda não tens saldos em nenhuma loja.
         </div>

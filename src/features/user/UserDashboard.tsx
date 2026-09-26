@@ -402,6 +402,23 @@ const UserDashboard: React.FC = () => {
               </div>
             </div>
           </div>
+
+          <div className="border-t border-slate-100 bg-slate-50 px-6 py-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cashback disponível</p>
+                <p className="text-sm font-black text-[#0a2540]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(currentUser.wallet?.available || 0)}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setView('wallets')}
+                className="rounded-full bg-[#0a2540] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
+              >
+                Ver por loja
+              </button>
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
