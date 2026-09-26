@@ -5,10 +5,17 @@ service cloud.firestore {
     function isAdmin() {
       return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
     }
+    function isMerchant() {
+      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'merchant';
+    }
     function isAuthenticated() { return request.auth != null; }
 
     match /users/{userId} {
-      allow read: if isAdmin() || request.auth.uid == userId || resource.data.role == 'merchant' || resource.data.isPublic == true;
+      allow read: if isAdmin()
+        || request.auth.uid == userId
+        || resource.data.role == 'merchant'
+        || (isMerchant() && resource.data.role == 'client')
+        || resource.data.isPublic == true;
       allow create: if true; 
       allow update, delete: if isAdmin() || request.auth.uid == userId;
     }
