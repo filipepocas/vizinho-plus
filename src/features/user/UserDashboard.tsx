@@ -7,6 +7,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, AntiWasteItem, MunicipalityFAQ } from '../../types';
+import { summarizeStoreWallets } from '../../utils/wallets';
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
@@ -63,6 +64,7 @@ const UserDashboard: React.FC = () => {
   const [emailCopied, setEmailCopied] = useState(false);
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
+  const totalCardBalance = useMemo(() => summarizeStoreWallets(currentUser?.storeWallets).total, [currentUser?.storeWallets]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -380,15 +382,11 @@ const UserDashboard: React.FC = () => {
              <Printer size={20} />
           </button>
 
-          <div className="p-6 flex items-center justify-between border-b border-slate-100 bg-slate-50/50">
+          <div className="p-6 border-b border-slate-100 bg-slate-50/50">
             <div className="pr-12">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 leading-none mb-1">Cliente Vizinho+</p>
               <h1 className="text-xl font-black text-[#0a2540] uppercase italic tracking-tighter leading-none">{currentUser.name}</h1>
               {currentUser.nif && <p className="text-xs font-bold text-slate-500 mt-2 flex items-center gap-1"><IdCard size={12}/> NIF: {currentUser.nif}</p>}
-            </div>
-            <div className="text-right">
-              <span className="text-[10px] font-bold text-slate-400 uppercase block tracking-widest">Saldo Atual</span>
-              <span className="text-2xl font-black text-[#00d66f] italic">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(stats.available)}</span>
             </div>
           </div>
           <div className="p-8 flex flex-col items-center gap-6">
@@ -407,7 +405,7 @@ const UserDashboard: React.FC = () => {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cashback disponível</p>
-                <p className="text-sm font-black text-[#0a2540]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(currentUser.wallet?.available || 0)}</p>
+                <p className="text-sm font-black text-[#0a2540]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(totalCardBalance)}</p>
               </div>
 
               <button

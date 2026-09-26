@@ -10,7 +10,7 @@ export interface StoreWalletSummary {
 }
 
 export const summarizeStoreWallets = (
-  storeWallets?: Record<string, { available?: number; merchantName?: string }>
+  storeWallets?: Record<string, { available?: number; pending?: number; merchantName?: string }>
 ): StoreWalletSummary => {
   if (!storeWallets) {
     return { total: 0, entries: [] };
