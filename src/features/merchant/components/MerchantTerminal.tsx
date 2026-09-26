@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
+import { normalizeClientCardValue } from '../../../utils/clientCard';
 
 interface MerchantTerminalProps {
   cardNumber: string;
@@ -31,11 +32,11 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
 
   // Correção: Adicionado (e: any) para TS Strict Mode
   const handleNifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    let val = e.target.value.replace(/\D/g, ''); 
-    if (val.length > 9) val = val.substring(0, 9);
-    let formatted = val;
-    if (val.length > 6) formatted = `${val.substring(0, 3)} ${val.substring(3, 6)} ${val.substring(6, 9)}`;
-    else if (val.length > 3) formatted = `${val.substring(0, 3)} ${val.substring(3, 6)}`;
+    const normalized = normalizeClientCardValue(e.target.value);
+    const trimmed = normalized.slice(0, 9);
+    let formatted = trimmed;
+    if (trimmed.length > 6) formatted = `${trimmed.substring(0, 3)} ${trimmed.substring(3, 6)} ${trimmed.substring(6, 9)}`;
+    else if (trimmed.length > 3) formatted = `${trimmed.substring(0, 3)} ${trimmed.substring(3, 6)}`;
     setCardNumber(formatted);
   };
 

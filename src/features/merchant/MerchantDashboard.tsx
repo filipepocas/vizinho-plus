@@ -22,6 +22,7 @@ import MerchantSettings from './components/MerchantSettings';
 import MerchantMarketing from './components/MerchantMarketing'; 
 import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
+import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, addTransaction, logout, locations } = useStore();
@@ -69,7 +70,8 @@ const MerchantDashboard: React.FC = () => {
   const concelhos = wasteDistrito ? Object.keys(locations[wasteDistrito] || {}).sort() : [];
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
-  const isNifValid = useMemo(() => cardNumber.replace(/\s/g, '').length === 9, [cardNumber]);
+  const normalizedCardNumber = useMemo(() => normalizeClientCardValue(cardNumber), [cardNumber]);
+  const isNifValid = useMemo(() => normalizedCardNumber.length === 9, [normalizedCardNumber]);
 
   const previewCashbackValue = useMemo(() => {
     const numAmount = parseFloat(amount) || 0;
@@ -147,10 +149,10 @@ const MerchantDashboard: React.FC = () => {
 
   useEffect(() => {
     const searchClient = async () => {
-      if (!isNifValid) { setFoundClient(null); return; }
+      const cleanNumber = normalizeClientCardValue(cardNumber);
+      if (!isNifValid || !cleanNumber) { setFoundClient(null); return; }
       setIsSearching(true);
       try {
-        const cleanNumber = cardNumber.replace(/\s/g, '');
         let q = query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client'));
         let snap = await getDocs(q);
         if (snap.empty) {
@@ -540,7 +542,7 @@ const MerchantDashboard: React.FC = () => {
         <p className="text-slate-400 text-[10px] font-black uppercase tracking-widest text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
       </footer>
 
-      {showScanner && <QRScannerModal onScan={(text: string) => { setCardNumber(text); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
+      {showScanner && <QRScannerModal onScan={(text: string) => { setCardNumber(formatClientCardValue(text)); setShowScanner(false); }} onClose={() => setShowScanner(false)} />}
       
       {showInbox && (
         <div className="fixed inset-0 z-[200] bg-[#0a2540]/95 backdrop-blur-md flex items-center justify-center p-6">
