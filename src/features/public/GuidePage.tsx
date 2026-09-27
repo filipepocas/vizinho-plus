@@ -246,7 +246,7 @@ const GuidePage: React.FC = () => {
               </div>
               <div>
                 <h3 className="font-black uppercase tracking-tight text-[#0a2540] mb-2">Como contacto o apoio?</h3>
-                <p>Email: geral@vizinhomais.pt Disponível no rodapé de todas as páginas da plataforma.</p>
+                <p>Email: rochap.filipe@gmail.com Disponível no rodapé de todas as páginas da plataforma.</p>
               </div>
               <div>
                 <h3 className="font-black uppercase tracking-tight text-[#0a2540] mb-2">O saldo de cashback tem validade?</h3>
