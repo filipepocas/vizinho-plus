@@ -15,7 +15,7 @@ interface RegisterPageProps {
 }
 
 const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
-  const { locations } = useStore();
+  const { locations, generateUniqueCustomerNumber } = useStore();
   const [formData, setFormData] = useState({ name: '', email: '', phone: '', birthDate: '', password: '', distrito: '', concelho: '', freguesia: '', zipCode: '' });
   const [confirmEmail, setConfirmEmail] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -50,8 +50,9 @@ const RegisterPage: React.FC<RegisterPageProps> = ({ onBack, onSuccess }) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email.trim(), formData.password);
       const uid = userCredential.user.uid;
+      const customerNumber = await generateUniqueCustomerNumber();
       await setDoc(doc(db, 'users', uid), {
-        id: uid, name: formData.name.trim(), customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(), 
+        id: uid, name: formData.name.trim(), customerNumber, 
         phone: formData.phone.trim(), zipCode: formData.zipCode, email: formData.email.toLowerCase().trim(),
         distrito: formData.distrito, concelho: formData.concelho, freguesia: formData.freguesia,
         birthDate: formData.birthDate, role: 'client', status: 'active', wallet: { available: 0, pending: 0 }, devices: [], createdAt: serverTimestamp()

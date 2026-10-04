@@ -63,7 +63,7 @@ const UserHistory: React.FC<UserHistoryProps> = ({ transactions, evaluatedIds, o
             </div>
             <div className="flex flex-col items-end gap-2">
                 <p className={`text-sm font-black italic ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                {t.type === 'earn' ? '+' : '-'}{formatCurrency(t.cashbackAmount)}
+                {t.type === 'earn' ? '+' : '-'}{formatCurrency(Number(t.cashbackAmount ?? t.cashbackEarned ?? 0))}
                 </p>
                 
                 {t.type === 'earn' && (

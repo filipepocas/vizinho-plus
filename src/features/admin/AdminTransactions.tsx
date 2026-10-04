@@ -70,8 +70,8 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
         "NIF Loja": m?.nif || '---',
         "Cliente": t.clientName || '---',
         "NIF Cliente": t.clientNif || c?.nif || '---',
-        "Fatura": t.amount,
-        "Cashback": t.cashbackAmount,
+        "Fatura": Number(t.amount || 0),
+        "Cashback": Number(t.cashbackAmount ?? t.cashbackEarned ?? 0),
         Tipo: t.type === 'earn' ? 'Atribuição' : 'Desconto',
         Status: t.status === 'cancelled' ? 'Anulado' : 'Aprovado'
       };
@@ -145,9 +145,9 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
                       <span className="block text-[9px] text-slate-400 font-bold lowercase italic">{t.clientName}</span>
                     </td>
                     <td className="p-6 text-center font-mono font-bold text-slate-400">{t.clientCardNumber || t.clientNif || '---'}</td>
-                    <td className="p-6 text-right font-black text-slate-500">{t.amount.toFixed(2)} €</td>
+                    <td className="p-6 text-right font-black text-slate-500">{Number(t.amount || 0).toFixed(2)} €</td>
                     <td className={`p-6 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                      {t.type === 'earn' ? '+' : '-'}{t.cashbackAmount.toFixed(2)} €
+                      {t.type === 'earn' ? '+' : '-'}{Number(t.cashbackAmount ?? t.cashbackEarned ?? 0).toFixed(2)} €
                     </td>
                   </tr>
                 ))}

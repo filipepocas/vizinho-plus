@@ -1,6 +1,4 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
 /* VIZINHO+ 2026 - NÚCLEO VISUAL 
   Configuração de Reset e Suavização Comercial
@@ -39,11 +37,9 @@
   }
 }
 
-@layer components {
-  /* Classe auxiliar para o gradiente moderno solicitado */
-  .vplus-gradient {
-    @apply bg-gradient-to-r from-[#0a2540] to-[#00d66f];
-  }
+/* Classe auxiliar para o gradiente moderno solicitado */
+.vplus-gradient {
+  @apply bg-gradient-to-r from-[#0a2540] to-[#00d66f];
 }
 
 /* Evitar zoom automático em inputs no iOS e melhorar usabilidade mobile */

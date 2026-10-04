@@ -2,29 +2,76 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+
     function isAdmin() {
-      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isAuthenticated() && (
+        request.auth.token.email == 'rochap.filipe@gmail.com' ||
+        getUserData().role == 'admin'
+      );
     }
+
     function isMerchant() {
-      return request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'merchant';
+      return isAuthenticated() && getUserData().role == 'merchant';
     }
-    function isAuthenticated() { return request.auth != null; }
 
     match /users/{userId} {
+      // Leitura permitida: próprio utilizador, admin, lojas públicas, ou comerciantes a identificar clientes no terminal
       allow read: if isAdmin()
-        || request.auth.uid == userId
+        || (isAuthenticated() && request.auth.uid == userId)
         || resource.data.role == 'merchant'
         || (isMerchant() && resource.data.role == 'client')
         || resource.data.isPublic == true;
-      allow create: if true; 
-      allow update, delete: if isAdmin() || request.auth.uid == userId;
+
+      // Criação: apenas utilizador autenticado a criar o próprio perfil como 'client' ou 'merchant' (pendente), ou Admin a provisionar
+      allow create: if isAdmin() || (
+        isAuthenticated() &&
+        request.auth.uid == userId &&
+        request.resource.data.role in ['client', 'merchant'] &&
+        (request.resource.data.role == 'client' || request.resource.data.status == 'pending')
+      );
+
+      // Atualização:
+      // 1. Admin pode atualizar qualquer documento
+      // 2. O próprio utilizador pode atualizar os seus dados de perfil SEM alterar o seu 'role', 'wallet' ou 'storeWallets'
+      // 3. Um comerciante ativo pode atualizar exclusivamente a carteira da sua própria loja ('storeWallets.<merchantId>') e 'wallet' num registo de transação
+      allow update: if isAdmin()
+        || (
+          isAuthenticated() &&
+          request.auth.uid == userId &&
+          request.resource.data.role == resource.data.role &&
+          (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'wallet', 'storeWallets']))
+        )
+        || (
+          isMerchant() &&
+          resource.data.role == 'client' &&
+          request.resource.data.role == 'client' &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wallet', 'storeWallets', 'updatedAt'])
+        );
+
+      // Eliminação: Admin ou o próprio utilizador (Direito ao Esquecimento RGPD)
+      allow delete: if isAdmin() || (isAuthenticated() && request.auth.uid == userId);
     }
 
     match /transactions/{transactionId} {
       allow read: if isAdmin() || (isAuthenticated() && (resource.data.clientId == request.auth.uid || resource.data.merchantId == request.auth.uid));
-      allow create: if isAuthenticated(); 
-      allow update: if isAdmin() || (isAuthenticated() && (resource.data.clientId == request.auth.uid || resource.data.merchantId == request.auth.uid));
-      allow delete: if isAdmin();
+      // Apenas comerciantes (para a sua própria loja) ou admins podem registar movimentos
+      allow create: if isAdmin() || (isMerchant() && request.resource.data.merchantId == request.auth.uid);
+      // Atualização restrita: comerciante da transação (ex: associar fatura / pedir anulação) ou admin
+      allow update: if isAdmin() || (
+        isMerchant() &&
+        resource.data.merchantId == request.auth.uid &&
+        request.resource.data.merchantId == resource.data.merchantId &&
+        request.resource.data.clientId == resource.data.clientId &&
+        request.resource.data.cashbackAmount == resource.data.cashbackAmount
+      );
+      allow delete: if isAdmin() || (isAuthenticated() && (resource.data.clientId == request.auth.uid || resource.data.merchantId == request.auth.uid));
     }
 
     match /feedbacks/{feedbackId} {
@@ -38,7 +85,7 @@ service cloud.firestore {
     match /leaflets/{leafletId} { allow read: if true; allow write: if isAdmin(); }
     match /leaflet_campaigns/{campaignId} { allow read: if true; allow write: if isAdmin(); }
     match /system/{document=**} { allow read: if true; allow write: if isAdmin(); }
-    match /pricing_rules/{ruleId} { allow read: if isAuthenticated(); allow write: if isAdmin(); }
+    match /pricing_rules/{ruleId} { allow read: if true; allow write: if isAdmin(); }
 
     match /merchant_requests/{requestId} {
       allow read: if isAdmin();
@@ -59,14 +106,14 @@ service cloud.firestore {
     }
 
     match /notifications/{notifId} {
-      allow read: if isAuthenticated(); allow create: if isAdmin(); allow update, delete: if isAdmin();
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
     }
 
     match /events/{eventId} {
       allow read: if isAuthenticated() || isAdmin();
       allow create: if true; 
-      allow update: if isAdmin(); 
-      allow delete: if isAdmin();
+      allow update, delete: if isAdmin();
     }
 
     match /anti_waste/{itemId} {

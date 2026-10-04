@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { 
   collection, onSnapshot, query, where, serverTimestamp, 
-  doc, getDocs, writeBatch, limit, updateDoc, setDoc, arrayUnion, startAfter, getDoc
+  doc, getDocs, writeBatch, limit, updateDoc, arrayUnion, startAfter, getDoc, runTransaction
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -32,6 +32,7 @@ interface StoreState {
   updateTransactionDocument: (transactionId: string, documentNumber: string) => Promise<void>;
   subscribeToTransactions: (role?: string, id?: string) => () => void;
   checkNifExists: (nif: string) => Promise<boolean>;
+  generateUniqueCustomerNumber: () => Promise<string>;
   initializeAuth: () => () => void;
   deleteUserWithHistory: (userId: string, role: 'client' | 'merchant') => Promise<void>;
   updateUserToken: (userId: string, token: string) => Promise<void>;
@@ -118,14 +119,12 @@ export const useStore = create<StoreState>((set, get) => ({
     const { products, lastVisibleProduct } = get();
     
     try {
-      // Construir constraints dinamicamente
       const constraints: any[] = [];
       const canQueryConcelho = Array.isArray(filters.concelho) && filters.concelho.length > 0 && filters.concelho.length <= 10;
       const canQueryFreguesia = Array.isArray(filters.freguesia) && filters.freguesia.length > 0 && filters.freguesia.length <= 10;
       const useConcelhoQuery = canQueryConcelho;
       const useFreguesiaQuery = !useConcelhoQuery && canQueryFreguesia;
 
-      // Otimização: Filtra direto no Firestore por campos exatos quando possível
       if (filters.distrito) {
         constraints.push(where('distrito', '==', filters.distrito));
       }
@@ -150,12 +149,10 @@ export const useStore = create<StoreState>((set, get) => ({
         constraints.push(startAfter(lastVisibleProduct));
       }
 
-      // Construir query corretamente com todos os constraints
       const q = query(collection(db, 'products'), ...constraints);
       const snap = await getDocs(q);
       let fetchedProducts = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Product));
 
-      // Ordenação robusta no cliente (evita necessidade de índices compostos complexos no Firestore)
       fetchedProducts.sort((a: Product, b: Product) => {
         const dateA = getProductDate(a);
         const dateB = getProductDate(b);
@@ -165,7 +162,6 @@ export const useStore = create<StoreState>((set, get) => ({
         return dateB - dateA;
       });
 
-      // Filtros geográficos e taxonomia adicionais no cliente
       const normalizeValue = (value: any) => {
         if (value === undefined || value === null) return '';
         return String(value).trim().toLowerCase();
@@ -261,40 +257,127 @@ export const useStore = create<StoreState>((set, get) => ({
     return !snap.empty;
   },
 
+  generateUniqueCustomerNumber: async () => {
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = Math.floor(100000000 + Math.random() * 900000000).toString();
+      try {
+        const [byCard, byNif] = await Promise.all([
+          getDocs(query(collection(db, 'users'), where('customerNumber', '==', candidate), limit(1))),
+          getDocs(query(collection(db, 'users'), where('nif', '==', candidate), limit(1)))
+        ]);
+        if (byCard.empty && byNif.empty) {
+          return candidate;
+        }
+      } catch {
+        // Caso o utilizador ainda não tenha permissão de leitura antes do registo, retorna o candidato gerado
+        return candidate;
+      }
+    }
+    return Math.floor(100000000 + Math.random() * 900000000).toString();
+  },
+
   addTransaction: async (tx: TransactionCreate) => {
     const { currentUser } = get();
     if (!currentUser) return;
-    
+
+    const rawAmount = Number(tx.amount) || 0;
+    const invoiceAmount = tx.invoiceAmount ? Number(tx.invoiceAmount) : rawAmount;
+    const percent = Number(currentUser.cashbackPercent || 0);
+
+    // Sem período de maturação: todo o cashback atribuído ou descontado é imediato ('available')
+    const calculatedCashback = tx.type === 'earn'
+      ? Number(((invoiceAmount * percent) / 100).toFixed(2))
+      : Number(rawAmount.toFixed(2));
+
     try {
       const newTxRef = doc(collection(db, 'transactions'));
-      await setDoc(newTxRef, {
-        clientId: tx.clientId,
-        merchantId: currentUser.id,
-        merchantName: currentUser.shopName || currentUser.name,
-        amount: Number(tx.amount),
-        invoiceAmount: tx.invoiceAmount ? Number(tx.invoiceAmount) : 0,
-        type: tx.type,
-        status: 'pending',
-        createdAt: serverTimestamp(),
-        clientNif: tx.documentNumber || "",
-        documentNumber: tx.documentNumber || "",
-        clientName: tx.clientName || "Desconhecido",
-        clientCardNumber: tx.clientCardNumber || "---",
-        clientBirthDate: tx.clientBirthDate || "",
-        cashbackPercent: currentUser.cashbackPercent || 0
+      const clientRef = doc(db, 'users', tx.clientId);
+      const merchantName = currentUser.shopName || currentUser.name || 'Loja Parceira';
+
+      await runTransaction(db, async (transaction) => {
+        const clientSnap = await transaction.get(clientRef);
+        if (!clientSnap.exists()) {
+          throw new Error('Cliente não encontrado.');
+        }
+
+        const clientData = clientSnap.data() as UserProfile;
+        const storeWallets = { ...(clientData.storeWallets || {}) };
+        const currentStoreWallet = storeWallets[currentUser.id] || {
+          available: 0,
+          pending: 0,
+          merchantName
+        };
+
+        const currentAvailable = Number(currentStoreWallet.available || 0);
+
+        if (tx.type === 'redeem') {
+          const maxDiscountAllowed = Number((invoiceAmount * 0.5).toFixed(2));
+          if (calculatedCashback > currentAvailable + 0.01) {
+            throw new Error('Saldo insuficiente nesta loja.');
+          }
+          if (calculatedCashback > maxDiscountAllowed + 0.01) {
+            throw new Error('O desconto não pode exceder 50% do valor da fatura.');
+          }
+        }
+
+        const delta = tx.type === 'earn' ? calculatedCashback : -calculatedCashback;
+        const nextStoreAvailable = Math.max(0, Number((currentAvailable + delta).toFixed(2)));
+
+        storeWallets[currentUser.id] = {
+          available: nextStoreAvailable,
+          pending: 0,
+          merchantName,
+          lastUpdate: serverTimestamp()
+        };
+
+        const nextTotalAvailable = Number(
+          Object.values(storeWallets)
+            .reduce((sum, w: any) => sum + Number(w?.available || 0), 0)
+            .toFixed(2)
+        );
+
+        transaction.set(newTxRef, {
+          clientId: tx.clientId,
+          merchantId: currentUser.id,
+          merchantName,
+          amount: invoiceAmount,
+          invoiceAmount,
+          cashbackAmount: calculatedCashback,
+          cashbackEarned: tx.type === 'earn' ? calculatedCashback : 0,
+          type: tx.type,
+          status: 'available',
+          createdAt: serverTimestamp(),
+          clientNif: tx.documentNumber || '',
+          documentNumber: tx.documentNumber || '',
+          clientName: tx.clientName || clientData.name || 'Desconhecido',
+          clientCardNumber: tx.clientCardNumber || clientData.customerNumber || '---',
+          clientBirthDate: tx.clientBirthDate || clientData.birthDate || '',
+          cashbackPercent: percent
+        });
+
+        transaction.update(clientRef, {
+          storeWallets,
+          wallet: {
+            available: nextTotalAvailable,
+            pending: 0
+          },
+          updatedAt: serverTimestamp()
+        });
       });
-      toast.success("MOVIMENTO ENVIADO!");
+
+      toast.success(tx.type === 'earn' ? "CASHBACK ATRIBUÍDO COM SUCESSO!" : "DESCONTO REGISTADO COM SUCESSO!");
       return newTxRef.id;
-    } catch (e) {
-      toast.error("ERRO NO REGISTO.");
+    } catch (e: any) {
+      console.error("Erro na transação:", e);
+      toast.error(e?.message || "ERRO NO REGISTO.");
     }
   },
 
   updateTransactionDocument: async (transactionId: string, documentNumber: string) => {
     try {
-        const txRef = doc(db, 'transactions', transactionId);
-        await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
-        toast.success("Fatura associada!");
+      const txRef = doc(db, 'transactions', transactionId);
+      await updateDoc(txRef, { documentNumber: documentNumber.toUpperCase() });
+      toast.success("Fatura associada!");
     } catch(e) {
       toast.error("Erro.");
     }
@@ -303,10 +386,55 @@ export const useStore = create<StoreState>((set, get) => ({
   cancelTransaction: async (id: string) => {
     try {
       const txRef = doc(db, 'transactions', id);
-      await updateDoc(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
-      toast.success("PEDIDO DE ANULAÇÃO ENVIADO.");
+      await runTransaction(db, async (transaction) => {
+        const txSnap = await transaction.get(txRef);
+        if (!txSnap.exists()) throw new Error('Transação não encontrada.');
+        const txData = txSnap.data() as Transaction;
+        if (txData.status === 'cancelled') return;
+
+        const clientRef = doc(db, 'users', txData.clientId);
+        const clientSnap = await transaction.get(clientRef);
+
+        if (clientSnap.exists()) {
+          const clientData = clientSnap.data() as UserProfile;
+          const storeWallets = { ...(clientData.storeWallets || {}) };
+          const merchantId = txData.merchantId;
+          const currentStoreWallet = storeWallets[merchantId] || {
+            available: 0,
+            pending: 0,
+            merchantName: txData.merchantName || 'Loja Parceira'
+          };
+
+          const val = Number(txData.cashbackAmount || 0);
+          // Reverter movimento: se foi 'earn' subtrai, se foi 'redeem' devolve
+          const reverseDelta = txData.type === 'earn' ? -val : val;
+          const nextStoreAvailable = Math.max(0, Number((Number(currentStoreWallet.available || 0) + reverseDelta).toFixed(2)));
+
+          storeWallets[merchantId] = {
+            ...currentStoreWallet,
+            available: nextStoreAvailable,
+            pending: 0,
+            lastUpdate: serverTimestamp()
+          };
+
+          const nextTotalAvailable = Number(
+            Object.values(storeWallets)
+              .reduce((sum, w: any) => sum + Number(w?.available || 0), 0)
+              .toFixed(2)
+          );
+
+          transaction.update(clientRef, {
+            storeWallets,
+            wallet: { available: nextTotalAvailable, pending: 0 },
+            updatedAt: serverTimestamp()
+          });
+        }
+
+        transaction.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
+      });
+      toast.success("MOVIMENTO ANULADO E SALDO AJUSTADO.");
     } catch (e) {
-      toast.error("ERRO.");
+      toast.error("ERRO AO ANULAR.");
     }
   },
 
@@ -323,7 +451,7 @@ export const useStore = create<StoreState>((set, get) => ({
     }
     
     return onSnapshot(q, (snap: any) => {
-      let docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+      const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
       
       docs.sort((a: Transaction, b: Transaction) => {
         return getTransactionDate(b) - getTransactionDate(a);
@@ -345,15 +473,33 @@ export const useStore = create<StoreState>((set, get) => ({
       set({ locations: data });
     });
 
+    let unsubUserDoc: (() => void) | null = null;
+
     const unsubAuth = onAuthStateChanged(auth, (user: any) => {
+      if (unsubUserDoc) {
+        unsubUserDoc();
+        unsubUserDoc = null;
+      }
+
       if (user) {
-        onSnapshot(doc(db, 'users', user.uid), (d: any) => {
-          if (d.exists()) set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
+        unsubUserDoc = onSnapshot(doc(db, 'users', user.uid), (d: any) => {
+          if (d.exists()) {
+            set({ currentUser: { ...d.data(), id: user.uid } as UserProfile, isLoading: false, isInitialized: true });
+          } else {
+            set({ currentUser: null, isLoading: false, isInitialized: true });
+          }
         });
-      } else set({ currentUser: null, isLoading: false, isInitialized: true });
+      } else {
+        set({ currentUser: null, isLoading: false, isInitialized: true });
+      }
     });
+
     get().fetchTaxonomy();
-    return () => { unsubAuth(); unsubLocs(); };
+    return () => {
+      if (unsubUserDoc) unsubUserDoc();
+      unsubAuth();
+      unsubLocs();
+    };
   },
 
   deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {

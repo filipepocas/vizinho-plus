@@ -27,8 +27,8 @@ const MERCH_CATEGORIES = [
 
 const LandingPage: React.FC = () => {
   const navigate = useNavigate();
-  const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
-  const { locations } = useStore();
+  const logoPath = '/logo-vizinho.png';
+  const { locations, generateUniqueCustomerNumber } = useStore();
 
   const [showCommunityModal, setShowCommunityModal] = useState(false);
   const [showExternalModal, setShowExternalModal] = useState(false);
@@ -224,19 +224,38 @@ const LandingPage: React.FC = () => {
 
     setLoading(true);
     try {
-        const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
-        let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
-        
-        clients = clients.filter((c: any) => {
-            return bannerTargets.some(z => 
-                z.includes(`Freguesia: ${c.freguesia}`) || 
-                z.includes(`Concelho: ${c.concelho}`) || 
-                z.includes(`Distrito: ${c.distrito}`)
-            );
-        });
+        let count = 0;
+        try {
+          const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
+          let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
+          
+          clients = clients.filter((c: any) => {
+              return bannerTargets.some(z => 
+                  z.includes(`Freguesia: ${c.freguesia}`) || 
+                  z.includes(`Concelho: ${c.concelho}`) || 
+                  z.includes(`Distrito: ${c.distrito}`)
+              );
+          });
+          count = clients.length;
+        } catch {
+          // Visitantes não autenticados não têm acesso direto à coleção privada 'users'; estimar com base em 'system/memberCount' ou mínimo por zona
+          const baseMembers = membersCount && membersCount > 0 ? membersCount : 250;
+          count = Math.max(50, Math.round((baseMembers * Math.min(bannerTargets.length, 5)) / 5));
+        }
 
-        const count = clients.length;
-        const totalCost = count * 0.03 * days;
+        // Verificar se existe regra de preço para banner em pricing_rules
+        let totalCost = count * 0.03 * days;
+        try {
+          const rulesSnap = await getDocs(query(collection(db, 'pricing_rules'), where('tool', '==', 'banner')));
+          if (!rulesSnap.empty) {
+            const rule = rulesSnap.docs[0].data();
+            const unitPrice = Number(rule.price) || 0.03;
+            const minPrice = Number(rule.minPrice) || 0;
+            const rawCost = rule.chargeType === 'per_day' ? unitPrice * days * bannerTargets.length : count * unitPrice * days;
+            totalCost = Math.max(minPrice, rawCost);
+          }
+        } catch {}
+
         setBannerSimulation({ count, cost: totalCost, days });
     } catch(err) { toast.error("Erro na simulação."); } finally { setLoading(false); }
   };
@@ -290,22 +309,23 @@ const LandingPage: React.FC = () => {
     setLoadingPartner(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, partnerForm.email.trim(), partnerForm.password);
-      await signOut(auth); 
+      const { password, ...safePartnerData } = partnerForm;
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         role: 'merchant',
         status: 'pending',
         createdAt: serverTimestamp(),
-        ...partnerForm,
+        ...safePartnerData,
         name: partnerForm.shopName.trim(),
         wallet: { available: 0, pending: 0 }
       });
       await addDoc(collection(db, 'merchant_requests'), { 
         uid: userCredential.user.uid, 
-        ...partnerForm, 
+        ...safePartnerData, 
         status: 'pending', 
         createdAt: serverTimestamp() 
       });
+      await signOut(auth);
       toast.success("Pedido enviado com sucesso! Aguarde a aprovação do administrador.");
       setPartnerForm({ shopName: '', responsibleName: '', phone: '', email: '', password: '', category: '', distrito: '', concelho: '', freguesia: '', zipCode: '', address: '' });
     } catch (e: any) { 
@@ -322,14 +342,16 @@ const LandingPage: React.FC = () => {
     setClientLoading(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, clientForm.email.trim(), clientForm.password);
+      const customerNumber = await generateUniqueCustomerNumber();
+      const { password, ...safeClientData } = clientForm;
       await setDoc(doc(db, 'users', userCredential.user.uid), {
         id: userCredential.user.uid,
         role: 'client',
         status: 'active',
-        customerNumber: Math.floor(100000000 + Math.random() * 900000000).toString(),
+        customerNumber,
         createdAt: serverTimestamp(),
         wallet: { available: 0, pending: 0 },
-        ...clientForm
+        ...safeClientData
       });
       toast.success("Registo efetuado com sucesso!");
       navigate('/dashboard');

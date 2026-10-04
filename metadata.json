@@ -1,0 +1,6 @@
+{
+  "name": "Vizinho+ | Cashback Local",
+  "description": "Plataforma de fidelização e cashback para o comércio local Vizinho+.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

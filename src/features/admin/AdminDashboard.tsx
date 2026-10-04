@@ -86,23 +86,6 @@ const AdminDashboard: React.FC = () => {
         setBadFeedbacks(bad);
     });
     
-    const cleanupExpiredData = async () => {
-       const now = new Date();
-       try {
-         const eventsSnap = await getDocs(collection(db, 'events'));
-         eventsSnap.forEach((docSnap: any) => {
-            const ev = docSnap.data();
-            if (ev.endDate && ev.endDate.toDate() < now) deleteDoc(doc(db, 'events', docSnap.id)).catch(() => {});
-         });
-         const wasteSnap = await getDocs(collection(db, 'anti_waste'));
-         wasteSnap.forEach((docSnap: any) => {
-            const w = docSnap.data();
-            if (w.endTime && w.endTime.toDate() < now) deleteDoc(doc(db, 'anti_waste', docSnap.id)).catch(() => {});
-         });
-       } catch(e) {}
-    };
-    cleanupExpiredData();
-
     return () => { unsub1(); unsub2(); unsub3(); unsub4(); };
   }, []);
 
