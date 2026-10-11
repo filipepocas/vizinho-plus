@@ -16,8 +16,8 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser, merchantBalances }) =>
   const [showDetails, setShowDetails] = useState(false);
 
   const summary = useMemo(
-    () => summarizeStoreWallets(merchantBalances && Object.keys(merchantBalances).length > 0 ? merchantBalances : currentUser?.storeWallets),
-    [merchantBalances, currentUser?.storeWallets]
+    () => summarizeStoreWallets(merchantBalances),
+    [merchantBalances]
   );
 
   return (

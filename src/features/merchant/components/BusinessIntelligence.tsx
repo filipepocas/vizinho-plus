@@ -4,6 +4,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../../config/firebase';
 import { Transaction, Feedback } from '../../../types';
+import { summarizeCashbackLedger } from '../../../utils/clientBalance';
 import { BarChart3, TrendingUp, Wallet, Star, Clock, AlertCircle, Users, Trophy, Activity } from 'lucide-react';
 
 interface BIProps {
@@ -197,17 +198,8 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
   }, [transactions]);
 
   const cashbackStats = useMemo(() => {
-    let emitted = 0, used = 0, available = 0;
-    transactions.forEach(t => {
-      if (t.status !== 'available' || t.processedByBackend === false) return;
-      if (t.type === 'earn') emitted += Number(t.cashbackAmount || 0);
-      else if (t.type === 'redeem') {
-        emitted += Number(t.cashbackEarned || 0);
-        used += Number(t.cashbackAmount || t.amount || 0);
-      }
-    });
-    available = Math.max(0, Number((emitted - used).toFixed(2)));
-    return { emitted, used, available: Math.max(0, available) };
+    const ledger = summarizeCashbackLedger(transactions);
+    return { emitted: ledger.emitted, used: ledger.redeemed, available: ledger.available };
   }, [transactions]);
 
   const feedbackStats = useMemo(() => {

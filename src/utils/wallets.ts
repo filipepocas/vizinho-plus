@@ -22,7 +22,7 @@ export const summarizeStoreWallets = (
       name: data?.merchantName || 'Loja Parceira',
       available: Number(data?.available || 0),
     }))
-    .filter((entry) => entry.available > 0)
+    .filter((entry) => entry.available !== 0)
     .sort((a, b) => b.available - a.available);
 
   return {

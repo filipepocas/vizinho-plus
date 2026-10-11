@@ -23,7 +23,7 @@ import MerchantMarketing from './components/MerchantMarketing';
 import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
-import { summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
+import { summarizeCashbackLedger, summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, addTransaction, logout, locations } = useStore();
@@ -94,22 +94,14 @@ const MerchantDashboard: React.FC = () => {
   }, [merchantTransactions, txSearch, txStartDate, txEndDate]);
 
   const txTotals = useMemo(() => {
-    let emitido = 0, descontado = 0;
-    filteredMerchantTransactions.forEach((t: any) => {
-      if (t.status !== 'available' || t.processedByBackend === false) return;
-      if (t.type === 'earn') emitido += (t.cashbackAmount || 0);
-      else if (t.type === 'redeem') {
-        emitido += (t.cashbackEarned || 0);
-        descontado += (t.cashbackAmount || t.amount || 0);
-      }
-    });
+    const ledger = summarizeCashbackLedger(merchantTransactions);
     return {
-      emitido,
-      descontado,
-      available: Math.max(0, Number((emitido - descontado).toFixed(2))),
-      total: filteredMerchantTransactions.length
+      emitido: ledger.emitted,
+      descontado: ledger.redeemed,
+      available: ledger.available,
+      total: merchantTransactions.length
     };
-  }, [filteredMerchantTransactions]);
+  }, [merchantTransactions]);
 
   useEffect(() => {
     if (!currentUser?.id) return;

@@ -6,9 +6,25 @@ export interface ClientStoreBalanceEntry {
   available: number;
 }
 
+export interface CashbackLedgerSummary {
+  emitted: number;
+  redeemed: number;
+  available: number;
+}
+
 const getIssuedCashback = (tx: Transaction): number => {
-  if (tx.type === 'redeem' && tx.cashbackEarned !== undefined && tx.cashbackEarned !== null) {
-    return Number(tx.cashbackEarned) || 0;
+  if (tx.type === 'redeem') {
+    if (tx.cashbackEarned !== undefined && tx.cashbackEarned !== null) {
+      return Number(tx.cashbackEarned) || 0;
+    }
+
+    const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
+    const amountPaid = Math.max(0, purchaseAmount - getRedeemedCashback(tx));
+    return Number(((amountPaid * Number(tx.cashbackPercent || 0)) / 100).toFixed(2));
+  }
+
+  if (tx.cashbackAmount !== undefined && tx.cashbackAmount !== null) {
+    return Number(tx.cashbackAmount) || 0;
   }
 
   if (tx.cashbackPercent !== undefined && tx.cashbackPercent !== null) {
@@ -16,15 +32,31 @@ const getIssuedCashback = (tx: Transaction): number => {
     return Number(((purchaseAmount * Number(tx.cashbackPercent || 0)) / 100).toFixed(2));
   }
 
-  return tx.type === 'earn' ? Number(tx.cashbackAmount || 0) : 0;
+  return 0;
 };
 
 const getRedeemedCashback = (tx: Transaction): number => {
-  return tx.type === 'redeem' ? Number(tx.cashbackAmount || tx.amount || 0) : 0;
+  if (tx.type !== 'redeem') return 0;
+  return Number(tx.cashbackAmount ?? tx.amount ?? 0) || 0;
 };
 
 const isIncludedInAvailableBalance = (tx: Transaction): boolean => {
   return tx.status === 'available' && tx.processedByBackend !== false;
+};
+
+export const summarizeCashbackLedger = (transactions: Transaction[] = []): CashbackLedgerSummary => {
+  const totals = transactions.reduce((summary, tx) => {
+    if (!isIncludedInAvailableBalance(tx)) return summary;
+    if (tx.type !== 'earn' && tx.type !== 'redeem') return summary;
+
+    summary.emitted += getIssuedCashback(tx);
+    summary.redeemed += getRedeemedCashback(tx);
+    return summary;
+  }, { emitted: 0, redeemed: 0 });
+
+  const emitted = Number(totals.emitted.toFixed(2));
+  const redeemed = Number(totals.redeemed.toFixed(2));
+  return { emitted, redeemed, available: Number((emitted - redeemed).toFixed(2)) };
 };
 
 export const calculateClientBalanceFromTransactions = (
@@ -66,12 +98,12 @@ export const summarizeClientStoreBalancesFromTransactions = (
   });
 
   const entries = Array.from(balances.entries())
-    .map(([id, data]) => ({ id, name: data.name, available: Math.max(0, data.available) }))
-    .filter((entry) => entry.available > 0)
+    .map(([id, data]) => ({ id, name: data.name, available: Number(data.available.toFixed(2)) }))
+    .filter((entry) => entry.available !== 0)
     .sort((a, b) => b.available - a.available);
 
   return {
-    total: Number(entries.reduce((sum, entry) => sum + entry.available, 0).toFixed(2)),
+    total: Number(Array.from(balances.values()).reduce((sum, entry) => sum + entry.available, 0).toFixed(2)),
     entries,
   };
 };
