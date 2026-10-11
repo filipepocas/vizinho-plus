@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import { 
-  collection, onSnapshot, query, where, serverTimestamp, 
+  collection, onSnapshot, query, where, serverTimestamp, addDoc,
   doc, getDocs, writeBatch, limit, updateDoc, arrayUnion, startAfter, getDoc, runTransaction
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
@@ -290,79 +290,24 @@ export const useStore = create<StoreState>((set, get) => ({
       : Number(rawAmount.toFixed(2));
 
     try {
-      const newTxRef = doc(collection(db, 'transactions'));
-      const clientRef = doc(db, 'users', tx.clientId);
       const merchantName = currentUser.shopName || currentUser.name || 'Loja Parceira';
-
-      await runTransaction(db, async (transaction) => {
-        const clientSnap = await transaction.get(clientRef);
-        if (!clientSnap.exists()) {
-          throw new Error('Cliente não encontrado.');
-        }
-
-        const clientData = clientSnap.data() as UserProfile;
-        const storeWallets = { ...(clientData.storeWallets || {}) };
-        const currentStoreWallet = storeWallets[currentUser.id] || {
-          available: 0,
-          pending: 0,
-          merchantName
-        };
-
-        const currentAvailable = Number(currentStoreWallet.available || 0);
-
-        if (tx.type === 'redeem') {
-          const maxDiscountAllowed = Number((invoiceAmount * 0.5).toFixed(2));
-          if (calculatedCashback > currentAvailable + 0.01) {
-            throw new Error('Saldo insuficiente nesta loja.');
-          }
-          if (calculatedCashback > maxDiscountAllowed + 0.01) {
-            throw new Error('O desconto não pode exceder 50% do valor da fatura.');
-          }
-        }
-
-        const delta = tx.type === 'earn' ? calculatedCashback : -calculatedCashback;
-        const nextStoreAvailable = Math.max(0, Number((currentAvailable + delta).toFixed(2)));
-
-        storeWallets[currentUser.id] = {
-          available: nextStoreAvailable,
-          pending: 0,
-          merchantName,
-          lastUpdate: serverTimestamp()
-        };
-
-        const nextTotalAvailable = Number(
-          Object.values(storeWallets)
-            .reduce((sum, w: any) => sum + Number(w?.available || 0), 0)
-            .toFixed(2)
-        );
-
-        transaction.set(newTxRef, {
-          clientId: tx.clientId,
-          merchantId: currentUser.id,
-          merchantName,
-          amount: invoiceAmount,
-          invoiceAmount,
-          cashbackAmount: calculatedCashback,
-          cashbackEarned: tx.type === 'earn' ? calculatedCashback : 0,
-          type: tx.type,
-          status: 'available',
-          createdAt: serverTimestamp(),
-          clientNif: tx.documentNumber || '',
-          documentNumber: tx.documentNumber || '',
-          clientName: tx.clientName || clientData.name || 'Desconhecido',
-          clientCardNumber: tx.clientCardNumber || clientData.customerNumber || '---',
-          clientBirthDate: tx.clientBirthDate || clientData.birthDate || '',
-          cashbackPercent: percent
-        });
-
-        transaction.update(clientRef, {
-          storeWallets,
-          wallet: {
-            available: nextTotalAvailable,
-            pending: 0
-          },
-          updatedAt: serverTimestamp()
-        });
+      const newTxRef = await addDoc(collection(db, 'transactions'), {
+        clientId: tx.clientId,
+        merchantId: currentUser.id,
+        merchantName,
+        amount: invoiceAmount,
+        invoiceAmount,
+        cashbackAmount: calculatedCashback,
+        cashbackEarned: tx.type === 'earn' ? calculatedCashback : 0,
+        type: tx.type,
+        status: 'available',
+        createdAt: serverTimestamp(),
+        clientNif: tx.documentNumber || '',
+        documentNumber: tx.documentNumber || '',
+        clientName: tx.clientName || 'Desconhecido',
+        clientCardNumber: tx.clientCardNumber || '---',
+        clientBirthDate: tx.clientBirthDate || '',
+        cashbackPercent: percent
       });
 
       toast.success(tx.type === 'earn' ? "CASHBACK ATRIBUÍDO COM SUCESSO!" : "DESCONTO REGISTADO COM SUCESSO!");

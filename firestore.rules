@@ -37,22 +37,13 @@ service cloud.firestore {
         (request.resource.data.role == 'client' || request.resource.data.status == 'pending')
       );
 
-      // Atualização:
-      // 1. Admin pode atualizar qualquer documento
-      // 2. O próprio utilizador pode atualizar os seus dados de perfil SEM alterar o seu 'role', 'wallet' ou 'storeWallets'
-      // 3. Um comerciante ativo pode atualizar exclusivamente a carteira da sua própria loja ('storeWallets.<merchantId>') e 'wallet' num registo de transação
+      // Carteiras são atualizadas apenas pelo Admin SDK no processador de transações.
       allow update: if isAdmin()
         || (
           isAuthenticated() &&
           request.auth.uid == userId &&
           request.resource.data.role == resource.data.role &&
           (!request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'wallet', 'storeWallets']))
-        )
-        || (
-          isMerchant() &&
-          resource.data.role == 'client' &&
-          request.resource.data.role == 'client' &&
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['wallet', 'storeWallets', 'updatedAt'])
         );
 
       // Eliminação: Admin ou o próprio utilizador (Direito ao Esquecimento RGPD)
