@@ -11,7 +11,7 @@ interface MerchantTerminalProps {
   foundClient: UserProfile | null;
   amount: string;
   setAmount: (val: string) => void;
-  previewCashback: number;
+  cashbackPercent: number;
   documentNumber: string;
   setDocumentNumber: (val: string) => void;
   onOpenScanner: () => void;
@@ -24,7 +24,7 @@ interface MerchantTerminalProps {
 
 const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   cardNumber, setCardNumber, isNifValid, foundClient,
-  amount, setAmount, previewCashback,
+  amount, setAmount, cashbackPercent,
   onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching, isLeaving
 }) => {
 
@@ -43,6 +43,8 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   const invoiceAmount = Number(amount) || 0;
   const maxDiscountAllowed = invoiceAmount * 0.5;
   const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
+  const selectedRedeemAmount = Number(customRedeem) || 0;
+  const cashbackToIssue = Number((Math.max(0, invoiceAmount - selectedRedeemAmount) * cashbackPercent / 100).toFixed(2));
 
   const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0 && !isLeaving;
   
@@ -97,7 +99,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
                 <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
                   <ArrowRight size={16} className="text-[#00d66f]" />
                   <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
-                    Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(previewCashback)}</span>
+                    Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(cashbackToIssue)}</span>
                   </span>
                 </div>
               </div>

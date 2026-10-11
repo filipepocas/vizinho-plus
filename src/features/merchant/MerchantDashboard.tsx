@@ -76,12 +76,6 @@ const MerchantDashboard: React.FC = () => {
   const normalizedCardNumber = useMemo(() => normalizeClientCardValue(cardNumber), [cardNumber]);
   const isNifValid = useMemo(() => normalizedCardNumber.length === 9, [normalizedCardNumber]);
 
-  const previewCashbackValue = useMemo(() => {
-    const numAmount = parseFloat(amount) || 0;
-    const percent = currentUser?.cashbackPercent || 0;
-    return (numAmount * percent) / 100;
-  }, [amount, currentUser?.cashbackPercent]);
-
   const filteredMerchantTransactions = useMemo(() => {
     return merchantTransactions.filter((t: any) => {
       const search = txSearch.toLowerCase().trim();
@@ -347,7 +341,7 @@ const MerchantDashboard: React.FC = () => {
             cardNumber={cardNumber} setCardNumber={setCardNumber}
             isNifValid={isNifValid} isSearching={isSearching} foundClient={foundClient}
             amount={amount} setAmount={setAmount}
-            previewCashback={previewCashbackValue}
+            cashbackPercent={currentUser.cashbackPercent || 0}
             documentNumber={documentNumber} setDocumentNumber={setDocumentNumber}
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
