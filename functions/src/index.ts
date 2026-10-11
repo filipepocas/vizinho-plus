@@ -50,7 +50,8 @@ export const txProcessor = v2.firestore.onDocumentCreated(
           }
 
           if (!isLeaving && invoiceAmount > 0) {
-            newCashbackEarned = roundToTwo(invoiceAmount * (merchantCashbackPercent / 100));
+            const amountPaid = Math.max(0, invoiceAmount - secureCashbackAmount);
+            newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
           }
         }
 

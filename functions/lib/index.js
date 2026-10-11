@@ -77,7 +77,8 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
                     throw new Error("Fraude: Resgate superior a 50%.");
                 }
                 if (!isLeaving && invoiceAmount > 0) {
-                    newCashbackEarned = roundToTwo(invoiceAmount * (merchantCashbackPercent / 100));
+                    const amountPaid = Math.max(0, invoiceAmount - secureCashbackAmount);
+                    newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
                 }
             }
             transaction.update(event.data.ref, {
