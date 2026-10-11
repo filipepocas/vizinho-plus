@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile, Transaction } from '../../types';
@@ -102,11 +102,19 @@ const MerchantDashboard: React.FC = () => {
   const txTotals = useMemo(() => {
     let emitido = 0, descontado = 0;
     filteredMerchantTransactions.forEach((t: any) => {
-      if (t.status === 'cancelled') return;
+      if (t.status !== 'available' || t.processedByBackend === false) return;
       if (t.type === 'earn') emitido += (t.cashbackAmount || 0);
-      else if (t.type === 'redeem') descontado += (t.cashbackAmount || 0);
+      else if (t.type === 'redeem') {
+        emitido += (t.cashbackEarned || 0);
+        descontado += (t.cashbackAmount || t.amount || 0);
+      }
     });
-    return { emitido, descontado, total: filteredMerchantTransactions.length };
+    return {
+      emitido,
+      descontado,
+      available: Math.max(0, Number((emitido - descontado).toFixed(2))),
+      total: filteredMerchantTransactions.length
+    };
   }, [filteredMerchantTransactions]);
 
   useEffect(() => {
@@ -141,8 +149,7 @@ const MerchantDashboard: React.FC = () => {
     const qTx = query(
       collection(db, 'transactions'), 
       where('merchantId', '==', currentUser.id),
-      orderBy('createdAt', 'desc'),
-      limit(200)
+      orderBy('createdAt', 'desc')
     );
     const unsubTx = onSnapshot(qTx, (snap: any) => {
       setMerchantTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
@@ -369,7 +376,7 @@ const MerchantDashboard: React.FC = () => {
                 </div>
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4 mb-8">
                 <div className="bg-green-50 p-6 rounded-[25px] border-2 border-green-200 text-center">
                   <p className="text-[9px] font-black uppercase text-green-700 tracking-widest mb-1">Cashback Emitido</p>
                   <p className="text-2xl font-black text-green-600">{formatCurrency(txTotals.emitido)}</p>
@@ -377,6 +384,10 @@ const MerchantDashboard: React.FC = () => {
                 <div className="bg-blue-50 p-6 rounded-[25px] border-2 border-blue-200 text-center">
                   <p className="text-[9px] font-black uppercase text-blue-700 tracking-widest mb-1">Saldo Descontado</p>
                   <p className="text-2xl font-black text-blue-600">{formatCurrency(txTotals.descontado)}</p>
+                </div>
+                <div className="bg-[#0a2540] p-6 rounded-[25px] border-2 border-[#0a2540] text-center">
+                  <p className="text-[9px] font-black uppercase text-[#00d66f] tracking-widest mb-1">Saldo por Descontar</p>
+                  <p className="text-2xl font-black text-white">{formatCurrency(txTotals.available)}</p>
                 </div>
                 <div className="bg-slate-50 p-6 rounded-[25px] border-2 border-slate-200 text-center">
                   <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1">Total Movimentos</p>

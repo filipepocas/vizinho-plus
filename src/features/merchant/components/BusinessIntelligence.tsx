@@ -34,8 +34,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
           getDocs(query(
             collection(db, 'transactions'), 
             where('merchantId', '==', merchantId),
-            orderBy('createdAt', 'desc'),
-            limit(200)
+            orderBy('createdAt', 'desc')
           )),
           getDocs(query(
             collection(db, 'feedbacks'), 
@@ -200,10 +199,14 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
   const cashbackStats = useMemo(() => {
     let emitted = 0, used = 0, available = 0;
     transactions.forEach(t => {
-      if (t.status === 'cancelled') return;
-      if (t.type === 'earn') { emitted += t.cashbackAmount; available += t.cashbackAmount; } 
-      else if (t.type === 'redeem') { used += t.amount; available -= t.amount; }
+      if (t.status !== 'available' || t.processedByBackend === false) return;
+      if (t.type === 'earn') emitted += Number(t.cashbackAmount || 0);
+      else if (t.type === 'redeem') {
+        emitted += Number(t.cashbackEarned || 0);
+        used += Number(t.cashbackAmount || t.amount || 0);
+      }
     });
+    available = Math.max(0, Number((emitted - used).toFixed(2)));
     return { emitted, used, available: Math.max(0, available) };
   }, [transactions]);
 
