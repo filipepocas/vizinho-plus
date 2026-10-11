@@ -190,10 +190,18 @@ const MerchantDashboard: React.FC = () => {
 
         let storeBalance = 0;
         if (match) {
-          const txSnap = await getDocs(query(collection(db, 'transactions'), where('clientId', '==', match.id)));
-          const clientTransactions = txSnap.docs.map((transactionDoc: any) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
-          const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
-          storeBalance = summary.entries.find((entry) => entry.id === currentUser?.id)?.available || 0;
+          try {
+            const txSnap = await getDocs(query(
+              collection(db, 'transactions'),
+              where('clientId', '==', match.id),
+              where('merchantId', '==', currentUser!.id)
+            ));
+            const clientTransactions = txSnap.docs.map((transactionDoc: any) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
+            const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
+            storeBalance = summary.entries.find((entry) => entry.id === currentUser?.id)?.available || 0;
+          } catch (balanceError) {
+            console.error('Erro ao carregar saldo do cliente nesta loja:', balanceError);
+          }
         }
         if (isCurrentSearch) {
           setFoundClient(match);
