@@ -23,7 +23,6 @@ import MerchantMarketing from './components/MerchantMarketing';
 import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
-import { summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, addTransaction, logout, locations } = useStore();
@@ -188,24 +187,23 @@ const MerchantDashboard: React.FC = () => {
           }
         }
 
-        let storeBalance = 0;
         if (match) {
-          try {
-            const txSnap = await getDocs(query(
-              collection(db, 'transactions'),
-              where('clientId', '==', match.id),
-              where('merchantId', '==', currentUser!.id)
-            ));
-            const clientTransactions = txSnap.docs.map((transactionDoc: any) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
-            const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
-            storeBalance = summary.entries.find((entry) => entry.id === currentUser?.id)?.available || 0;
-          } catch (balanceError) {
-            console.error('Erro ao carregar saldo do cliente nesta loja:', balanceError);
-          }
-        }
-        if (isCurrentSearch) {
+          if (!isCurrentSearch) return;
           setFoundClient(match);
-          setClientStoreBalance(storeBalance);
+          setClientStoreBalance(Number(match.storeWallets?.[currentUser!.id]?.available || 0));
+          unsubscribeClient = onSnapshot(
+            doc(db, 'users', match.id),
+            (clientSnapshot) => {
+              if (!isCurrentSearch || !clientSnapshot.exists()) return;
+              const client = { id: clientSnapshot.id, ...clientSnapshot.data() } as UserProfile;
+              setFoundClient(client);
+              setClientStoreBalance(Number(client.storeWallets?.[currentUser!.id]?.available || 0));
+            },
+            (error) => console.error('Erro ao acompanhar a carteira do cliente:', error)
+          );
+        } else if (isCurrentSearch) {
+          setFoundClient(null);
+          setClientStoreBalance(0);
         }
       } catch (err) {
         if (isCurrentSearch) {
@@ -216,10 +214,12 @@ const MerchantDashboard: React.FC = () => {
         if (isCurrentSearch) setIsSearching(false);
       }
     };
+    let unsubscribeClient: (() => void) | undefined;
     const timeoutId = setTimeout(() => searchClient(), 500);
     return () => {
       isCurrentSearch = false;
       clearTimeout(timeoutId);
+      unsubscribeClient?.();
     };
   }, [cardNumber, isNifValid, currentUser?.id]);
 

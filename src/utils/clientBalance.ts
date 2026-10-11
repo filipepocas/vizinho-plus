@@ -28,7 +28,7 @@ export const calculateClientBalanceFromTransactions = (
   return transactions
     .filter((tx) => {
       if (!clientId || tx.clientId !== clientId) return false;
-      if (tx.status === 'cancelled' || tx.status === 'rejected') return false;
+      if (tx.status !== 'available') return false;
       return tx.type === 'earn' || tx.type === 'redeem';
     })
     .reduce((sum, tx) => {
@@ -47,7 +47,7 @@ export const summarizeClientStoreBalancesFromTransactions = (
   // 1. Calcular a partir das transações carregadas
   transactions.forEach((tx) => {
     if (!clientId || tx.clientId !== clientId) return;
-    if (tx.status === 'cancelled' || tx.status === 'rejected') return;
+    if (tx.status !== 'available') return;
     if (tx.type !== 'earn' && tx.type !== 'redeem') return;
 
     const merchantId = tx.merchantId || 'unknown';
@@ -61,17 +61,15 @@ export const summarizeClientStoreBalancesFromTransactions = (
     });
   });
 
-  // 2. Mesclar com storeWallets persistidas no documento do utilizador (fonte de verdade para históricos > 150 transações)
+  // Use transaction history only for legacy profiles without a stored wallet.
   if (storeWallets) {
+    balances.clear();
     Object.entries(storeWallets).forEach(([merchantId, walletData]) => {
       const walletAvailable = Number(walletData?.available || 0);
-      const existing = balances.get(merchantId);
-      if (!existing || walletAvailable > existing.available) {
-        balances.set(merchantId, {
-          name: walletData?.merchantName || existing?.name || 'Loja Parceira',
-          available: Number(walletAvailable.toFixed(2)),
-        });
-      }
+      balances.set(merchantId, {
+        name: walletData?.merchantName || 'Loja Parceira',
+        available: Number(walletAvailable.toFixed(2)),
+      });
     });
   }
 
