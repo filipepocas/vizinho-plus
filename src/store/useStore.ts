@@ -307,7 +307,8 @@ export const useStore = create<StoreState>((set, get) => ({
         clientName: tx.clientName || 'Desconhecido',
         clientCardNumber: tx.clientCardNumber || '---',
         clientBirthDate: tx.clientBirthDate || '',
-        cashbackPercent: percent
+        cashbackPercent: percent,
+        processedByBackend: false
       });
 
       toast.success(tx.type === 'earn' ? "CASHBACK ATRIBUÍDO COM SUCESSO!" : "DESCONTO REGISTADO COM SUCESSO!");
@@ -392,7 +393,7 @@ export const useStore = create<StoreState>((set, get) => ({
     } else if (role === 'merchant') {
       q = query(collection(db, 'transactions'), where('merchantId', '==', id), limit(200));
     } else {
-      q = query(collection(db, 'transactions'), where('clientId', '==', id), limit(150));
+      q = query(collection(db, 'transactions'), where('clientId', '==', id));
     }
     
     return onSnapshot(q, (snap: any) => {

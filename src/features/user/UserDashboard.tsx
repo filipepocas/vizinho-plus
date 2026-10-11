@@ -68,13 +68,10 @@ const UserDashboard: React.FC = () => {
 
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
   const clientStoreBalanceSummary = useMemo(
-    () => summarizeClientStoreBalancesFromTransactions(transactions, currentUser?.id, currentUser?.storeWallets),
-    [transactions, currentUser?.id, currentUser?.storeWallets]
+    () => summarizeClientStoreBalancesFromTransactions(transactions, currentUser?.id),
+    [transactions, currentUser?.id]
   );
-  const totalCardBalance = useMemo(() => {
-    if (clientStoreBalanceSummary.total > 0 || transactions.length > 0) return clientStoreBalanceSummary.total;
-    return Object.values(currentUser?.storeWallets || {}).reduce((sum: number, wallet: any) => sum + Number(wallet?.available || 0), 0);
-  }, [clientStoreBalanceSummary.total, transactions.length, currentUser?.storeWallets]);
+  const totalCardBalance = clientStoreBalanceSummary.total;
   const merchantBalanceMap = useMemo(() => {
     return clientStoreBalanceSummary.entries.reduce((acc: Record<string, { available: number; merchantName: string }>, entry) => {
       acc[entry.id] = { available: entry.available, merchantName: entry.name };

@@ -6,19 +6,25 @@ export interface ClientStoreBalanceEntry {
   available: number;
 }
 
-const getSafeTxCashback = (tx: any): number => {
-  if (tx.cashbackAmount !== undefined && tx.cashbackAmount !== null && !isNaN(Number(tx.cashbackAmount))) {
-    return Number(tx.cashbackAmount);
+const getIssuedCashback = (tx: Transaction): number => {
+  if (tx.type === 'redeem' && tx.cashbackEarned !== undefined && tx.cashbackEarned !== null) {
+    return Number(tx.cashbackEarned) || 0;
   }
-  if (tx.cashbackEarned !== undefined && tx.cashbackEarned !== null && !isNaN(Number(tx.cashbackEarned))) {
-    return Number(tx.cashbackEarned);
+
+  if (tx.cashbackPercent !== undefined && tx.cashbackPercent !== null) {
+    const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
+    return Number(((purchaseAmount * Number(tx.cashbackPercent || 0)) / 100).toFixed(2));
   }
-  if (tx.type === 'redeem') {
-    return Number(tx.amount || 0);
-  }
-  const invoice = Number(tx.invoiceAmount || tx.amount || 0);
-  const percent = Number(tx.cashbackPercent || 0);
-  return Number(((invoice * percent) / 100).toFixed(2));
+
+  return tx.type === 'earn' ? Number(tx.cashbackAmount || 0) : 0;
+};
+
+const getRedeemedCashback = (tx: Transaction): number => {
+  return tx.type === 'redeem' ? Number(tx.cashbackAmount || tx.amount || 0) : 0;
+};
+
+const isIncludedInAvailableBalance = (tx: Transaction): boolean => {
+  return tx.status === 'available' && tx.processedByBackend !== false;
 };
 
 export const calculateClientBalanceFromTransactions = (
@@ -28,12 +34,11 @@ export const calculateClientBalanceFromTransactions = (
   return transactions
     .filter((tx) => {
       if (!clientId || tx.clientId !== clientId) return false;
-      if (tx.status !== 'available') return false;
+      if (!isIncludedInAvailableBalance(tx)) return false;
       return tx.type === 'earn' || tx.type === 'redeem';
     })
     .reduce((sum, tx) => {
-      const value = getSafeTxCashback(tx);
-      return tx.type === 'earn' ? sum + value : sum - value;
+      return sum + getIssuedCashback(tx) - getRedeemedCashback(tx);
     }, 0);
 };
 
@@ -47,31 +52,18 @@ export const summarizeClientStoreBalancesFromTransactions = (
   // 1. Calcular a partir das transações carregadas
   transactions.forEach((tx) => {
     if (!clientId || tx.clientId !== clientId) return;
-    if (tx.status !== 'available') return;
+    if (!isIncludedInAvailableBalance(tx)) return;
     if (tx.type !== 'earn' && tx.type !== 'redeem') return;
 
     const merchantId = tx.merchantId || 'unknown';
     const existing = balances.get(merchantId) || { name: tx.merchantName || 'Loja Parceira', available: 0 };
-    const val = getSafeTxCashback(tx);
-    const delta = tx.type === 'earn' ? val : -val;
+    const delta = getIssuedCashback(tx) - getRedeemedCashback(tx);
 
     balances.set(merchantId, {
       name: existing.name,
       available: Number((existing.available + delta).toFixed(2)),
     });
   });
-
-  // Use transaction history only for legacy profiles without a stored wallet.
-  if (storeWallets) {
-    balances.clear();
-    Object.entries(storeWallets).forEach(([merchantId, walletData]) => {
-      const walletAvailable = Number(walletData?.available || 0);
-      balances.set(merchantId, {
-        name: walletData?.merchantName || 'Loja Parceira',
-        available: Number(walletAvailable.toFixed(2)),
-      });
-    });
-  }
 
   const entries = Array.from(balances.entries())
     .map(([id, data]) => ({ id, name: data.name, available: Math.max(0, data.available) }))

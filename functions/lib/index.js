@@ -76,15 +76,14 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
                 if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
                     throw new Error("Fraude: Resgate superior a 50%.");
                 }
-                if (!isLeaving && invoiceAmount > secureCashbackAmount) {
-                    const amountPaid = invoiceAmount - secureCashbackAmount;
-                    newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
+                if (!isLeaving && invoiceAmount > 0) {
+                    newCashbackEarned = roundToTwo(invoiceAmount * (merchantCashbackPercent / 100));
                 }
             }
             transaction.update(event.data.ref, {
                 cashbackAmount: secureCashbackAmount,
                 cashbackEarned: newCashbackEarned,
-                cashbackPercent: tx.type === 'earn' ? merchantCashbackPercent : 0,
+                cashbackPercent: isLeaving ? 0 : merchantCashbackPercent,
                 processedByBackend: true
             });
             const userData = clientDoc.data();

@@ -23,6 +23,7 @@ import MerchantMarketing from './components/MerchantMarketing';
 import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
+import { summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, addTransaction, logout, locations } = useStore();
@@ -190,16 +191,19 @@ const MerchantDashboard: React.FC = () => {
         if (match) {
           if (!isCurrentSearch) return;
           setFoundClient(match);
-          setClientStoreBalance(Number(match.storeWallets?.[currentUser!.id]?.available || 0));
           unsubscribeClient = onSnapshot(
-            doc(db, 'users', match.id),
-            (clientSnapshot) => {
-              if (!isCurrentSearch || !clientSnapshot.exists()) return;
-              const client = { id: clientSnapshot.id, ...clientSnapshot.data() } as UserProfile;
-              setFoundClient(client);
-              setClientStoreBalance(Number(client.storeWallets?.[currentUser!.id]?.available || 0));
+            query(
+              collection(db, 'transactions'),
+              where('clientId', '==', match.id),
+              where('merchantId', '==', currentUser!.id)
+            ),
+            (snapshot) => {
+              if (!isCurrentSearch) return;
+              const clientTransactions = snapshot.docs.map((transactionDoc: any) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
+              const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
+              setClientStoreBalance(summary.entries.find((entry) => entry.id === currentUser!.id)?.available || 0);
             },
-            (error) => console.error('Erro ao acompanhar a carteira do cliente:', error)
+            (error) => console.error('Erro ao acompanhar os movimentos do cliente:', error)
           );
         } else if (isCurrentSearch) {
           setFoundClient(null);
