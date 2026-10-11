@@ -64,7 +64,12 @@ const AdminSettings: React.FC = () => {
     showClientRatings: true,
     showClientAntiWaste: true,
     showClientEvents: true,
+    showClientMunicipalities: true,
+    showClientOpportunities: true,
+    showClientVipBenefits: true,
+    showPromoteServices: true,
     showMerchantTerminal: true,
+    showMerchantCatalog: true,
     showMerchantMarketing: true,
     showMerchantAntiWaste: true,
     showMerchantSettings: true
@@ -97,7 +102,12 @@ const AdminSettings: React.FC = () => {
               showClientRatings: data.showClientRatings !== false,
               showClientAntiWaste: data.showClientAntiWaste !== false,
               showClientEvents: data.showClientEvents !== false,
+              showClientMunicipalities: data.showClientMunicipalities !== false,
+              showClientOpportunities: data.showClientOpportunities !== false,
+              showClientVipBenefits: data.showClientVipBenefits !== false,
+              showPromoteServices: data.showPromoteServices !== false,
               showMerchantTerminal: data.showMerchantTerminal !== false,
+              showMerchantCatalog: data.showMerchantCatalog !== false,
               showMerchantMarketing: data.showMerchantMarketing !== false,
               showMerchantAntiWaste: data.showMerchantAntiWaste !== false,
               showMerchantSettings: data.showMerchantSettings !== false,
@@ -225,6 +235,18 @@ const AdminSettings: React.FC = () => {
                   <input type="checkbox" checked={sysConfig.showClientEvents} onChange={e => setSysConfig({...sysConfig, showClientEvents: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
                   Mostrar "Eventos"
                 </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientMunicipalities} onChange={e => setSysConfig({...sysConfig, showClientMunicipalities: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Munícipe"
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientOpportunities} onChange={e => setSysConfig({...sysConfig, showClientOpportunities: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Oportunidades"
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showClientVipBenefits} onChange={e => setSysConfig({...sysConfig, showClientVipBenefits: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Vantagens VIP"
+                </label>
               </div>
 
               <div className="space-y-4 bg-white p-6 rounded-3xl border-4 border-slate-100">
@@ -232,6 +254,10 @@ const AdminSettings: React.FC = () => {
                 <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
                   <input type="checkbox" checked={sysConfig.showMerchantTerminal} onChange={e => setSysConfig({...sysConfig, showMerchantTerminal: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
                   Mostrar "Terminal" no painel do Comerciante
+                </label>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showMerchantCatalog} onChange={e => setSysConfig({...sysConfig, showMerchantCatalog: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Catálogo" no painel do Comerciante
                 </label>
                 <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
                   <input type="checkbox" checked={sysConfig.showMerchantMarketing} onChange={e => setSysConfig({...sysConfig, showMerchantMarketing: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
@@ -244,6 +270,14 @@ const AdminSettings: React.FC = () => {
                 <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
                   <input type="checkbox" checked={sysConfig.showMerchantSettings} onChange={e => setSysConfig({...sysConfig, showMerchantSettings: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
                   Mostrar "Definições" no painel do Comerciante
+                </label>
+              </div>
+
+              <div className="space-y-4 bg-white p-6 rounded-3xl border-4 border-slate-100">
+                <h4 className="font-black uppercase text-sm mb-3">Visibilidade - Landing Page</h4>
+                <label className="flex items-center gap-3 text-xs font-black uppercase tracking-widest text-[#0a2540] cursor-pointer">
+                  <input type="checkbox" checked={sysConfig.showPromoteServices} onChange={e => setSysConfig({...sysConfig, showPromoteServices: e.target.checked})} className="w-6 h-6 accent-[#00d66f]" />
+                  Mostrar "Promova os seus serviços"
                 </label>
               </div>
 

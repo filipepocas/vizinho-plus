@@ -1,17 +1,27 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { Navigate } from 'react-router-dom';
 import { db } from '../../config/firebase';
-import { collection, query, onSnapshot, orderBy } from 'firebase/firestore';
+import { collection, query, onSnapshot, orderBy, doc, getDoc } from 'firebase/firestore';
 import { Crown, MapPin, Globe, Star, Search, X } from 'lucide-react';
 import { Vantagem } from '../../types';
 import toast from 'react-hot-toast';
+import { useStore } from '../../store/useStore';
 
 const VantagensPage: React.FC = () => {
+  const { currentUser, isInitialized } = useStore();
   const [vantagens, setVantagens] = useState<Vantagem[]>([]);
+  const [vipBenefitsEnabled, setVipBenefitsEnabled] = useState<boolean | null>(null);
   const logoPath = process.env.PUBLIC_URL + '/logo-vizinho.png';
 
   const [searchName, setSearchName] = useState('');
   const [selectedConcelhos, setSelectedConcelhos] = useState<string[]>([]);
   const [selectedCats, setSelectedCats] = useState<string[]>([]);
+
+  useEffect(() => {
+    getDoc(doc(db, 'system', 'config'))
+      .then((configSnap: any) => setVipBenefitsEnabled(configSnap.data()?.showClientVipBenefits !== false))
+      .catch(() => setVipBenefitsEnabled(true));
+  }, []);
 
   useEffect(() => {
     const q = query(collection(db, 'vantagens'), orderBy('createdAt', 'desc'));
@@ -21,6 +31,9 @@ const VantagensPage: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  if (!isInitialized || vipBenefitsEnabled === null) return null;
+  if (!vipBenefitsEnabled && currentUser?.role !== 'admin') return <Navigate to="/" replace />;
 
   const availableCats = useMemo(() => Array.from(new Set(vantagens.map(v => v.category).filter(Boolean))), [vantagens]);
   const availableConcelhos = useMemo(() => {

@@ -97,7 +97,12 @@ export interface SystemConfig { id?: string; globalServiceFee: number; maturatio
   showClientRatings?: boolean;
   showClientAntiWaste?: boolean;
   showClientEvents?: boolean;
+  showClientMunicipalities?: boolean;
+  showClientOpportunities?: boolean;
+  showClientVipBenefits?: boolean;
+  showPromoteServices?: boolean;
   showMerchantTerminal?: boolean;
+  showMerchantCatalog?: boolean;
   showMerchantMarketing?: boolean;
   showMerchantAntiWaste?: boolean;
   showMerchantSettings?: boolean;

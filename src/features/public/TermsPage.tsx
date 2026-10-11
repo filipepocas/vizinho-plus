@@ -37,7 +37,6 @@ const TermsPage: React.FC = () => {
               </p>
             </div>
           </div>
-          <a href="/guia-da-app" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Guia da App</a>
         </div>
 
         <div className="bg-white rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] p-8 md:p-12 space-y-10 overflow-hidden relative">

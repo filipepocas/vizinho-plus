@@ -44,7 +44,7 @@ const LandingPage: React.FC = () => {
   const [membersCount, setMembersCount] = useState<number | null>(null);
 
   const [showTerms, setShowTerms] = useState(false);
-  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', showMemberCount: true });
+  const [sysConfig, setSysConfig] = useState({ supportEmail: 'ajuda@vizinho-plus.pt', showMemberCount: true, showPromoteServices: true });
 
   const distritos = Object.keys(locations || {}).sort();
 
@@ -444,8 +444,6 @@ const LandingPage: React.FC = () => {
         <div className="flex gap-6 flex-wrap justify-center">
           <button onClick={() => setShowContactModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors flex items-center gap-2"><Mail size={16}/> Apoio / Contacto</button>
           <a href="/terms" target="_blank" rel="noopener noreferrer" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Termos & Privacidade</a>
-          <a href="/guia-da-app" className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Guia da App</a>
-          <button onClick={() => navigate('/guia-da-app')} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Como funciona?</button>
           <button onClick={() => setShowCommunityModal(true)} className="text-slate-600 font-black uppercase text-[10px] tracking-widest hover:text-[#00d66f] transition-colors">Anuncie dentro da comunidade</button>
         </div>
         <p className="text-[#0a2540] text-[10px] font-black uppercase tracking-[0.2em] mb-2 text-center px-6">Vizinho+ &copy; 2026 • Tecnologia para o Comércio Local</p>
@@ -606,9 +604,11 @@ const LandingPage: React.FC = () => {
                     <button onClick={() => {setShowCommunityModal(false); setShowEventModal(true);}} className="bg-blue-50 border-4 border-blue-100 hover:border-blue-500 p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group">
                        <CalendarPlus size={40} className="text-blue-500 group-hover:scale-110 transition-transform" /><h3 className="font-black text-[#0a2540] uppercase text-lg">Comunicar Evento Grátis</h3>
                     </button>
-                    <button onClick={() => {setShowCommunityModal(false); setShowExternalModal(true);}} className="bg-[#0a2540] border-4 border-[#0a2540] hover:border-[#00d66f] p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group shadow-xl">
-                       <Megaphone size={40} className="text-[#00d66f] group-hover:scale-110 transition-transform" /><h3 className="font-black text-white uppercase text-lg">Promova os seus serviços</h3>
-                    </button>
+                      {sysConfig.showPromoteServices !== false && (
+                       <button onClick={() => {setShowCommunityModal(false); setShowExternalModal(true);}} className="bg-[#0a2540] border-4 border-[#0a2540] hover:border-[#00d66f] p-6 rounded-3xl transition-all flex flex-col items-center text-center gap-3 group shadow-xl">
+                         <Megaphone size={40} className="text-[#00d66f] group-hover:scale-110 transition-transform" /><h3 className="font-black text-white uppercase text-lg">Promova os seus serviços</h3>
+                       </button>
+                      )}
                  </div>
              </div>
          </div>
@@ -701,7 +701,7 @@ const LandingPage: React.FC = () => {
       )}
 
       {/* MODAL EXTERNO */}
-      {showExternalModal && (
+      {showExternalModal && sysConfig.showPromoteServices !== false && (
         <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-sm overflow-y-auto pt-10 pb-10">
           <div className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[40px] border-4 border-[#0a2540] shadow-2xl flex flex-col overflow-hidden animate-in zoom-in relative">
             <div className="bg-[#0a2540] p-6 text-[#00d66f] flex justify-between items-center shrink-0 sticky top-0 z-10">

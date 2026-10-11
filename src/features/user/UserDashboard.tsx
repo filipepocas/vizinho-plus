@@ -41,7 +41,10 @@ const UserDashboard: React.FC = () => {
     showClientWallet: true,
     showClientRatings: true,
     showClientAntiWaste: true,
-    showClientEvents: true
+    showClientEvents: true,
+    showClientMunicipalities: true,
+    showClientOpportunities: true,
+    showClientVipBenefits: true
   });
   
   const [evaluatedIds, setEvaluatedIds] = useState<string[]>([]);
@@ -436,9 +439,11 @@ const UserDashboard: React.FC = () => {
           <button onClick={() => setShowFaqModal(true)} className="w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in bg-amber-500 text-white border-amber-700 hover:bg-amber-600">
             <HelpCircle size={18} /> Guia da App
           </button>
-          <button onClick={toggleMunicipalities} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
-            <Building2 size={18} /> Munícipe
-          </button>
+          {sysConfig.showClientMunicipalities !== false && (
+            <button onClick={toggleMunicipalities} className={`w-full p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 transition-colors animate-in fade-in ${view === 'municipalities' ? 'bg-[#0a2540] text-blue-400 border-black' : 'bg-blue-500 text-white border-blue-700 hover:bg-blue-600'}`}>
+              <Building2 size={18} /> Munícipe
+            </button>
+          )}
         </div>
 
         {appNotification && (
@@ -534,7 +539,7 @@ const UserDashboard: React.FC = () => {
           </div>
         )}
 
-          {view === 'municipalities' && (
+          {view === 'municipalities' && sysConfig.showClientMunicipalities !== false && (
             <div className="space-y-6 animate-in fade-in duration-500">
               <div className="bg-blue-50 p-6 rounded-[30px] border-2 border-blue-100">
                 <p className="text-[10px] font-black uppercase text-blue-800 mb-2 flex items-center gap-2"><Search size={14}/> Pesquisar por Localidade</p>
@@ -655,6 +660,7 @@ const UserDashboard: React.FC = () => {
         )}
         </div>
 
+        {sysConfig.showClientOpportunities !== false && (
         <button onClick={openLeaflet} disabled={activeLeaflets.length === 0} className={`w-full overflow-hidden rounded-3xl transition-all border-2 ${activeLeaflets.length > 0 ? 'bg-white border-[#0a2540] shadow-xl hover:scale-[1.01]' : 'bg-slate-200 border-slate-300 opacity-60'}`}>
           <div className="flex items-center">
             <div className={`p-8 flex items-center justify-center ${activeLeaflets.length > 0 ? 'bg-[#0a2540]' : 'bg-slate-400'}`}>
@@ -667,6 +673,7 @@ const UserDashboard: React.FC = () => {
             {activeLeaflets.length > 0 && <div className="pr-6"><ExternalLink size={20} className="text-[#0a2540] opacity-30" /></div>}
           </div>
         </button>
+        )}
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
           {isInstallable && (
@@ -688,7 +695,7 @@ const UserDashboard: React.FC = () => {
           )}
         </div>
 
-        {sysConfig.vantagensUrl && (
+        {sysConfig.vantagensUrl && sysConfig.showClientVipBenefits !== false && (
           <button onClick={() => window.open(sysConfig.vantagensUrl, '_blank')} className="w-full relative overflow-hidden p-8 rounded-3xl shadow-xl hover:scale-[1.01] transition-all group bg-[#0a2540] border-2 border-[#bf953f]">
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/5 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
             <div className="flex items-center justify-between relative z-10">

@@ -23,6 +23,7 @@ import MerchantMarketing from './components/MerchantMarketing';
 import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
+import { summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, addTransaction, logout, locations } = useStore();
@@ -39,6 +40,7 @@ const MerchantDashboard: React.FC = () => {
     merchantTerms: 'A carregar...', 
     merchantFaqs: 'A carregar guia...',
     showMerchantTerminal: true,
+    showMerchantCatalog: true,
     showMerchantMarketing: true,
     showMerchantAntiWaste: true,
     showMerchantSettings: true
@@ -51,6 +53,7 @@ const MerchantDashboard: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSearching, setIsSearching] = useState(false);
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
+  const [clientStoreBalance, setClientStoreBalance] = useState(0);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
 
@@ -117,6 +120,7 @@ const MerchantDashboard: React.FC = () => {
           merchantTerms: data.merchantTerms || '', 
           merchantFaqs: data.merchantFaqs || '',
           showMerchantTerminal: data.showMerchantTerminal !== false,
+          showMerchantCatalog: data.showMerchantCatalog !== false,
           showMerchantMarketing: data.showMerchantMarketing !== false,
           showMerchantAntiWaste: data.showMerchantAntiWaste !== false,
           showMerchantSettings: data.showMerchantSettings !== false
@@ -148,10 +152,18 @@ const MerchantDashboard: React.FC = () => {
   }, [currentUser?.id]);
 
   useEffect(() => {
+    let isCurrentSearch = true;
     const searchClient = async () => {
       const cleanNumber = normalizeClientCardValue(cardNumber);
-      if (!isNifValid || !cleanNumber) { setFoundClient(null); return; }
+      if (!isNifValid || !cleanNumber) {
+        setFoundClient(null);
+        setClientStoreBalance(0);
+        setIsSearching(false);
+        return;
+      }
       setIsSearching(true);
+      setFoundClient(null);
+      setClientStoreBalance(0);
       try {
         const queryStrategies = [
           query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client')),
@@ -176,12 +188,32 @@ const MerchantDashboard: React.FC = () => {
           }
         }
 
-        setFoundClient(match);
-      } catch (err) { setFoundClient(null); } finally { setIsSearching(false); }
+        let storeBalance = 0;
+        if (match) {
+          const txSnap = await getDocs(query(collection(db, 'transactions'), where('clientId', '==', match.id)));
+          const clientTransactions = txSnap.docs.map((transactionDoc: any) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
+          const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
+          storeBalance = summary.entries.find((entry) => entry.id === currentUser?.id)?.available || 0;
+        }
+        if (isCurrentSearch) {
+          setFoundClient(match);
+          setClientStoreBalance(storeBalance);
+        }
+      } catch (err) {
+        if (isCurrentSearch) {
+          setFoundClient(null);
+          setClientStoreBalance(0);
+        }
+      } finally {
+        if (isCurrentSearch) setIsSearching(false);
+      }
     };
     const timeoutId = setTimeout(() => searchClient(), 500);
-    return () => clearTimeout(timeoutId);
-  }, [cardNumber, isNifValid]);
+    return () => {
+      isCurrentSearch = false;
+      clearTimeout(timeoutId);
+    };
+  }, [cardNumber, isNifValid, currentUser?.id]);
 
   const handleDeleteMessage = async (id: string) => {
     try { await deleteDoc(doc(db, 'merchant_messages', id)); toast.success("MENSAGEM APAGADA."); if (adminMessages.length <= 1) setShowInbox(false); } catch (e) { toast.error("ERRO."); }
@@ -261,7 +293,9 @@ const MerchantDashboard: React.FC = () => {
           {sysConfig.showMerchantTerminal !== false && (
             <button onClick={() => setView('terminal')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
           )}
-          <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> Catálogo</button>
+          {sysConfig.showMerchantCatalog !== false && (
+            <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> Catálogo</button>
+          )}
           {sysConfig.showMerchantMarketing !== false && (
             <button onClick={() => setView('marketing')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
           )}
@@ -299,15 +333,15 @@ const MerchantDashboard: React.FC = () => {
             onOpenScanner={() => setShowScanner(true)}
             onProcessAction={processAction}
             isLoading={isLoading}
-            clientStoreBalance={foundClient?.storeWallets?.[currentUser.id]?.available || 0}
+            clientStoreBalance={clientStoreBalance}
             formatCurrency={(v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v)}
             isLeaving={currentUser.isLeaving}
           />
         )}
 
-        {view === 'catalog' && <MerchantCatalog merchant={currentUser} />}
+        {view === 'catalog' && sysConfig.showMerchantCatalog !== false && <MerchantCatalog merchant={currentUser} />}
         {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} />}
-        {view === 'marketing' && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
+        {view === 'marketing' && sysConfig.showMerchantMarketing !== false && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
         {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
 
         {view === 'history' && (
