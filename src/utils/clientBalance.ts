@@ -14,8 +14,9 @@ export interface CashbackLedgerSummary {
 
 const getIssuedCashback = (tx: Transaction): number => {
   if (tx.type === 'redeem') {
-    if (tx.cashbackEarned !== undefined && tx.cashbackEarned !== null) {
-      return Number(tx.cashbackEarned) || 0;
+    const earnedValue = Number(tx.cashbackEarned ?? 0);
+    if (earnedValue > 0) {
+      return earnedValue;
     }
 
     const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
@@ -41,7 +42,7 @@ const getRedeemedCashback = (tx: Transaction): number => {
 };
 
 const isIncludedInAvailableBalance = (tx: Transaction): boolean => {
-  return tx.status === 'available' && tx.processedByBackend !== false;
+  return tx.status === 'available';
 };
 
 export const summarizeCashbackLedger = (transactions: Transaction[] = []): CashbackLedgerSummary => {

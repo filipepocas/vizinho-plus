@@ -190,13 +190,13 @@ const MerchantDashboard: React.FC = () => {
               where('clientId', '==', match.id),
               where('merchantId', '==', currentUser!.id)
             ),
-            (snapshot) => {
+            (snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => {
               if (!isCurrentSearch) return;
-              const clientTransactions = snapshot.docs.map((transactionDoc: any) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
+              const clientTransactions = snapshot.docs.map((transactionDoc) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
               const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
               setClientStoreBalance(summary.entries.find((entry) => entry.id === currentUser!.id)?.available || 0);
             },
-            (error) => console.error('Erro ao acompanhar os movimentos do cliente:', error)
+            (error: Error) => console.error('Erro ao acompanhar os movimentos do cliente:', error)
           );
         } else if (isCurrentSearch) {
           setFoundClient(null);

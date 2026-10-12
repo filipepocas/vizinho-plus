@@ -27,9 +27,24 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
 
-// Inicialização condicional para ambientes de Browser
-export const messaging = typeof window !== 'undefined' ? getMessaging(app) : null;
-export const analytics = typeof window !== 'undefined' ? getAnalytics(app) : null;
+// Inicialização condicional para ambientes de Browser com suporte real do Firebase
+const canUseBrowserFirebaseApis = typeof window !== 'undefined' && typeof navigator !== 'undefined';
+
+export const messaging = canUseBrowserFirebaseApis && 'serviceWorker' in navigator ? (() => {
+  try {
+    return getMessaging(app);
+  } catch {
+    return null;
+  }
+})() : null;
+
+export const analytics = canUseBrowserFirebaseApis ? (() => {
+  try {
+    return getAnalytics(app);
+  } catch {
+    return null;
+  }
+})() : null;
 
 // Exportação para o provisionamento (Com tipo "any" declarado para evitar erros de TS)
 export const provisionAuth = (() => {

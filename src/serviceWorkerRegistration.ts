@@ -7,11 +7,11 @@ const isLocalhost = Boolean(
 );
 
 export function register(config?: any) {
-  if (process.env.NODE_ENV === 'production' && 'serviceWorker' in navigator) {
-    const publicUrl = new URL(process.env.PUBLIC_URL, window.location.href);
+  if (import.meta.env.PROD && 'serviceWorker' in navigator) {
+    const publicUrl = new URL(import.meta.env.BASE_URL || '/', window.location.href);
     if (publicUrl.origin !== window.location.origin) return;
 
-    const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
+    const swUrl = new URL('service-worker.js', publicUrl).toString();
     const swExists = !!document.querySelector('script[src*="service-worker"]');
 
     if (!swExists) {

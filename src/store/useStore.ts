@@ -285,9 +285,13 @@ export const useStore = create<StoreState>((set, get) => ({
     const percent = Number(currentUser.cashbackPercent || 0);
 
     // Sem período de maturação: todo o cashback atribuído ou descontado é imediato ('available')
+    const cashbackRedeemed = tx.type === 'redeem' ? Number(Math.min(rawAmount, invoiceAmount).toFixed(2)) : 0;
+    const cashbackEarnedOnRedeem = tx.type === 'redeem'
+      ? Number(((Math.max(0, invoiceAmount - cashbackRedeemed) * percent) / 100).toFixed(2))
+      : 0;
     const calculatedCashback = tx.type === 'earn'
       ? Number(((invoiceAmount * percent) / 100).toFixed(2))
-      : Number(rawAmount.toFixed(2));
+      : cashbackRedeemed;
 
     try {
       const merchantName = currentUser.shopName || currentUser.name || 'Loja Parceira';
@@ -298,7 +302,7 @@ export const useStore = create<StoreState>((set, get) => ({
         amount: invoiceAmount,
         invoiceAmount,
         cashbackAmount: calculatedCashback,
-        cashbackEarned: tx.type === 'earn' ? calculatedCashback : 0,
+        cashbackEarned: tx.type === 'earn' ? calculatedCashback : cashbackEarnedOnRedeem,
         type: tx.type,
         status: 'available',
         createdAt: serverTimestamp(),
@@ -332,7 +336,7 @@ export const useStore = create<StoreState>((set, get) => ({
   cancelTransaction: async (id: string) => {
     try {
       const txRef = doc(db, 'transactions', id);
-      await runTransaction(db, async (transaction) => {
+      await runTransaction(db, async (transaction: any) => {
         const txSnap = await transaction.get(txRef);
         if (!txSnap.exists()) throw new Error('Transação não encontrada.');
         const txData = txSnap.data() as Transaction;
