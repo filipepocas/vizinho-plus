@@ -299,7 +299,7 @@ export const useStore = create<StoreState>((set, get) => ({
         clientId: tx.clientId,
         merchantId: currentUser.id,
         merchantName,
-        amount: invoiceAmount,
+        amount: tx.type === 'redeem' ? cashbackRedeemed : invoiceAmount,
         invoiceAmount,
         cashbackAmount: calculatedCashback,
         cashbackEarned: tx.type === 'earn' ? calculatedCashback : cashbackEarnedOnRedeem,
@@ -356,8 +356,9 @@ export const useStore = create<StoreState>((set, get) => ({
           };
 
           const val = Number(txData.cashbackAmount || 0);
-          // Reverter movimento: se foi 'earn' subtrai, se foi 'redeem' devolve
-          const reverseDelta = txData.type === 'earn' ? -val : val;
+          const earnedVal = Number(txData.cashbackEarned || 0);
+          // Reverter movimento: se foi 'earn' subtrai, se foi 'redeem' devolve o resgatado e desconta o emitido no resgate
+          const reverseDelta = txData.type === 'earn' ? -val : (val - earnedVal);
           const nextStoreAvailable = Math.max(0, Number((Number(currentStoreWallet.available || 0) + reverseDelta).toFixed(2)));
 
           storeWallets[merchantId] = {

@@ -36,18 +36,27 @@ exports.processNewTransaction = functions.firestore
 
         // --- MAGIA DA SEGURANÇA: BACKEND MATEMÁTICO ---
         let secureCashbackAmount = 0;
+        let newCashbackEarned = 0;
         
         if (tx.type === 'earn' || tx.type === 'cancel') {
-            // Em acumulação, força a percentagem atual da loja. O Frontend não manda nisto.
-            secureCashbackAmount = roundToTwo(baseAmount * (merchantCashbackPercent / 100));
+            const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
+            secureCashbackAmount = roundToTwo(purchaseAmount * (merchantCashbackPercent / 100));
         } else if (tx.type === 'redeem') {
-            // No resgate, o valor de transação equivale ao cashback a descontar
-            secureCashbackAmount = baseAmount;
+            secureCashbackAmount = roundToTwo(Number(tx.cashbackAmount ?? tx.amount ?? 0));
+            const invoiceAmount = Number(tx.invoiceAmount || tx.amount || 0);
+            if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
+              throw new Error("Fraude: Resgate superior a 50%.");
+            }
+            if (invoiceAmount > 0) {
+              const amountPaid = Math.max(0, invoiceAmount - secureCashbackAmount);
+              newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
+            }
         }
 
         // Atualiza a transação com os valores blindados
         transaction.update(snap.ref, {
             cashbackAmount: secureCashbackAmount,
+            cashbackEarned: newCashbackEarned,
             cashbackPercent: tx.type === 'earn' ? merchantCashbackPercent : 0,
             processedByBackend: true 
         });
@@ -62,16 +71,15 @@ exports.processNewTransaction = functions.firestore
         }
 
         let currentAvailable = storeWallets[mId].available || 0;
-        let currentPending = storeWallets[mId].pending || 0;
 
         if (tx.type === 'earn') {
-          storeWallets[mId].pending = roundToTwo(currentPending + secureCashbackAmount);
+          storeWallets[mId].available = roundToTwo(currentAvailable + secureCashbackAmount);
         } 
         else if (tx.type === 'redeem') {
           if (currentAvailable < secureCashbackAmount) {
             throw new Error("Fraude Detetada: Tentativa de resgate sem saldo.");
           }
-          storeWallets[mId].available = roundToTwo(currentAvailable - secureCashbackAmount);
+          storeWallets[mId].available = roundToTwo(currentAvailable - secureCashbackAmount + newCashbackEarned);
         }
 
         storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();

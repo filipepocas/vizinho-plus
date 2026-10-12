@@ -34,23 +34,32 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
         const [txSnap, fbSnap] = await Promise.all([
           getDocs(query(
             collection(db, 'transactions'), 
-            where('merchantId', '==', merchantId),
-            orderBy('createdAt', 'desc')
+            where('merchantId', '==', merchantId)
           )),
           getDocs(query(
             collection(db, 'feedbacks'), 
-            where('merchantId', '==', merchantId),
-            orderBy('createdAt', 'desc'),
-            limit(50)
+            where('merchantId', '==', merchantId)
           ))
         ]);
 
         if (!isMounted) return;
 
-        setTransactions(txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+        const loadedTxs = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+        loadedTxs.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+          return dateB - dateA;
+        });
+        setTransactions(loadedTxs);
         setLoadingTx(false);
 
-        setFeedbacks(fbSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback)));
+        const loadedFbs = fbSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback));
+        loadedFbs.sort((a, b) => {
+          const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+          const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+          return dateB - dateA;
+        });
+        setFeedbacks(loadedFbs.slice(0, 50));
         setLoadingFeedbacks(false);
       } catch (err) {
         console.error("Erro ao carregar BI:", err);

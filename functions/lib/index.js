@@ -53,6 +53,7 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
     const merchantRef = db.collection("users").doc(tx.merchantId);
     try {
         await db.runTransaction(async (transaction) => {
+            var _a, _b;
             const clientDoc = await transaction.get(clientRef);
             const merchantDoc = await transaction.get(merchantRef);
             if (!clientDoc.exists || !merchantDoc.exists)
@@ -61,18 +62,18 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
             if (!merchantData)
                 throw new Error("Dados do lojista vazios.");
             const merchantCashbackPercent = Number(merchantData.cashbackPercent) || 0;
-            const baseAmount = Number(tx.amount) || 0;
             const isLeaving = merchantData.isLeaving === true;
             let secureCashbackAmount = 0;
             let newCashbackEarned = 0;
             if (tx.type === 'earn') {
                 if (isLeaving)
                     throw new Error("Loja em processo de saída.");
-                secureCashbackAmount = roundToTwo(baseAmount * (merchantCashbackPercent / 100));
+                const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
+                secureCashbackAmount = roundToTwo(purchaseAmount * (merchantCashbackPercent / 100));
             }
             else if (tx.type === 'redeem') {
-                secureCashbackAmount = baseAmount;
-                const invoiceAmount = Number(tx.invoiceAmount) || 0;
+                secureCashbackAmount = roundToTwo(Number((_b = (_a = tx.cashbackAmount) !== null && _a !== void 0 ? _a : tx.amount) !== null && _b !== void 0 ? _b : 0));
+                const invoiceAmount = Number(tx.invoiceAmount || tx.amount || 0);
                 if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
                     throw new Error("Fraude: Resgate superior a 50%.");
                 }

@@ -32,7 +32,6 @@ export const txProcessor = v2.firestore.onDocumentCreated(
         if (!merchantData) throw new Error("Dados do lojista vazios.");
 
         const merchantCashbackPercent = Number(merchantData.cashbackPercent) || 0;
-        const baseAmount = Number(tx.amount) || 0;
         const isLeaving = merchantData.isLeaving === true;
 
         let secureCashbackAmount = 0;
@@ -40,10 +39,11 @@ export const txProcessor = v2.firestore.onDocumentCreated(
 
         if (tx.type === 'earn') {
           if (isLeaving) throw new Error("Loja em processo de saída.");
-          secureCashbackAmount = roundToTwo(baseAmount * (merchantCashbackPercent / 100));
+          const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
+          secureCashbackAmount = roundToTwo(purchaseAmount * (merchantCashbackPercent / 100));
         } else if (tx.type === 'redeem') {
-          secureCashbackAmount = baseAmount;
-          const invoiceAmount = Number(tx.invoiceAmount) || 0;
+          secureCashbackAmount = roundToTwo(Number(tx.cashbackAmount ?? tx.amount ?? 0));
+          const invoiceAmount = Number(tx.invoiceAmount || tx.amount || 0);
 
           if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
             throw new Error("Fraude: Resgate superior a 50%.");

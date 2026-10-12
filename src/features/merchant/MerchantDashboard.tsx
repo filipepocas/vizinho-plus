@@ -134,11 +134,18 @@ const MerchantDashboard: React.FC = () => {
 
     const qTx = query(
       collection(db, 'transactions'), 
-      where('merchantId', '==', currentUser.id),
-      orderBy('createdAt', 'desc')
+      where('merchantId', '==', currentUser.id)
     );
     const unsubTx = onSnapshot(qTx, (snap: any) => {
-      setMerchantTransactions(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
+      const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+      docs.sort((a, b) => {
+        const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
+        const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
+        return dateB - dateA;
+      });
+      setMerchantTransactions(docs);
+    }, (error) => {
+      console.error("Erro ao carregar transações do lojista:", error);
     });
 
     return () => { unsubMsg(); unsubWaste(); unsubTx(); };
@@ -184,6 +191,9 @@ const MerchantDashboard: React.FC = () => {
         if (match) {
           if (!isCurrentSearch) return;
           setFoundClient(match);
+          const initialWalletBalance = Number(match.storeWallets?.[currentUser!.id]?.available || 0);
+          setClientStoreBalance(initialWalletBalance);
+
           unsubscribeClient = onSnapshot(
             query(
               collection(db, 'transactions'),
@@ -193,8 +203,9 @@ const MerchantDashboard: React.FC = () => {
             (snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => {
               if (!isCurrentSearch) return;
               const clientTransactions = snapshot.docs.map((transactionDoc) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
-              const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id);
-              setClientStoreBalance(summary.entries.find((entry) => entry.id === currentUser!.id)?.available || 0);
+              const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id, match.storeWallets);
+              const storeEntry = summary.entries.find((entry) => entry.id === currentUser!.id);
+              setClientStoreBalance(storeEntry ? storeEntry.available : 0);
             },
             (error: Error) => console.error('Erro ao acompanhar os movimentos do cliente:', error)
           );
