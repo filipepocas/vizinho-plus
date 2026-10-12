@@ -528,7 +528,7 @@ const UserDashboard: React.FC = () => {
         {/* VISTAS DINÂMICAS */}
         <div>
           {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={merchantBalanceMap} vantagensUrl="" />}
+          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={merchantBalanceMap} transactions={transactions} vantagensUrl="" />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">

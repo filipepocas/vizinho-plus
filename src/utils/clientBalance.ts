@@ -12,6 +12,23 @@ export interface CashbackLedgerSummary {
   available: number;
 }
 
+export interface StoreMovementEntry {
+  id: string;
+  merchantId: string;
+  merchantName: string;
+  type: 'earn' | 'redeem';
+  amount: number;
+}
+
+const getDateValue = (value: any): number => {
+  if (!value) return 0;
+  if (value.toDate && typeof value.toDate === 'function') return value.toDate().getTime();
+  if (value.seconds) return value.seconds * 1000;
+  if (typeof value === 'string') return new Date(value).getTime();
+  if (typeof value === 'number') return value;
+  return 0;
+};
+
 const getIssuedCashback = (tx: Transaction): number => {
   if (tx.type === 'redeem') {
     const earnedValue = Number(tx.cashbackEarned ?? 0);
@@ -73,6 +90,33 @@ export const calculateClientBalanceFromTransactions = (
     .reduce((sum, tx) => {
       return sum + getIssuedCashback(tx) - getRedeemedCashback(tx);
     }, 0);
+};
+
+export const getRecentStoreMovements = (
+  transactions: Transaction[] = [],
+  clientId?: string,
+  storeId?: string,
+  limit: number = 5
+): StoreMovementEntry[] => {
+  return transactions
+    .filter((tx) => {
+      if (!clientId || tx.clientId !== clientId) return false;
+      if (!isIncludedInAvailableBalance(tx)) return false;
+      if (tx.type !== 'earn' && tx.type !== 'redeem') return false;
+      if (storeId && tx.merchantId !== storeId) return false;
+      return true;
+    })
+    .map((tx) => ({
+      id: tx.id,
+      merchantId: tx.merchantId || 'unknown',
+      merchantName: tx.merchantName || 'Loja Parceira',
+      type: tx.type as 'earn' | 'redeem',
+      amount: Number(tx.cashbackAmount ?? tx.cashbackEarned ?? 0) || 0,
+      createdAt: tx.createdAt,
+    }))
+    .sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt))
+    .slice(0, limit)
+    .map(({ createdAt, ...movement }) => movement);
 };
 
 export const summarizeClientStoreBalancesFromTransactions = (
