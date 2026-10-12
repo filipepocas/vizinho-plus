@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, Camera, ArrowRight, User as UserIcon, Coins, Gift, AlertTriangle } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
 import { normalizeClientCardValue } from '../../../utils/clientCard';
+import { getMaxRedeemableCashback } from '../../../utils/clientBalance';
 
 interface MerchantTerminalProps {
   cardNumber: string;
@@ -41,8 +42,7 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   };
 
   const invoiceAmount = Number(amount) || 0;
-  const maxDiscountAllowed = Number((invoiceAmount * 0.5).toFixed(2));
-  const actualDiscountToApply = Number(Math.min(clientStoreBalance, maxDiscountAllowed).toFixed(2));
+  const actualDiscountToApply = getMaxRedeemableCashback(clientStoreBalance, invoiceAmount);
   const selectedRedeemAmount = Number(customRedeem) || 0;
   const isRedeemExceeded = selectedRedeemAmount > (actualDiscountToApply + 0.001);
   const effectiveDiscount = isRedeemExceeded ? 0 : selectedRedeemAmount;

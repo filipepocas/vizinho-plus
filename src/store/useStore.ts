@@ -342,48 +342,9 @@ export const useStore = create<StoreState>((set, get) => ({
         const txData = txSnap.data() as Transaction;
         if (txData.status === 'cancelled') return;
 
-        const clientRef = doc(db, 'users', txData.clientId);
-        const clientSnap = await transaction.get(clientRef);
-
-        if (clientSnap.exists()) {
-          const clientData = clientSnap.data() as UserProfile;
-          const storeWallets = { ...(clientData.storeWallets || {}) };
-          const merchantId = txData.merchantId;
-          const currentStoreWallet = storeWallets[merchantId] || {
-            available: 0,
-            pending: 0,
-            merchantName: txData.merchantName || 'Loja Parceira'
-          };
-
-          const val = Number(txData.cashbackAmount || 0);
-          const earnedVal = Number(txData.cashbackEarned || 0);
-          // Reverter movimento: se foi 'earn' subtrai, se foi 'redeem' devolve o resgatado e desconta o emitido no resgate
-          const reverseDelta = txData.type === 'earn' ? -val : (val - earnedVal);
-          const nextStoreAvailable = Math.max(0, Number((Number(currentStoreWallet.available || 0) + reverseDelta).toFixed(2)));
-
-          storeWallets[merchantId] = {
-            ...currentStoreWallet,
-            available: nextStoreAvailable,
-            pending: 0,
-            lastUpdate: serverTimestamp()
-          };
-
-          const nextTotalAvailable = Number(
-            Object.values(storeWallets)
-              .reduce((sum, w: any) => sum + Number(w?.available || 0), 0)
-              .toFixed(2)
-          );
-
-          transaction.update(clientRef, {
-            storeWallets,
-            wallet: { available: nextTotalAvailable, pending: 0 },
-            updatedAt: serverTimestamp()
-          });
-        }
-
         transaction.update(txRef, { status: 'cancelled', cancelledAt: serverTimestamp() });
       });
-      toast.success("MOVIMENTO ANULADO E SALDO AJUSTADO.");
+      toast.success("MOVIMENTO ANULADO. O SALDO SERÁ ATUALIZADO.");
     } catch (e) {
       toast.error("ERRO AO ANULAR.");
     }

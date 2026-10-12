@@ -12,6 +12,7 @@ describe('summarizeStoreWallets', () => {
     expect(result.entries).toEqual([
       { id: 'lojaA', name: 'Loja A', available: 12.5 },
       { id: 'lojaB', name: 'Loja B', available: 8.25 },
+      { id: 'lojaC', name: 'Loja C', available: 0 },
     ]);
   });
 

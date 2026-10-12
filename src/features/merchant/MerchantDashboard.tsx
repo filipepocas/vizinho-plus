@@ -137,14 +137,14 @@ const MerchantDashboard: React.FC = () => {
       where('merchantId', '==', currentUser.id)
     );
     const unsubTx = onSnapshot(qTx, (snap: any) => {
-      const docs = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+      const docs: Transaction[] = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
       docs.sort((a, b) => {
         const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
         const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
         return dateB - dateA;
       });
       setMerchantTransactions(docs);
-    }, (error) => {
+    }, (error: Error) => {
       console.error("Erro ao carregar transações do lojista:", error);
     });
 

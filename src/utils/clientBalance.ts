@@ -65,6 +65,12 @@ const isIncludedInAvailableBalance = (tx: Transaction): boolean => {
   return tx.status === 'available' || !tx.status;
 };
 
+export const getMaxRedeemableCashback = (availableBalance: number, invoiceAmount: number): number => {
+  const availableCents = Math.max(0, Math.round((Number(availableBalance) || 0) * 100));
+  const invoiceCents = Math.max(0, Math.round((Number(invoiceAmount) || 0) * 100));
+  return Math.min(availableCents, Math.floor(invoiceCents / 2)) / 100;
+};
+
 export const summarizeCashbackLedger = (transactions: Transaction[] = []): CashbackLedgerSummary => {
   const totals = transactions.reduce((summary, tx) => {
     if (!isIncludedInAvailableBalance(tx)) return summary;
@@ -165,25 +171,26 @@ export const summarizeClientStoreBalancesFromTransactions = (
 ): { total: number; entries: ClientStoreBalanceEntry[] } => {
   const balances = new Map<string, { name: string; available: number }>();
 
-  const relevantTxs = transactions.filter((tx) => {
+  const clientCashbackTxs = transactions.filter((tx) => {
     if (!clientId || tx.clientId !== clientId) return false;
-    if (!isIncludedInAvailableBalance(tx)) return false;
     return tx.type === 'earn' || tx.type === 'redeem';
   });
+  const relevantTxs = clientCashbackTxs.filter(isIncludedInAvailableBalance);
 
-  if (relevantTxs.length > 0) {
-    relevantTxs.forEach((tx) => {
-      const merchantId = tx.merchantId || 'unknown';
-      const existing = balances.get(merchantId) || { name: tx.merchantName || 'Loja Parceira', available: 0 };
-      const delta = getIssuedCashback(tx) - getRedeemedCashback(tx);
+  relevantTxs.forEach((tx) => {
+    const merchantId = tx.merchantId || 'unknown';
+    const existing = balances.get(merchantId) || { name: tx.merchantName || 'Loja Parceira', available: 0 };
+    const delta = getIssuedCashback(tx) - getRedeemedCashback(tx);
 
-      balances.set(merchantId, {
-        name: existing.name,
-        available: Number((existing.available + delta).toFixed(2)),
-      });
+    balances.set(merchantId, {
+      name: existing.name,
+      available: Number((existing.available + delta).toFixed(2)),
     });
-  } else if (storeWallets) {
+  });
+
+  if (storeWallets) {
     Object.entries(storeWallets).forEach(([merchantId, wallet]) => {
+      if (clientCashbackTxs.some((tx) => (tx.merchantId || 'unknown') === merchantId)) return;
       const avail = Number(wallet?.available || 0);
       if (avail > 0) {
         balances.set(merchantId, {
@@ -196,7 +203,6 @@ export const summarizeClientStoreBalancesFromTransactions = (
 
   const entries = Array.from(balances.entries())
     .map(([id, data]) => ({ id, name: data.name, available: Math.max(0, Number(data.available.toFixed(2))) }))
-    .filter((entry) => entry.available > 0)
     .sort((a, b) => b.available - a.available);
 
   return {

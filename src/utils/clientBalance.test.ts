@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { getRecentStoreMovements, summarizeCashbackLedger, summarizeClientStoreBalancesFromTransactions } from './clientBalance';
+import { getMaxRedeemableCashback, getRecentStoreMovements, summarizeCashbackLedger, summarizeClientStoreBalancesFromTransactions } from './clientBalance';
 
 describe('cashback balance rules', () => {
   it('counts available cashback even when backend processing flag is false', () => {
@@ -81,6 +81,57 @@ describe('cashback balance rules', () => {
     ]);
   });
 
+  it('keeps a store with zero net balance so its recent history remains visible', () => {
+    const transactions = [
+      {
+        id: 'tx-earn', clientId: 'client-1', merchantId: 'm1', merchantName: 'Loja A', type: 'earn', status: 'available',
+        cashbackAmount: 10, createdAt: { seconds: 10 },
+      },
+      {
+        id: 'tx-redeem', clientId: 'client-1', merchantId: 'm1', merchantName: 'Loja A', type: 'redeem', status: 'available',
+        cashbackAmount: 10, cashbackEarned: 0, cashbackPercent: 0, createdAt: { seconds: 20 },
+      },
+    ] as any;
+
+    expect(summarizeClientStoreBalancesFromTransactions(transactions, 'client-1')).toEqual({
+      total: 0,
+      entries: [{ id: 'm1', name: 'Loja A', available: 0 }],
+    });
+    expect(getRecentStoreMovements(transactions, 'client-1', 'm1', 5)).toHaveLength(2);
+  });
+
+  it('combines transaction balances with wallet-only stores without overriding the ledger', () => {
+    const transactions = [
+      {
+        id: 'tx-earn', clientId: 'client-1', merchantId: 'm1', merchantName: 'Loja A', type: 'earn', status: 'available',
+        cashbackAmount: 2,
+      },
+      {
+        id: 'tx-cancelled', clientId: 'client-1', merchantId: 'm2', merchantName: 'Loja B', type: 'earn', status: 'cancelled',
+        cashbackAmount: 12,
+      },
+    ] as any;
+
+    expect(summarizeClientStoreBalancesFromTransactions(transactions, 'client-1', {
+      m1: { available: 99, pending: 0, merchantName: 'Loja A' },
+      m2: { available: 12, pending: 0, merchantName: 'Loja B' },
+      m3: { available: 5, pending: 0, merchantName: 'Loja C' },
+    })).toEqual({
+      total: 7,
+      entries: [
+        { id: 'm3', name: 'Loja C', available: 5 },
+        { id: 'm1', name: 'Loja A', available: 2 },
+      ],
+    });
+  });
+
+  it('caps redemption at the balance and rounds the 50% limit down to cents', () => {
+    expect(getMaxRedeemableCashback(10, 20)).toBe(10);
+    expect(getMaxRedeemableCashback(20, 20)).toBe(10);
+    expect(getMaxRedeemableCashback(20, 1.01)).toBe(0.5);
+    expect(getMaxRedeemableCashback(20, -1)).toBe(0);
+  });
+
   it('includes both redeem and emit movements when a purchase has discount and cashback earned', () => {
     const transactions = [
       {
@@ -105,4 +156,3 @@ describe('cashback balance rules', () => {
     ]);
   });
 });
-

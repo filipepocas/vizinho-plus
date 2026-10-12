@@ -44,7 +44,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
 
         if (!isMounted) return;
 
-        const loadedTxs = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
+        const loadedTxs: Transaction[] = txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction));
         loadedTxs.sort((a, b) => {
           const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
           const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
@@ -53,7 +53,7 @@ const BusinessIntelligence: React.FC<BIProps> = ({ merchantId }) => {
         setTransactions(loadedTxs);
         setLoadingTx(false);
 
-        const loadedFbs = fbSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback));
+        const loadedFbs: Feedback[] = fbSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Feedback));
         loadedFbs.sort((a, b) => {
           const dateA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : (a.createdAt?.seconds ? a.createdAt.seconds * 1000 : 0);
           const dateB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : (b.createdAt?.seconds ? b.createdAt.seconds * 1000 : 0);
