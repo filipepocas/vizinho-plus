@@ -99,8 +99,9 @@ export const txProcessor = v2.firestore.onDocumentCreated(
         }
 
         storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();
-        let globalAvailable = 0;
-        Object.values(storeWallets).forEach((w: any) => { globalAvailable += (w.available || 0); });
+        const globalAvailable = Object.values(storeWallets).reduce((total: number, wallet: any) => {
+          return total + Number(wallet.available || 0);
+        }, 0);
 
         transaction.update(clientRef, {
           storeWallets: storeWallets,
@@ -157,33 +158,48 @@ export const txReverser = v2.firestore.onDocumentUpdated(
 
     if (before && after && before.status === 'available' && before.processedByBackend === true && after.status === 'cancelled') {
       const clientRef = db.collection("users").doc(after.clientId);
+      const transactionRef = event.data!.after.ref;
 
       await db.runTransaction(async (transaction) => {
+        const transactionDoc = await transaction.get(transactionRef);
         const clientDoc = await transaction.get(clientRef);
+        const currentTx = transactionDoc.data();
+        if (!transactionDoc.exists || !currentTx || currentTx.walletReversalProcessed) return;
+        if (currentTx.status !== "cancelled" || currentTx.processedByBackend !== true) return;
+
         const userData = clientDoc.data();
         if (!clientDoc.exists || !userData) return;
 
         let storeWallets = userData.storeWallets || {};
-        const mId = after.merchantId;
-        if (!storeWallets[mId]) return;
+        const mId = currentTx.merchantId;
 
-        let currentAvailable = storeWallets[mId].available || 0;
-        const amountToCancel = Number(after.cashbackAmount) || 0;
-        const earnedToCancel = Number(after.cashbackEarned) || 0;
+        if (!storeWallets[mId]) {
+          transaction.update(transactionRef, { walletReversalProcessed: true });
+          return;
+        }
 
-        if (after.type === 'earn') {
+        const currentAvailable = roundToTwo(Number(storeWallets[mId].available || 0));
+        if (!Number.isFinite(currentAvailable) || currentAvailable < 0) {
+          throw new Error("Saldo da loja inválido.");
+        }
+        const amountToCancel = Number(currentTx.cashbackAmount) || 0;
+        const earnedToCancel = Number(currentTx.cashbackEarned) || 0;
+
+        if (currentTx.type === 'earn') {
           storeWallets[mId].available = roundToTwo(Math.max(0, currentAvailable - amountToCancel));
-        } else if (after.type === 'redeem') {
+        } else if (currentTx.type === 'redeem') {
           storeWallets[mId].available = roundToTwo(currentAvailable + amountToCancel - earnedToCancel);
         }
 
-        let globalAvailable = 0;
-        Object.values(storeWallets).forEach((w: any) => { globalAvailable += (w.available || 0); });
+        const globalAvailable = Object.values(storeWallets).reduce((total: number, wallet: any) => {
+          return total + Number(wallet.available || 0);
+        }, 0);
 
         transaction.update(clientRef, {
           storeWallets: storeWallets,
           wallet: { available: roundToTwo(globalAvailable), pending: 0 }
         });
+        transaction.update(transactionRef, { walletReversalProcessed: true });
       });
     }
   }

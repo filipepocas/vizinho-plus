@@ -45,7 +45,7 @@ const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
  * 1. PROCESSAR NOVAS TRANSAÇÕES E ATRIBUIR SALDO
  */
 exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionId}", async (event) => {
-    var _a, _b;
+    var _a;
     const tx = (_a = event.data) === null || _a === void 0 ? void 0 : _a.data();
     if (!tx || tx.processedByBackend)
         return;
@@ -54,33 +54,51 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
     try {
         await db.runTransaction(async (transaction) => {
             var _a, _b;
+            const transactionDoc = await transaction.get(event.data.ref);
             const clientDoc = await transaction.get(clientRef);
             const merchantDoc = await transaction.get(merchantRef);
+            const currentTx = transactionDoc.data();
+            if (!transactionDoc.exists || !currentTx || currentTx.processedByBackend || currentTx.status !== "available")
+                return;
             if (!clientDoc.exists || !merchantDoc.exists)
                 throw new Error("Documentos não encontrados.");
             const merchantData = merchantDoc.data();
             if (!merchantData)
                 throw new Error("Dados do lojista vazios.");
-            const merchantCashbackPercent = Number(merchantData.cashbackPercent) || 0;
+            const merchantCashbackPercent = Number((_a = merchantData.cashbackPercent) !== null && _a !== void 0 ? _a : 0);
+            if (!Number.isFinite(merchantCashbackPercent) || merchantCashbackPercent < 0 || merchantCashbackPercent > 100) {
+                throw new Error("Percentagem de cashback inválida.");
+            }
             const isLeaving = merchantData.isLeaving === true;
+            const invoiceAmount = Number(currentTx.invoiceAmount);
+            if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
+                throw new Error("O valor da compra tem de ser superior a zero.");
+            }
             let secureCashbackAmount = 0;
             let newCashbackEarned = 0;
-            if (tx.type === 'earn') {
+            if (currentTx.type === 'earn') {
                 if (isLeaving)
                     throw new Error("Loja em processo de saída.");
-                const purchaseAmount = Number(tx.invoiceAmount || tx.amount || 0);
-                secureCashbackAmount = roundToTwo(purchaseAmount * (merchantCashbackPercent / 100));
+                secureCashbackAmount = roundToTwo(invoiceAmount * (merchantCashbackPercent / 100));
             }
-            else if (tx.type === 'redeem') {
-                secureCashbackAmount = roundToTwo(Number((_b = (_a = tx.cashbackAmount) !== null && _a !== void 0 ? _a : tx.amount) !== null && _b !== void 0 ? _b : 0));
-                const invoiceAmount = Number(tx.invoiceAmount || tx.amount || 0);
-                if (invoiceAmount > 0 && secureCashbackAmount > (invoiceAmount * 0.5) + 0.05) {
+            else if (currentTx.type === 'redeem') {
+                const requestedCashback = Number((_b = currentTx.cashbackAmount) !== null && _b !== void 0 ? _b : currentTx.amount);
+                if (!Number.isFinite(requestedCashback) || requestedCashback <= 0) {
+                    throw new Error("O valor a descontar tem de ser superior a zero.");
+                }
+                secureCashbackAmount = roundToTwo(requestedCashback);
+                const invoiceCents = Math.round(invoiceAmount * 100);
+                const maximumRedeemable = Math.floor(invoiceCents / 2) / 100;
+                if (secureCashbackAmount > maximumRedeemable) {
                     throw new Error("Fraude: Resgate superior a 50%.");
                 }
-                if (!isLeaving && invoiceAmount > 0) {
+                if (!isLeaving) {
                     const amountPaid = Math.max(0, invoiceAmount - secureCashbackAmount);
                     newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
                 }
+            }
+            else {
+                throw new Error("Tipo de transação inválido.");
             }
             transaction.update(event.data.ref, {
                 cashbackAmount: secureCashbackAmount,
@@ -92,21 +110,25 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
             if (!userData)
                 throw new Error("Dados do cliente vazios.");
             let storeWallets = userData.storeWallets || {};
-            const mId = tx.merchantId;
+            const mId = currentTx.merchantId;
             if (!storeWallets[mId])
-                storeWallets[mId] = { available: 0, pending: 0, merchantName: tx.merchantName };
-            let currentAvailable = storeWallets[mId].available || 0;
-            if (tx.type === 'earn') {
+                storeWallets[mId] = { available: 0, pending: 0, merchantName: currentTx.merchantName };
+            const currentAvailable = roundToTwo(Number(storeWallets[mId].available || 0));
+            if (!Number.isFinite(currentAvailable) || currentAvailable < 0) {
+                throw new Error("Saldo da loja inválido.");
+            }
+            if (currentTx.type === 'earn') {
                 storeWallets[mId].available = roundToTwo(currentAvailable + secureCashbackAmount);
             }
-            else if (tx.type === 'redeem') {
+            else if (currentTx.type === 'redeem') {
                 if (currentAvailable < secureCashbackAmount)
                     throw new Error("Saldo insuficiente.");
                 storeWallets[mId].available = roundToTwo(currentAvailable - secureCashbackAmount + newCashbackEarned);
             }
             storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();
-            let globalAvailable = 0;
-            Object.values(storeWallets).forEach((w) => { globalAvailable += (w.available || 0); });
+            const globalAvailable = Object.values(storeWallets).reduce((total, wallet) => {
+                return total + Number(wallet.available || 0);
+            }, 0);
             transaction.update(clientRef, {
                 storeWallets: storeWallets,
                 wallet: { available: roundToTwo(globalAvailable), pending: 0 }
@@ -139,7 +161,13 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
     }
     catch (error) {
         logger.error("Erro Transação:", error);
-        await ((_b = event.data) === null || _b === void 0 ? void 0 : _b.ref.update({ status: "rejected", rejectReason: error.message }));
+        await db.runTransaction(async (transaction) => {
+            const transactionDoc = await transaction.get(event.data.ref);
+            const currentTx = transactionDoc.data();
+            if (transactionDoc.exists && (currentTx === null || currentTx === void 0 ? void 0 : currentTx.status) === "available" && !currentTx.processedByBackend) {
+                transaction.update(event.data.ref, { status: "rejected", rejectReason: error.message });
+            }
+        });
     }
 });
 /**
@@ -149,32 +177,46 @@ exports.txReverser = v2.firestore.onDocumentUpdated("transactions/{transactionId
     var _a, _b;
     const before = (_a = event.data) === null || _a === void 0 ? void 0 : _a.before.data();
     const after = (_b = event.data) === null || _b === void 0 ? void 0 : _b.after.data();
-    if (before && after && before.status !== 'cancelled' && after.status === 'cancelled') {
+    if (before && after && before.status === 'available' && before.processedByBackend === true && after.status === 'cancelled') {
         const clientRef = db.collection("users").doc(after.clientId);
+        const transactionRef = event.data.after.ref;
         await db.runTransaction(async (transaction) => {
+            const transactionDoc = await transaction.get(transactionRef);
             const clientDoc = await transaction.get(clientRef);
+            const currentTx = transactionDoc.data();
+            if (!transactionDoc.exists || !currentTx || currentTx.walletReversalProcessed)
+                return;
+            if (currentTx.status !== "cancelled" || currentTx.processedByBackend !== true)
+                return;
             const userData = clientDoc.data();
             if (!clientDoc.exists || !userData)
                 return;
             let storeWallets = userData.storeWallets || {};
-            const mId = after.merchantId;
-            if (!storeWallets[mId])
+            const mId = currentTx.merchantId;
+            if (!storeWallets[mId]) {
+                transaction.update(transactionRef, { walletReversalProcessed: true });
                 return;
-            let currentAvailable = storeWallets[mId].available || 0;
-            const amountToCancel = Number(after.cashbackAmount) || 0;
-            const earnedToCancel = Number(after.cashbackEarned) || 0;
-            if (after.type === 'earn') {
+            }
+            const currentAvailable = roundToTwo(Number(storeWallets[mId].available || 0));
+            if (!Number.isFinite(currentAvailable) || currentAvailable < 0) {
+                throw new Error("Saldo da loja inválido.");
+            }
+            const amountToCancel = Number(currentTx.cashbackAmount) || 0;
+            const earnedToCancel = Number(currentTx.cashbackEarned) || 0;
+            if (currentTx.type === 'earn') {
                 storeWallets[mId].available = roundToTwo(Math.max(0, currentAvailable - amountToCancel));
             }
-            else if (after.type === 'redeem') {
+            else if (currentTx.type === 'redeem') {
                 storeWallets[mId].available = roundToTwo(currentAvailable + amountToCancel - earnedToCancel);
             }
-            let globalAvailable = 0;
-            Object.values(storeWallets).forEach((w) => { globalAvailable += (w.available || 0); });
+            const globalAvailable = Object.values(storeWallets).reduce((total, wallet) => {
+                return total + Number(wallet.available || 0);
+            }, 0);
             transaction.update(clientRef, {
                 storeWallets: storeWallets,
                 wallet: { available: roundToTwo(globalAvailable), pending: 0 }
             });
+            transaction.update(transactionRef, { walletReversalProcessed: true });
         });
     }
 });
