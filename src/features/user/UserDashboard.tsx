@@ -7,7 +7,7 @@ import { QRCodeCanvas } from 'qrcode.react';
 import { collection, query, where, getDocs, doc, getDoc, onSnapshot, orderBy } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { Transaction, User as UserProfile, Leaflet, AppNotification, AppEvent, AntiWasteItem, MunicipalityFAQ } from '../../types';
-import { summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
+import { summarizeClientStoreBalancesFromTransactions, getRecentStoreMovements } from '../../utils/clientBalance';
 import FeedbackForm from '../../components/dashboard/FeedbackForm';
 import UserHome from './components/UserHome';
 import UserHistory from './components/UserHistory';
@@ -19,7 +19,7 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, Gift
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, ChevronUp, Gift
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -66,6 +66,7 @@ const UserDashboard: React.FC = () => {
   const [showFaqModal, setShowFaqModal] = useState(false); 
   const [emailCopied, setEmailCopied] = useState(false);
 
+  const [showCardStoreDetails, setShowCardStoreDetails] = useState(false);
   const displayCardNumber = currentUser?.customerNumber || currentUser?.nif || "000000000";
   const clientStoreBalanceSummary = useMemo(
     () => summarizeClientStoreBalancesFromTransactions(transactions, currentUser?.id),
@@ -78,6 +79,15 @@ const UserDashboard: React.FC = () => {
       return acc;
     }, {} as Record<string, { available: number; merchantName: string }>);
   }, [clientStoreBalanceSummary.entries]);
+
+  const cardMovementsByStore = useMemo(() => {
+    if (!currentUser?.id) return {};
+    const map: Record<string, ReturnType<typeof getRecentStoreMovements>> = {};
+    clientStoreBalanceSummary.entries.forEach((entry) => {
+      map[entry.id] = getRecentStoreMovements(transactions, currentUser.id, entry.id, 5);
+    });
+    return map;
+  }, [currentUser?.id, clientStoreBalanceSummary.entries, transactions]);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -418,17 +428,99 @@ const UserDashboard: React.FC = () => {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Cashback disponível</p>
-                <p className="text-sm font-black text-[#0a2540]">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(totalCardBalance)}</p>
+                <p className="text-xl font-black text-[#00d66f] italic">{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(totalCardBalance)}</p>
+                <p className="text-[8px] font-bold text-slate-400 uppercase mt-0.5">Soma de todas as lojas</p>
               </div>
 
               <button
                 type="button"
-                onClick={() => setView('wallets')}
-                className="rounded-full bg-[#0a2540] px-4 py-2 text-[10px] font-black uppercase tracking-widest text-white"
+                onClick={() => setShowCardStoreDetails((prev) => !prev)}
+                className="flex items-center gap-1.5 rounded-full bg-[#0a2540] px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-white hover:bg-black transition-colors"
               >
-                Ver por loja
+                {showCardStoreDetails ? <>Ocultar <ChevronUp size={14} /></> : <>Ver por loja <ChevronDown size={14} /></>}
               </button>
             </div>
+
+            {showCardStoreDetails && (
+              <div className="mt-4 pt-4 border-t border-slate-200/80 space-y-4 animate-in fade-in">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-[10px] font-black uppercase tracking-widest text-slate-500">Saldo disponível por loja</h4>
+                  <button
+                    onClick={() => setView('wallets')}
+                    className="text-[9px] font-black uppercase tracking-wider text-blue-600 hover:underline"
+                  >
+                    Abrir em ecrã inteiro &rarr;
+                  </button>
+                </div>
+
+                {clientStoreBalanceSummary.entries.length > 0 ? (
+                  <div className="space-y-3">
+                    {clientStoreBalanceSummary.entries.map((entry) => {
+                      const movements = cardMovementsByStore[entry.id] || [];
+                      return (
+                        <div key={entry.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <div className="bg-slate-100 p-2 rounded-xl text-[#0a2540]">
+                                <Store size={16} />
+                              </div>
+                              <div>
+                                <p className="text-xs font-black uppercase text-[#0a2540] leading-none">{entry.name}</p>
+                                <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-wider mt-1">
+                                  {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(entry.available)} disponível
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                            <div className="flex items-center justify-between">
+                              <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Últimos 5 movimentos</p>
+                              <span className="text-[8px] font-bold text-slate-400 uppercase">{movements.length} registos</span>
+                            </div>
+
+                            {movements.length > 0 ? (
+                              movements.map((m) => {
+                                const baseId = m.id.replace(/-earn$/, '');
+                                const originalTx = transactions.find((t) => t.id === baseId);
+                                const d = originalTx?.createdAt?.toDate
+                                  ? originalTx.createdAt.toDate()
+                                  : originalTx?.createdAt?.seconds
+                                  ? new Date(originalTx.createdAt.seconds * 1000)
+                                  : null;
+                                const dateStr = d ? `${d.toLocaleDateString('pt-PT')} ${d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })}` : '';
+
+                                return (
+                                  <div key={m.id} className="flex items-center justify-between bg-slate-50 rounded-xl px-2.5 py-1.5 text-[9px]">
+                                    <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                      <span className={`font-black uppercase tracking-wider ${m.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                                        {m.type === 'earn' ? 'Emitido' : 'Descontado'}
+                                      </span>
+                                      {dateStr && <span className="text-[8px] font-bold text-slate-400">{dateStr}</span>}
+                                    </div>
+                                    <span className={`font-black ${m.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
+                                      {m.type === 'earn' ? '+' : '-'}{new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(m.amount)}
+                                    </span>
+                                  </div>
+                                );
+                              })
+                            ) : (
+                              <p className="text-[8px] font-bold uppercase text-slate-400 text-center py-1 bg-slate-50 rounded-xl">
+                                Sem movimentos recentes
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[9px] font-black uppercase text-slate-400 text-center py-4 bg-slate-100/60 rounded-2xl">
+                    Ainda não tens saldo em nenhuma loja parceira.
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </div>
 

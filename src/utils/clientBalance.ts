@@ -98,25 +98,61 @@ export const getRecentStoreMovements = (
   storeId?: string,
   limit: number = 5
 ): StoreMovementEntry[] => {
-  return transactions
-    .filter((tx) => {
-      if (!clientId || tx.clientId !== clientId) return false;
-      if (!isIncludedInAvailableBalance(tx)) return false;
-      if (tx.type !== 'earn' && tx.type !== 'redeem') return false;
-      if (storeId && tx.merchantId !== storeId) return false;
-      return true;
-    })
-    .map((tx) => ({
-      id: tx.id,
-      merchantId: tx.merchantId || 'unknown',
-      merchantName: tx.merchantName || 'Loja Parceira',
-      type: tx.type as 'earn' | 'redeem',
-      amount: Number(tx.cashbackAmount ?? tx.cashbackEarned ?? 0) || 0,
-      createdAt: tx.createdAt,
-    }))
-    .sort((a, b) => getDateValue(b.createdAt) - getDateValue(a.createdAt))
+  const movements: (StoreMovementEntry & { createdAtDate: number })[] = [];
+
+  transactions.forEach((tx) => {
+    if (!clientId || tx.clientId !== clientId) return;
+    if (!isIncludedInAvailableBalance(tx)) return;
+    if (tx.type !== 'earn' && tx.type !== 'redeem') return;
+    if (storeId && tx.merchantId !== storeId) return;
+
+    const txDate = getDateValue(tx.createdAt);
+    const merchantId = tx.merchantId || 'unknown';
+    const merchantName = tx.merchantName || 'Loja Parceira';
+
+    if (tx.type === 'earn') {
+      const amount = getIssuedCashback(tx);
+      if (amount > 0) {
+        movements.push({
+          id: tx.id,
+          merchantId,
+          merchantName,
+          type: 'earn',
+          amount,
+          createdAtDate: txDate,
+        });
+      }
+    } else if (tx.type === 'redeem') {
+      const redeemed = getRedeemedCashback(tx);
+      if (redeemed > 0) {
+        movements.push({
+          id: tx.id,
+          merchantId,
+          merchantName,
+          type: 'redeem',
+          amount: redeemed,
+          createdAtDate: txDate,
+        });
+      }
+
+      const earned = getIssuedCashback(tx);
+      if (earned > 0) {
+        movements.push({
+          id: `${tx.id}-earn`,
+          merchantId,
+          merchantName,
+          type: 'earn',
+          amount: earned,
+          createdAtDate: txDate,
+        });
+      }
+    }
+  });
+
+  return movements
+    .sort((a, b) => b.createdAtDate - a.createdAtDate)
     .slice(0, limit)
-    .map(({ createdAt, ...movement }) => movement);
+    .map(({ createdAtDate, ...movement }) => movement);
 };
 
 export const summarizeClientStoreBalancesFromTransactions = (

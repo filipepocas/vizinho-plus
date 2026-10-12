@@ -80,4 +80,29 @@ describe('cashback balance rules', () => {
       { id: 'tx-1', merchantId: 'm1', merchantName: 'Loja A', type: 'earn', amount: 10 },
     ]);
   });
+
+  it('includes both redeem and emit movements when a purchase has discount and cashback earned', () => {
+    const transactions = [
+      {
+        id: 'tx-hybrid',
+        clientId: 'client-1',
+        merchantId: 'm1',
+        merchantName: 'Loja A',
+        type: 'redeem',
+        status: 'available',
+        amount: 50,
+        invoiceAmount: 50,
+        cashbackAmount: 10,
+        cashbackEarned: 4,
+        cashbackPercent: 10,
+        createdAt: { seconds: 100 },
+      },
+    ] as any;
+
+    expect(getRecentStoreMovements(transactions, 'client-1', 'm1', 5)).toEqual([
+      { id: 'tx-hybrid', merchantId: 'm1', merchantName: 'Loja A', type: 'redeem', amount: 10 },
+      { id: 'tx-hybrid-earn', merchantId: 'm1', merchantName: 'Loja A', type: 'earn', amount: 4 },
+    ]);
+  });
 });
+

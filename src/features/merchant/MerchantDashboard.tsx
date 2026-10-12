@@ -366,18 +366,22 @@ const MerchantDashboard: React.FC = () => {
                 <div className="bg-green-50 p-6 rounded-[25px] border-2 border-green-200 text-center">
                   <p className="text-[9px] font-black uppercase text-green-700 tracking-widest mb-1">Cashback Emitido</p>
                   <p className="text-2xl font-black text-green-600">{formatCurrency(txTotals.emitido)}</p>
+                  <p className="text-[8px] font-bold text-green-700/80 uppercase mt-1">Soma do total emitido aos clientes</p>
                 </div>
                 <div className="bg-blue-50 p-6 rounded-[25px] border-2 border-blue-200 text-center">
                   <p className="text-[9px] font-black uppercase text-blue-700 tracking-widest mb-1">Saldo Descontado</p>
                   <p className="text-2xl font-black text-blue-600">{formatCurrency(txTotals.descontado)}</p>
+                  <p className="text-[8px] font-bold text-blue-700/80 uppercase mt-1">Soma do total descontado pelos clientes</p>
                 </div>
                 <div className="bg-[#0a2540] p-6 rounded-[25px] border-2 border-[#0a2540] text-center">
                   <p className="text-[9px] font-black uppercase text-[#00d66f] tracking-widest mb-1">Saldo por Descontar</p>
                   <p className="text-2xl font-black text-white">{formatCurrency(txTotals.available)}</p>
+                  <p className="text-[8px] font-bold text-slate-300 uppercase mt-1">Cálculo: Emitido - Descontado</p>
                 </div>
                 <div className="bg-slate-50 p-6 rounded-[25px] border-2 border-slate-200 text-center">
                   <p className="text-[9px] font-black uppercase text-slate-500 tracking-widest mb-1">Total Movimentos</p>
                   <p className="text-2xl font-black text-slate-600">{txTotals.total}</p>
+                  <p className="text-[8px] font-bold text-slate-400 uppercase mt-1">Total de transações registadas</p>
                 </div>
               </div>
 
@@ -431,8 +435,19 @@ const MerchantDashboard: React.FC = () => {
                           </td>
                           <td className="py-4 text-center font-mono font-bold text-slate-400">{t.documentNumber || '---'}</td>
                           <td className="py-4 text-right font-black text-slate-500">{Number(t.amount || 0).toFixed(2)} €</td>
-                          <td className={`py-4 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                            {t.type === 'earn' ? '+' : '-'}{Number(t.cashbackAmount || 0).toFixed(2)} €
+                          <td className="py-4 text-right">
+                            {t.type === 'earn' ? (
+                              <span className="font-black text-[#00d66f]">+{Number(t.cashbackAmount || 0).toFixed(2)} €</span>
+                            ) : (
+                              <div>
+                                <span className="font-black text-red-500">-{Number(t.cashbackAmount || 0).toFixed(2)} €</span>
+                                {Number(t.cashbackEarned || 0) > 0 && (
+                                  <span className="block text-[10px] font-bold text-[#00d66f]">
+                                    +{Number(t.cashbackEarned).toFixed(2)} € (Emitido)
+                                  </span>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="py-4 text-center">
                             <span className={`px-3 py-1 rounded-full text-[8px] font-black uppercase ${
@@ -440,7 +455,7 @@ const MerchantDashboard: React.FC = () => {
                               t.type === 'redeem' ? 'bg-blue-100 text-blue-700' : 
                               'bg-red-100 text-red-700'
                             }`}>
-                              {t.type === 'earn' ? 'Emitido' : t.type === 'redeem' ? 'Descontado' : 'Anulado'}
+                              {t.type === 'earn' ? 'Emitido' : t.type === 'redeem' ? (Number(t.cashbackEarned || 0) > 0 ? 'Desconto + Emissão' : 'Descontado') : 'Anulado'}
                             </span>
                           </td>
                         </tr>
@@ -545,14 +560,46 @@ const MerchantDashboard: React.FC = () => {
         {showConfirmModal && foundClient && pendingAction && (
           <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#0a2540]/90 backdrop-blur-md">
             <div className="bg-white w-full max-w-sm rounded-[40px] border-4 border-[#0a2540] shadow-[12px_12px_0px_0px_#00d66f] overflow-hidden animate-in zoom-in">
-               <div className="bg-[#0a2540] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação</h3></div>
-               <div className="p-8 text-center space-y-4">
-                 <p className="text-xs font-bold text-slate-500 uppercase">Cliente</p>
-                 <p className="text-lg font-black text-[#0a2540]">{foundClient.name}</p>
+               <div className="bg-[#0a2540] p-6 text-white text-center"><AlertTriangle size={32} className="mx-auto text-[#00d66f] mb-2" /><h3 className="font-black uppercase italic tracking-tighter text-xl">Confirmação da Operação</h3></div>
+               <div className="p-8 space-y-4">
+                 <div className="text-center">
+                   <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Cliente</p>
+                   <p className="text-lg font-black text-[#0a2540] uppercase">{foundClient.name}</p>
+                   <p className="text-[9px] font-bold text-slate-400">{foundClient.customerNumber || foundClient.nif}</p>
+                 </div>
+
                  <div className="border-t-2 border-dashed border-slate-100 my-4"></div>
-                 <p className="text-xs font-bold text-slate-500 uppercase">{pendingAction.type === 'earn' ? 'Fatura Base' : 'Valor a Descontar'}</p>
-                 <p className={`text-4xl font-black italic ${pendingAction.type === 'earn' ? 'text-[#0a2540]' : 'text-red-500'}`}>{formatCurrency(pendingAction.val)}</p>
-                 <div className="flex gap-4 mt-8">
+
+                 {pendingAction.type === 'earn' ? (
+                   <div className="text-center space-y-1">
+                     <p className="text-[10px] font-black text-slate-500 uppercase tracking-wider">Valor da Fatura</p>
+                     <p className="text-3xl font-black text-[#0a2540]">{formatCurrency(pendingAction.invAmount)}</p>
+                     <p className="text-xs font-black text-[#00d66f] uppercase mt-2">
+                       Cashback a Emitir: +{formatCurrency((pendingAction.invAmount * (currentUser.cashbackPercent || 0)) / 100)} ({currentUser.cashbackPercent}%)
+                     </p>
+                   </div>
+                 ) : (
+                   <div className="space-y-2 text-xs font-bold text-slate-600 bg-slate-50 p-4 rounded-2xl border border-slate-100">
+                     <div className="flex justify-between">
+                       <span>Total da Fatura:</span>
+                       <span className="font-black text-[#0a2540]">{formatCurrency(pendingAction.invAmount)}</span>
+                     </div>
+                     <div className="flex justify-between text-red-500 font-black">
+                       <span>Desconto a Aplicar:</span>
+                       <span>-{formatCurrency(pendingAction.val)}</span>
+                     </div>
+                     <div className="flex justify-between border-t border-slate-200 pt-1.5 font-black text-slate-800">
+                       <span>A Pagar pelo Cliente:</span>
+                       <span>{formatCurrency(Math.max(0, pendingAction.invAmount - pendingAction.val))}</span>
+                     </div>
+                     <div className="flex justify-between text-[#00d66f] font-black pt-1">
+                       <span>Novo Cashback Emitido:</span>
+                       <span>+{formatCurrency(((Math.max(0, pendingAction.invAmount - pendingAction.val) * (currentUser.cashbackPercent || 0)) / 100))}</span>
+                     </div>
+                   </div>
+                 )}
+
+                 <div className="flex gap-4 mt-6">
                    <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
                    <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
                  </div>

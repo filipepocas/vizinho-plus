@@ -41,10 +41,12 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   };
 
   const invoiceAmount = Number(amount) || 0;
-  const maxDiscountAllowed = invoiceAmount * 0.5;
-  const actualDiscountToApply = Math.min(clientStoreBalance, maxDiscountAllowed);
+  const maxDiscountAllowed = Number((invoiceAmount * 0.5).toFixed(2));
+  const actualDiscountToApply = Number(Math.min(clientStoreBalance, maxDiscountAllowed).toFixed(2));
   const selectedRedeemAmount = Number(customRedeem) || 0;
-  const cashbackToIssue = Number((Math.max(0, invoiceAmount - selectedRedeemAmount) * cashbackPercent / 100).toFixed(2));
+  const isRedeemExceeded = selectedRedeemAmount > (actualDiscountToApply + 0.001);
+  const effectiveDiscount = isRedeemExceeded ? 0 : selectedRedeemAmount;
+  const cashbackToIssue = Number((Math.max(0, invoiceAmount - effectiveDiscount) * (cashbackPercent / 100)).toFixed(2));
 
   const canProcessEarn = !isLoading && foundClient !== null && invoiceAmount > 0 && !isLeaving;
   
@@ -54,7 +56,13 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
                           invoiceAmount > 0 && 
                           !isNaN(redeemVal) && 
                           redeemVal > 0 && 
-                          redeemVal <= (actualDiscountToApply + 0.01); 
+                          !isRedeemExceeded;
+
+  const handleApplyMaxDiscount = () => {
+    if (actualDiscountToApply > 0) {
+      setCustomRedeem(actualDiscountToApply.toFixed(2));
+    }
+  };
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 animate-in fade-in duration-500">
@@ -96,11 +104,17 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
             
             {invoiceAmount > 0 && !isLeaving && (
               <div className="flex flex-col gap-2 animate-in zoom-in">
-                <div className="flex items-center gap-3 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
-                  <ArrowRight size={16} className="text-[#00d66f]" />
-                  <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest">
-                    Cashback a Emitir: <span className="text-[#00d66f] text-sm italic ml-1">{formatCurrency(cashbackToIssue)}</span>
-                  </span>
+                <div className="flex flex-col gap-1.5 bg-green-50 p-4 rounded-2xl border-2 border-green-200">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-black uppercase text-[#0a2540] tracking-widest flex items-center gap-2">
+                      <ArrowRight size={16} className="text-[#00d66f]" />
+                      Cashback a Emitir:
+                    </span>
+                    <span className="text-[#00d66f] text-base font-black italic">{formatCurrency(cashbackToIssue)}</span>
+                  </div>
+                  <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider ml-6">
+                    Fórmula: ({formatCurrency(invoiceAmount)} - {formatCurrency(effectiveDiscount)}) × {cashbackPercent}% da loja
+                  </p>
                 </div>
               </div>
             )}
@@ -120,9 +134,10 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
             <>
               <div className="p-3 bg-white/30 rounded-2xl mb-1 border-2 border-[#0a2540]/10"><UserIcon size={24} className="text-[#0a2540]" strokeWidth={3} /></div>
               <h4 className="font-black uppercase text-center text-sm tracking-tighter italic">{foundClient.name}</h4>
-              <div className="bg-[#0a2540] px-4 py-2 rounded-xl text-center w-full mt-2 shadow-inner border border-[#0a2540]">
-                <p className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest mb-1">Saldo nesta Loja</p>
+              <div className="bg-[#0a2540] px-4 py-3 rounded-2xl text-center w-full mt-2 shadow-inner border border-[#0a2540]">
+                <p className="text-[8px] font-black text-[#00d66f] uppercase tracking-widest mb-0.5">Saldo nesta Loja</p>
                 <p className="text-xl font-black text-white italic">{formatCurrency(clientStoreBalance)}</p>
+                <p className="text-[7px] font-bold text-slate-300 uppercase tracking-wider mt-1">Cashback líquido deste cliente nesta loja</p>
               </div>
             </>
           ) : (
@@ -133,31 +148,74 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
           )}
         </div>
 
-        <button onClick={() => onProcessAction('earn')} disabled={!canProcessEarn} className="flex-1 bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-3 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100">
-          <Coins size={32} className="text-[#00d66f]" />
-          <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback</span>
+        <button onClick={() => onProcessAction('earn')} disabled={!canProcessEarn} className="bg-[#0a2540] p-6 rounded-[35px] text-white transition-all hover:bg-black hover:scale-[1.02] shadow-[8px_8px_0px_0px_#00d66f] border-2 border-[#0a2540] flex flex-col items-center justify-center gap-2 disabled:opacity-40 disabled:shadow-none disabled:hover:scale-100">
+          <Coins size={28} className="text-[#00d66f]" />
+          <span className="font-black text-[11px] uppercase tracking-[0.2em]">Atribuir Cashback Total</span>
+          <span className="text-[8px] font-bold text-slate-300 uppercase">Sem desconto ({formatCurrency(invoiceAmount * (cashbackPercent / 100))} a emitir)</span>
         </button>
 
         {clientStoreBalance > 0 && invoiceAmount > 0 && (
-           <div className="bg-blue-50 p-4 rounded-3xl border-2 border-blue-200 animate-in fade-in">
-              <p className="text-[9px] font-black uppercase tracking-widest text-blue-800 mb-2 flex items-center gap-2">
-                 <AlertTriangle size={14} /> Máximo a descontar (50%): <span className="font-bold text-lg">{formatCurrency(actualDiscountToApply)}</span>
-              </p>
-              <input 
-                type="number" step="0.01" min="0" max={actualDiscountToApply}
-                value={customRedeem} onChange={e => setCustomRedeem(e.target.value)} 
-                placeholder="Valor a descontar" 
-                className="w-full p-4 bg-white border-2 border-blue-300 rounded-2xl text-center font-black text-blue-900 outline-none focus:border-blue-500 mb-2" 
-              />
+           <div className="bg-blue-50 p-5 rounded-3xl border-2 border-blue-200 animate-in fade-in space-y-3">
+              <div className="space-y-1">
+                <p className="text-[9px] font-black uppercase tracking-widest text-blue-900 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5"><AlertTriangle size={14} className="text-blue-600" /> Máximo a descontar (50%):</span>
+                  <span className="font-black text-base text-blue-900">{formatCurrency(actualDiscountToApply)}</span>
+                </p>
+                <p className="text-[8px] font-bold text-blue-700 leading-tight">
+                  Regra: nunca superior a 50% do valor da compra nem ao saldo líquido do cliente nesta loja.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <input 
+                    type="number" step="0.01" min="0" max={actualDiscountToApply}
+                    value={customRedeem} onChange={e => setCustomRedeem(e.target.value)} 
+                    placeholder="Valor a descontar (€)" 
+                    className={`flex-1 p-3.5 bg-white border-2 rounded-2xl text-center font-black outline-none transition-colors ${
+                      isRedeemExceeded ? 'border-red-500 text-red-600 bg-red-50/20' : 'border-blue-300 text-blue-900 focus:border-blue-500'
+                    }`}
+                  />
+                  {actualDiscountToApply > 0 && (
+                    <button
+                      type="button"
+                      onClick={handleApplyMaxDiscount}
+                      className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-[9px] font-black uppercase tracking-wider shrink-0 transition-all shadow-sm"
+                    >
+                      Máx.
+                    </button>
+                  )}
+                </div>
+
+                {isRedeemExceeded && (
+                  <p className="text-red-500 text-[9px] font-black uppercase text-center leading-tight">
+                    O valor a descontar não pode ultrapassar {formatCurrency(actualDiscountToApply)}!
+                  </p>
+                )}
+              </div>
+
               <button 
                 onClick={() => onProcessAction('redeem', Number(customRedeem))} 
                 disabled={!canProcessRedeem} 
-                className="w-full bg-white p-4 rounded-2xl text-[#0a2540] border-4 border-[#0a2540] transition-all hover:bg-slate-50 hover:scale-[1.02] shadow-xl flex flex-col items-center justify-center gap-1 disabled:opacity-40 disabled:hover:scale-100"
+                className="w-full bg-[#0a2540] text-white p-4 rounded-2xl border-2 border-[#0a2540] transition-all hover:bg-black hover:scale-[1.01] shadow-lg flex flex-col items-center justify-center gap-0.5 disabled:opacity-40 disabled:hover:scale-100 disabled:shadow-none"
               >
-                <Gift size={24} className="text-[#0a2540]" />
-                <span className="font-black text-[10px] uppercase tracking-[0.2em]">Confirmar Desconto</span>
+                <div className="flex items-center gap-2">
+                  <Gift size={20} className="text-[#00d66f]" />
+                  <span className="font-black text-[10px] uppercase tracking-[0.2em]">Confirmar Desconto</span>
+                </div>
+                {canProcessRedeem && (
+                  <span className="text-[8px] font-bold text-slate-300">
+                    Desconta {formatCurrency(redeemVal)} &bull; Emite +{formatCurrency(cashbackToIssue)}
+                  </span>
+                )}
               </button>
            </div>
+        )}
+
+        {foundClient && clientStoreBalance <= 0 && invoiceAmount > 0 && (
+          <div className="bg-slate-50 p-4 rounded-2xl border border-slate-200 text-center text-slate-500 text-[9px] font-bold uppercase leading-relaxed">
+            Este cliente ainda não tem saldo líquido acumulado nesta loja para aplicar descontos.
+          </div>
         )}
       </div>
     </div>
