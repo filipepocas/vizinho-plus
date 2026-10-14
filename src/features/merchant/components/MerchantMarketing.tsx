@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { db } from '../../../config/firebase';
-import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDocs } from 'firebase/firestore';
+import { collection, addDoc, query, where, onSnapshot, serverTimestamp, orderBy, getDocs, limit } from 'firebase/firestore';
 import { Megaphone, Image as ImageIcon, FileText, Send, Loader2, Bell, Filter, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { LeafletCampaign, MarketingRequest, PricingRule } from '../../../types';
@@ -162,16 +162,9 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
 
     setLoading(true);
     try {
-        const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
-        let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
-
-        if (targetType === 'zonas') {
-            clients = clients.filter((c: any) => targetZones.some((z: string) => z.includes(`Freguesia: ${c.freguesia}`) || z.includes(`Concelho: ${c.concelho}`) || z.includes(`Distrito: ${c.distrito}`)));
-        } else if (targetType === 'birthDate') {
-            const cm = new Date().getMonth() + 1;
-            clients = clients.filter((c: any) => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
-        } else if (targetType === 'top_20_volume' || targetType === 'top_20_visits') {
-            const txSnap = await getDocs(query(collection(db, 'transactions'), where('merchantId', '==', merchantId)));
+        let count = 0;
+        if (targetType === 'top_20_volume' || targetType === 'top_20_visits') {
+            const txSnap = await getDocs(query(collection(db, 'transactions'), where('merchantId', '==', merchantId), limit(500)));
             const txs = txSnap.docs.map((d: any) => d.data()).filter((t: any) => t.type === 'earn' && t.status !== 'cancelled');
             const stats: Record<string, {vol: number, vis: number}> = {};
             txs.forEach((t: any) => {
@@ -180,10 +173,22 @@ const MerchantMarketing: React.FC<Props> = ({ merchantId, merchantName, initialT
                 stats[t.clientId].vis += 1;
             });
             let sortedIds = Object.keys(stats).sort((a: string, b: string) => targetType === 'top_20_volume' ? stats[b].vol - stats[a].vol : stats[b].vis - stats[a].vis);
-            clients = clients.filter((c: any) => sortedIds.slice(0, 20).includes(c.id));
+            count = Math.min(20, sortedIds.length);
+        } else {
+            try {
+              const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active'), limit(200)));
+              let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
+              if (targetType === 'zonas') {
+                  clients = clients.filter((c: any) => targetZones.some((z: string) => z.includes(`Freguesia: ${c.freguesia}`) || z.includes(`Concelho: ${c.concelho}`) || z.includes(`Distrito: ${c.distrito}`)));
+              } else if (targetType === 'birthDate') {
+                  const cm = new Date().getMonth() + 1;
+                  clients = clients.filter((c: any) => c.birthDate && parseInt(c.birthDate.split('-')[1]) === cm);
+              }
+              count = Math.max(25, clients.length);
+            } catch {
+              count = Math.max(50, targetZones.length * 40);
+            }
         }
-
-        const count = clients.length;
         
         const pricing = calculatePrice(type, count, days);
         if (!pricing.foundRule) {

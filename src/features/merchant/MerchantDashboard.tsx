@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
-import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy } from 'firebase/firestore';
+import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy, limit } from 'firebase/firestore';
 import { db } from '../../config/firebase';
 import { useNavigate } from 'react-router-dom';
 import { User as UserProfile, Transaction } from '../../types';
@@ -166,11 +166,10 @@ const MerchantDashboard: React.FC = () => {
       setClientStoreBalance(0);
       try {
         const queryStrategies = [
-          query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client')),
-          query(collection(db, 'users'), where('customerNumber', '==', cleanNumber)),
-          query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client')),
-          query(collection(db, 'users'), where('nif', '==', cleanNumber)),
-          query(collection(db, 'users'), where('customerNumber', '==', Number(cleanNumber)))
+          query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), where('role', '==', 'client'), limit(1)),
+          query(collection(db, 'users'), where('customerNumber', '==', cleanNumber), limit(1)),
+          query(collection(db, 'users'), where('nif', '==', cleanNumber), where('role', '==', 'client'), limit(1)),
+          query(collection(db, 'users'), where('nif', '==', cleanNumber), limit(1))
         ];
 
         let match: UserProfile | null = null;

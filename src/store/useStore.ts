@@ -349,7 +349,7 @@ export const useStore = create<StoreState>((set, get) => ({
     } else if (role === 'merchant') {
       q = query(collection(db, 'transactions'), where('merchantId', '==', id), limit(200));
     } else {
-      q = query(collection(db, 'transactions'), where('clientId', '==', id));
+      q = query(collection(db, 'transactions'), where('clientId', '==', id), limit(50));
     }
     
     return onSnapshot(q, (snap: any) => {

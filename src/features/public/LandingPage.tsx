@@ -224,24 +224,9 @@ const LandingPage: React.FC = () => {
 
     setLoading(true);
     try {
-        let count = 0;
-        try {
-          const snap = await getDocs(query(collection(db, 'users'), where('role', '==', 'client'), where('status', '==', 'active')));
-          let clients = snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as any));
-          
-          clients = clients.filter((c: any) => {
-              return bannerTargets.some(z => 
-                  z.includes(`Freguesia: ${c.freguesia}`) || 
-                  z.includes(`Concelho: ${c.concelho}`) || 
-                  z.includes(`Distrito: ${c.distrito}`)
-              );
-          });
-          count = clients.length;
-        } catch {
-          // Visitantes não autenticados não têm acesso direto à coleção privada 'users'; estimar com base em 'system/memberCount' ou mínimo por zona
-          const baseMembers = membersCount && membersCount > 0 ? membersCount : 250;
-          count = Math.max(50, Math.round((baseMembers * Math.min(bannerTargets.length, 5)) / 5));
-        }
+        // Estimar alcance potencial com base no contador global de membros e zonas selecionadas (sem descarregar a coleção privada de utilizadores)
+        const baseMembers = membersCount && membersCount > 0 ? membersCount : 250;
+        const count = Math.max(50, Math.round((baseMembers * Math.min(bannerTargets.length, 5)) / 5));
 
         // Verificar se existe regra de preço para banner em pricing_rules
         let totalCost = count * 0.03 * days;

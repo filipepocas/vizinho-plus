@@ -323,7 +323,11 @@ export const notifDispatcher = v2.firestore.onDocumentWritten(
     if (scheduledFor > new Date()) return;
 
     try {
-      const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
+      const usersSnap = await db.collection("users")
+        .where("role", "==", "client")
+        .where("status", "==", "active")
+        .select("fcmTokens", "birthDate", "freguesia", "concelho", "distrito", "email")
+        .get();
       let tokens: string[] = [];
 
       usersSnap.forEach(doc => {
@@ -384,7 +388,11 @@ export const merchantPushDispatcher = v2.firestore.onDocumentUpdated(
     if (before?.status !== 'approved' && after?.status === 'approved' && after?.type === 'push_notification' && after?.sent !== true) {
 
       try {
-        const usersSnap = await db.collection("users").where("role", "==", "client").where("status", "==", "active").get();
+        const usersSnap = await db.collection("users")
+          .where("role", "==", "client")
+          .where("status", "==", "active")
+          .select("fcmTokens", "birthDate", "freguesia", "concelho", "distrito")
+          .get();
         let tokens: string[] = [];
 
         usersSnap.forEach(doc => {
@@ -463,21 +471,40 @@ export const adminMessenger = v2.https.onCall(async (request) => {
 });
 
 /**
- * 7. CONTADOR DE MEMBROS
+ * 7. CONTADOR DE MEMBROS (Atómico, sem O(N) reads)
  */
-export const memberCounter = v2.firestore.onDocumentWritten(
+export const memberCounter = v2.firestore.onDocumentCreated(
   "users/{userId}",
-  async () => {
+  async (event) => {
     try {
-      const usersSnap = await db.collection("users").get();
-      const count = usersSnap.size;
-      logger.info(`[memberCounter] Contando membros: ${count}`);
-      await db.doc("system/memberCount").set({
-        count,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      const userData = event.data?.data();
+      if (userData?.role === 'client' || userData?.role === 'merchant') {
+        logger.info(`[memberCounter] Novo membro registado: ${event.params.userId}`);
+        await db.doc("system/memberCount").set({
+          count: admin.firestore.FieldValue.increment(1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
     } catch (error) {
-      logger.error("Erro ao atualizar contador:", error);
+      logger.error("Erro ao incrementar contador:", error);
+    }
+  }
+);
+
+export const memberDecrementer = v2.firestore.onDocumentDeleted(
+  "users/{userId}",
+  async (event) => {
+    try {
+      const userData = event.data?.data();
+      if (userData?.role === 'client' || userData?.role === 'merchant') {
+        logger.info(`[memberDecrementer] Membro removido: ${event.params.userId}`);
+        await db.doc("system/memberCount").set({
+          count: admin.firestore.FieldValue.increment(-1),
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        }, { merge: true });
+      }
+    } catch (error) {
+      logger.error("Erro ao decrementar contador:", error);
     }
   }
 );
@@ -488,21 +515,79 @@ export const memberCounter = v2.firestore.onDocumentWritten(
 export const getMemberCount = v2.https.onRequest(async (req, res) => {
   try {
     const countSnap = await db.doc("system/memberCount").get();
-    if (countSnap.exists) {
+    if (countSnap.exists && countSnap.data()?.count !== undefined) {
       res.header("Cache-Control", "public, max-age=3600");
-      res.json({ count: countSnap.data()?.count || 0 });
+      res.json({ count: Math.max(0, countSnap.data()?.count || 0) });
     } else {
-      // Se o documento não existe, contar e criar
-      const usersSnap = await db.collection("users").get();
-      const count = usersSnap.size;
+      // Se não existe, calcula com count() nativo agregador (sem descarregar documentos)
+      const usersCountSnap = await db.collection("users").where("role", "in", ["client", "merchant"]).count().get();
+      const count = usersCountSnap.data().count;
       await db.doc("system/memberCount").set({
         count,
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
+      }, { merge: true });
       res.json({ count });
     }
   } catch (error) {
     logger.error("Erro em getMemberCount:", error);
     res.status(500).json({ error: "Erro ao contar membros" });
   }
+});
+
+/**
+ * 9. PESQUISA SEGURA DE CLIENTES PARA TERMINAL DE LOJA (RGPD Compliant)
+ */
+export const lookupClient = v2.https.onCall(async (request) => {
+  if (!request.auth) {
+    throw new v2.https.HttpsError("unauthenticated", "Utilizador não autenticado.");
+  }
+  const callerUid = request.auth.uid;
+  const callerDoc = await db.collection("users").doc(callerUid).get();
+  const callerRole = callerDoc.data()?.role;
+  const callerEmail = request.auth.token.email;
+  const isCallerAdmin = callerEmail === "rochap.filipe@gmail.com" || callerRole === "admin";
+  const isCallerMerchant = callerRole === "merchant";
+
+  if (!isCallerAdmin && !isCallerMerchant) {
+    throw new v2.https.HttpsError("permission-denied", "Apenas comerciantes e administradores podem pesquisar clientes.");
+  }
+
+  const rawQuery = request.data?.query;
+  if (!rawQuery || typeof rawQuery !== "string") {
+    throw new v2.https.HttpsError("invalid-argument", "Termo de pesquisa inválido.");
+  }
+
+  const clean = rawQuery.replace(/[^0-9]/g, "");
+  if (!clean) return { client: null };
+
+  let clientSnap = await db.collection("users")
+    .where("customerNumber", "==", clean)
+    .where("role", "==", "client")
+    .limit(1)
+    .get();
+
+  if (clientSnap.empty) {
+    clientSnap = await db.collection("users")
+      .where("nif", "==", clean)
+      .where("role", "==", "client")
+      .limit(1)
+      .get();
+  }
+
+  if (clientSnap.empty) return { client: null };
+
+  const clientDoc = clientSnap.docs[0];
+  const clientData = clientDoc.data();
+  const storeWallet = clientData.storeWallets?.[callerUid] || { available: 0, pending: 0 };
+
+  return {
+    client: {
+      id: clientDoc.id,
+      name: clientData.name || "Cliente Vizinho+",
+      customerNumber: clientData.customerNumber,
+      nif: clientData.nif || "",
+      birthDate: clientData.birthDate || "",
+      storeWalletAvailable: Number(storeWallet.available || 0)
+    }
+  };
 });

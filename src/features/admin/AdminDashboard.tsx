@@ -57,9 +57,9 @@ const AdminDashboard: React.FC = () => {
     const loadAllData = async () => {
       try {
         const [txSnap, mSnap, cSnap] = await Promise.all([
-          getDocs(query(collection(db, 'transactions'), limit(500))),
-          getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'))),
-          getDocs(query(collection(db, 'users'), where('role', '==', 'client')))
+          getDocs(query(collection(db, 'transactions'), limit(300))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'), limit(500))),
+          getDocs(query(collection(db, 'users'), where('role', '==', 'client'), limit(150)))
         ]);
         
         setGlobalTransactions(txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
@@ -71,10 +71,6 @@ const AdminDashboard: React.FC = () => {
     };
 
     loadAllData();
-
-    const interval = setInterval(loadAllData, 2 * 60 * 1000);
-
-    return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
