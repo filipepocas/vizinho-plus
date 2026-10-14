@@ -115,8 +115,8 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
     try {
       await deleteUserWithHistory(id, 'merchant');
       toast.success("Loja eliminada do sistema.");
-    } catch (err) {
-      toast.error("Erro ao eliminar a loja.");
+    } catch (err: any) {
+      toast.error(err?.message || "Erro ao eliminar a loja.");
     } finally {
       setDeletingId(null);
     }

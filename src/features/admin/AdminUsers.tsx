@@ -69,8 +69,8 @@ const AdminUsers: React.FC<AdminUsersProps> = ({ users, transactions }) => {
     try { 
       await deleteUserWithHistory(id, 'client'); 
       toast.success("Cliente eliminado."); 
-    } catch (e) { 
-      toast.error("Erro."); 
+    } catch (e: any) {
+      toast.error(e?.message || "Erro.");
     } finally { 
       setIsDeletingId(null); 
     }

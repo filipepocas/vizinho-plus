@@ -16,7 +16,7 @@ interface MerchantTerminalProps {
   documentNumber: string;
   setDocumentNumber: (val: string) => void;
   onOpenScanner: () => void;
-  onProcessAction: (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => void;
+  onProcessAction: (type: 'earn' | 'redeem', redeemAmount?: number) => void;
   isLoading: boolean;
   clientStoreBalance: number;
   formatCurrency: (val: number) => string;

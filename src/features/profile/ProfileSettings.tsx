@@ -82,7 +82,7 @@ const ProfileSettings: React.FC<{ onBack: () => void }> = ({ onBack }) => {
         setRgpdDeleted(true);
       } catch (error: any) {
         if (error.code === 'auth/requires-recent-login') alert("Por segurança, precisas de fazer login novamente antes de eliminar a conta.");
-        else toast.error("Erro ao eliminar conta.");
+        else toast.error(error.message || "Erro ao eliminar conta.");
       } finally { setIsDeleting(false); }
     }
   };

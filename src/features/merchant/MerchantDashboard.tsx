@@ -23,7 +23,7 @@ import MerchantMarketing from './components/MerchantMarketing';
 import MerchantCatalog from './components/MerchantCatalog';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
-import { summarizeCashbackLedger, summarizeClientStoreBalancesFromTransactions } from '../../utils/clientBalance';
+import { summarizeCashbackLedger } from '../../utils/clientBalance';
 
 const MerchantDashboard: React.FC = () => {
   const { currentUser, addTransaction, logout, locations } = useStore();
@@ -55,7 +55,7 @@ const MerchantDashboard: React.FC = () => {
   const [foundClient, setFoundClient] = useState<UserProfile | null>(null);
   const [clientStoreBalance, setClientStoreBalance] = useState(0);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem' | 'cancel', val: number, invAmount: number} | null>(null);
+  const [pendingAction, setPendingAction] = useState<{type: 'earn' | 'redeem', val: number, invAmount: number} | null>(null);
 
   const [wasteForm, setWasteForm] = useState({ productInfo: '', conditions: '', endTime: '19:00' });
   const [wasteDistrito, setWasteDistrito] = useState('');
@@ -173,7 +173,7 @@ const MerchantDashboard: React.FC = () => {
           query(collection(db, 'users'), where('customerNumber', '==', Number(cleanNumber)))
         ];
 
-        let match: any = null;
+        let match: UserProfile | null = null;
         for (const q of queryStrategies) {
           const snap = await getDocs(q);
           if (!snap.empty) {
@@ -195,19 +195,14 @@ const MerchantDashboard: React.FC = () => {
           setClientStoreBalance(initialWalletBalance);
 
           unsubscribeClient = onSnapshot(
-            query(
-              collection(db, 'transactions'),
-              where('clientId', '==', match.id),
-              where('merchantId', '==', currentUser!.id)
-            ),
-            (snapshot: { docs: Array<{ id: string; data: () => Record<string, unknown> }> }) => {
-              if (!isCurrentSearch) return;
-              const clientTransactions = snapshot.docs.map((transactionDoc) => ({ id: transactionDoc.id, ...transactionDoc.data() } as Transaction));
-              const summary = summarizeClientStoreBalancesFromTransactions(clientTransactions, match.id, match.storeWallets);
-              const storeEntry = summary.entries.find((entry) => entry.id === currentUser!.id);
-              setClientStoreBalance(storeEntry ? storeEntry.available : 0);
+            doc(db, 'users', match.id),
+            (snapshot: { exists: () => boolean; id: string; data: () => Record<string, unknown> }) => {
+              if (!isCurrentSearch || !snapshot.exists()) return;
+              const client = { ...snapshot.data(), id: snapshot.id } as UserProfile;
+              setFoundClient(client);
+              setClientStoreBalance(Number(client.storeWallets?.[currentUser!.id]?.available || 0));
             },
-            (error: Error) => console.error('Erro ao acompanhar os movimentos do cliente:', error)
+            (error: Error) => console.error('Erro ao acompanhar a carteira do cliente:', error)
           );
         } else if (isCurrentSearch) {
           setFoundClient(null);
@@ -235,7 +230,7 @@ const MerchantDashboard: React.FC = () => {
     try { await deleteDoc(doc(db, 'merchant_messages', id)); toast.success("MENSAGEM APAGADA."); if (adminMessages.length <= 1) setShowInbox(false); } catch (e) { toast.error("ERRO."); }
   };
 
-  const processAction = (type: 'earn' | 'redeem' | 'cancel', redeemAmount?: number) => {
+  const processAction = (type: 'earn' | 'redeem', redeemAmount?: number) => {
     const val = type === 'redeem' ? redeemAmount : parseFloat(amount);
     setPendingAction({ type, val: val || 0, invAmount: parseFloat(amount) || 0 });
     setShowConfirmModal(true);
@@ -251,7 +246,7 @@ const MerchantDashboard: React.FC = () => {
         clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
       });
       setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
-    } catch (e) { toast.error("ERRO NO REGISTO."); } finally { setIsLoading(false); }
+    } catch (e: any) { toast.error(e?.message || "ERRO NO REGISTO."); } finally { setIsLoading(false); }
   };
 
   const handleAddWasteZone = () => {
@@ -445,7 +440,7 @@ const MerchantDashboard: React.FC = () => {
                             <span className="block text-[9px] text-slate-400 lowercase font-bold">{t.clientCardNumber || t.clientNif || ''}</span>
                           </td>
                           <td className="py-4 text-center font-mono font-bold text-slate-400">{t.documentNumber || '---'}</td>
-                          <td className="py-4 text-right font-black text-slate-500">{Number(t.amount || 0).toFixed(2)} €</td>
+                          <td className="py-4 text-right font-black text-slate-500">{Number(t.invoiceAmount ?? t.amount ?? 0).toFixed(2)} €</td>
                           <td className="py-4 text-right">
                             {t.type === 'earn' ? (
                               <span className="font-black text-[#00d66f]">+{Number(t.cashbackAmount || 0).toFixed(2)} €</span>

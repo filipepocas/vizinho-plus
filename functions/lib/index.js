@@ -40,7 +40,14 @@ const logger = __importStar(require("firebase-functions/logger"));
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 const db = admin.firestore();
-const roundToTwo = (num) => Math.round((num + Number.EPSILON) * 100) / 100;
+const toCents = (amount) => {
+    const cents = Math.round(amount * 100);
+    if (!Number.isSafeInteger(cents) || Math.abs(amount - cents / 100) > 0.0000001) {
+        throw new Error("Os valores monetários têm de estar expressos em cêntimos.");
+    }
+    return cents;
+};
+const fromCents = (amount) => amount / 100;
 /**
  * 1. PROCESSAR NOVAS TRANSAÇÕES E ATRIBUIR SALDO
  */
@@ -53,7 +60,7 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
     const merchantRef = db.collection("users").doc(tx.merchantId);
     try {
         await db.runTransaction(async (transaction) => {
-            var _a, _b;
+            var _a;
             const transactionDoc = await transaction.get(event.data.ref);
             const clientDoc = await transaction.get(clientRef);
             const merchantDoc = await transaction.get(merchantRef);
@@ -65,6 +72,10 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
             const merchantData = merchantDoc.data();
             if (!merchantData)
                 throw new Error("Dados do lojista vazios.");
+            const clientData = clientDoc.data();
+            if (!clientData || clientData.role !== "client" || merchantData.role !== "merchant") {
+                throw new Error("A transação tem de pertencer a um cliente e a uma loja válidos.");
+            }
             const merchantCashbackPercent = Number((_a = merchantData.cashbackPercent) !== null && _a !== void 0 ? _a : 0);
             if (!Number.isFinite(merchantCashbackPercent) || merchantCashbackPercent < 0 || merchantCashbackPercent > 100) {
                 throw new Error("Percentagem de cashback inválida.");
@@ -74,27 +85,37 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
             if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0) {
                 throw new Error("O valor da compra tem de ser superior a zero.");
             }
+            const invoiceCents = toCents(invoiceAmount);
+            if (!Number.isSafeInteger(invoiceCents) || invoiceCents <= 0) {
+                throw new Error("O valor da compra é inválido.");
+            }
             let secureCashbackAmount = 0;
             let newCashbackEarned = 0;
             if (currentTx.type === 'earn') {
                 if (isLeaving)
                     throw new Error("Loja em processo de saída.");
-                secureCashbackAmount = roundToTwo(invoiceAmount * (merchantCashbackPercent / 100));
+                if (toCents(Number(currentTx.amount)) !== invoiceCents) {
+                    throw new Error("O valor da atribuição tem de corresponder ao valor da compra.");
+                }
+                secureCashbackAmount = fromCents(Math.round(invoiceCents * (merchantCashbackPercent / 100)));
             }
             else if (currentTx.type === 'redeem') {
-                const requestedCashback = Number((_b = currentTx.cashbackAmount) !== null && _b !== void 0 ? _b : currentTx.amount);
+                const requestedCashback = Number(currentTx.amount);
                 if (!Number.isFinite(requestedCashback) || requestedCashback <= 0) {
                     throw new Error("O valor a descontar tem de ser superior a zero.");
                 }
-                secureCashbackAmount = roundToTwo(requestedCashback);
-                const invoiceCents = Math.round(invoiceAmount * 100);
-                const maximumRedeemable = Math.floor(invoiceCents / 2) / 100;
-                if (secureCashbackAmount > maximumRedeemable) {
+                const requestedCents = toCents(requestedCashback);
+                if (!Number.isSafeInteger(requestedCents) || requestedCents <= 0) {
+                    throw new Error("O valor a descontar é inválido.");
+                }
+                secureCashbackAmount = fromCents(requestedCents);
+                const maximumRedeemableCents = Math.floor(invoiceCents / 2);
+                if (requestedCents > maximumRedeemableCents) {
                     throw new Error("Fraude: Resgate superior a 50%.");
                 }
                 if (!isLeaving) {
-                    const amountPaid = Math.max(0, invoiceAmount - secureCashbackAmount);
-                    newCashbackEarned = roundToTwo(amountPaid * (merchantCashbackPercent / 100));
+                    const amountPaidCents = invoiceCents - requestedCents;
+                    newCashbackEarned = fromCents(Math.round(amountPaidCents * (merchantCashbackPercent / 100)));
                 }
             }
             else {
@@ -104,34 +125,53 @@ exports.txProcessor = v2.firestore.onDocumentCreated("transactions/{transactionI
                 cashbackAmount: secureCashbackAmount,
                 cashbackEarned: newCashbackEarned,
                 cashbackPercent: isLeaving ? 0 : merchantCashbackPercent,
+                merchantName: merchantData.shopName || merchantData.name || currentTx.merchantName,
                 processedByBackend: true
             });
-            const userData = clientDoc.data();
-            if (!userData)
-                throw new Error("Dados do cliente vazios.");
-            let storeWallets = userData.storeWallets || {};
+            const storeWallets = clientData.storeWallets || {};
             const mId = currentTx.merchantId;
-            if (!storeWallets[mId])
-                storeWallets[mId] = { available: 0, pending: 0, merchantName: currentTx.merchantName };
-            const currentAvailable = roundToTwo(Number(storeWallets[mId].available || 0));
+            if (!storeWallets[mId]) {
+                storeWallets[mId] = {
+                    available: 0,
+                    pending: 0,
+                    merchantName: merchantData.shopName || merchantData.name || currentTx.merchantName
+                };
+            }
+            const currentAvailable = Number(storeWallets[mId].available || 0);
             if (!Number.isFinite(currentAvailable) || currentAvailable < 0) {
                 throw new Error("Saldo da loja inválido.");
             }
+            const currentAvailableCents = toCents(currentAvailable);
             if (currentTx.type === 'earn') {
-                storeWallets[mId].available = roundToTwo(currentAvailable + secureCashbackAmount);
+                storeWallets[mId].available = fromCents(currentAvailableCents + toCents(secureCashbackAmount));
             }
             else if (currentTx.type === 'redeem') {
-                if (currentAvailable < secureCashbackAmount)
-                    throw new Error("Saldo insuficiente.");
-                storeWallets[mId].available = roundToTwo(currentAvailable - secureCashbackAmount + newCashbackEarned);
+                const requestedCents = toCents(secureCashbackAmount);
+                if (currentAvailableCents < requestedCents)
+                    throw new Error("Saldo insuficiente nesta loja.");
+                storeWallets[mId].available = fromCents(currentAvailableCents - requestedCents + toCents(newCashbackEarned));
             }
             storeWallets[mId].lastUpdate = admin.firestore.FieldValue.serverTimestamp();
-            const globalAvailable = Object.values(storeWallets).reduce((total, wallet) => {
-                return total + Number(wallet.available || 0);
+            const globalAvailableCents = Object.values(storeWallets).reduce((total, wallet) => {
+                const available = Number(wallet.available || 0);
+                if (!Number.isFinite(available) || available < 0) {
+                    throw new Error("Saldo de loja inválido.");
+                }
+                return total + toCents(available);
+            }, 0);
+            const globalPendingCents = Object.values(storeWallets).reduce((total, wallet) => {
+                const pending = Number(wallet.pending || 0);
+                if (!Number.isFinite(pending) || pending < 0) {
+                    throw new Error("Saldo pendente inválido.");
+                }
+                return total + toCents(pending);
             }, 0);
             transaction.update(clientRef, {
                 storeWallets: storeWallets,
-                wallet: { available: roundToTwo(globalAvailable), pending: 0 }
+                wallet: {
+                    available: fromCents(globalAvailableCents),
+                    pending: fromCents(globalPendingCents)
+                }
             });
         });
         const clientDocAfter = await clientRef.get();
@@ -194,27 +234,57 @@ exports.txReverser = v2.firestore.onDocumentUpdated("transactions/{transactionId
             let storeWallets = userData.storeWallets || {};
             const mId = currentTx.merchantId;
             if (!storeWallets[mId]) {
-                transaction.update(transactionRef, { walletReversalProcessed: true });
+                transaction.update(transactionRef, {
+                    status: "available",
+                    cancelledAt: admin.firestore.FieldValue.delete(),
+                    cancellationError: "A carteira da loja não está disponível para reverter este movimento."
+                });
                 return;
             }
-            const currentAvailable = roundToTwo(Number(storeWallets[mId].available || 0));
+            const currentAvailable = Number(storeWallets[mId].available || 0);
             if (!Number.isFinite(currentAvailable) || currentAvailable < 0) {
                 throw new Error("Saldo da loja inválido.");
             }
-            const amountToCancel = Number(currentTx.cashbackAmount) || 0;
-            const earnedToCancel = Number(currentTx.cashbackEarned) || 0;
+            const currentAvailableCents = toCents(currentAvailable);
+            const amountToCancelCents = toCents(Number(currentTx.cashbackAmount) || 0);
+            const earnedToCancelCents = toCents(Number(currentTx.cashbackEarned) || 0);
             if (currentTx.type === 'earn') {
-                storeWallets[mId].available = roundToTwo(Math.max(0, currentAvailable - amountToCancel));
+                if (currentAvailableCents < amountToCancelCents) {
+                    transaction.update(transactionRef, {
+                        status: "available",
+                        cancelledAt: admin.firestore.FieldValue.delete(),
+                        cancellationError: "O cashback deste movimento já foi utilizado e não pode ser anulado."
+                    });
+                    return;
+                }
+                storeWallets[mId].available = fromCents(currentAvailableCents - amountToCancelCents);
             }
             else if (currentTx.type === 'redeem') {
-                storeWallets[mId].available = roundToTwo(currentAvailable + amountToCancel - earnedToCancel);
+                if (currentAvailableCents + amountToCancelCents < earnedToCancelCents) {
+                    transaction.update(transactionRef, {
+                        status: "available",
+                        cancelledAt: admin.firestore.FieldValue.delete(),
+                        cancellationError: "O cashback emitido nesta compra já foi utilizado e não pode ser anulado."
+                    });
+                    return;
+                }
+                storeWallets[mId].available = fromCents(currentAvailableCents + amountToCancelCents - earnedToCancelCents);
             }
-            const globalAvailable = Object.values(storeWallets).reduce((total, wallet) => {
-                return total + Number(wallet.available || 0);
+            else {
+                throw new Error("Tipo de transação inválido para anulação.");
+            }
+            const globalAvailableCents = Object.values(storeWallets).reduce((total, wallet) => {
+                return total + toCents(Number(wallet.available || 0));
+            }, 0);
+            const globalPendingCents = Object.values(storeWallets).reduce((total, wallet) => {
+                return total + toCents(Number(wallet.pending || 0));
             }, 0);
             transaction.update(clientRef, {
                 storeWallets: storeWallets,
-                wallet: { available: roundToTwo(globalAvailable), pending: 0 }
+                wallet: {
+                    available: fromCents(globalAvailableCents),
+                    pending: fromCents(globalPendingCents)
+                }
             });
             transaction.update(transactionRef, { walletReversalProcessed: true });
         });

@@ -62,7 +62,7 @@ const getRedeemedCashback = (tx: Transaction): number => {
 };
 
 const isIncludedInAvailableBalance = (tx: Transaction): boolean => {
-  return tx.status === 'available' || !tx.status;
+  return (tx.status === 'available' || !tx.status) && tx.processedByBackend !== false;
 };
 
 export const getMaxRedeemableCashback = (availableBalance: number, invoiceAmount: number): number => {
@@ -190,11 +190,11 @@ export const summarizeClientStoreBalancesFromTransactions = (
 
   if (storeWallets) {
     Object.entries(storeWallets).forEach(([merchantId, wallet]) => {
-      if (clientCashbackTxs.some((tx) => (tx.merchantId || 'unknown') === merchantId)) return;
-      const avail = Number(wallet?.available || 0);
-      if (avail > 0) {
+      const avail = Number(wallet?.available);
+      const existing = balances.get(merchantId);
+      if (Number.isFinite(avail) && avail >= 0 && (existing || avail > 0)) {
         balances.set(merchantId, {
-          name: wallet?.merchantName || 'Loja Parceira',
+          name: wallet?.merchantName || existing?.name || 'Loja Parceira',
           available: Number(avail.toFixed(2)),
         });
       }

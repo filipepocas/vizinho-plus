@@ -70,8 +70,9 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
         "NIF Loja": m?.nif || '---',
         "Cliente": t.clientName || '---',
         "NIF Cliente": t.clientNif || c?.nif || '---',
-        "Fatura": Number(t.amount || 0),
-        "Cashback": Number(t.cashbackAmount ?? t.cashbackEarned ?? 0),
+        "Fatura": Number(t.invoiceAmount ?? t.amount ?? 0),
+        "Cashback Descontado": t.type === 'redeem' ? Number(t.cashbackAmount || 0) : 0,
+        "Cashback Emitido": t.type === 'earn' ? Number(t.cashbackAmount || 0) : Number(t.cashbackEarned || 0),
         Tipo: t.type === 'earn' ? 'Atribuição' : 'Desconto',
         Status: t.status === 'cancelled' ? 'Anulado' : 'Aprovado'
       };
@@ -133,7 +134,8 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
                   <th className="p-6">Parceiro / Cliente</th>
                   <th className="p-6 text-center">Docs</th>
                   <th className="p-6 text-right">Fatura</th>
-                  <th className="p-6 text-right">Cashback</th>
+                  <th className="p-6 text-right">Emitido</th>
+                  <th className="p-6 text-right">Descontado</th>
                 </tr>
               </thead>
               <tbody className="divide-y-4 divide-slate-100">
@@ -145,9 +147,12 @@ const AdminTransactions: React.FC<AdminTransactionsProps> = ({ transactions, cli
                       <span className="block text-[9px] text-slate-400 font-bold lowercase italic">{t.clientName}</span>
                     </td>
                     <td className="p-6 text-center font-mono font-bold text-slate-400">{t.clientCardNumber || t.clientNif || '---'}</td>
-                    <td className="p-6 text-right font-black text-slate-500">{Number(t.amount || 0).toFixed(2)} €</td>
-                    <td className={`p-6 text-right font-black ${t.type === 'earn' ? 'text-[#00d66f]' : 'text-red-500'}`}>
-                      {t.type === 'earn' ? '+' : '-'}{Number(t.cashbackAmount ?? t.cashbackEarned ?? 0).toFixed(2)} €
+                    <td className="p-6 text-right font-black text-slate-500">{Number(t.invoiceAmount ?? t.amount ?? 0).toFixed(2)} €</td>
+                    <td className="p-6 text-right font-black text-[#00d66f]">
+                      {Number(t.type === 'earn' ? t.cashbackAmount || 0 : t.cashbackEarned || 0).toFixed(2)} €
+                    </td>
+                    <td className="p-6 text-right font-black text-red-500">
+                      {Number(t.type === 'redeem' ? t.cashbackAmount : 0).toFixed(2)} €
                     </td>
                   </tr>
                 ))}

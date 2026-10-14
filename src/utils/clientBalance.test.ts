@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { getMaxRedeemableCashback, getRecentStoreMovements, summarizeCashbackLedger, summarizeClientStoreBalancesFromTransactions } from './clientBalance';
 
 describe('cashback balance rules', () => {
-  it('counts available cashback even when backend processing flag is false', () => {
+  it('counts cashback after backend processing', () => {
     const transactions = [
       {
         id: 'tx-earn',
@@ -16,7 +16,7 @@ describe('cashback balance rules', () => {
         cashbackAmount: 10,
         cashbackEarned: 10,
         cashbackPercent: 10,
-        processedByBackend: false,
+        processedByBackend: true,
       },
       {
         id: 'tx-redeem',
@@ -30,7 +30,7 @@ describe('cashback balance rules', () => {
         cashbackAmount: 8,
         cashbackEarned: 0,
         cashbackPercent: 10,
-        processedByBackend: false,
+        processedByBackend: true,
       },
     ] as any;
 
@@ -43,6 +43,33 @@ describe('cashback balance rules', () => {
     expect(summarizeClientStoreBalancesFromTransactions(transactions, 'client-1')).toEqual({
       total: 9.2,
       entries: [{ id: 'merchant-1', name: 'Loja A', available: 9.2 }],
+    });
+  });
+
+  it('does not count unprocessed client-provided amounts as available cashback', () => {
+    const transactions = [
+      {
+        id: 'tx-unprocessed',
+        clientId: 'client-1',
+        merchantId: 'merchant-1',
+        merchantName: 'Loja A',
+        amount: 100,
+        invoiceAmount: 100,
+        type: 'earn',
+        status: 'available',
+        cashbackAmount: 1000,
+        processedByBackend: false,
+      },
+    ] as any;
+
+    expect(summarizeCashbackLedger(transactions)).toEqual({
+      emitted: 0,
+      redeemed: 0,
+      available: 0,
+    });
+    expect(summarizeClientStoreBalancesFromTransactions(transactions, 'client-1')).toEqual({
+      total: 0,
+      entries: [],
     });
   });
 
@@ -100,7 +127,7 @@ describe('cashback balance rules', () => {
     expect(getRecentStoreMovements(transactions, 'client-1', 'm1', 5)).toHaveLength(2);
   });
 
-  it('combines transaction balances with wallet-only stores without overriding the ledger', () => {
+  it('uses the server wallet as the authoritative balance for each store', () => {
     const transactions = [
       {
         id: 'tx-earn', clientId: 'client-1', merchantId: 'm1', merchantName: 'Loja A', type: 'earn', status: 'available',
@@ -114,13 +141,13 @@ describe('cashback balance rules', () => {
 
     expect(summarizeClientStoreBalancesFromTransactions(transactions, 'client-1', {
       m1: { available: 99, pending: 0, merchantName: 'Loja A' },
-      m2: { available: 12, pending: 0, merchantName: 'Loja B' },
+      m2: { available: 0, pending: 0, merchantName: 'Loja B' },
       m3: { available: 5, pending: 0, merchantName: 'Loja C' },
     })).toEqual({
-      total: 7,
+      total: 104,
       entries: [
+        { id: 'm1', name: 'Loja A', available: 99 },
         { id: 'm3', name: 'Loja C', available: 5 },
-        { id: 'm1', name: 'Loja A', available: 2 },
       ],
     });
   });

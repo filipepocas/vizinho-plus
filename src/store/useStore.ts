@@ -3,7 +3,7 @@
 import { create } from 'zustand';
 import { 
   collection, onSnapshot, query, where, serverTimestamp, addDoc,
-  doc, getDocs, writeBatch, limit, updateDoc, arrayUnion, startAfter, getDoc, runTransaction
+  doc, getDocs, writeBatch, limit, updateDoc, deleteDoc, arrayUnion, startAfter, getDoc, runTransaction
 } from 'firebase/firestore';
 import { signOut, onAuthStateChanged, sendPasswordResetEmail } from 'firebase/auth';
 import { db, auth } from '../config/firebase';
@@ -280,29 +280,21 @@ export const useStore = create<StoreState>((set, get) => ({
     const { currentUser } = get();
     if (!currentUser) return;
 
-    const rawAmount = Number(tx.amount) || 0;
-    const invoiceAmount = tx.invoiceAmount ? Number(tx.invoiceAmount) : rawAmount;
-    const percent = Number(currentUser.cashbackPercent || 0);
-
-    // Sem período de maturação: todo o cashback atribuído ou descontado é imediato ('available')
-    const cashbackRedeemed = tx.type === 'redeem' ? Number(Math.min(rawAmount, invoiceAmount).toFixed(2)) : 0;
-    const cashbackEarnedOnRedeem = tx.type === 'redeem'
-      ? Number(((Math.max(0, invoiceAmount - cashbackRedeemed) * percent) / 100).toFixed(2))
-      : 0;
-    const calculatedCashback = tx.type === 'earn'
-      ? Number(((invoiceAmount * percent) / 100).toFixed(2))
-      : cashbackRedeemed;
+    const invoiceAmount = Number(tx.invoiceAmount ?? tx.amount);
+    const amount = tx.type === 'redeem' ? Number(tx.amount) : invoiceAmount;
 
     try {
+      if (!Number.isFinite(invoiceAmount) || invoiceAmount <= 0 || !Number.isFinite(amount) || amount <= 0) {
+        throw new Error("O valor da compra e o valor a descontar têm de ser superiores a zero.");
+      }
+
       const merchantName = currentUser.shopName || currentUser.name || 'Loja Parceira';
       const newTxRef = await addDoc(collection(db, 'transactions'), {
         clientId: tx.clientId,
         merchantId: currentUser.id,
         merchantName,
-        amount: tx.type === 'redeem' ? cashbackRedeemed : invoiceAmount,
+        amount,
         invoiceAmount,
-        cashbackAmount: calculatedCashback,
-        cashbackEarned: tx.type === 'earn' ? calculatedCashback : cashbackEarnedOnRedeem,
         type: tx.type,
         status: 'available',
         createdAt: serverTimestamp(),
@@ -310,16 +302,14 @@ export const useStore = create<StoreState>((set, get) => ({
         documentNumber: tx.documentNumber || '',
         clientName: tx.clientName || 'Desconhecido',
         clientCardNumber: tx.clientCardNumber || '---',
-        clientBirthDate: tx.clientBirthDate || '',
-        cashbackPercent: percent,
-        processedByBackend: false
+        clientBirthDate: tx.clientBirthDate || ''
       });
 
       toast.success(tx.type === 'earn' ? "CASHBACK ATRIBUÍDO COM SUCESSO!" : "DESCONTO REGISTADO COM SUCESSO!");
       return newTxRef.id;
     } catch (e: any) {
       console.error("Erro na transação:", e);
-      toast.error(e?.message || "ERRO NO REGISTO.");
+      throw e;
     }
   },
 
@@ -416,19 +406,40 @@ export const useStore = create<StoreState>((set, get) => ({
 
   deleteUserWithHistory: async (userId: string, role: 'client' | 'merchant') => {
     try {
-      const q = query(
-        collection(db, 'transactions'), 
-        where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId),
-        limit(500)
-      );
-      const snap = await getDocs(q);
-      const batch = writeBatch(db);
-      snap.docs.forEach((d: any) => batch.delete(d.ref));
-      batch.delete(doc(db, 'users', userId));
-      await batch.commit();
+      const transactionDocs: any[] = [];
+      let lastTransaction: any = null;
+
+      while (true) {
+        const constraints = [
+          where(role === 'merchant' ? 'merchantId' : 'clientId', '==', userId),
+          limit(450),
+          ...(lastTransaction ? [startAfter(lastTransaction)] : [])
+        ];
+        const snap = await getDocs(query(collection(db, 'transactions'), ...constraints));
+        transactionDocs.push(...snap.docs);
+        if (snap.docs.length < 450) break;
+        lastTransaction = snap.docs[snap.docs.length - 1];
+      }
+
+      const hasFinancialHistory = transactionDocs.some((transactionDoc) => {
+        const transaction = transactionDoc.data();
+        return transaction.status !== 'cancelled' && transaction.status !== 'rejected';
+      });
+      if (hasFinancialHistory) {
+        throw new Error('Esta conta tem movimentos de cashback. Para preservar os saldos e a contabilidade da loja, contacte o suporte para uma eliminação/anonimização segura.');
+      }
+
+      for (let offset = 0; offset < transactionDocs.length; offset += 450) {
+        const batch = writeBatch(db);
+        transactionDocs.slice(offset, offset + 450).forEach((transactionDoc) => batch.delete(transactionDoc.ref));
+        await batch.commit();
+      }
+
+      await deleteDoc(doc(db, 'users', userId));
       toast.success("DADOS APAGADOS.");
-    } catch (e) {
-      toast.error("ERRO.");
+    } catch (error) {
+      console.error("Erro ao eliminar utilizador e histórico:", error);
+      throw error;
     }
   }
 }));
