@@ -457,6 +457,8 @@ const UserDashboard: React.FC = () => {
                   <div className="space-y-3">
                     {clientStoreBalanceSummary.entries.map((entry) => {
                       const movements = cardMovementsByStore[entry.id] || [];
+                      const merchant = allMerchants.find((store) => store.id === entry.id);
+                      const storeLocation = [merchant?.concelho, merchant?.freguesia].filter(Boolean).join(' • ');
                       return (
                         <div key={entry.id} className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-sm space-y-3">
                           <div className="flex items-center justify-between">
@@ -466,6 +468,7 @@ const UserDashboard: React.FC = () => {
                               </div>
                               <div>
                                 <p className="text-xs font-black uppercase text-[#0a2540] leading-none">{entry.name}</p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase mt-1">{storeLocation || 'Localização não indicada'}</p>
                                 <p className="text-[10px] font-bold text-[#00d66f] uppercase tracking-wider mt-1">
                                   {new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(entry.available)} disponível
                                 </p>

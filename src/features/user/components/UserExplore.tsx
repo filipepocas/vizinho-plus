@@ -3,7 +3,6 @@
 import React, { useState, useMemo } from 'react';
 import { Search, MapPin, Navigation, Percent, X, AlertTriangle, Clock } from 'lucide-react';
 import { User as UserProfile } from '../../../types';
-import toast from 'react-hot-toast';
 import { isOpenNow } from '../../../utils/timeUtils';
 
 interface UserExploreProps {
@@ -23,10 +22,6 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
     const val = e.target.value;
     if (!val) return;
     if (selectedConcelhos.includes(val)) return;
-    if (selectedConcelhos.length >= 2) {
-      toast.error("Só pode filtrar no máximo por 2 concelhos em simultâneo.");
-      return;
-    }
     setSelectedConcelhos([...selectedConcelhos, val]);
   };
 
@@ -68,7 +63,7 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="space-y-2">
             <select value="" onChange={handleAddConcelho} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] appearance-none">
-              <option value="">FILTRAR CONCELHOS (Máx 2)</option>
+              <option value="">FILTRAR CONCELHOS</option>
               {availableConcelhos.map(c => <option key={c as string} value={c as string}>{c}</option>)}
             </select>
             {selectedConcelhos.length > 0 && (
