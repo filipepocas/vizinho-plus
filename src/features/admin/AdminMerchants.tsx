@@ -38,6 +38,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
   // Estados de Saída / Eliminação (Ponto 2)
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [setupLeavingId, setSetupLeavingId] = useState<string | null>(null);
+  const [updatingStatusId, setUpdatingStatusId] = useState<string | null>(null);
   const [leavingDate, setLeavingDate] = useState('');
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -78,7 +79,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
       "Código Postal": m.zipCode || '---',
       "Website": m.websiteUrl || '---',
       "Email Público": m.publicEmail || '---',
-      "Estado": m.status === 'active' ? 'Ativo' : 'Suspenso',
+      "Estado": m.status === 'active' ? 'Ativo' : m.status === 'disabled' ? 'Suspenso' : m.status === 'pending' ? 'Pendente' : 'Não definido',
       "Data de Registo": m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleString() : '---',
       "Saldo Acumulado (Global)": m.wallet?.available || 0,
       "Em Saída?": m.isLeaving ? 'Sim' : 'Não',
@@ -154,6 +155,19 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
       toast.success("Loja reativada.");
     } catch (err) {
       toast.error("Erro ao cancelar saída.");
+    }
+  };
+
+  const handleToggleStatus = async (merchant: UserProfile) => {
+    const nextStatus = merchant.status === 'active' ? 'disabled' : 'active';
+    setUpdatingStatusId(merchant.id);
+    try {
+      await onUpdateStatus(merchant.id, nextStatus);
+      toast.success(nextStatus === 'active' ? 'Loja ativada.' : 'Loja suspensa.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Não foi possível atualizar o estado da loja.');
+    } finally {
+      setUpdatingStatusId(null);
     }
   };
 
@@ -262,8 +276,16 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
             
             <div className="mt-auto flex flex-col gap-2">
               <div className="flex gap-2">
-                <span className={`flex-1 text-center py-3 rounded-xl text-[8px] font-black uppercase border-2 ${merchant.status === 'active' ? 'bg-green-50 text-green-600 border-green-200' : 'bg-red-50 text-red-600 border-red-200'}`}>{merchant.status === 'active' ? 'Ativo' : 'Suspenso'}</span>
-                <button onClick={(e) => { e.stopPropagation(); onUpdateStatus(merchant.id, merchant.status === 'active' ? 'disabled' : 'active'); }} className="px-4 py-3 bg-[#0a2540] text-white rounded-xl text-[8px] font-black hover:bg-black transition-colors">ALTERAR</button>
+                <span className={`flex-1 text-center py-3 rounded-xl text-[8px] font-black uppercase border-2 ${merchant.status === 'active' ? 'bg-green-50 text-green-600 border-green-200' : merchant.status === 'disabled' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  {merchant.status === 'active' ? 'Ativo' : merchant.status === 'disabled' ? 'Suspenso' : merchant.status === 'pending' ? 'Pendente' : 'Não definido'}
+                </span>
+                <button
+                  onClick={(e) => { e.stopPropagation(); handleToggleStatus(merchant); }}
+                  disabled={updatingStatusId === merchant.id}
+                  className="px-4 py-3 bg-[#0a2540] text-white rounded-xl text-[8px] font-black hover:bg-black transition-colors disabled:opacity-50"
+                >
+                  {updatingStatusId === merchant.id ? 'A GUARDAR...' : merchant.status === 'active' ? 'SUSPENDER' : 'ATIVAR'}
+                </button>
               </div>
 
               <div className="flex gap-2 pt-2 border-t-2 border-dashed border-slate-200 mt-2">

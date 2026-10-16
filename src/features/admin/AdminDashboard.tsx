@@ -54,16 +54,22 @@ const AdminDashboard: React.FC = () => {
   const [badFeedbacks, setBadFeedbacks] = useState(0);
 
   useEffect(() => {
+    const unsubscribeMerchants = onSnapshot(
+      query(collection(db, 'users'), where('role', '==', 'merchant'), limit(500)),
+      (snap: any) => {
+        setGlobalMerchants(snap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
+      },
+      (err: Error) => console.error('Erro ao acompanhar lojas:', err)
+    );
+
     const loadAllData = async () => {
       try {
-        const [txSnap, mSnap, cSnap] = await Promise.all([
+        const [txSnap, cSnap] = await Promise.all([
           getDocs(query(collection(db, 'transactions'), limit(300))),
-          getDocs(query(collection(db, 'users'), where('role', '==', 'merchant'), limit(500))),
           getDocs(query(collection(db, 'users'), where('role', '==', 'client'), limit(150)))
         ]);
         
         setGlobalTransactions(txSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as Transaction)));
-        setGlobalMerchants(mSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
         setGlobalClients(cSnap.docs.map((d: any) => ({ id: d.id, ...d.data() } as UserProfile)));
       } catch (err) {
         console.error("Erro ao carregar dados:", err);
@@ -71,6 +77,7 @@ const AdminDashboard: React.FC = () => {
     };
 
     loadAllData();
+    return () => unsubscribeMerchants();
   }, []);
 
   useEffect(() => {
