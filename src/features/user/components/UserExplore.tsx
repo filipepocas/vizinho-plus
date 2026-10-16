@@ -18,13 +18,6 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
   const availableCats = useMemo(() => Array.from(new Set(allMerchants.map(m => m.category).filter(Boolean))), [allMerchants]);
   const availableConcelhos = useMemo(() => Array.from(new Set(allMerchants.map(m => m.concelho).filter(Boolean))), [allMerchants]);
 
-  const handleAddConcelho = (e: React.ChangeEvent<HTMLSelectElement>) => {
-    const val = e.target.value;
-    if (!val) return;
-    if (selectedConcelhos.includes(val)) return;
-    setSelectedConcelhos([...selectedConcelhos, val]);
-  };
-
   const handleAddCat = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const val = e.target.value;
     if (!val || selectedCats.includes(val)) return;
@@ -42,8 +35,20 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
   }, [allMerchants, searchName, selectedConcelhos, selectedCats]);
 
   const openInMaps = (m: UserProfile) => {
-    const exactAddress = m.address ? `${m.address}, ` : '';
-    const searchQuery = `${m.shopName || m.name}, ${exactAddress}${m.freguesia || m.concelho || ''}, Portugal`.trim();
+    const hasCoordinates = typeof m.latitude === 'number'
+      && Number.isFinite(m.latitude)
+      && m.latitude >= -90
+      && m.latitude <= 90
+      && typeof m.longitude === 'number'
+      && Number.isFinite(m.longitude)
+      && m.longitude >= -180
+      && m.longitude <= 180;
+    const hasAddress = Boolean(m.address?.trim() || m.zipCode?.trim());
+    const searchQuery = hasCoordinates
+      ? `${m.latitude},${m.longitude}`
+      : hasAddress
+      ? [m.address, m.zipCode, m.freguesia, m.concelho, m.distrito, 'Portugal'].filter(Boolean).join(', ')
+      : [m.shopName || m.name, m.freguesia, m.concelho, m.distrito, 'Portugal'].filter(Boolean).join(', ');
     window.open(`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(searchQuery)}`, '_blank');
   };
 
@@ -62,10 +67,29 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
         
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           <div className="space-y-2">
-            <select value="" onChange={handleAddConcelho} className="w-full bg-slate-50 border-2 border-slate-100 rounded-2xl p-4 text-[10px] font-black uppercase outline-none focus:border-[#00d66f] appearance-none">
-              <option value="">FILTRAR CONCELHOS</option>
-              {availableConcelhos.map(c => <option key={c as string} value={c as string}>{c}</option>)}
-            </select>
+            <details className="rounded-2xl border-2 border-slate-100 bg-slate-50">
+              <summary className="cursor-pointer list-none p-4 text-[10px] font-black uppercase outline-none">
+                Filtrar concelhos {selectedConcelhos.length > 0 ? `(${selectedConcelhos.length} selecionados)` : '(Todos)'}
+              </summary>
+              <div className="max-h-52 space-y-1 overflow-y-auto border-t border-slate-200 p-3">
+                {availableConcelhos.map(c => {
+                  const concelho = c as string;
+                  return (
+                    <label key={concelho} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-[10px] font-bold uppercase text-slate-700 hover:bg-white">
+                      <input
+                        type="checkbox"
+                        checked={selectedConcelhos.includes(concelho)}
+                        onChange={() => setSelectedConcelhos(current => current.includes(concelho)
+                          ? current.filter(selected => selected !== concelho)
+                          : [...current, concelho])}
+                        className="h-4 w-4 accent-[#00d66f]"
+                      />
+                      {concelho}
+                    </label>
+                  );
+                })}
+              </div>
+            </details>
             {selectedConcelhos.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {selectedConcelhos.map(c => (
@@ -121,7 +145,8 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
                     </div>
                     
                     <h4 className={`text-lg font-black uppercase tracking-tighter leading-none mb-1 ${m.isLeaving ? 'text-slate-500 line-through decoration-slate-300' : 'text-[#0a2540]'}`}>{m.shopName || m.name}</h4>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase mb-2">{m.address ? `${m.address} • ` : ''}{m.freguesia || m.concelho || 'Sem Localidade'}</p>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">{[m.freguesia, m.zipCode].filter(Boolean).join(' • ') || m.concelho || 'Sem Localidade'}</p>
+                    {m.address && <p className="text-[9px] font-bold text-slate-400 uppercase mb-2">{m.address}</p>}
                     
                     {m.isLeaving ? (
                       <div className="inline-flex items-center gap-2 bg-amber-100 px-3 py-1.5 rounded-xl border border-amber-200 text-amber-800">

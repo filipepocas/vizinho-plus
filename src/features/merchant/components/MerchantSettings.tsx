@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { User as UserProfile } from '../../../types';
-import { doc, updateDoc } from 'firebase/firestore';
+import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../../config/firebase';
 import { updatePassword } from 'firebase/auth';
 import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock, Smartphone } from 'lucide-react';
@@ -39,6 +39,8 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
   const [freguesia, setFreguesia] = useState<string>(currentUser.freguesia || '');
   const [address, setAddress] = useState<string>(currentUser.address || '');
   const [zipCode, setZipCode] = useState<string>(currentUser.zipCode || '');
+  const [latitude, setLatitude] = useState<string>(currentUser.latitude?.toString() || '');
+  const [longitude, setLongitude] = useState<string>(currentUser.longitude?.toString() || '');
 
   const [businessHours, setBusinessHours] = useState(currentUser.businessHours || defaultHours);
 
@@ -62,6 +64,8 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
     setFreguesia(currentUser.freguesia || '');
     setAddress(currentUser.address || '');
     setZipCode(currentUser.zipCode || '');
+    setLatitude(currentUser.latitude?.toString() || '');
+    setLongitude(currentUser.longitude?.toString() || '');
     if (currentUser.businessHours) setBusinessHours(currentUser.businessHours);
   }, [currentUser]);
 
@@ -93,6 +97,22 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
         return;
       }
 
+      const hasLatitude = latitude.trim() !== '';
+      const hasLongitude = longitude.trim() !== '';
+      const parsedLatitude = hasLatitude ? Number(latitude.replace(',', '.')) : undefined;
+      const parsedLongitude = hasLongitude ? Number(longitude.replace(',', '.')) : undefined;
+      if (hasLatitude !== hasLongitude) {
+        setMessage({ type: 'error', text: 'Preencha latitude e longitude ou deixe ambas vazias.' });
+        return;
+      }
+      if (hasLatitude && (
+        !Number.isFinite(parsedLatitude) || parsedLatitude! < -90 || parsedLatitude! > 90
+        || !Number.isFinite(parsedLongitude) || parsedLongitude! < -180 || parsedLongitude! > 180
+      )) {
+        setMessage({ type: 'error', text: 'Insira coordenadas válidas (latitude entre -90 e 90 e longitude entre -180 e 180).' });
+        return;
+      }
+
       const merchantRef = doc(db, 'users', currentUser.id);
       await updateDoc(merchantRef, {
         shopName: shopName.trim(),
@@ -105,6 +125,8 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
         freguesia: freguesia,
         address: address.trim(),
         zipCode: zipCode.trim(),
+        latitude: parsedLatitude ?? deleteField(),
+        longitude: parsedLongitude ?? deleteField(),
         businessHours: businessHours
       });
 
@@ -236,6 +258,16 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
                      <Locate className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={14} />
                      <input placeholder="Cód. Postal" value={zipCode} onChange={handleZipCodeChange} className="w-full pl-10 p-3 rounded-xl font-bold text-xs outline-none border-2 border-slate-200 focus:border-[#00d66f]" />
                    </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="mb-1 block text-[9px] font-black uppercase text-slate-400">Latitude (Opcional)</label>
+                    <input type="number" step="any" inputMode="decimal" placeholder="38.7223" value={latitude} onChange={e => setLatitude(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 p-3 text-xs font-bold outline-none focus:border-[#00d66f]" />
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[9px] font-black uppercase text-slate-400">Longitude (Opcional)</label>
+                    <input type="number" step="any" inputMode="decimal" placeholder="-9.1393" value={longitude} onChange={e => setLongitude(e.target.value)} className="w-full rounded-xl border-2 border-slate-200 p-3 text-xs font-bold outline-none focus:border-[#00d66f]" />
+                  </div>
                 </div>
             </div>
         </div>
