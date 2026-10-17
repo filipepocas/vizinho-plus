@@ -5,7 +5,7 @@ import { useStore } from '../../store/useStore';
 import { User as UserProfile } from '../../types/index';
 import { 
   Search, Store, CheckCircle2, Hash, 
-  MapPin, RefreshCw, Download, X, CheckSquare, Filter, Trash2, CalendarClock, AlertTriangle
+  MapPin, RefreshCw, Download, X, CheckSquare, Filter, Trash2, CalendarClock, AlertTriangle, Pencil
 } from 'lucide-react';
 import { db } from '../../config/firebase';
 import { collection, addDoc, serverTimestamp, doc, updateDoc } from 'firebase/firestore';
@@ -16,10 +16,11 @@ interface AdminMerchantsProps {
   merchants: UserProfile[];
   onUpdateStatus: (id: string, newStatus: string) => Promise<void>;
   onOpenModal: () => void;
+  onEditMerchant: (merchant: UserProfile) => void;
   loading?: boolean;
 }
 
-const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStatus, onOpenModal, loading }) => {
+const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStatus, onOpenModal, onEditMerchant, loading }) => {
   const { deleteUserWithHistory, locations } = useStore();
   
   const [searchQuery, setSearchQuery] = useState('');
@@ -79,7 +80,7 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
       "Código Postal": m.zipCode || '---',
       "Website": m.websiteUrl || '---',
       "Email Público": m.publicEmail || '---',
-      "Estado": m.status === 'active' ? 'Ativo' : m.status === 'disabled' ? 'Suspenso' : m.status === 'pending' ? 'Pendente' : 'Não definido',
+      "Estado": (m.status || 'active') === 'active' ? 'Ativo' : m.status === 'disabled' ? 'Suspenso' : m.status === 'pending' ? 'Pendente' : 'Ativo',
       "Data de Registo": m.createdAt?.seconds ? new Date(m.createdAt.seconds * 1000).toLocaleString() : '---',
       "Saldo Acumulado (Global)": m.wallet?.available || 0,
       "Em Saída?": m.isLeaving ? 'Sim' : 'Não',
@@ -159,11 +160,20 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
   };
 
   const handleToggleStatus = async (merchant: UserProfile) => {
-    const nextStatus = merchant.status === 'active' ? 'disabled' : 'active';
+    const isCurrentlyActive = (merchant.status || 'active') === 'active';
+    const nextStatus = isCurrentlyActive ? 'disabled' : 'active';
+
+    if (isCurrentlyActive) {
+      const confirmSuspend = window.confirm(
+        `Tem a certeza que deseja SUSPENDER a loja "${merchant.shopName || merchant.name}"?\n\nA loja deixará de poder emitir e resgatar cashback aos clientes até ser reativada.`
+      );
+      if (!confirmSuspend) return;
+    }
+
     setUpdatingStatusId(merchant.id);
     try {
       await onUpdateStatus(merchant.id, nextStatus);
-      toast.success(nextStatus === 'active' ? 'Loja ativada.' : 'Loja suspensa.');
+      toast.success(nextStatus === 'active' ? 'Loja ativada com sucesso.' : 'Loja suspensa com sucesso.');
     } catch (err: any) {
       toast.error(err?.message || 'Não foi possível atualizar o estado da loja.');
     } finally {
@@ -276,15 +286,22 @@ const AdminMerchants: React.FC<AdminMerchantsProps> = ({ merchants, onUpdateStat
             
             <div className="mt-auto flex flex-col gap-2">
               <div className="flex gap-2">
-                <span className={`flex-1 text-center py-3 rounded-xl text-[8px] font-black uppercase border-2 ${merchant.status === 'active' ? 'bg-green-50 text-green-600 border-green-200' : merchant.status === 'disabled' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
-                  {merchant.status === 'active' ? 'Ativo' : merchant.status === 'disabled' ? 'Suspenso' : merchant.status === 'pending' ? 'Pendente' : 'Não definido'}
+                <span className={`flex-1 text-center py-3 rounded-xl text-[8px] font-black uppercase border-2 ${(merchant.status || 'active') === 'active' ? 'bg-green-50 text-green-600 border-green-200' : merchant.status === 'disabled' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-amber-50 text-amber-700 border-amber-200'}`}>
+                  {(merchant.status || 'active') === 'active' ? 'Ativo' : merchant.status === 'disabled' ? 'Suspenso' : 'Pendente'}
                 </span>
                 <button
                   onClick={(e) => { e.stopPropagation(); handleToggleStatus(merchant); }}
                   disabled={updatingStatusId === merchant.id}
-                  className="px-4 py-3 bg-[#0a2540] text-white rounded-xl text-[8px] font-black hover:bg-black transition-colors disabled:opacity-50"
+                  className={`px-3 py-3 rounded-xl text-[8px] font-black uppercase transition-colors disabled:opacity-50 ${(merchant.status || 'active') === 'active' ? 'bg-[#0a2540] text-white hover:bg-black' : 'bg-[#00d66f] text-[#0a2540] hover:bg-[#00b85e] shadow-sm'}`}
                 >
-                  {updatingStatusId === merchant.id ? 'A GUARDAR...' : merchant.status === 'active' ? 'SUSPENDER' : 'ATIVAR'}
+                  {updatingStatusId === merchant.id ? 'A GUARDAR...' : (merchant.status || 'active') === 'active' ? 'SUSPENDER' : 'ATIVAR'}
+                </button>
+                <button
+                  onClick={(e) => { e.stopPropagation(); onEditMerchant(merchant); }}
+                  className="px-3 py-3 bg-blue-50 text-blue-700 rounded-xl text-[8px] font-black uppercase hover:bg-blue-100 transition-colors border border-blue-200 flex items-center gap-1 shadow-sm"
+                  title="Editar dados da loja"
+                >
+                  <Pencil size={12} /> EDITAR
                 </button>
               </div>
 

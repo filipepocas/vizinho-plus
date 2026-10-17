@@ -47,11 +47,22 @@ const AdminDashboard: React.FC = () => {
   const [globalMerchants, setGlobalMerchants] = useState<UserProfile[]>([]);
   const [globalClients, setGlobalClients] = useState<UserProfile[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingMerchant, setEditingMerchant] = useState<UserProfile | null>(null);
 
   const [pendingMerchants, setPendingMerchants] = useState(0);
   const [pendingMarketing, setPendingMarketing] = useState(0);
   const [pendingEvents, setPendingEvents] = useState(0);
   const [badFeedbacks, setBadFeedbacks] = useState(0);
+
+  const handleOpenCreateMerchant = () => {
+    setEditingMerchant(null);
+    setIsModalOpen(true);
+  };
+
+  const handleEditMerchant = (merchant: UserProfile) => {
+    setEditingMerchant(merchant);
+    setIsModalOpen(true);
+  };
 
   useEffect(() => {
     const unsubscribeMerchants = onSnapshot(
@@ -166,7 +177,14 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'overview' && <div className="bg-white rounded-[30px] border-4 border-[#0a2540] p-6 shadow-xl w-full overflow-hidden"><h2 className="text-2xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6">Auditoria de Transações</h2><AdminTransactions transactions={globalTransactions} clients={globalClients} merchants={globalMerchants} /></div>}
         {currentView === 'requests' && <AdminMerchantRequests />}
         {currentView === 'users' && <AdminUsers users={globalClients} transactions={globalTransactions} />}
-        {currentView === 'merchants' && <AdminMerchants merchants={globalMerchants} onUpdateStatus={handleUpdateMerchantStatus} onOpenModal={() => setIsModalOpen(true)} />}
+        {currentView === 'merchants' && (
+          <AdminMerchants 
+            merchants={globalMerchants} 
+            onUpdateStatus={handleUpdateMerchantStatus} 
+            onOpenModal={handleOpenCreateMerchant}
+            onEditMerchant={handleEditMerchant}
+          />
+        )}
         {currentView === 'events' && <AdminEvents />} 
         {currentView === 'anti_waste' && <AdminAntiWaste />} 
         {currentView === 'comms' && <AdminComms />}
@@ -184,7 +202,12 @@ const AdminDashboard: React.FC = () => {
         {currentView === 'banners' && <BannerManager />} 
         {currentView === 'admin_msg' && (<div className="bg-white p-20 rounded-[40px] border-4 border-dashed border-slate-200 text-center"><MessageSquare size={64} className="mx-auto text-slate-300 mb-4" /><h2 className="text-2xl font-black uppercase text-slate-400">Comunicados Avançados</h2><p className="text-slate-400 font-bold mt-2">Esta funcionalidade com filtros de zona está a ser preparada.</p></div>)}
       </main>
-      <MerchantModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onSuccess={() => setIsModalOpen(false)} />
+      <MerchantModal 
+        isOpen={isModalOpen} 
+        merchantToEdit={editingMerchant}
+        onClose={() => { setIsModalOpen(false); setEditingMerchant(null); }} 
+        onSuccess={() => { setIsModalOpen(false); setEditingMerchant(null); }} 
+      />
     </div>
   );
 };

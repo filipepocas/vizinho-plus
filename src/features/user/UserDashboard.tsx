@@ -103,9 +103,12 @@ const UserDashboard: React.FC = () => {
         const configSnap = await getDoc(doc(db, 'system', 'config'));
         if (configSnap.exists()) setSysConfig(configSnap.data());
 
-        const q = query(collection(db, 'users'), where('role', '==', 'merchant'), where('status', '==', 'active'));
+        const q = query(collection(db, 'users'), where('role', '==', 'merchant'));
         const merchantsSnap = await getDocs(q);
-        setAllMerchants(merchantsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() })) as UserProfile[]);
+        const activeMerchants = merchantsSnap.docs
+          .map((d: any) => ({ id: d.id, ...d.data() } as UserProfile))
+          .filter((m: any) => (m.status || 'active') === 'active');
+        setAllMerchants(activeMerchants);
       } catch (err) {
         console.error("Erro ao carregar config:", err);
       }
