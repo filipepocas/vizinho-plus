@@ -48,6 +48,17 @@ export interface User {
   publicEmail?: string;
   isLeaving?: boolean;
   leavingDate?: string;
+  excludedCashbackItems?: string[];
+  excludedCashbackNotes?: string;
+  operators?: MerchantOperator[];
+}
+
+export interface MerchantOperator {
+  id: string;
+  name: string;
+  pin: string; // 4 to 6 digits
+  active: boolean;
+  createdAt?: any;
 }
 
 export interface ProductTaxonomy {
@@ -84,8 +95,8 @@ export interface Product {
 }
 
 export interface Banner { id: string; title: string; imageUrl: string; targetType: 'all' | 'zip' | 'birthday' | 'zonas'; targetValue?: string; targetZones?: string[]; targetZipCodes?: string[]; maxImpressions?: number; startDate: any; endDate: any; createdAt: any; active: boolean; }
-export interface Transaction { id: string; clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem' | 'cancel'; status: 'pending' | 'available' | 'rejected' | 'cancelled'; createdAt: any; clientName?: string; clientCardNumber?: string; clientNif?: string; cashbackAmount?: number; cashbackEarned?: number; cashbackPercent?: number; documentNumber?: string; clientBirthDate?: string; processedByBackend?: boolean; walletReversalProcessed?: boolean; maturedAt?: any; rejectReason?: string; cancelledAt?: any; cancellationError?: string; }
-export interface TransactionCreate { clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem'; documentNumber?: string; clientName?: string; clientCardNumber?: string; clientBirthDate?: string; }
+export interface Transaction { id: string; clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem' | 'cancel'; status: 'pending' | 'available' | 'rejected' | 'cancelled'; createdAt: any; clientName?: string; clientCardNumber?: string; clientNif?: string; cashbackAmount?: number; cashbackEarned?: number; cashbackPercent?: number; documentNumber?: string; clientBirthDate?: string; processedByBackend?: boolean; walletReversalProcessed?: boolean; maturedAt?: any; rejectReason?: string; cancelledAt?: any; cancellationError?: string; operatorId?: string; operatorName?: string; }
+export interface TransactionCreate { clientId: string; merchantId: string; merchantName: string; amount: number; invoiceAmount?: number; type: 'earn' | 'redeem'; documentNumber?: string; clientName?: string; clientCardNumber?: string; clientBirthDate?: string; operatorId?: string; operatorName?: string; }
 export interface MarketingRequest { id?: string; merchantId?: string; merchantName?: string; shopName?: string; type: 'banner' | 'leaflet' | 'push_notification'; status: 'pending' | 'approved' | 'rejected'; createdAt: any; title?: string; text?: string; imageUrl?: string; requestedDate?: string; leafletCampaignTitle?: string; leafletCampaignId?: string; spaceType?: string; description?: string; sellPrice?: string; unit?: string; promoPrice?: string; promoType?: string; targetType?: string; targetCriteria?: string; targetValue?: string; targetZones?: string[]; targetCount?: number; cost?: number; isExternal?: boolean; companyName?: string; contactName?: string; nif?: string; email?: string; phone?: string; serviceCompleted?: boolean; finalPrice?: number; billingSent?: boolean; billingSentDate?: string; paymentReceived?: boolean; paymentReceivedDate?: string; }
 export interface Leaflet { id?: string; title: string; createdAt?: any; startDate?: any; endDate?: any; leafletUrl?: string; imageUrl?: string; isActive?: boolean; targetZipCodes?: string[]; targetZones?: string[]; limitDate?: any; distributionDate?: any; }
 export type LeafletCampaign = Leaflet;

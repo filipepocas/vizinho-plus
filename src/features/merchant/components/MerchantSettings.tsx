@@ -5,7 +5,7 @@ import { User as UserProfile } from '../../../types';
 import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../../config/firebase';
 import { updatePassword } from 'firebase/auth';
-import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock, Smartphone } from 'lucide-react';
+import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock, Smartphone, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../../store/useStore';
 import { translateDay } from '../../../utils/timeUtils';
@@ -42,6 +42,9 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
   const [latitude, setLatitude] = useState<string>(currentUser.latitude?.toString() || '');
   const [longitude, setLongitude] = useState<string>(currentUser.longitude?.toString() || '');
 
+  const [excludedCashbackItems, setExcludedCashbackItems] = useState<string[]>(currentUser.excludedCashbackItems || []);
+  const [excludedCashbackNotes, setExcludedCashbackNotes] = useState<string>(currentUser.excludedCashbackNotes || '');
+
   const [businessHours, setBusinessHours] = useState(currentUser.businessHours || defaultHours);
 
   const [isLoading, setIsLoading] = useState(false);
@@ -66,6 +69,8 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
     setZipCode(currentUser.zipCode || '');
     setLatitude(currentUser.latitude?.toString() || '');
     setLongitude(currentUser.longitude?.toString() || '');
+    setExcludedCashbackItems(currentUser.excludedCashbackItems || []);
+    setExcludedCashbackNotes(currentUser.excludedCashbackNotes || '');
     if (currentUser.businessHours) setBusinessHours(currentUser.businessHours);
   }, [currentUser]);
 

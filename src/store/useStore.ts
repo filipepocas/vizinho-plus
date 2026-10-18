@@ -302,7 +302,9 @@ export const useStore = create<StoreState>((set, get) => ({
         documentNumber: tx.documentNumber || '',
         clientName: tx.clientName || 'Desconhecido',
         clientCardNumber: tx.clientCardNumber || '---',
-        clientBirthDate: tx.clientBirthDate || ''
+        clientBirthDate: tx.clientBirthDate || '',
+        operatorId: tx.operatorId || '',
+        operatorName: tx.operatorName || ''
       });
 
       toast.success(tx.type === 'earn' ? "CASHBACK ATRIBUÍDO COM SUCESSO!" : "DESCONTO REGISTADO COM SUCESSO!");

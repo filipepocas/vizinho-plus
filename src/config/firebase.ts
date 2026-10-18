@@ -2,7 +2,7 @@
 
 import { initializeApp, getApp, getApps } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { getAnalytics } from 'firebase/analytics';
 import { getMessaging } from 'firebase/messaging';
 import { getStorage } from 'firebase/storage';
@@ -26,6 +26,13 @@ const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const storage = getStorage(app);
+
+// Configuração de persistência local para manter a sessão ligada mesmo ao reiniciar o dispositivo
+if (typeof window !== 'undefined') {
+  setPersistence(auth, browserLocalPersistence).catch((err) => {
+    console.warn('Erro ao configurar persistência do Firebase Auth:', err);
+  });
+}
 
 // Inicialização condicional para ambientes de Browser com suporte real do Firebase
 const canUseBrowserFirebaseApis = typeof window !== 'undefined' && typeof navigator !== 'undefined';
