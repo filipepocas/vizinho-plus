@@ -81,9 +81,15 @@ export const useStore = create<StoreState>((set, get) => ({
   logout: async () => {
     set({ isLoading: true });
     try {
+      localStorage.removeItem('vplus_operator_mode');
+      sessionStorage.removeItem('vplus_operator_mode');
       await signOut(auth);
       set({ currentUser: null, transactions: [], isLoading: false, isInitialized: true });
-    } catch (e) { set({ isLoading: false }); }
+    } catch (e) {
+      localStorage.removeItem('vplus_operator_mode');
+      sessionStorage.removeItem('vplus_operator_mode');
+      set({ isLoading: false });
+    }
   },
 
   resetPassword: async (email: string) => {

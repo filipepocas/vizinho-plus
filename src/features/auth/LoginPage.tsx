@@ -1,5 +1,3 @@
-// src/features/auth/LoginPage.tsx
-
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { auth, db } from '../../config/firebase';
@@ -8,7 +6,7 @@ import { doc, getDoc } from 'firebase/firestore';
 import { useStore } from '../../store/useStore';
 import { 
   LogIn, Mail, Lock, ArrowRight, Smartphone, 
-  Zap, Loader2, AlertTriangle, Volume2
+  Zap, Loader2, AlertTriangle, Volume2, Eye, EyeOff
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -26,7 +24,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   const [loading, setLoading] = useState(false);
   const [keepLoggedIn, setKeepLoggedIn] = useState<boolean>(() => localStorage.getItem('vplus_keep_logged_in') !== 'false');
 
-  const [savedAccount, setSavedAccount] = useState<{ uid: string; email: string; name: string; role: string } | null>(() => {
+  const [savedAccount, setSavedAccount] = useState<{ uid: string; email: string; name: string; role: string; savedPassword?: string } | null>(() => {
     try {
       const saved = localStorage.getItem('vplus_saved_account');
       return saved ? JSON.parse(saved) : null;
@@ -34,6 +32,11 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
       return null;
     }
   });
+
+  const [directPassword, setDirectPassword] = useState<string>(() => {
+    return savedAccount?.savedPassword || '';
+  });
+  const [showDirectPassword, setShowDirectPassword] = useState(false);
   
   const [setupStep, setSetupStep] = useState(false);
   const [tempUserId, setTempUserId] = useState('');
@@ -44,34 +47,60 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   const navigate = useNavigate();
   const { setCurrentUser } = useStore();
 
-  const handleDirectLogin = async () => {
+  const handleDirectLogin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     setLoading(true);
     try {
-      // 1. Verificar se auth.currentUser já está inicializado e persistido
-      if (auth.currentUser) {
+      // 1. Limpeza garantida de resquícios de operador
+      localStorage.removeItem('vplus_operator_mode');
+      sessionStorage.removeItem('vplus_operator_mode');
+
+      // 2. Verificar se auth.currentUser já está ativo e coincide com a conta
+      if (auth.currentUser && (!savedAccount || auth.currentUser.email === savedAccount.email)) {
         const uid = auth.currentUser.uid;
         const userDoc = await getDoc(doc(db, 'users', uid));
         if (userDoc.exists()) {
           const userData = { id: userDoc.id, ...userDoc.data() } as any;
-          finalizeLogin(userData);
+          finalizeLogin(userData, directPassword || savedAccount?.savedPassword);
           return;
         }
       }
 
-      // 2. Se houver conta guardada em localStorage
-      if (savedAccount?.uid) {
-        const userDoc = await getDoc(doc(db, 'users', savedAccount.uid));
-        if (userDoc.exists()) {
-          const userData = { id: userDoc.id, ...userDoc.data() } as any;
-          finalizeLogin(userData);
-          return;
-        }
+      // 3. Autenticar com a password guardada na sessão ou introduzida no campo
+      const effectivePassword = directPassword.trim() || savedAccount?.savedPassword || '';
+      const targetEmail = savedAccount?.email?.trim();
+
+      if (!targetEmail) {
+        toast.error("Nenhuma conta guardada no dispositivo.");
+        setLoading(false);
+        return;
       }
 
-      toast.error("Por favor, introduza a password para renovar a ligação.");
+      if (!effectivePassword) {
+        toast.error("Por favor, introduza a password no campo acima para entrar direto.");
+        setLoading(false);
+        return;
+      }
+
+      const userCredential = await signInWithEmailAndPassword(auth, targetEmail, effectivePassword);
+      const uid = userCredential.user.uid;
+      const userDoc = await getDoc(doc(db, 'users', uid));
+
+      if (userDoc.exists()) {
+        const userData = { id: userDoc.id, ...userDoc.data() } as any;
+        finalizeLogin(userData, effectivePassword);
+      } else {
+        toast.error("Conta não encontrada no sistema.");
+        setLoading(false);
+      }
     } catch (e: any) {
       console.warn("Direct login fallback:", e);
-      toast.error("Introduza a password para autenticar.");
+      const code = e?.code || '';
+      if (code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+        toast.error("Password incorreta. Verifique a password no campo.");
+      } else {
+        toast.error("Erro na autenticação. Verifique a password.");
+      }
     } finally {
       setLoading(false);
     }
@@ -80,6 +109,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   const handleForgetAccount = () => {
     localStorage.removeItem('vplus_saved_account');
     setSavedAccount(null);
+    setDirectPassword('');
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -104,7 +134,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
           setLoading(false);
           return;
         }
-        finalizeLogin(userData);
+        finalizeLogin(userData, password);
       } else {
           toast.error("Conta não encontrada no sistema.");
           setLoading(false);
@@ -125,18 +155,28 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
     }
   };
 
-  const finalizeLogin = async (userData: any) => {
+  const finalizeLogin = async (userData: any, pwdUsed?: string) => {
+    // O modo operador NUNCA deve ficar gravado quando sai ou inicia sessão
+    localStorage.removeItem('vplus_operator_mode');
+    sessionStorage.removeItem('vplus_operator_mode');
+
+    const effectivePwd = pwdUsed || directPassword || savedAccount?.savedPassword || '';
+
     if (keepLoggedIn) {
       localStorage.setItem('vplus_keep_logged_in', 'true');
-      localStorage.setItem('vplus_saved_account', JSON.stringify({
+      const accountData = {
         uid: userData.id,
         email: userData.email,
         name: userData.name || userData.shopName || '',
-        role: userData.role
-      }));
+        role: userData.role,
+        savedPassword: effectivePwd
+      };
+      localStorage.setItem('vplus_saved_account', JSON.stringify(accountData));
+      setSavedAccount(accountData);
     } else {
       localStorage.setItem('vplus_keep_logged_in', 'false');
       localStorage.removeItem('vplus_saved_account');
+      setSavedAccount(null);
     }
 
     setCurrentUser(userData);
@@ -233,7 +273,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
           
           {/* BOTÃO EM DESTAQUE: LIGAR / ENTRAR DIRETO */}
           {savedAccount && (
-            <div className="mb-8 p-6 rounded-[32px] bg-gradient-to-br from-[#0a2540] to-[#13385e] border-4 border-[#00d66f] shadow-[0_12px_24px_rgba(0,214,111,0.2)] text-white text-center space-y-3 animate-in zoom-in">
+            <div className="mb-8 p-6 rounded-[32px] bg-gradient-to-br from-[#0a2540] to-[#13385e] border-4 border-[#00d66f] shadow-[0_12px_24px_rgba(0,214,111,0.2)] text-white text-center space-y-4 animate-in zoom-in">
               <div className="flex items-center justify-center gap-2">
                 <span className="p-1.5 bg-[#00d66f] text-[#0a2540] rounded-full inline-flex">
                   <Zap size={16} fill="#0a2540" />
@@ -250,9 +290,44 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
                 <p className="text-xs font-bold text-slate-300 mt-0.5">{savedAccount.email}</p>
               </div>
 
+              {/* CAMPO DE PASSWORD NO ENTRAR DIRETO */}
+              <div className="text-left space-y-1.5">
+                <label className="text-[10px] font-black uppercase tracking-wider text-slate-300 ml-1 flex items-center justify-between">
+                  <span>Password da Conta:</span>
+                  {savedAccount.savedPassword ? (
+                    <span className="text-[#00d66f] text-[9px] font-bold">✓ Guardada na sessão</span>
+                  ) : (
+                    <span className="text-amber-300 text-[9px] font-bold">Introduza para entrar direto</span>
+                  )}
+                </label>
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+                  <input
+                    type={showDirectPassword ? "text" : "password"}
+                    value={directPassword}
+                    onChange={(e) => setDirectPassword(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleDirectLogin();
+                      }
+                    }}
+                    placeholder="••••••••"
+                    className="w-full pl-11 pr-12 py-3.5 bg-white/10 border-2 border-white/20 focus:border-[#00d66f] rounded-2xl text-white placeholder-slate-400 outline-none font-bold text-sm tracking-widest transition-all"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowDirectPassword(!showDirectPassword)}
+                    className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-300 hover:text-white transition-colors"
+                  >
+                    {showDirectPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
               <button
                 type="button"
-                onClick={handleDirectLogin}
+                onClick={() => handleDirectLogin()}
                 disabled={loading}
                 className="w-full bg-[#00d66f] text-[#0a2540] py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#00c263] transition-all flex items-center justify-center gap-2 shadow-lg border-b-4 border-black/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
               >
@@ -263,7 +338,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
               <button
                 type="button"
                 onClick={handleForgetAccount}
-                className="text-[9px] font-bold text-slate-400 hover:text-white uppercase tracking-wider underline pt-1 block mx-auto"
+                className="text-[9px] font-bold text-slate-400 hover:text-white uppercase tracking-wider underline pt-1 block mx-auto transition-colors"
               >
                 Entrar com outra conta
               </button>
