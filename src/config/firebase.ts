@@ -29,7 +29,7 @@ export const storage = getStorage(app);
 
 // Configuração de persistência local para manter a sessão ligada mesmo ao reiniciar o dispositivo
 if (typeof window !== 'undefined') {
-  setPersistence(auth, browserLocalPersistence).catch((err) => {
+  setPersistence(auth, browserLocalPersistence).catch((err: any) => {
     console.warn('Erro ao configurar persistência do Firebase Auth:', err);
   });
 }

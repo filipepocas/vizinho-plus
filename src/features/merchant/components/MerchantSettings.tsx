@@ -5,7 +5,7 @@ import { User as UserProfile } from '../../../types';
 import { deleteField, doc, updateDoc } from 'firebase/firestore';
 import { db, auth } from '../../../config/firebase';
 import { updatePassword } from 'firebase/auth';
-import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock, Smartphone, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, XCircle, Globe, Mail, Lock, Store, MapPin, Locate, Clock, Smartphone, AlertTriangle, Check } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useStore } from '../../../store/useStore';
 import { translateDay } from '../../../utils/timeUtils';
@@ -14,6 +14,15 @@ import { usePWAInstall } from '../../../hooks/usePWAInstall';
 interface MerchantSettingsProps {
   currentUser: UserProfile;
 }
+
+const QUICK_EXCLUDED_ITEMS = [
+  'Tabaco',
+  'Jogos Santa Casa / Raspadinhas',
+  'Jornais e Revistas',
+  'Recargas',
+  'Medicamentos com receita',
+  'Artigos em Saldos'
+];
 
 const defaultHours = {
   monday: { open: '09:00', close: '19:00', closed: false },
@@ -74,6 +83,12 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
     if (currentUser.businessHours) setBusinessHours(currentUser.businessHours);
   }, [currentUser]);
 
+  const toggleExcludedItem = (item: string) => {
+    setExcludedCashbackItems(prev =>
+      prev.includes(item) ? prev.filter(i => i !== item) : [...prev, item]
+    );
+  };
+
   const handleZipCodeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let value = e.target.value.replace(/\D/g, '');
     if (value.length > 4) value = value.substring(0, 4) + '-' + value.substring(4, 7);
@@ -132,7 +147,9 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
         zipCode: zipCode.trim(),
         latitude: parsedLatitude ?? deleteField(),
         longitude: parsedLongitude ?? deleteField(),
-        businessHours: businessHours
+        businessHours: businessHours,
+        excludedCashbackItems: excludedCashbackItems,
+        excludedCashbackNotes: excludedCashbackNotes.trim()
       });
 
       setMessage({ type: 'success', text: 'Dados atualizados com sucesso!' });
@@ -290,6 +307,69 @@ const MerchantSettings: React.FC<MerchantSettingsProps> = ({ currentUser }) => {
       </div>
 
       <div className="space-y-8">
+        {/* ARTIGOS EXCLUÍDOS DE CASHBACK */}
+        <div className="bg-white rounded-[40px] shadow-lg border-4 border-amber-300 p-8 md:p-10 space-y-6">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] flex items-center gap-2">
+                <AlertTriangle className="text-amber-500" /> Artigos Excluídos de Cashback
+              </h2>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                Estes produtos aparecem em alerta ao cliente (na loja e no saldo) e no ecrã de caixa.
+              </p>
+            </div>
+            <span className="bg-amber-100 text-amber-800 text-[9px] font-black uppercase px-3 py-1 rounded-full border border-amber-300 shrink-0">
+              {excludedCashbackItems.length} selecionados
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-[10px] font-black uppercase text-slate-400">Atalhos de Seleção Rápida</label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {QUICK_EXCLUDED_ITEMS.map((item) => {
+                const isSelected = excludedCashbackItems.includes(item);
+                return (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => toggleExcludedItem(item)}
+                    className={`p-3.5 rounded-2xl font-black text-xs uppercase flex items-center justify-between border-2 transition-all ${
+                      isSelected
+                        ? 'bg-amber-500 text-white border-amber-600 shadow-md scale-[1.01]'
+                        : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{item}</span>
+                    {isSelected ? <Check size={16} strokeWidth={3} /> : <span className="text-[10px] text-slate-300">+</span>}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-[10px] font-black uppercase text-slate-400">
+              Outros Artigos Excluídos / Observações (Texto Livre)
+            </label>
+            <textarea
+              rows={3}
+              value={excludedCashbackNotes}
+              onChange={(e) => setExcludedCashbackNotes(e.target.value)}
+              placeholder="Ex: Bebidas alcoólicas destiladas, sacos, artigos em liquidação..."
+              className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:outline-none focus:border-amber-500 font-bold text-xs text-[#0a2540]"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={handleSaveData}
+            disabled={isLoading}
+            className="w-full bg-amber-500 text-[#0a2540] font-black uppercase text-xs py-4 rounded-2xl hover:bg-amber-400 transition-all border-b-4 border-amber-700 disabled:opacity-50 shadow-md"
+          >
+            {isLoading ? 'A Guardar...' : 'Guardar Artigos Excluídos'}
+          </button>
+        </div>
+
         <div className="bg-white rounded-[40px] shadow-lg border-4 border-slate-100 p-8 md:p-10">
           <h2 className="text-xl font-black uppercase italic tracking-tighter text-[#0a2540] mb-6 flex items-center gap-2"><Clock className="text-amber-500"/> Horário de Funcionamento</h2>
           <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-6">Os clientes verão se a sua loja está aberta ou fechada em tempo real.</p>

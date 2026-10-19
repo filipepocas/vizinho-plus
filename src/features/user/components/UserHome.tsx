@@ -11,9 +11,10 @@ interface UserHomeProps {
   transactions?: Transaction[];
   vantagensUrl: string;
   hideHeader?: boolean;
+  allMerchants?: UserProfile[];
 }
 
-const UserHome: React.FC<UserHomeProps> = ({ currentUser, merchantBalances, transactions = [] }) => {
+const UserHome: React.FC<UserHomeProps> = ({ currentUser, merchantBalances, transactions = [], allMerchants = [] }) => {
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(val);
   const [showDetails, setShowDetails] = useState(true);
 
@@ -85,6 +86,26 @@ const UserHome: React.FC<UserHomeProps> = ({ currentUser, merchantBalances, tran
                     </div>
                   </div>
                 </div>
+
+                {(() => {
+                  const merchant = allMerchants.find(s => s.id === m.id);
+                  const hasExcluded = (merchant?.excludedCashbackItems && merchant.excludedCashbackItems.length > 0) || merchant?.excludedCashbackNotes;
+                  if (!hasExcluded) return null;
+                  return (
+                    <div className="bg-amber-50 border-2 border-amber-300 rounded-2xl p-3 flex items-start gap-2.5 text-amber-900">
+                      <AlertTriangle size={15} className="text-amber-600 shrink-0 mt-0.5" />
+                      <div className="text-[9px] font-bold leading-tight">
+                        <span className="font-black uppercase tracking-wider text-amber-800">Artigos Excluídos de Cashback nesta loja: </span>
+                        <span>
+                          {[
+                            ...(merchant?.excludedCashbackItems || []),
+                            ...(merchant?.excludedCashbackNotes ? [merchant.excludedCashbackNotes] : [])
+                          ].join(', ')}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
                 <div className="space-y-2 pt-2 border-t border-slate-100">
                   <div className="flex items-center justify-between">

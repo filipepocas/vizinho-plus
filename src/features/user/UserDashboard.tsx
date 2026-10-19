@@ -19,7 +19,8 @@ import UserExplore from './components/UserExplore';
 import { 
   LogOut, Wallet, MessageSquare, Settings, ShieldCheck, Mail, X, 
   IdCard, Bell, Volume2, Loader2, Printer, BookOpen, CalendarPlus, 
-  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, ChevronUp, Gift
+  Leaf, MapPin, Smartphone, HelpCircle, ShoppingBag, Search, Star, ExternalLink, Store, Building2, Link2, Phone, ChevronDown, ChevronUp, Gift,
+  AlertTriangle
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { usePWAInstall } from '../../hooks/usePWAInstall';
@@ -479,6 +480,25 @@ const UserDashboard: React.FC = () => {
                             </div>
                           </div>
 
+                          {(() => {
+                            const hasExcluded = (merchant?.excludedCashbackItems && merchant.excludedCashbackItems.length > 0) || merchant?.excludedCashbackNotes;
+                            if (!hasExcluded) return null;
+                            return (
+                              <div className="bg-amber-50 border border-amber-300 rounded-xl p-2 flex items-start gap-1.5 text-amber-900">
+                                <AlertTriangle size={12} className="text-amber-600 shrink-0 mt-0.5" />
+                                <div className="text-[8px] font-bold leading-tight">
+                                  <span className="font-black uppercase tracking-wider text-amber-800">Artigos Excluídos: </span>
+                                  <span>
+                                    {[
+                                      ...(merchant?.excludedCashbackItems || []),
+                                      ...(merchant?.excludedCashbackNotes ? [merchant.excludedCashbackNotes] : [])
+                                    ].join(', ')}
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })()}
+
                           <div className="space-y-1.5 pt-2 border-t border-slate-100">
                             <div className="flex items-center justify-between">
                               <p className="text-[8px] font-black uppercase tracking-widest text-slate-400">Últimos 5 movimentos</p>
@@ -626,7 +646,7 @@ const UserDashboard: React.FC = () => {
         {/* VISTAS DINÂMICAS */}
         <div>
           {view === 'explore' && <UserExplore allMerchants={allMerchants} />}
-          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={merchantBalanceMap} transactions={transactions} vantagensUrl="" />}
+          {view === 'wallets' && <UserHome currentUser={currentUser} stats={{available: totalCardBalance, pending: 0}} merchantBalances={merchantBalanceMap} transactions={transactions} vantagensUrl="" allMerchants={allMerchants} />}
         
         {view === 'history' && (
           <div className="space-y-4 animate-in fade-in duration-500">

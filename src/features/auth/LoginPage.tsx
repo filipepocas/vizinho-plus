@@ -24,6 +24,16 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [keepLoggedIn, setKeepLoggedIn] = useState<boolean>(() => localStorage.getItem('vplus_keep_logged_in') !== 'false');
+
+  const [savedAccount, setSavedAccount] = useState<{ uid: string; email: string; name: string; role: string } | null>(() => {
+    try {
+      const saved = localStorage.getItem('vplus_saved_account');
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
   
   const [setupStep, setSetupStep] = useState(false);
   const [tempUserId, setTempUserId] = useState('');
@@ -33,6 +43,44 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   const { isInstallable, installApp } = usePWAInstall();
   const navigate = useNavigate();
   const { setCurrentUser } = useStore();
+
+  const handleDirectLogin = async () => {
+    setLoading(true);
+    try {
+      // 1. Verificar se auth.currentUser já está inicializado e persistido
+      if (auth.currentUser) {
+        const uid = auth.currentUser.uid;
+        const userDoc = await getDoc(doc(db, 'users', uid));
+        if (userDoc.exists()) {
+          const userData = { id: userDoc.id, ...userDoc.data() } as any;
+          finalizeLogin(userData);
+          return;
+        }
+      }
+
+      // 2. Se houver conta guardada em localStorage
+      if (savedAccount?.uid) {
+        const userDoc = await getDoc(doc(db, 'users', savedAccount.uid));
+        if (userDoc.exists()) {
+          const userData = { id: userDoc.id, ...userDoc.data() } as any;
+          finalizeLogin(userData);
+          return;
+        }
+      }
+
+      toast.error("Por favor, introduza a password para renovar a ligação.");
+    } catch (e: any) {
+      console.warn("Direct login fallback:", e);
+      toast.error("Introduza a password para autenticar.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleForgetAccount = () => {
+    localStorage.removeItem('vplus_saved_account');
+    setSavedAccount(null);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,6 +126,19 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   };
 
   const finalizeLogin = async (userData: any) => {
+    if (keepLoggedIn) {
+      localStorage.setItem('vplus_keep_logged_in', 'true');
+      localStorage.setItem('vplus_saved_account', JSON.stringify({
+        uid: userData.id,
+        email: userData.email,
+        name: userData.name || userData.shopName || '',
+        role: userData.role
+      }));
+    } else {
+      localStorage.setItem('vplus_keep_logged_in', 'false');
+      localStorage.removeItem('vplus_saved_account');
+    }
+
     setCurrentUser(userData);
     if (userData.role === 'admin') navigate('/admin');
     else if (userData.role === 'merchant') navigate('/merchant');
@@ -169,7 +230,49 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
         </div>
 
         <div className="bg-white rounded-[48px] p-8 md:p-10 shadow-2xl border-4 border-slate-100 relative overflow-hidden">
-          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic mb-8 flex items-center gap-3"><LogIn className="text-[#00d66f]" size={28} /> Entrar</h2>
+          
+          {/* BOTÃO EM DESTAQUE: LIGAR / ENTRAR DIRETO */}
+          {savedAccount && (
+            <div className="mb-8 p-6 rounded-[32px] bg-gradient-to-br from-[#0a2540] to-[#13385e] border-4 border-[#00d66f] shadow-[0_12px_24px_rgba(0,214,111,0.2)] text-white text-center space-y-3 animate-in zoom-in">
+              <div className="flex items-center justify-center gap-2">
+                <span className="p-1.5 bg-[#00d66f] text-[#0a2540] rounded-full inline-flex">
+                  <Zap size={16} fill="#0a2540" />
+                </span>
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-[#00d66f]">
+                  Sessão Guardada Neste Equipamento
+                </span>
+              </div>
+
+              <div>
+                <h3 className="text-xl font-black uppercase italic tracking-tight text-white leading-tight">
+                  {savedAccount.name || 'Conta Utilizador'}
+                </h3>
+                <p className="text-xs font-bold text-slate-300 mt-0.5">{savedAccount.email}</p>
+              </div>
+
+              <button
+                type="button"
+                onClick={handleDirectLogin}
+                disabled={loading}
+                className="w-full bg-[#00d66f] text-[#0a2540] py-4 rounded-2xl font-black uppercase text-xs tracking-widest hover:bg-[#00c263] transition-all flex items-center justify-center gap-2 shadow-lg border-b-4 border-black/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50"
+              >
+                {loading ? <Loader2 className="animate-spin" size={18} /> : <Zap size={18} fill="#0a2540" />}
+                ⚡ LIGAR / ENTRAR DIRETO
+              </button>
+
+              <button
+                type="button"
+                onClick={handleForgetAccount}
+                className="text-[9px] font-bold text-slate-400 hover:text-white uppercase tracking-wider underline pt-1 block mx-auto"
+              >
+                Entrar com outra conta
+              </button>
+            </div>
+          )}
+
+          <h2 className="text-2xl font-black text-[#0a2540] uppercase italic mb-8 flex items-center gap-3">
+            <LogIn className="text-[#00d66f]" size={28} /> {savedAccount ? 'Ou Iniciar Sessão' : 'Entrar'}
+          </h2>
 
           <form onSubmit={handleLogin} className="space-y-6">
             <div className="relative group">
@@ -188,6 +291,25 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
                     placeholder="••••••••" 
                 />
             </div>
+
+            {/* OPÇÃO COMUTÁVEL: MANTER SESSÃO SEMPRE LIGADA */}
+            <label className="flex items-start gap-3 p-4 bg-slate-50 border-2 border-slate-200 rounded-2xl cursor-pointer hover:bg-slate-100/70 transition-colors">
+              <input
+                type="checkbox"
+                checked={keepLoggedIn}
+                onChange={(e) => setKeepLoggedIn(e.target.checked)}
+                className="mt-0.5 w-4 h-4 accent-[#00d66f] rounded cursor-pointer shrink-0"
+              />
+              <div className="space-y-0.5">
+                <span className="text-[10px] font-black uppercase text-[#0a2540] block leading-tight">
+                  Manter sessão sempre ligada neste equipamento
+                </span>
+                <span className="text-[9px] font-bold text-slate-400 block leading-tight">
+                  A sessão não fecha mesmo quando desliga o telemóvel.
+                </span>
+              </div>
+            </label>
+
             <button 
                 type="submit" disabled={loading} 
                 className="w-full bg-[#0a2540] text-white p-6 rounded-3xl font-black uppercase italic tracking-widest hover:bg-black transition-all flex items-center justify-center gap-3 shadow-xl disabled:opacity-50"

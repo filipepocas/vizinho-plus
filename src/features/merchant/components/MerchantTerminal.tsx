@@ -21,12 +21,15 @@ interface MerchantTerminalProps {
   clientStoreBalance: number;
   formatCurrency: (val: number) => string;
   isLeaving?: boolean;
+  excludedCashbackItems?: string[];
+  excludedCashbackNotes?: string;
 }
 
 const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
   cardNumber, setCardNumber, isNifValid, foundClient,
   amount, setAmount, cashbackPercent,
-  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching, isLeaving
+  onOpenScanner, onProcessAction, isLoading, clientStoreBalance, formatCurrency, isSearching, isLeaving,
+  excludedCashbackItems, excludedCashbackNotes
 }) => {
 
   const [customRedeem, setCustomRedeem] = useState<string>('');
@@ -96,6 +99,24 @@ const MerchantTerminal: React.FC<MerchantTerminalProps> = ({
           </div>
 
           <div className="space-y-4">
+            {((excludedCashbackItems && excludedCashbackItems.length > 0) || excludedCashbackNotes) && (
+              <div className="bg-amber-50 border-2 border-amber-300 p-4 rounded-2xl flex items-start gap-3 text-amber-900 animate-in fade-in">
+                <AlertTriangle size={20} className="text-amber-600 shrink-0 mt-0.5" />
+                <div className="text-[10px] font-bold leading-relaxed">
+                  <span className="font-black uppercase tracking-wider text-amber-800 block mb-0.5">
+                    ⚠️ Atenção Operador (Artigos Excluídos de Cashback):
+                  </span>
+                  Certifique-se de NÃO incluir no valor da fatura os artigos excluídos desta loja:{" "}
+                  <strong className="font-black text-[#0a2540]">
+                    {[
+                      ...(excludedCashbackItems || []),
+                      ...(excludedCashbackNotes ? [excludedCashbackNotes] : [])
+                    ].join(', ')}
+                  </strong>.
+                </div>
+              </div>
+            )}
+
             <label className="text-[10px] font-black uppercase text-slate-400 tracking-widest ml-2">Valor da Nova Fatura (€)</label>
             <input 
               type="number" step="0.01" min="0" value={amount} onChange={e => { setAmount(e.target.value); setCustomRedeem(''); }} placeholder="0.00" 

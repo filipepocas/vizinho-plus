@@ -1,17 +1,16 @@
-// src/features/merchant/MerchantDashboard.tsx
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useStore } from '../../store/useStore';
 import { collection, query, where, getDocs, onSnapshot, doc, deleteDoc, getDoc, addDoc, serverTimestamp, Timestamp, orderBy, limit } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { db, auth } from '../../config/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useNavigate } from 'react-router-dom';
-import { User as UserProfile, Transaction } from '../../types';
+import { User as UserProfile, Transaction, MerchantOperator } from '../../types';
 import { 
   LogOut, Settings, X, 
   Smartphone, AlertTriangle, Megaphone, 
   MessageSquare, BellRing, Send, Clock, Calendar, Users, Filter,
   Loader2, Trash2, BookOpen, Leaf, ArrowRight, HelpCircle, Package, Activity,
-  Search, History
+  Search, History, Shield, ShieldAlert, KeyRound, Lock, Check, Delete
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
@@ -21,6 +20,7 @@ import BusinessIntelligence from './components/BusinessIntelligence';
 import MerchantSettings from './components/MerchantSettings';
 import MerchantMarketing from './components/MerchantMarketing'; 
 import MerchantCatalog from './components/MerchantCatalog';
+import MerchantOperators from './components/MerchantOperators';
 import { usePWAInstall } from '../../hooks/usePWAInstall'; 
 import { normalizeClientCardValue, formatClientCardValue } from '../../utils/clientCard';
 import { summarizeCashbackLedger } from '../../utils/clientBalance';
@@ -30,7 +30,21 @@ const MerchantDashboard: React.FC = () => {
   const navigate = useNavigate();
   const { isInstallable, installApp } = usePWAInstall();
 
-  const [view, setView] = useState<'terminal' | 'catalog' | 'bi' | 'settings' | 'marketing' | 'anti_waste' | 'history'>('terminal');
+  const [view, setView] = useState<'terminal' | 'catalog' | 'bi' | 'settings' | 'marketing' | 'anti_waste' | 'history' | 'operators'>('terminal');
+
+  // Modo Operador (Acesso Restrito ao Terminal)
+  const [isOperatorMode, setIsOperatorMode] = useState<boolean>(() => {
+    return localStorage.getItem('vplus_operator_mode') === 'true';
+  });
+  const [showExitOperatorModal, setShowExitOperatorModal] = useState(false);
+  const [merchantPasswordExit, setMerchantPasswordExit] = useState('');
+  const [isExitingOperator, setIsExitingOperator] = useState(false);
+
+  // Validação por PIN do Operador (4 a 6 dígitos)
+  const [showPinModal, setShowPinModal] = useState(false);
+  const [operatorPin, setOperatorPin] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [isConfirmingTx, setIsConfirmingTx] = useState(false);
   
   const [adminMessages, setAdminMessages] = useState<any[]>([]);
   const [showInbox, setShowInbox] = useState(false);
@@ -83,7 +97,8 @@ const MerchantDashboard: React.FC = () => {
         (t.clientName || '').toLowerCase().includes(search) ||
         (t.clientCardNumber || '').includes(search) ||
         (t.clientNif || '').includes(search) ||
-        (t.documentNumber || '').toLowerCase().includes(search);
+        (t.documentNumber || '').toLowerCase().includes(search) ||
+        (t.operatorName || '').toLowerCase().includes(search);
       
       const txDate = t.createdAt?.toDate ? t.createdAt.toDate() : new Date(t.createdAt?.seconds * 1000 || 0);
       const matchStart = !txStartDate || txDate >= new Date(txStartDate);
@@ -235,17 +250,116 @@ const MerchantDashboard: React.FC = () => {
     setShowConfirmModal(true);
   };
 
-  const handleConfirm = async () => {
+  const handleProceedToPin = () => {
+    setShowConfirmModal(false);
+    setOperatorPin('');
+    setPinError('');
+    setShowPinModal(true);
+  };
+
+  const handleKeypadPress = (val: string) => {
+    setPinError('');
+    if (val === 'clear') {
+      setOperatorPin('');
+    } else if (val === 'backspace') {
+      setOperatorPin(prev => prev.slice(0, -1));
+    } else if (operatorPin.length < 6) {
+      setOperatorPin(prev => prev + val);
+    }
+  };
+
+  const activeOperators = useMemo(() => {
+    return (currentUser?.operators || []).filter(o => o.active);
+  }, [currentUser?.operators]);
+
+  const matchedOperator = useMemo(() => {
+    if (!operatorPin || operatorPin.length < 4) return null;
+    return activeOperators.find(o => o.pin === operatorPin.trim()) || null;
+  }, [operatorPin, activeOperators]);
+
+  const handleExecuteTransactionWithPin = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
     if (!pendingAction || !currentUser || !foundClient) return;
-    setShowConfirmModal(false); setIsLoading(true);
+
+    const cleanPin = operatorPin.trim();
+
+    let responsibleId = '';
+    let responsibleName = '';
+
+    if (activeOperators.length > 0) {
+      const matched = activeOperators.find(o => o.pin === cleanPin);
+      if (!matched) {
+        setPinError("PIN incorreto. Verifique o seu PIN de 4 a 6 dígitos.");
+        return;
+      }
+      responsibleId = matched.id;
+      responsibleName = matched.name;
+    } else {
+      if (cleanPin.length < 4) {
+        setPinError("Introduza um PIN de 4 a 6 dígitos para validar.");
+        return;
+      }
+      responsibleId = 'admin';
+      responsibleName = currentUser.responsibleName || currentUser.name || 'Gerência';
+    }
+
+    setIsConfirmingTx(true);
+    setIsLoading(true);
     try {
       await addTransaction({
-        clientId: foundClient.id, merchantId: currentUser.id, merchantName: currentUser.shopName || currentUser.name || 'Loja',
-        amount: pendingAction.val, invoiceAmount: pendingAction.invAmount, type: pendingAction.type, documentNumber: documentNumber,
-        clientName: foundClient.name, clientCardNumber: foundClient.customerNumber, clientBirthDate: foundClient.birthDate
+        clientId: foundClient.id,
+        merchantId: currentUser.id,
+        merchantName: currentUser.shopName || currentUser.name || 'Loja',
+        amount: pendingAction.val,
+        invoiceAmount: pendingAction.invAmount,
+        type: pendingAction.type,
+        documentNumber: documentNumber,
+        clientName: foundClient.name,
+        clientCardNumber: foundClient.customerNumber,
+        clientBirthDate: foundClient.birthDate,
+        operatorId: responsibleId,
+        operatorName: responsibleName
       });
-      setAmount(''); setDocumentNumber(''); setCardNumber(''); setFoundClient(null);
-    } catch (e: any) { toast.error(e?.message || "ERRO NO REGISTO."); } finally { setIsLoading(false); }
+
+      toast.success(`Operação validada por "${responsibleName}"!`);
+      setShowPinModal(false);
+      setOperatorPin('');
+      setAmount('');
+      setDocumentNumber('');
+      setCardNumber('');
+      setFoundClient(null);
+      setPendingAction(null);
+    } catch (e: any) {
+      toast.error(e?.message || "ERRO NO REGISTO.");
+    } finally {
+      setIsConfirmingTx(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleEnterOperatorMode = () => {
+    localStorage.setItem('vplus_operator_mode', 'true');
+    setIsOperatorMode(true);
+    setView('terminal');
+    toast.success("Modo Operador ativado! Acesso restrito ao Terminal de Caixa.");
+  };
+
+  const handleExitOperatorMode = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentUser?.email || !merchantPasswordExit) return;
+    setIsExitingOperator(true);
+    try {
+      await signInWithEmailAndPassword(auth, currentUser.email, merchantPasswordExit);
+      localStorage.removeItem('vplus_operator_mode');
+      setIsOperatorMode(false);
+      setShowExitOperatorModal(false);
+      setMerchantPasswordExit('');
+      toast.success("Modo Operador desativado. Menus e painel completo restaurados!");
+    } catch (err) {
+      toast.error("Password de comerciante incorreta.");
+    } finally {
+      setIsExitingOperator(false);
+    }
   };
 
   const handleAddWasteZone = () => {
@@ -299,39 +413,57 @@ const MerchantDashboard: React.FC = () => {
           </button>
         </div>
         
-        <nav className="flex flex-wrap justify-center gap-2">
-          {sysConfig.showMerchantTerminal !== false && (
-            <button onClick={() => setView('terminal')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
-          )}
-          {sysConfig.showMerchantCatalog !== false && (
-            <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> Catálogo</button>
-          )}
-          {sysConfig.showMerchantMarketing !== false && (
-            <button onClick={() => setView('marketing')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
-          )}
-          {sysConfig.showMerchantAntiWaste !== false && (
-            <button onClick={() => setView('anti_waste')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'anti_waste' ? 'bg-[#22c55e] text-white' : 'text-green-400 hover:bg-green-500/20'}`}>Desperdício</button>
-          )}
-          <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'history' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><History size={14} className="inline mr-1"/> Histórico</button>
-          <button onClick={() => setView('bi')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Activity size={14} className="inline mr-1"/> B.I.</button>
-          {sysConfig.showMerchantSettings !== false && (
-            <button onClick={() => setView('settings')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Settings size={14} className="inline mr-1"/></button>
-          )}
-          <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
-        </nav>
+        {isOperatorMode ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="bg-amber-400 text-[#0a2540] px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center gap-2 shadow-lg border-2 border-amber-300">
+              <ShieldAlert size={18} /> Modo Operador Ativo (Terminal Restrito)
+            </span>
+            <button
+              onClick={() => setShowExitOperatorModal(true)}
+              className="bg-white/10 hover:bg-white/20 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 border border-white/20 transition-all hover:scale-105"
+            >
+              <Lock size={16} /> Sair do Modo Operador
+            </button>
+          </div>
+        ) : (
+          <nav className="flex flex-wrap justify-center gap-2">
+            {sysConfig.showMerchantTerminal !== false && (
+              <button onClick={() => setView('terminal')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'terminal' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Terminal</button>
+            )}
+            {sysConfig.showMerchantCatalog !== false && (
+              <button onClick={() => setView('catalog')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'catalog' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Package size={14} className="inline mr-1"/> Catálogo</button>
+            )}
+            {sysConfig.showMerchantMarketing !== false && (
+              <button onClick={() => setView('marketing')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'marketing' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}>Marketing</button>
+            )}
+            {sysConfig.showMerchantAntiWaste !== false && (
+              <button onClick={() => setView('anti_waste')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'anti_waste' ? 'bg-[#22c55e] text-white' : 'text-green-400 hover:bg-green-500/20'}`}>Desperdício</button>
+            )}
+            <button onClick={() => setView('history')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'history' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><History size={14} className="inline mr-1"/> Histórico</button>
+            <button onClick={() => setView('bi')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'bi' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Activity size={14} className="inline mr-1"/> B.I.</button>
+            <button onClick={() => setView('operators')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'operators' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Users size={14} className="inline mr-1"/> Users</button>
+            {sysConfig.showMerchantSettings !== false && (
+              <button onClick={() => setView('settings')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Settings size={14} className="inline mr-1"/></button>
+            )}
+            <button onClick={handleEnterOperatorMode} className="bg-amber-400/90 text-[#0a2540] hover:bg-amber-300 px-3.5 py-3 rounded-xl font-black text-[10px] uppercase transition-all flex items-center gap-1 shadow-sm" title="Bloquear restantes menus e manter apenas o terminal para funcionários"><Shield size={14} /> Modo Operador</button>
+            <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
+          </nav>
+        )}
       </header>
 
       <main className="max-w-7xl mx-auto p-4 w-full space-y-6">
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-           <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors">
-             <HelpCircle size={20} /> Guia Passo-a-Passo da App
-           </button>
+        {!isOperatorMode && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <button onClick={() => setShowFaqModal(true)} className="w-full bg-blue-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-blue-700 hover:bg-blue-600 transition-colors">
+               <HelpCircle size={20} /> Guia Passo-a-Passo da App
+             </button>
 
-           <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
-             <BookOpen size={20} /> Ler Condições de Adesão
-           </button>
-        </div>
+             <button onClick={() => setShowRulesModal(true)} className="w-full bg-amber-500 text-white p-4 rounded-[20px] font-black uppercase tracking-widest text-[10px] shadow-lg flex items-center justify-center gap-2 border-b-4 border-amber-700 hover:bg-amber-600 transition-colors">
+               <BookOpen size={20} /> Ler Condições de Adesão
+             </button>
+          </div>
+        )}
 
         {view === 'terminal' && (
           <MerchantTerminal 
@@ -346,13 +478,16 @@ const MerchantDashboard: React.FC = () => {
             clientStoreBalance={clientStoreBalance}
             formatCurrency={(v) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(v)}
             isLeaving={currentUser.isLeaving}
+            excludedCashbackItems={currentUser.excludedCashbackItems}
+            excludedCashbackNotes={currentUser.excludedCashbackNotes}
           />
         )}
 
-        {view === 'catalog' && sysConfig.showMerchantCatalog !== false && <MerchantCatalog merchant={currentUser} />}
-        {view === 'bi' && <BusinessIntelligence merchantId={currentUser.id} />}
-        {view === 'marketing' && sysConfig.showMerchantMarketing !== false && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
-        {view === 'settings' && <MerchantSettings currentUser={currentUser} />}
+        {view === 'catalog' && !isOperatorMode && sysConfig.showMerchantCatalog !== false && <MerchantCatalog merchant={currentUser} />}
+        {view === 'bi' && !isOperatorMode && <BusinessIntelligence merchantId={currentUser.id} />}
+        {view === 'marketing' && !isOperatorMode && sysConfig.showMerchantMarketing !== false && <MerchantMarketing merchantId={currentUser.id} merchantName={currentUser.shopName || currentUser.name || ""} />}
+        {view === 'settings' && !isOperatorMode && <MerchantSettings currentUser={currentUser} />}
+        {view === 'operators' && !isOperatorMode && <MerchantOperators currentUser={currentUser} />}
 
         {view === 'history' && (
           <div className="space-y-6 animate-in fade-in duration-500 pb-10">
@@ -599,14 +734,14 @@ const MerchantDashboard: React.FC = () => {
                      </div>
                      <div className="flex justify-between text-[#00d66f] font-black pt-1">
                        <span>Novo Cashback Emitido:</span>
-                       <span>+{formatCurrency(((Math.max(0, pendingAction.invAmount - pendingAction.val) * (currentUser.cashbackPercent || 0)) / 100))}</span>
+                       <span>+{formatCurrency(((Math.max(0, pendingAction.invAmount - pendingAction.val) * (currentUser?.cashbackPercent || 0)) / 100))}</span>
                      </div>
                    </div>
                  )}
 
                  <div className="flex gap-4 mt-6">
                    <button onClick={() => setShowConfirmModal(false)} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-slate-400 bg-slate-100 hover:bg-slate-200">Cancelar</button>
-                   <button onClick={handleConfirm} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
+                   <button onClick={handleProceedToPin} className="flex-1 py-4 rounded-2xl font-black uppercase text-[10px] text-[#0a2540] bg-[#00d66f] shadow-lg hover:scale-105 transition-all border-b-4 border-black/10">Confirmar</button>
                  </div>
                </div>
             </div>

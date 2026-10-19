@@ -159,6 +159,21 @@ const UserExplore: React.FC<UserExploreProps> = ({ allMerchants }) => {
                         <span className="text-[9px] font-black uppercase tracking-widest">{m.cashbackPercent || 0}% Cashback</span>
                       </div>
                     )}
+
+                    {((m.excludedCashbackItems && m.excludedCashbackItems.length > 0) || m.excludedCashbackNotes) && (
+                      <div className="mt-2.5 bg-amber-50 border-2 border-amber-300 rounded-2xl p-2.5 px-3 flex items-start gap-2 text-amber-900">
+                        <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                        <div className="text-[9px] font-bold leading-tight">
+                          <span className="font-black uppercase tracking-wider text-amber-800">Artigos Excluídos de Cashback: </span>
+                          <span>
+                            {[
+                              ...(m.excludedCashbackItems || []),
+                              ...(m.excludedCashbackNotes ? [m.excludedCashbackNotes] : [])
+                            ].join(', ')}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
                 
