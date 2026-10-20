@@ -56,7 +56,8 @@ export interface User {
 export interface MerchantOperator {
   id: string;
   name: string;
-  pin: string; // 4 to 6 digits
+  pin: string; // PIN numérico ou password
+  password?: string; // Suporte a password alfanumérica
   active: boolean;
   createdAt?: any;
 }

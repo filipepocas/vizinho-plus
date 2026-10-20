@@ -37,6 +37,14 @@ const MerchantDashboard: React.FC = () => {
     localStorage.removeItem('vplus_operator_mode');
     return sessionStorage.getItem('vplus_operator_mode') === 'true';
   });
+  const [activeOperator, setActiveOperator] = useState<{ id: string; name: string } | null>(() => {
+    try {
+      const raw = sessionStorage.getItem('vplus_active_operator');
+      return raw ? JSON.parse(raw) : null;
+    } catch {
+      return null;
+    }
+  });
   const [showExitOperatorModal, setShowExitOperatorModal] = useState(false);
   const [merchantPasswordExit, setMerchantPasswordExit] = useState('');
   const [isExitingOperator, setIsExitingOperator] = useState(false);
@@ -251,8 +259,48 @@ const MerchantDashboard: React.FC = () => {
     setShowConfirmModal(true);
   };
 
+  const executeTransactionDirectly = async (responsibleId: string, responsibleName: string) => {
+    if (!pendingAction || !currentUser || !foundClient) return;
+    setIsConfirmingTx(true);
+    setIsLoading(true);
+    try {
+      await addTransaction({
+        clientId: foundClient.id,
+        merchantId: currentUser.id,
+        merchantName: currentUser.shopName || currentUser.name || 'Loja',
+        amount: pendingAction.val,
+        invoiceAmount: pendingAction.invAmount,
+        type: pendingAction.type,
+        documentNumber: documentNumber,
+        clientName: foundClient.name,
+        clientCardNumber: foundClient.customerNumber,
+        clientBirthDate: foundClient.birthDate,
+        operatorId: responsibleId,
+        operatorName: responsibleName
+      });
+
+      toast.success(`Operação validada por "${responsibleName}"!`);
+      setShowPinModal(false);
+      setOperatorPin('');
+      setAmount('');
+      setDocumentNumber('');
+      setCardNumber('');
+      setFoundClient(null);
+      setPendingAction(null);
+    } catch (e: any) {
+      toast.error(e?.message || "ERRO NO REGISTO.");
+    } finally {
+      setIsConfirmingTx(false);
+      setIsLoading(false);
+    }
+  };
+
   const handleProceedToPin = () => {
     setShowConfirmModal(false);
+    if (isOperatorMode && activeOperator) {
+      executeTransactionDirectly(activeOperator.id, activeOperator.name);
+      return;
+    }
     setOperatorPin('');
     setPinError('');
     setShowPinModal(true);
@@ -338,23 +386,17 @@ const MerchantDashboard: React.FC = () => {
     }
   };
 
-  const handleEnterOperatorMode = () => {
-    sessionStorage.setItem('vplus_operator_mode', 'true');
-    localStorage.removeItem('vplus_operator_mode');
-    setIsOperatorMode(true);
-    setView('terminal');
-    toast.success("Modo Operador ativado! Acesso restrito ao Terminal de Caixa.");
-  };
-
   const handleExitOperatorAndLogout = async () => {
     setIsExitingOperator(true);
     try {
       localStorage.removeItem('vplus_operator_mode');
       sessionStorage.removeItem('vplus_operator_mode');
+      sessionStorage.removeItem('vplus_active_operator');
       setIsOperatorMode(false);
+      setActiveOperator(null);
       setShowExitOperatorModal(false);
       await logout();
-      toast.success("Modo Operador encerrado e sessão terminada com segurança!");
+      toast.success("Sessão de operador terminada com segurança!");
       navigate('/login');
     } catch (err) {
       console.error("Erro ao sair do modo operador:", err);
@@ -372,7 +414,9 @@ const MerchantDashboard: React.FC = () => {
       await signInWithEmailAndPassword(auth, currentUser.email, merchantPasswordExit);
       localStorage.removeItem('vplus_operator_mode');
       sessionStorage.removeItem('vplus_operator_mode');
+      sessionStorage.removeItem('vplus_active_operator');
       setIsOperatorMode(false);
+      setActiveOperator(null);
       setShowExitOperatorModal(false);
       setMerchantPasswordExit('');
       toast.success("Modo Operador desativado. Menus e painel completo restaurados!");
@@ -437,7 +481,7 @@ const MerchantDashboard: React.FC = () => {
         {isOperatorMode ? (
           <div className="flex flex-wrap items-center gap-3">
             <span className="bg-amber-400 text-[#0a2540] px-4 py-2.5 rounded-2xl font-black text-xs uppercase flex items-center gap-2 shadow-lg border-2 border-amber-300">
-              <ShieldAlert size={18} /> Modo Operador Ativo (Terminal Restrito)
+              <ShieldAlert size={18} /> {activeOperator ? `Operador: ${activeOperator.name}` : 'Modo Operador (Terminal)'}
             </span>
             <button
               onClick={handleExitOperatorAndLogout}
@@ -445,14 +489,14 @@ const MerchantDashboard: React.FC = () => {
               className="bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 shadow-lg border-2 border-red-400 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
             >
               {isExitingOperator ? <Loader2 className="animate-spin" size={16} /> : <LogOut size={16} />}
-              Sair do Modo Operador (Logoff)
+              Terminar Turno (Sair)
             </button>
             <button
               onClick={() => setShowExitOperatorModal(true)}
               className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-1.5 transition-all"
               title="Desbloquear painel de gestão com password"
             >
-              <Lock size={14} /> Desbloquear
+              <Lock size={14} /> Desbloquear Loja
             </button>
           </div>
         ) : (
@@ -475,7 +519,6 @@ const MerchantDashboard: React.FC = () => {
             {sysConfig.showMerchantSettings !== false && (
               <button onClick={() => setView('settings')} className={`px-4 py-3 rounded-xl font-black text-[10px] uppercase transition-all ${view === 'settings' ? 'bg-[#00d66f] text-[#0a2540]' : 'text-white hover:bg-white/10'}`}><Settings size={14} className="inline mr-1"/></button>
             )}
-            <button onClick={handleEnterOperatorMode} className="bg-amber-400/90 text-[#0a2540] hover:bg-amber-300 px-3.5 py-3 rounded-xl font-black text-[10px] uppercase transition-all flex items-center gap-1 shadow-sm" title="Bloquear restantes menus e manter apenas o terminal para funcionários"><Shield size={14} /> Modo Operador</button>
             <button onClick={async () => { await logout(); navigate('/'); }} className="p-3 text-red-400 hover:text-red-500 hover:bg-white/10 rounded-xl transition-all"><LogOut size={20} /></button>
           </nav>
         )}
@@ -488,8 +531,12 @@ const MerchantDashboard: React.FC = () => {
             <div className="flex items-center gap-3 text-[#0a2540]">
               <ShieldAlert className="text-amber-600 shrink-0" size={26} />
               <div>
-                <p className="text-xs font-black uppercase tracking-wider text-[#0a2540]">Terminal de Caixa em Modo Operador</p>
-                <p className="text-[10px] font-bold text-slate-500 mt-0.5">Acesso restrito a transações com PIN de operador. Menus de gestão bloqueados.</p>
+                <p className="text-xs font-black uppercase tracking-wider text-[#0a2540]">
+                  {activeOperator ? `Terminal de Caixa • Operador: ${activeOperator.name}` : 'Terminal de Caixa em Modo Operador'}
+                </p>
+                <p className="text-[10px] font-bold text-slate-500 mt-0.5">
+                  Acesso exclusivo a operações de caixa. As transações ficam automaticamente associadas ao seu turno.
+                </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
@@ -499,13 +546,13 @@ const MerchantDashboard: React.FC = () => {
                 className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shrink-0 transition-all shadow-md active:scale-95 disabled:opacity-50"
               >
                 {isExitingOperator ? <Loader2 className="animate-spin" size={16} /> : <LogOut size={16} />}
-                Sair do Modo Operador (Logoff)
+                Terminar Turno (Logoff)
               </button>
               <button
                 onClick={() => setShowExitOperatorModal(true)}
                 className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shrink-0 transition-all"
               >
-                <Lock size={14} /> Desbloquear Painel
+                <Lock size={14} /> Desbloquear Loja
               </button>
             </div>
           </div>

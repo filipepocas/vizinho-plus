@@ -29,8 +29,8 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
   const [newPin, setNewPin] = useState('');
   const [confirmNewPin, setConfirmNewPin] = useState('');
 
-  const validatePinFormat = (pin: string) => {
-    return /^\d{4,6}$/.test(pin.trim());
+  const validatePasswordFormat = (val: string) => {
+    return val.trim().length >= 4;
   };
 
   const handleCreateOperator = async (e: React.FormEvent) => {
@@ -39,17 +39,17 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
     const cleanPin = operatorPin.trim();
 
     if (!cleanName) return toast.error("Introduza o nome do operador.");
-    if (!validatePinFormat(cleanPin)) {
-      return toast.error("O PIN deve ter entre 4 e 6 dígitos numéricos.");
+    if (!validatePasswordFormat(cleanPin)) {
+      return toast.error("A password/PIN deve ter pelo menos 4 caracteres ou dígitos.");
     }
     if (cleanPin !== confirmPin.trim()) {
-      return toast.error("Os PINs introduzidos não coincidem.");
+      return toast.error("As passwords/PINs introduzidos não coincidem.");
     }
 
-    // Verificar se o PIN já está atribuído a outro operador ativo nesta loja
-    const pinConflict = operators.some(op => op.pin === cleanPin);
+    // Verificar se o PIN/Password já está atribuído a outro operador ativo nesta loja
+    const pinConflict = operators.some(op => (op.pin === cleanPin || op.password === cleanPin));
     if (pinConflict) {
-      return toast.error("Este PIN já se encontra atribuído a outro operador. Escolha um PIN único.");
+      return toast.error("Esta password/PIN já se encontra atribuída a outro operador. Escolha uma única.");
     }
 
     setIsSaving(true);
@@ -58,6 +58,7 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
         id: `op_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
         name: cleanName,
         pin: cleanPin,
+        password: cleanPin,
         active: true,
         createdAt: new Date().toISOString()
       };
@@ -110,33 +111,33 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
     if (!editingOperator) return;
 
     const cleanPin = newPin.trim();
-    if (!validatePinFormat(cleanPin)) {
-      return toast.error("O novo PIN deve ter entre 4 e 6 dígitos numéricos.");
+    if (!validatePasswordFormat(cleanPin)) {
+      return toast.error("A nova password/PIN deve ter pelo menos 4 caracteres ou dígitos.");
     }
     if (cleanPin !== confirmNewPin.trim()) {
-      return toast.error("A confirmação do PIN não coincide.");
+      return toast.error("A confirmação da password/PIN não coincide.");
     }
 
-    const pinConflict = operators.some(op => op.id !== editingOperator.id && op.pin === cleanPin);
+    const pinConflict = operators.some(op => op.id !== editingOperator.id && (op.pin === cleanPin || op.password === cleanPin));
     if (pinConflict) {
-      return toast.error("Este PIN já se encontra atribuído a outro operador.");
+      return toast.error("Esta password/PIN já se encontra atribuída a outro operador.");
     }
 
     setIsSaving(true);
     try {
       const updatedList = operators.map(op => {
-        if (op.id === editingOperator.id) return { ...op, pin: cleanPin };
+        if (op.id === editingOperator.id) return { ...op, pin: cleanPin, password: cleanPin };
         return op;
       });
       const merchantRef = doc(db, 'users', currentUser.id);
       await updateDoc(merchantRef, { operators: updatedList });
 
-      toast.success(`PIN de "${editingOperator.name}" alterado com sucesso!`);
+      toast.success(`Password/PIN de "${editingOperator.name}" alterado com sucesso!`);
       setEditingOperator(null);
       setNewPin('');
       setConfirmNewPin('');
     } catch (err) {
-      toast.error("Erro ao atualizar PIN.");
+      toast.error("Erro ao atualizar password.");
     } finally {
       setIsSaving(false);
     }
@@ -316,17 +317,15 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">
-                  PIN de Acesso (4, 5 ou 6 dígitos)
+                  Password / PIN de Acesso (mínimo 4 caracteres ou dígitos)
                 </label>
                 <div className="relative">
                   <input
                     required
                     type={showPin ? "text" : "password"}
-                    inputMode="numeric"
-                    maxLength={6}
-                    placeholder="Ex: 1234"
+                    placeholder="Ex: 1234 ou senha123"
                     value={operatorPin}
-                    onChange={(e) => setOperatorPin(e.target.value.replace(/\D/g, ''))}
+                    onChange={(e) => setOperatorPin(e.target.value)}
                     className="w-full p-4 pr-12 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-[#00d66f] font-black text-lg tracking-widest text-[#0a2540] outline-none"
                   />
                   <button
@@ -337,21 +336,19 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
                     {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
                   </button>
                 </div>
-                <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">Apenas números (4 a 6 dígitos)</p>
+                <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase">Números ou letras (mínimo 4 caracteres)</p>
               </div>
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">
-                  Confirmar PIN
+                  Confirmar Password / PIN
                 </label>
                 <input
                   required
                   type={showPin ? "text" : "password"}
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="Repetir PIN"
+                  placeholder="Repetir password / PIN"
                   value={confirmPin}
-                  onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => setConfirmPin(e.target.value)}
                   className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-[#00d66f] font-black text-lg tracking-widest text-[#0a2540] outline-none"
                 />
               </div>
@@ -399,32 +396,28 @@ const MerchantOperators: React.FC<MerchantOperatorsProps> = ({ currentUser }) =>
             <form onSubmit={handleUpdatePin} className="p-8 space-y-5">
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">
-                  Novo PIN (4 a 6 dígitos)
+                  Nova Password / PIN (mínimo 4 caracteres ou dígitos)
                 </label>
                 <input
                   required
                   type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="Novo PIN"
+                  placeholder="Nova password ou PIN"
                   value={newPin}
-                  onChange={(e) => setNewPin(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => setNewPin(e.target.value)}
                   className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-blue-500 font-black text-lg tracking-widest text-[#0a2540] outline-none"
                 />
               </div>
 
               <div>
                 <label className="block text-[10px] font-black uppercase text-slate-400 mb-2">
-                  Confirmar Novo PIN
+                  Confirmar Nova Password / PIN
                 </label>
                 <input
                   required
                   type="password"
-                  inputMode="numeric"
-                  maxLength={6}
-                  placeholder="Repetir novo PIN"
+                  placeholder="Repetir nova password ou PIN"
                   value={confirmNewPin}
-                  onChange={(e) => setConfirmNewPin(e.target.value.replace(/\D/g, ''))}
+                  onChange={(e) => setConfirmNewPin(e.target.value)}
                   className="w-full p-4 rounded-2xl bg-slate-50 border-2 border-slate-200 focus:border-blue-500 font-black text-lg tracking-widest text-[#0a2540] outline-none"
                 />
               </div>
