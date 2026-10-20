@@ -34,7 +34,12 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
   });
 
   const [directPassword, setDirectPassword] = useState<string>(() => {
-    return savedAccount?.savedPassword || '';
+    return (
+      savedAccount?.savedPassword ||
+      sessionStorage.getItem('vplus_saved_password') ||
+      localStorage.getItem('vplus_saved_password') ||
+      ''
+    );
   });
   const [showDirectPassword, setShowDirectPassword] = useState(false);
   
@@ -67,7 +72,13 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
       }
 
       // 3. Autenticar com a password guardada na sessão ou introduzida no campo
-      const effectivePassword = directPassword.trim() || savedAccount?.savedPassword || '';
+      const effectivePassword = (
+        directPassword ||
+        savedAccount?.savedPassword ||
+        sessionStorage.getItem('vplus_saved_password') ||
+        localStorage.getItem('vplus_saved_password') ||
+        ''
+      ).trim();
       const targetEmail = savedAccount?.email?.trim();
 
       if (!targetEmail) {
@@ -108,6 +119,8 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
 
   const handleForgetAccount = () => {
     localStorage.removeItem('vplus_saved_account');
+    localStorage.removeItem('vplus_saved_password');
+    sessionStorage.removeItem('vplus_saved_password');
     setSavedAccount(null);
     setDirectPassword('');
   };
@@ -160,10 +173,17 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
     localStorage.removeItem('vplus_operator_mode');
     sessionStorage.removeItem('vplus_operator_mode');
 
-    const effectivePwd = pwdUsed || directPassword || savedAccount?.savedPassword || '';
+    const effectivePwd = pwdUsed || directPassword || savedAccount?.savedPassword || sessionStorage.getItem('vplus_saved_password') || localStorage.getItem('vplus_saved_password') || '';
+
+    if (effectivePwd) {
+      sessionStorage.setItem('vplus_saved_password', effectivePwd);
+    }
 
     if (keepLoggedIn) {
       localStorage.setItem('vplus_keep_logged_in', 'true');
+      if (effectivePwd) {
+        localStorage.setItem('vplus_saved_password', effectivePwd);
+      }
       const accountData = {
         uid: userData.id,
         email: userData.email,
@@ -176,6 +196,7 @@ const LoginPage: React.FC<LoginPageProps> = ({ installPrompt }) => {
     } else {
       localStorage.setItem('vplus_keep_logged_in', 'false');
       localStorage.removeItem('vplus_saved_account');
+      localStorage.removeItem('vplus_saved_password');
       setSavedAccount(null);
     }
 

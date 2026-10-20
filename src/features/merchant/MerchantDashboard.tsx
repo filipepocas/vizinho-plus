@@ -440,10 +440,19 @@ const MerchantDashboard: React.FC = () => {
               <ShieldAlert size={18} /> Modo Operador Ativo (Terminal Restrito)
             </span>
             <button
-              onClick={() => setShowExitOperatorModal(true)}
-              className="bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 shadow-lg border-2 border-red-400 transition-all hover:scale-105 active:scale-95"
+              onClick={handleExitOperatorAndLogout}
+              disabled={isExitingOperator}
+              className="bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-2 shadow-lg border-2 border-red-400 transition-all hover:scale-105 active:scale-95 disabled:opacity-50"
             >
-              <LogOut size={16} /> Sair do Modo Operador (Logoff)
+              {isExitingOperator ? <Loader2 className="animate-spin" size={16} /> : <LogOut size={16} />}
+              Sair do Modo Operador (Logoff)
+            </button>
+            <button
+              onClick={() => setShowExitOperatorModal(true)}
+              className="bg-white/10 hover:bg-white/20 text-white px-3.5 py-3 rounded-2xl font-black text-xs uppercase flex items-center gap-1.5 transition-all"
+              title="Desbloquear painel de gestão com password"
+            >
+              <Lock size={14} /> Desbloquear
             </button>
           </div>
         ) : (
@@ -483,12 +492,22 @@ const MerchantDashboard: React.FC = () => {
                 <p className="text-[10px] font-bold text-slate-500 mt-0.5">Acesso restrito a transações com PIN de operador. Menus de gestão bloqueados.</p>
               </div>
             </div>
-            <button
-              onClick={() => setShowExitOperatorModal(true)}
-              className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shrink-0 transition-all shadow-md active:scale-95"
-            >
-              <LogOut size={16} /> Sair do Modo Operador (Logoff)
-            </button>
+            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
+              <button
+                onClick={handleExitOperatorAndLogout}
+                disabled={isExitingOperator}
+                className="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-5 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-2 shrink-0 transition-all shadow-md active:scale-95 disabled:opacity-50"
+              >
+                {isExitingOperator ? <Loader2 className="animate-spin" size={16} /> : <LogOut size={16} />}
+                Sair do Modo Operador (Logoff)
+              </button>
+              <button
+                onClick={() => setShowExitOperatorModal(true)}
+                className="w-full sm:w-auto bg-slate-200 hover:bg-slate-300 text-slate-800 px-4 py-3 rounded-2xl font-black text-xs uppercase tracking-wider flex items-center justify-center gap-1.5 shrink-0 transition-all"
+              >
+                <Lock size={14} /> Desbloquear Painel
+              </button>
+            </div>
           </div>
         )}
         

@@ -1,8 +1,8 @@
 {
-  "crons": [
+  "rewrites": [
     {
-      "path": "/api/maturar",
-      "schedule": "0 4 1 * *"
+      "source": "/(.*)",
+      "destination": "/index.html"
     }
   ]
 }
